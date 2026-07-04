@@ -1,7 +1,7 @@
 {
   "name": "@aifinpay/agent",
   "version": "1.0.0",
-  "description": "Unified agent-economy SDK for autonomous AI agents \u2014 chain-opaque AiFinPayAgent surface (call/openSession/balance/verify) over Polygon and Solana execution environments.",
+  "description": "Unified agent-economy SDK for autonomous AI agents — chain-opaque AiFinPayAgent surface (call/openSession/balance/verify) over Polygon and Solana execution environments.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -66,5 +66,8 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "bin": {
+    "aifinpay": "./dist/cli.js"
   }
 }
