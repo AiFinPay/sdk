@@ -1,0 +1,38 @@
+{
+  "name": "@aifinpay/wallet-widget",
+  "version": "0.1.0",
+  "description": "AiFinPay Agent Wallet widget — read-only companion for the agent's own wallet: balance, prepaid request packages (quota receipts), payments feed. Embeds in browser extensions, dashboards and chat inline cards.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./styles.css": "./dist/styles.css"
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && cp src/styles.css dist/styles.css",
+    "dev": "vite demo",
+    "build:demo": "vite build demo",
+    "build:extension": "vite build --config extension/vite.config.ts"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  },
+  "keywords": ["aifinpay", "ai-agents", "wallet", "x402", "aifp", "widget"],
+  "license": "MIT"
+}

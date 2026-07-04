@@ -1,0 +1,79 @@
+/* AiFinPay Agent Wallet — design tokens from iteration 2 (2a dark / 2b light).
+   All classes are aifp-prefixed; the widget is safe to mount in a shadow root. */
+.aifp-widget {
+  --aifp-bg: #0f1622;
+  --aifp-card: #151f30;
+  --aifp-line: rgba(255, 255, 255, 0.08);
+  --aifp-fg: #e8edf5;
+  --aifp-mut: #8b98ac;
+  --aifp-grad: linear-gradient(100deg, #153a5f 0%, #2b78c5 100%);
+  --aifp-accent: #2b78c5;
+  --aifp-warn: #d9a13b;
+  --aifp-alert: #d95c4a;
+  --aifp-ok: #3bb273;
+  width: 380px;
+  max-height: 600px;
+  overflow-y: auto;
+  background: var(--aifp-bg);
+  color: var(--aifp-fg);
+  border: 1px solid var(--aifp-line);
+  border-radius: 14px;
+  font: 13px/1.45 Inter, -apple-system, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  padding: 14px;
+  box-sizing: border-box;
+}
+.aifp-light.aifp-widget {
+  --aifp-bg: #ffffff;
+  --aifp-card: #f4f7fb;
+  --aifp-line: rgba(15, 22, 34, 0.1);
+  --aifp-fg: #12203a;
+  --aifp-mut: #5b6b82;
+  box-shadow: 0 12px 40px rgba(15, 22, 34, 0.18);
+}
+.aifp-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.aifp-logo { color: var(--aifp-accent); font-size: 16px; }
+.aifp-title { font-weight: 600; flex: 1; }
+.aifp-badge { font-size: 11px; padding: 2px 8px; border: 1px solid var(--aifp-line); border-radius: 999px; color: var(--aifp-mut); }
+.aifp-x { background: none; border: 0; color: var(--aifp-mut); cursor: pointer; font-size: 13px; }
+.aifp-section { margin: 12px 0; }
+.aifp-label { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--aifp-mut); }
+.aifp-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.aifp-hero-num { font-size: 30px; font-weight: 650; margin: 2px 0; }
+.aifp-unit { font-size: 14px; color: var(--aifp-mut); font-weight: 500; }
+.aifp-muted { color: var(--aifp-mut); font-size: 12px; }
+.aifp-num { font-weight: 600; }
+.aifp-card { background: var(--aifp-card); border: 1px solid var(--aifp-line); border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
+.aifp-card-title { font-weight: 600; text-transform: capitalize; }
+.aifp-card.aifp-low { border-color: color-mix(in srgb, var(--aifp-warn) 55%, transparent); }
+.aifp-card.aifp-low .aifp-bar-fill { background: var(--aifp-warn); }
+.aifp-card.aifp-exhausted { border-color: color-mix(in srgb, var(--aifp-alert) 55%, transparent); opacity: 0.85; }
+.aifp-bar { height: 5px; border-radius: 999px; background: var(--aifp-line); margin-top: 7px; overflow: hidden; }
+.aifp-bar-fill { height: 100%; border-radius: 999px; background: var(--aifp-grad); transition: width 0.3s; }
+.aifp-group { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--aifp-mut); margin: 10px 0 4px; }
+.aifp-pay-row { display: flex; width: 100%; justify-content: space-between; gap: 8px; background: none; border: 0; color: var(--aifp-fg); font: inherit; text-align: left; padding: 6px 0; border-bottom: 1px solid var(--aifp-line); cursor: pointer; }
+.aifp-chip { font-size: 10.5px; color: var(--aifp-mut); border: 1px solid var(--aifp-line); border-radius: 999px; padding: 1px 6px; margin-left: 6px; }
+.aifp-details { font-size: 12px; color: var(--aifp-mut); padding: 6px 0 8px; border-bottom: 1px solid var(--aifp-line); }
+.aifp-details a { color: var(--aifp-accent); text-decoration: none; }
+.aifp-banner { border-radius: 10px; padding: 8px 12px; font-size: 12.5px; margin-bottom: 8px; border: 1px solid; }
+.aifp-warn { border-color: color-mix(in srgb, var(--aifp-warn) 55%, transparent); background: color-mix(in srgb, var(--aifp-warn) 12%, transparent); }
+.aifp-alert { border-color: color-mix(in srgb, var(--aifp-alert) 55%, transparent); background: color-mix(in srgb, var(--aifp-alert) 12%, transparent); }
+.aifp-footer { display: flex; gap: 8px; margin-top: 12px; }
+.aifp-btn { flex: 1; text-align: center; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--aifp-line); background: var(--aifp-card); color: var(--aifp-fg); font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; }
+.aifp-primary { background: var(--aifp-grad); border: 0; color: #fff; }
+.aifp-link { background: none; border: 0; color: var(--aifp-accent); font: inherit; font-size: 12px; cursor: pointer; padding: 0; }
+.aifp-back { background: none; border: 0; color: var(--aifp-fg); font: inherit; font-weight: 600; cursor: pointer; padding: 0 0 10px; }
+.aifp-center { text-align: center; }
+.aifp-pad { padding: 12px 0; }
+.aifp-qr { border-radius: 10px; background: #fff; padding: 6px; margin: 6px auto; display: block; }
+.aifp-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.aifp-addr-full { font-size: 11.5px; word-break: break-all; color: var(--aifp-mut); margin: 8px 0; }
+.aifp-note { font-size: 12px; color: var(--aifp-mut); margin: 10px 0; }
+.aifp-steps { text-align: left; font-size: 12px; color: var(--aifp-mut); padding-left: 18px; }
+.aifp-serif { font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-size: 19px; margin: 6px 0; }
+.aifp-identity { color: var(--aifp-mut); font-size: 11.5px; border-top: 1px solid var(--aifp-line); padding-top: 8px; }
+.aifp-toast { position: sticky; bottom: 6px; margin: 8px auto 0; width: fit-content; background: var(--aifp-card); border: 1px solid var(--aifp-line); border-radius: 999px; padding: 6px 14px; font-size: 12px; }
+.aifp-skeleton { height: 38px; border-radius: 10px; background: var(--aifp-card); margin: 8px 0; animation: aifp-pulse 1.2s ease-in-out infinite; }
+.aifp-skeleton-sm { height: 20px; width: 60%; }
+@keyframes aifp-pulse { 50% { opacity: 0.45; } }
