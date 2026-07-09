@@ -265,7 +265,8 @@ class AiFinPayAgent:
                  solana_rpc:   Optional[str] = None,
                  base_url:     Optional[str] = None,
                  telemetry:    bool = True,
-                 budget_caps:  Optional[dict] = None):
+                 budget_caps:  Optional[dict] = None,
+                 heartbeat_interval_ms: int = 5 * 60 * 1000):
         self.inner       = inner
         self.evm_account = EvmAccount.from_key(evm_private_key_hex)
         self.sol_keypair = SolKeypair.from_seed(
@@ -285,6 +286,15 @@ class AiFinPayAgent:
         self._telemetry   = telemetry
         self._spend_24h   = _SpendTracker()
         self.budget_caps  = budget_caps or {}
+        # Auto-heartbeat throttle — mirrors unifiedAgent.ts's maybeHeartbeat().
+        # _last_heartbeat_ts=0 means "never fired yet this process", so the
+        # first opportunistic heartbeat always goes out.
+        self._heartbeat_interval_ms = heartbeat_interval_ms
+        self._last_heartbeat_ts: float = 0
+        # Cheap reuse: last balance() snapshot (from any caller), keyed by
+        # wall-clock ms, so maybeHeartbeat() can skip a fresh RPC round-trip
+        # when a recent one is already available.
+        self._last_balance_snapshot: Optional[tuple[float, dict]] = None
         # Cookie for the operator's user-session (magic-link login). See
         # establish_user_session() / list_my_agents() — same mechanism the
         # MCP agent_claim_self tool uses.
@@ -563,6 +573,7 @@ class AiFinPayAgent:
             if self._telemetry:
                 self._report_telemetry(kind="call", provider=p.name, chain=picked_chain,
                                         cost=reported_cost, free=True)
+            self._maybe_heartbeat()
             return init_resp
 
         try:
@@ -755,6 +766,7 @@ class AiFinPayAgent:
         if self._telemetry:
             self._report_telemetry(kind="call", provider=provider_name, chain="polygon",
                                     cost=reported_cost, tx=tx_hash.hex())
+        self._maybe_heartbeat()
         return paid_resp
 
     # ── Solana settlement (b2b_pay_with_split) ───────────────────────────
@@ -863,6 +875,7 @@ class AiFinPayAgent:
         if self._telemetry:
             self._report_telemetry(kind="call", provider=provider_name, chain="solana",
                                     cost=reported_cost, tx=tx_sig)
+        self._maybe_heartbeat()
         return paid_resp
 
     # ── Budget caps ─────────────────────────────────────────────────────────
@@ -901,7 +914,7 @@ class AiFinPayAgent:
         solana       = self._fetch_solana_native()
         solana_usdc  = self._fetch_solana_usdc()
 
-        return {
+        snapshot = {
             "agent_balance_usd": polygon * matic_usd + solana * sol_usd + polygon_usdc + solana_usdc,
             "chains": {
                 "solana":  {"sol": solana, "usdc": solana_usdc, "msecco_balance": 0},
@@ -911,6 +924,9 @@ class AiFinPayAgent:
             "budget_caps": self.budget_caps,
             "priced_at": int(time.time()),
         }
+        # Cache for maybe_heartbeat() reuse — see rationale there.
+        self._last_balance_snapshot = (time.time() * 1000, snapshot)
+        return snapshot
 
     def _fetch_polygon_native(self) -> float:
         try:
@@ -1070,6 +1086,56 @@ class AiFinPayAgent:
             spend_24h_usd=bal["spend_24h_usd"],
             balances=bal["chains"],
         )
+        self._last_heartbeat_ts = time.time() * 1000
+
+    def _maybe_heartbeat(self) -> None:
+        """Opportunistic, throttled heartbeat — called internally after a
+        SUCCESSFUL call()/pay() so the dashboard's "agent-reported caps"
+        section stays warm without every caller having to remember to call
+        report_heartbeat() by hand. Mirrors maybeHeartbeat() in
+        unifiedAgent.ts.
+
+        Throttle: at most once per ``_heartbeat_interval_ms`` (default
+        5 min), tracked via ``_last_heartbeat_ts`` — never fires more often
+        than that regardless of call volume.
+
+        Cost control: does NOT force a fresh balance() RPC round-trip on
+        every heartbeat. It reuses ``_last_balance_snapshot`` if one exists
+        and is no older than ``_heartbeat_interval_ms``; otherwise it sends
+        budget_caps + spend_24h only (balances omitted) rather than paying
+        for a live RPC call on this opportunistic path. Call ``balance()``
+        or ``report_heartbeat()`` explicitly for a heartbeat with a
+        guaranteed-fresh balance.
+
+        Best-effort: never raises, never blocks call()/pay() (Python's
+        ``requests`` is synchronous, so "non-blocking" here means "bounded
+        by the same short timeout as ``_report_telemetry``", matching the
+        existing per-call telemetry reporting in this file).
+        """
+        if not self._telemetry:
+            return
+        now = time.time() * 1000
+        if now - self._last_heartbeat_ts < self._heartbeat_interval_ms:
+            return
+        self._last_heartbeat_ts = now  # claim the slot before the network call
+
+        fresh = None
+        if self._last_balance_snapshot is not None:
+            snap_at, snap = self._last_balance_snapshot
+            if now - snap_at < self._heartbeat_interval_ms:
+                fresh = snap
+
+        payload: dict[str, Any] = {
+            "kind": "heartbeat",
+            "budget_caps": self.budget_caps,
+            "spend_24h_usd": self.get_spend_24h(),
+        }
+        if fresh is not None:
+            payload["balances"] = fresh["chains"]
+        try:
+            self._report_telemetry(**payload)
+        except Exception:
+            pass
 
     def pay(self, url: str, *, method: str = "GET", max_retries: int = 1,
             options: Optional[PayOptions] = None, **request_kwargs) -> requests.Response:
@@ -1093,4 +1159,5 @@ class AiFinPayAgent:
                 host = None
             max_amount_usd = options.max_amount_usd if options else None
             self._report_telemetry(kind="call", via="pay", provider=host, cost=max_amount_usd)
+        self._maybe_heartbeat()
         return resp

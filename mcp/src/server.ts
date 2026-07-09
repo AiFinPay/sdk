@@ -71,6 +71,29 @@ export async function createServer(config: McpConfig = {}) {
 
   log("info", `[aifinpay-mcp] solana: ${agent.solanaAddress} · evm: ${agent.evmAddress}`);
 
+  // Interval heartbeat — the agent identity above is created once at server
+  // startup (stdio: one process per client; a fresh identity/interval is
+  // created per mcp-http session too, see mcp-http/server.js). Fire an
+  // initial heartbeat right away so the dashboard shows liveness as soon as
+  // the server comes up, then keep reporting every `heartbeatIntervalMs`.
+  // `reportHeartbeat()` is already fire-and-forget + respects `telemetry:
+  // false`, so no extra guarding is needed here beyond the 0-disables-it
+  // knob.
+  const heartbeatIntervalMs = config.heartbeatIntervalMs ?? 5 * 60 * 1000;
+  let heartbeatTimer: NodeJS.Timeout | undefined;
+  if (heartbeatIntervalMs > 0) {
+    agent.reportHeartbeat();
+    heartbeatTimer = setInterval(() => agent.reportHeartbeat(), heartbeatIntervalMs);
+    // Don't let the heartbeat timer alone keep the process alive.
+    heartbeatTimer.unref?.();
+  }
+  const stopHeartbeat = () => {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = undefined;
+    }
+  };
+
   const server = new Server(
     {
       name: "@aifinpay/mcp",
@@ -128,7 +151,19 @@ export async function createServer(config: McpConfig = {}) {
     }
   });
 
-  return { server, agent };
+  // Clear the heartbeat interval whenever the MCP transport shuts the
+  // server down (stdio: client disconnects / EOF on stdin triggers this
+  // via the SDK's own transport-close handling) — this is the server's
+  // existing teardown path, so we hook it rather than inventing a new one.
+  // We also chain any onclose a caller sets later (see bin/aifinpay-mcp.js
+  // for the process-signal → server.close() wiring).
+  const existingOnClose = server.onclose;
+  server.onclose = () => {
+    stopHeartbeat();
+    existingOnClose?.();
+  };
+
+  return { server, agent, stopHeartbeat };
 }
 
 export interface ToolContext {

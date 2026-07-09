@@ -75,7 +75,12 @@ app.get("/", (_req, res) =>
 let _cachedToolspec = null;
 async function buildToolspec() {
   if (_cachedToolspec) return _cachedToolspec;
-  const { server } = await createServer({ logFn: () => {} });
+  // This server is only used to introspect the static tool list — it's
+  // never connect()-ed to a transport, so server.onclose() (which would
+  // normally clear the heartbeat interval, see mcp/src/server.ts) never
+  // fires. Disable the interval heartbeat explicitly here or it leaks for
+  // the lifetime of the process.
+  const { server } = await createServer({ logFn: () => {}, heartbeatIntervalMs: 0 });
   // Pull out the registered tool handlers — the Server stores them in
   // a private _requestHandlers map keyed by method name. Easier:
   // invoke ListToolsRequest manually via the registered handler.
@@ -169,6 +174,14 @@ app.post("/mcp", mcpLimiter, async (req, res) => {
       // pass AIFINPAY_AGENT_SECRET through their MCP client env (this
       // happens via the stdio path; the HTTP path is for listings).
       // createServer became async in @aifinpay/mcp 0.1.0-alpha.3 — must await
+      //
+      // createServer() also starts a per-session heartbeat setInterval
+      // (see mcp/src/server.ts). It's cleaned up automatically: the MCP
+      // SDK's server.connect(transport) below chains `transport.onclose`
+      // (session reap, set right above) with `server.onclose` (heartbeat
+      // teardown) so both fire when this session's transport closes — no
+      // extra wiring needed here. Per-session timers are therefore bounded
+      // by the session lifecycle and don't leak.
       const { server, agent } = await createServer({ logFn: sessionLog });
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);

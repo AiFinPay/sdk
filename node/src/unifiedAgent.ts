@@ -152,6 +152,12 @@ export interface AiFinPayAgentOptions extends AgentOptions {
   solanaRpc?:    string;     // default: env AIFINPAY_SOLANA_RPC or mainnet-beta
   /** RPC overrides for non-Polygon EVM chains used in bridge flows. */
   evmRpcUrls?:   Partial<Record<EvmChainName, string>>;
+  /**
+   * Throttle window (ms) for the auto-heartbeat fired opportunistically
+   * after a successful call()/pay(). Default 5 minutes. See
+   * `maybeHeartbeat()` for the throttle + balance-reuse rationale.
+   */
+  heartbeatIntervalMs?: number;
 }
 
 // ── 402 challenge body shape returned by AiFinPay paid-proxy bridges ─────
@@ -325,6 +331,15 @@ export class AiFinPayAgent {
   private  budgetCaps:     BudgetCaps;
   private  spend24h        = new SpendTracker();
   private  telemetry:      boolean;
+  // Auto-heartbeat throttle (see maybeHeartbeat()). lastHeartbeatTs=0 means
+  // "never fired yet this process" so the first opportunistic heartbeat
+  // always goes out.
+  private  heartbeatIntervalMs: number;
+  private  lastHeartbeatTs = 0;
+  // Cheap reuse: the last balance() snapshot taken by ANY caller (explicit
+  // agent.balance() or a prior heartbeat). maybeHeartbeat() reuses it if
+  // fresh enough instead of forcing a new RPC round-trip.
+  private  lastBalanceSnapshot?: { at: number; snapshot: BalanceSnapshot };
   private  _polygonPublic?: PublicClient;
   private  _polygonWallet?: WalletClient;
   // Multi-chain client cache for cross-chain orchestration (bridge flows).
@@ -348,6 +363,7 @@ export class AiFinPayAgent {
       ?? `${inner.baseUrl}${DEFAULT_REGISTRY_PATH}`;
     this.budgetCaps  = opts.budgetCaps ?? {};
     this.telemetry   = opts.telemetry !== false;
+    this.heartbeatIntervalMs = opts.heartbeatIntervalMs ?? 5 * 60 * 1000;
     this.polygonRpc  = opts.polygonRpc ?? "https://polygon.drpc.org";
     this.solanaRpc   = opts.solanaRpc
       ?? process.env.AIFINPAY_SOLANA_RPC
@@ -882,6 +898,7 @@ export class AiFinPayAgent {
       // Bridge didn't ask for payment — pass response through unchanged.
       // Nothing was paid, so the call does NOT count against budget caps.
       if (this.telemetry) this.reportTelemetry({ kind: "call", provider: provider.name, chain, cost, free: true });
+      this.maybeHeartbeat();
       return initialResp;
     }
 
@@ -925,6 +942,7 @@ export class AiFinPayAgent {
       }
       this.spend24h.add(cost);
       if (this.telemetry) this.reportTelemetry({ kind: "call", provider: provider.name, chain, cost, tx: solTxSig });
+      this.maybeHeartbeat();
       // @internal — attach settlement metadata for consumers (MCP, telemetry
       // dashboards) that need to surface the tx hash without an extra RPC
       // call. Response headers are read-only after construction so we use
@@ -995,6 +1013,7 @@ export class AiFinPayAgent {
 
     this.spend24h.add(cost);
     if (this.telemetry) this.reportTelemetry({ kind: "call", provider: provider.name, chain, cost, tx: txHash });
+    this.maybeHeartbeat();
     // @internal — see Solana branch above for rationale on property-attach.
     (paidResp as unknown as { aifinpayTx?: string; aifinpayChain?: ChainId }).aifinpayTx = txHash;
     (paidResp as unknown as { aifinpayTx?: string; aifinpayChain?: ChainId }).aifinpayChain = "polygon";
@@ -1108,7 +1127,7 @@ export class AiFinPayAgent {
     const solanaUsdcUsd  = solana_usdc;   // USDC ≈ $1
     const polygonUsdcUsd = polygon_usdc;  // USDC ≈ $1
 
-    return {
+    const snapshot: BalanceSnapshot = {
       agent_balance_usd: polygonUsd + solanaUsd + solanaUsdcUsd + polygonUsdcUsd,
       chains: {
         solana:  { sol: solana,   usdc: solana_usdc,  msecco_balance: 0 },
@@ -1118,6 +1137,9 @@ export class AiFinPayAgent {
       budget_caps: this.budgetCaps,
       priced_at: Math.floor(Date.now() / 1000),
     };
+    // Cache for maybeHeartbeat() reuse — see rationale there.
+    this.lastBalanceSnapshot = { at: Date.now(), snapshot };
+    return snapshot;
   }
 
   private async fetchPolygonNative(): Promise<number> {
@@ -1349,8 +1371,48 @@ export class AiFinPayAgent {
           spend_24h_usd: bal.spend_24h_usd,
           balances: bal.chains,
         });
+        this.lastHeartbeatTs = Date.now();
       })
       .catch(() => {});
+  }
+
+  /**
+   * Opportunistic, throttled heartbeat — called internally after a
+   * SUCCESSFUL call()/pay() so the dashboard's "agent-reported caps"
+   * section stays warm without every caller having to remember to invoke
+   * reportHeartbeat() by hand.
+   *
+   * Throttle: at most once per `heartbeatIntervalMs` (default 5 min),
+   * tracked via `lastHeartbeatTs` — never fires more often than that
+   * regardless of call volume.
+   *
+   * Cost control: does NOT force a fresh balance() RPC round-trip on every
+   * heartbeat. It reuses `lastBalanceSnapshot` if one exists and is no
+   * older than `heartbeatIntervalMs`; otherwise it sends budget_caps +
+   * spend_24h only (balances omitted) rather than paying for a live RPC
+   * call on this opportunistic path. Call `balance()` or `reportHeartbeat()`
+   * explicitly if you want a heartbeat with a guaranteed-fresh balance.
+   *
+   * Always fire-and-forget: never awaited by call()/pay(), never throws.
+   */
+  private maybeHeartbeat(): void {
+    if (!this.telemetry) return;
+    const now = Date.now();
+    if (now - this.lastHeartbeatTs < this.heartbeatIntervalMs) return;
+    this.lastHeartbeatTs = now; // claim the slot before the async work starts
+
+    const fresh = this.lastBalanceSnapshot
+      && (now - this.lastBalanceSnapshot.at) < this.heartbeatIntervalMs
+      ? this.lastBalanceSnapshot.snapshot
+      : undefined;
+
+    const payload: Record<string, unknown> = {
+      kind: "heartbeat",
+      budget_caps: this.budgetCaps,
+      spend_24h_usd: this.spend24h.total24h(),
+    };
+    if (fresh) payload.balances = fresh.chains;
+    this.reportTelemetry(payload);
   }
 
   /**
@@ -1375,6 +1437,7 @@ export class AiFinPayAgent {
         cost: init.options?.maxAmountUsd ?? null,
       });
     }
+    this.maybeHeartbeat();
     return resp;
   }
 }
