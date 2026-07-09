@@ -10,6 +10,7 @@ import { agentAddressTool, runAgentAddress } from "./tools/agent-address.js";
 import { agentQuoteTool, runAgentQuote } from "./tools/agent-quote.js";
 import { agentCallTool, runAgentCall } from "./tools/agent-call.js";
 import { agentClaimSelfTool, runAgentClaimSelf } from "./tools/agent-claim-self.js";
+import { myAgentsTool, runMyAgents } from "./tools/my-agents.js";
 import {
   payWithSplitTool,
   runPayWithSplit,
@@ -88,6 +89,7 @@ export async function createServer(config: McpConfig = {}) {
         agentAddressTool(),
         agentCallTool(),
         agentClaimSelfTool(),
+        myAgentsTool(),
         payableFetchTool(),
         agentQuoteTool(),
         payWithSplitTool(),
@@ -106,6 +108,8 @@ export async function createServer(config: McpConfig = {}) {
         return runAgentCall(ctx, args ?? {});
       case "agent_claim_self":
         return runAgentClaimSelf(ctx, args ?? {});
+      case "my_agents":
+        return runMyAgents(ctx, args ?? {});
       case "payable_fetch":
         return runPayableFetch(ctx, args ?? {});
       case "agent_quote":

@@ -102,6 +102,9 @@ export async function runAgentClaimSelf(
   }
   // Some setups split multiple cookies; grab the session one we care about.
   const cookieHeader = setCookie.split(",").map((c) => c.trim().split(";")[0]).join("; ");
+  // Stash on the agent so a later `my_agents` call in this same process can
+  // reuse the session without the user re-pasting the magic link.
+  ctx.agent.adoptUserSessionCookie(cookieHeader);
 
   // Claim both chains (EVM + Solana). Each is its own challenge + sig.
   // We try Polygon first because that's where live bridges settle today;

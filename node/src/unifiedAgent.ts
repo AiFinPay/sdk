@@ -331,6 +331,11 @@ export class AiFinPayAgent {
   // Keyed by EVM chain name (see crossChain.ts EVM_CHAINS).
   private  _evmClients: Map<EvmChainName, { publicClient: PublicClient; walletClient: WalletClient }> = new Map();
   private  evmRpcUrls: Partial<Record<EvmChainName, string>> = {};
+  // Cookie for the operator's user-session (magic-link login), captured by
+  // establishUserSession(). Same mechanism the MCP agent_claim_self tool
+  // uses inline; here it's held on the instance so subsequent calls
+  // (listMyAgents()) can reuse it without re-clicking the magic link.
+  private  userSessionCookie?: string;
 
   private constructor(
     inner:      Agent,
@@ -1242,6 +1247,79 @@ export class AiFinPayAgent {
     };
   }
 
+  // ── Owner user-session (magic-link) ───────────────────────────────────
+
+  /**
+   * Establish the operator's user-session by hitting a magic-link URL —
+   * same mechanism `agent_claim_self` (MCP) uses inline: the link is a
+   * one-shot, ~15-min-TTL sign-in URL like
+   * `https://aifinpay.io/api/auth/verify?token=…` that the user pastes in
+   * after signing in at https://aifinpay.io/login. The resulting session
+   * cookie (`__aifinpay_user_session`) is cached on this instance and
+   * reused by `listMyAgents()` — call this once per process, not per call.
+   */
+  async establishUserSession(magicLinkUrl: string): Promise<void> {
+    const res = await fetch(magicLinkUrl, { redirect: "manual" });
+    const setCookie = res.headers.get("set-cookie");
+    if (!setCookie) {
+      throw new AiFinPayError(
+        `Magic link did not return a session cookie (HTTP ${res.status}). Link may be expired or already used.`,
+      );
+    }
+    // Some setups split multiple cookies; keep the header verbatim minus
+    // attributes (Path=/, HttpOnly, …) — same trim as agent-claim-self.ts.
+    this.userSessionCookie = setCookie
+      .split(",")
+      .map((c) => c.trim().split(";")[0])
+      .join("; ");
+  }
+
+  /**
+   * Adopt an already-computed session cookie header (e.g. one the MCP
+   * `agent_claim_self` tool derived from the same magic link while doing
+   * its own claim flow) without re-fetching the magic link. Lets
+   * `listMyAgents()` reuse a session established by a sibling flow.
+   */
+  adoptUserSessionCookie(cookieHeader: string): void {
+    this.userSessionCookie = cookieHeader;
+  }
+
+  /**
+   * List agents owned by the signed-in operator, with balance/spend/health
+   * fields for each, over a rolling window. Requires `establishUserSession()`
+   * (or the MCP `agent_claim_self` flow, which also captures the cookie on
+   * this same agent instance) to have run first — otherwise throws.
+   *
+   * Calls `GET {baseUrl}/api/me/agents/overview` — owner-gated, same
+   * `__aifinpay_user_session` cookie as `/api/me/agents/challenge` and
+   * `/api/me/agents/claim`. Returns the parsed `agents` array from
+   * `{ window, agents: [...] }`.
+   */
+  async listMyAgents(): Promise<Array<Record<string, unknown>>> {
+    if (!this.userSessionCookie) {
+      throw new AiFinPayError(
+        "No user session established. Run the claim flow first — " +
+          "sign in at https://aifinpay.io/login, then call " +
+          "establishUserSession(magicLinkUrl) (Node) with the emailed link, " +
+          "or use the MCP agent_claim_self tool, before calling listMyAgents().",
+      );
+    }
+    const r = await this.inner.fetchImpl(`${this.inner.baseUrl}/api/me/agents/overview`, {
+      method: "GET",
+      headers: { accept: "application/json", cookie: this.userSessionCookie },
+    });
+    if (r.status === 401) {
+      throw new AiFinPayError(
+        "User session expired or invalid — re-run establishUserSession() with a fresh magic link.",
+      );
+    }
+    if (!r.ok) {
+      throw new AiFinPayError(`GET /api/me/agents/overview → ${r.status}`);
+    }
+    const j = (await r.json()) as { window?: unknown; agents?: Array<Record<string, unknown>> };
+    return j.agents ?? [];
+  }
+
   // ── Telemetry (opt-out) ─────────────────────────────────────────────────
 
   private reportTelemetry(payload: Record<string, unknown>): void {
@@ -1251,6 +1329,53 @@ export class AiFinPayAgent {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ agent_id: this.id, ...payload, ts: Date.now() }),
     }).catch(() => {});
+  }
+
+  /**
+   * Opt-in "advisory" heartbeat — reports the agent's own view of its
+   * budget caps, 24h spend, and balances so an operator dashboard can show
+   * "reported by your agent" liveness. This is NOT server-enforced: the
+   * backend does not verify these numbers on-chain, it just displays what
+   * the agent self-reports. Respects the same `telemetry: false` opt-out
+   * as `call()`'s per-request reporting. Fire-and-forget — never throws.
+   */
+  reportHeartbeat(): void {
+    if (!this.telemetry) return;
+    void this.balance()
+      .then((bal) => {
+        this.reportTelemetry({
+          kind: "heartbeat",
+          budget_caps: this.budgetCaps,
+          spend_24h_usd: bal.spend_24h_usd,
+          balances: bal.chains,
+        });
+      })
+      .catch(() => {});
+  }
+
+  /**
+   * Generic x402 payment with telemetry — thin wrapper over
+   * `inner.pay(url)` that reports a `kind:"call", via:"pay"` telemetry
+   * event on success, mirroring the reporting `call()` already does for
+   * registry-resolved payments. Unlike `call()`, the generic x402 flow
+   * (native AiFinPay + Coinbase facilitators) does not settle through a
+   * bridge that returns a verifiable tx hash here, so `cost` reflects the
+   * caller's declared `options.maxAmountUsd` cap (if any) rather than a
+   * confirmed on-chain amount — same "advisory" caveat as heartbeat.
+   */
+  async pay(url: string, init: Parameters<Agent["pay"]>[1] = {}): Promise<Response> {
+    const resp = await this.inner.pay(url, init);
+    if (this.telemetry) {
+      let host: string | null = null;
+      try { host = new URL(url).host; } catch { /* leave null */ }
+      this.reportTelemetry({
+        kind: "call",
+        via: "pay",
+        provider: host,
+        cost: init.options?.maxAmountUsd ?? null,
+      });
+    }
+    return resp;
   }
 }
 

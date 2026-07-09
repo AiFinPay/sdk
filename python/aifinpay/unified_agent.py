@@ -38,6 +38,7 @@ import requests
 
 from .errors import AiFinPayError, X402Error
 from .client import Agent  # legacy Solana-only agent (we wrap it)
+from .facilitators import PayOptions
 from .cross_chain import (
     EVM_CHAINS,
     USDC_NATIVE,
@@ -224,6 +225,23 @@ def _guard_challenge_usd(est_usd: float, cap: Optional[float], label: str) -> No
         )
 
 
+class _SpendTracker:
+    """24h rolling spend ring buffer. Mirrors SpendTracker in unifiedAgent.ts."""
+
+    def __init__(self) -> None:
+        self._ring: list[tuple[float, float]] = []  # (ts_seconds, usd)
+
+    def add(self, usd: float) -> None:
+        now = time.time()
+        self._ring.append((now, usd))
+        cutoff = now - 24 * 3600
+        while self._ring and self._ring[0][0] < cutoff:
+            self._ring.pop(0)
+
+    def total_24h(self) -> float:
+        return sum(usd for _, usd in self._ring)
+
+
 # ── Main class ──────────────────────────────────────────────────────────────
 
 class AiFinPayAgent:
@@ -245,7 +263,9 @@ class AiFinPayAgent:
                  registry_url: Optional[str] = None,
                  polygon_rpc:  Optional[str] = None,
                  solana_rpc:   Optional[str] = None,
-                 base_url:     Optional[str] = None):
+                 base_url:     Optional[str] = None,
+                 telemetry:    bool = True,
+                 budget_caps:  Optional[dict] = None):
         self.inner       = inner
         self.evm_account = EvmAccount.from_key(evm_private_key_hex)
         self.sol_keypair = SolKeypair.from_seed(
@@ -261,6 +281,15 @@ class AiFinPayAgent:
         self.solana_rpc  = solana_rpc  or os.environ.get("AIFINPAY_SOLANA_RPC",  DEFAULT_SOLANA_RPC)
         self._w3: Optional[Web3] = None
         self._registry_cache: Optional[list[ProviderEntry]] = None
+        # Telemetry (opt-out) — mirrors unifiedAgent.ts's `telemetry` flag.
+        self._telemetry   = telemetry
+        self._spend_24h   = _SpendTracker()
+        self.budget_caps  = budget_caps or {}
+        # Cookie for the operator's user-session (magic-link login). See
+        # establish_user_session() / list_my_agents() — same mechanism the
+        # MCP agent_claim_self tool uses.
+        self._user_session_cookie: Optional[str] = None
+        self._treasury_cache: dict = {}
 
     @classmethod
     def new(cls, **kwargs) -> "AiFinPayAgent":
@@ -517,6 +546,9 @@ class AiFinPayAgent:
         full_url = url.rstrip("/") + path
 
         picked_chain = (chain or p.preferred_chain or "polygon").lower()
+        # Registry price is what actually gets billed/tracked; `cost` (when
+        # given) is only a caller-side cap, not the amount to report.
+        reported_cost = p.price_usd if p.price_usd is not None else (cost or 0)
 
         # 1. Initial unauthenticated POST → expect 402
         init_resp = requests.request(
@@ -526,7 +558,11 @@ class AiFinPayAgent:
             headers={"content-type": "application/json"},
         )
         if init_resp.status_code != 402:
-            # Bridge didn't ask for payment — pass through.
+            # Bridge didn't ask for payment — pass through. Nothing was
+            # paid, so this does NOT count against budget caps.
+            if self._telemetry:
+                self._report_telemetry(kind="call", provider=p.name, chain=picked_chain,
+                                        cost=reported_cost, free=True)
             return init_resp
 
         try:
@@ -535,8 +571,10 @@ class AiFinPayAgent:
             raise X402Error("bridge returned 402 with non-JSON body")
 
         if picked_chain == "solana":
-            return self._settle_solana(full_url, challenge, method, body, timeout, cost=cost)
-        return self._settle_polygon(full_url, challenge, method, body, timeout, cost=cost)
+            return self._settle_solana(full_url, challenge, method, body, timeout, cost=cost,
+                                        provider_name=p.name, reported_cost=reported_cost)
+        return self._settle_polygon(full_url, challenge, method, body, timeout, cost=cost,
+                                     provider_name=p.name, reported_cost=reported_cost)
 
     # ── Cross-chain orchestration (Phase 1.5a: EVM↔EVM via LiFi) ───────────
     #
@@ -645,7 +683,9 @@ class AiFinPayAgent:
 
     def _settle_polygon(self, full_url: str, challenge: dict, method: str,
                         body: Optional[dict], timeout: float,
-                        cost: Optional[float] = None) -> requests.Response:
+                        cost: Optional[float] = None,
+                        provider_name: Optional[str] = None,
+                        reported_cost: float = 0) -> requests.Response:
         pm = challenge.get("pay_matic")
         if not pm:
             raise X402Error(
@@ -711,13 +751,19 @@ class AiFinPayAgent:
                 f"Bridge retry failed {paid_resp.status_code} after on-chain payment "
                 f"{tx_hash.hex()}: {paid_resp.text[:300]}"
             )
+        self._spend_24h.add(reported_cost)
+        if self._telemetry:
+            self._report_telemetry(kind="call", provider=provider_name, chain="polygon",
+                                    cost=reported_cost, tx=tx_hash.hex())
         return paid_resp
 
     # ── Solana settlement (b2b_pay_with_split) ───────────────────────────
 
     def _settle_solana(self, full_url: str, challenge: dict, method: str,
                        body: Optional[dict], timeout: float,
-                       cost: Optional[float] = None) -> requests.Response:
+                       cost: Optional[float] = None,
+                       provider_name: Optional[str] = None,
+                       reported_cost: float = 0) -> requests.Response:
         ps = challenge.get("pay_solana")
         if not ps:
             raise X402Error(
@@ -813,4 +859,238 @@ class AiFinPayAgent:
                 f"Bridge retry failed {paid_resp.status_code} after Solana payment "
                 f"{tx_sig}: {paid_resp.text[:300]}"
             )
+        self._spend_24h.add(reported_cost)
+        if self._telemetry:
+            self._report_telemetry(kind="call", provider=provider_name, chain="solana",
+                                    cost=reported_cost, tx=tx_sig)
         return paid_resp
+
+    # ── Budget caps ─────────────────────────────────────────────────────────
+
+    def set_budget(self, *, daily_usd: Optional[float] = None,
+                    per_call_usd: Optional[float] = None) -> None:
+        """Set soft budget caps. Mirrors ``setBudget()`` in unifiedAgent.ts.
+        Only enforced by ``call()``'s registry-level pre-check today (the
+        Node SDK's on_limit_exceeded="skip" behavior is not ported here)."""
+        caps: dict = {}
+        if daily_usd is not None:
+            caps["daily_usd"] = daily_usd
+        if per_call_usd is not None:
+            caps["per_call_usd"] = per_call_usd
+        self.budget_caps = caps
+
+    def get_spend_24h(self) -> float:
+        """Current 24h rolling spend across paid calls made by this
+        instance. Mirrors ``getSpend24h()`` in unifiedAgent.ts."""
+        return self._spend_24h.total_24h()
+
+    # ── Balance ─────────────────────────────────────────────────────────────
+
+    def balance(self) -> dict:
+        """Snapshot the agent's funds across both chains, USD-normalised.
+        Mirrors ``balance()`` in unifiedAgent.ts (Phase 1.4 scope: native
+        MATIC/SOL via RPC + SPL/ERC-20 USDC; Pyth feeds are TODO — uses
+        ``AIFINPAY_MATIC_USD`` / ``AIFINPAY_SOL_USD`` env, defaulting to
+        0.70 / 200). Never raises — RPC failures degrade to 0 balances so
+        this stays safe to call from ``report_heartbeat()``."""
+        matic_usd = float(os.environ.get("AIFINPAY_MATIC_USD", "0.70"))
+        sol_usd   = float(os.environ.get("AIFINPAY_SOL_USD", "200"))
+
+        polygon      = self._fetch_polygon_native()
+        polygon_usdc = self._fetch_polygon_usdc()
+        solana       = self._fetch_solana_native()
+        solana_usdc  = self._fetch_solana_usdc()
+
+        return {
+            "agent_balance_usd": polygon * matic_usd + solana * sol_usd + polygon_usdc + solana_usdc,
+            "chains": {
+                "solana":  {"sol": solana, "usdc": solana_usdc, "msecco_balance": 0},
+                "polygon": {"matic": polygon, "usdc": polygon_usdc, "msecco_balance": 0},
+            },
+            "spend_24h_usd": self.get_spend_24h(),
+            "budget_caps": self.budget_caps,
+            "priced_at": int(time.time()),
+        }
+
+    def _fetch_polygon_native(self) -> float:
+        try:
+            wei = self._web3().eth.get_balance(self.evm_address)
+            return wei / 1e18
+        except Exception:
+            return 0
+
+    def _fetch_polygon_usdc(self) -> float:
+        # Native Polygon USDC ERC20 (Circle-native, not bridged USDC.e)
+        usdc_addr = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
+        try:
+            w3 = self._web3()
+            c = w3.eth.contract(
+                address=Web3.to_checksum_address(usdc_addr),
+                abi=[{"type": "function", "name": "balanceOf", "stateMutability": "view",
+                      "inputs": [{"type": "address", "name": "owner"}],
+                      "outputs": [{"type": "uint256"}]}],
+            )
+            raw = c.functions.balanceOf(self.evm_address).call()
+            return raw / 1e6  # USDC has 6 decimals on Polygon
+        except Exception:
+            return 0
+
+    def _fetch_solana_native(self) -> float:
+        try:
+            r = requests.post(self.solana_rpc, timeout=10, json={
+                "jsonrpc": "2.0", "id": 1, "method": "getBalance",
+                "params": [self.solana_address],
+            })
+            lamports = ((r.json() or {}).get("result") or {}).get("value") or 0
+            return lamports / 1e9
+        except Exception:
+            return 0
+
+    def _fetch_solana_usdc(self) -> float:
+        # Mainnet USDC SPL mint on Solana (Circle native, not Wormhole-wrapped)
+        usdc_mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+        try:
+            r = requests.post(self.solana_rpc, timeout=10, json={
+                "jsonrpc": "2.0", "id": 1, "method": "getTokenAccountsByOwner",
+                "params": [self.solana_address, {"mint": usdc_mint}, {"encoding": "jsonParsed"}],
+            })
+            accounts = ((r.json() or {}).get("result") or {}).get("value") or []
+            total = 0.0
+            for acc in accounts:
+                try:
+                    ui = acc["account"]["data"]["parsed"]["info"]["tokenAmount"]["uiAmount"]
+                    if isinstance(ui, (int, float)):
+                        total += ui
+                except (KeyError, TypeError):
+                    continue
+            return total
+        except Exception:
+            return 0
+
+    # ── Owner user-session (magic-link) ────────────────────────────────────
+
+    def establish_user_session(self, magic_link_url: str, *, timeout: float = 10.0) -> None:
+        """Establish the operator's user-session by hitting a magic-link
+        URL — same mechanism the MCP ``agent_claim_self`` tool uses inline:
+        the link is a one-shot, ~15-min-TTL sign-in URL like
+        ``https://aifinpay.io/api/auth/verify?token=…`` that the user
+        pastes in after signing in at https://aifinpay.io/login. The
+        resulting session cookie (``__aifinpay_user_session``) is cached on
+        this instance and reused by ``list_my_agents()`` — call this once
+        per process, not per call.
+        """
+        r = requests.get(magic_link_url, timeout=timeout, allow_redirects=False)
+        set_cookie = r.headers.get("set-cookie")
+        if not set_cookie:
+            raise AiFinPayError(
+                f"Magic link did not return a session cookie (HTTP {r.status_code}). "
+                f"Link may be expired or already used."
+            )
+        # Some setups split multiple cookies; keep the header verbatim minus
+        # attributes (Path=/, HttpOnly, …) — same trim as the Node SDK /
+        # agent-claim-self.ts.
+        self._user_session_cookie = "; ".join(
+            part.strip().split(";")[0] for part in set_cookie.split(",")
+        )
+
+    def adopt_user_session_cookie(self, cookie_header: str) -> None:
+        """Adopt an already-computed session cookie header (e.g. one an MCP
+        ``agent_claim_self``-equivalent flow derived from the same magic
+        link) without re-fetching the magic link."""
+        self._user_session_cookie = cookie_header
+
+    def list_my_agents(self, *, timeout: float = 10.0) -> list[dict]:
+        """List agents owned by the signed-in operator, with balance/spend/
+        health fields for each, over a rolling window. Requires
+        ``establish_user_session()`` (or ``adopt_user_session_cookie()``) to
+        have run first — otherwise raises ``AiFinPayError``.
+
+        Calls ``GET {base_url}/api/me/agents/overview`` — owner-gated, same
+        ``__aifinpay_user_session`` cookie as ``/api/me/agents/challenge``
+        and ``/api/me/agents/claim``. Returns the parsed ``agents`` array
+        from ``{ window, agents: [...] }``.
+        """
+        if not self._user_session_cookie:
+            raise AiFinPayError(
+                "No user session established. Run the claim flow first — "
+                "sign in at https://aifinpay.io/login, then call "
+                "establish_user_session(magic_link_url) with the emailed "
+                "link, or use the MCP agent_claim_self tool, before calling "
+                "list_my_agents()."
+            )
+        r = requests.get(
+            f"{self.inner.base_url}/api/me/agents/overview",
+            timeout=timeout,
+            headers={"accept": "application/json", "cookie": self._user_session_cookie},
+        )
+        if r.status_code == 401:
+            raise AiFinPayError(
+                "User session expired or invalid — re-run establish_user_session() "
+                "with a fresh magic link."
+            )
+        if not r.ok:
+            raise AiFinPayError(f"GET /api/me/agents/overview → {r.status_code}")
+        data = _safe_json(r)
+        return data.get("agents") or []
+
+    # ── Telemetry (opt-out) ─────────────────────────────────────────────────
+
+    def _report_telemetry(self, **payload: Any) -> None:
+        """Best-effort, non-blocking-in-spirit report. No body content,
+        only metadata. Mirrors ``reportTelemetry()`` in unifiedAgent.ts —
+        the Node SDK fires this without awaiting; Python's ``requests`` is
+        synchronous, so we use a short timeout and swallow all errors so a
+        slow/unreachable telemetry endpoint never breaks a paid call."""
+        try:
+            requests.post(
+                f"{self.inner.base_url}/api/telemetry",
+                timeout=3,
+                json={"agent_id": self.id, **payload, "ts": int(time.time() * 1000)},
+            )
+        except Exception:
+            pass
+
+    def report_heartbeat(self) -> None:
+        """Opt-in "advisory" heartbeat — reports the agent's own view of
+        its budget caps, 24h spend, and balances so an operator dashboard
+        can show "reported by your agent" liveness. This is NOT
+        server-enforced: the backend does not verify these numbers
+        on-chain, it just displays what the agent self-reports. Respects
+        the same telemetry opt-out as ``call()``'s per-request reporting.
+        Best-effort — never raises."""
+        if not self._telemetry:
+            return
+        try:
+            bal = self.balance()
+        except Exception:
+            return
+        self._report_telemetry(
+            kind="heartbeat",
+            budget_caps=self.budget_caps,
+            spend_24h_usd=bal["spend_24h_usd"],
+            balances=bal["chains"],
+        )
+
+    def pay(self, url: str, *, method: str = "GET", max_retries: int = 1,
+            options: Optional[PayOptions] = None, **request_kwargs) -> requests.Response:
+        """Generic x402 payment with telemetry — thin wrapper over
+        ``inner.pay(url)`` that reports a ``kind="call", via="pay"``
+        telemetry event on success, mirroring the reporting ``call()``
+        already does for registry-resolved payments. Unlike ``call()``,
+        the generic x402 flow (native AiFinPay + Coinbase facilitators)
+        does not settle through a bridge that returns a verifiable tx hash
+        here, so ``cost`` reflects the caller's declared
+        ``options.max_amount_usd`` cap (if any) rather than a confirmed
+        on-chain amount — same "advisory" caveat as ``report_heartbeat()``.
+        """
+        resp = self.inner.pay(url, method=method, max_retries=max_retries,
+                               options=options, **request_kwargs)
+        if self._telemetry:
+            try:
+                from urllib.parse import urlparse
+                host = urlparse(url).netloc or None
+            except Exception:
+                host = None
+            max_amount_usd = options.max_amount_usd if options else None
+            self._report_telemetry(kind="call", via="pay", provider=host, cost=max_amount_usd)
+        return resp
