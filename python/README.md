@@ -65,6 +65,24 @@ agent = Agent.from_keypair_file("~/agent-wallet.json")
 agent = Agent.from_secret_b58("3RvZm7Gw...")
 ```
 
+## Client attribution (AIFP-1)
+
+Optionally self-declare which framework the agent runs under. When set,
+every HTTP request the SDK makes — the x402 flow (initial request + paid
+retry) and AiFinPay API calls (quote/pay/invoice/…) — carries the header
+`AIFP-Agent-Framework: <value>`.
+
+```python
+agent = Agent.new(framework="claude")
+```
+
+Well-known values: `chatgpt`, `claude`, `perplexity`, `gemini`, `cursor`,
+`openai-agents`, `windsurf`, `custom` — but any short token matching
+`[a-z0-9-]{1,32}` is accepted (input is lowercased first).
+
+There is **no default** — the header is only sent when you declare it
+(honest self-declaration, not fingerprinting).
+
 ## How x402 auth works under the hood
 
 `agent.pay(url)`:

@@ -266,8 +266,14 @@ class AiFinPayAgent:
                  base_url:     Optional[str] = None,
                  telemetry:    bool = True,
                  budget_caps:  Optional[dict] = None,
-                 heartbeat_interval_ms: int = 5 * 60 * 1000):
+                 heartbeat_interval_ms: int = 5 * 60 * 1000,
+                 framework:    Optional[str] = None):
         self.inner       = inner
+        # AIFP-1 client attribution — stored on the inner Agent (which
+        # validates/lowercases and attaches it to its own session), and
+        # mirrored onto the bridge 402 flow via _attribution_headers().
+        if framework is not None:
+            self.inner.framework = framework
         self.evm_account = EvmAccount.from_key(evm_private_key_hex)
         self.sol_keypair = SolKeypair.from_seed(
             nacl.signing.SigningKey(
@@ -356,6 +362,18 @@ class AiFinPayAgent:
     @property
     def evm_address(self) -> str:
         return self.evm_account.address
+
+    @property
+    def framework(self) -> Optional[str]:
+        """AIFP-1 self-declared framework token (see Agent.framework)."""
+        return self.inner.framework
+
+    def _attribution_headers(self) -> dict:
+        """Central AIFP-1 attribution for the bridge 402 flow, which uses
+        bare ``requests`` (not the inner Agent's session). Empty when no
+        framework is declared — the header is never sent by default."""
+        fw = self.inner.framework
+        return {"AIFP-Agent-Framework": fw} if fw else {}
 
     # ── Registry ──────────────────────────────────────────────────────────
 
@@ -565,7 +583,8 @@ class AiFinPayAgent:
             method, full_url,
             json=body if body is not None else None,
             timeout=timeout,
-            headers={"content-type": "application/json"},
+            headers={"content-type": "application/json",
+                     **self._attribution_headers()},
         )
         if init_resp.status_code != 402:
             # Bridge didn't ask for payment — pass through. Nothing was
@@ -755,6 +774,7 @@ class AiFinPayAgent:
                 "content-type": "application/json",
                 "x-tx-hash":    tx_hash.hex(),
                 "x-order-id":   order_id,
+                **self._attribution_headers(),
             },
         )
         if not paid_resp.ok:
@@ -864,6 +884,7 @@ class AiFinPayAgent:
                 "content-type": "application/json",
                 "x-solana-tx":  tx_sig,
                 "x-order-id":   order_id,
+                **self._attribution_headers(),
             },
         )
         if not paid_resp.ok:

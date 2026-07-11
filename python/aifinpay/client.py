@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
@@ -24,6 +25,24 @@ from .facilitators import PayOptions, detect_facilitator
 # fully retired (DNS removed) — do not use it.
 DEFAULT_BASE_URL = "https://aifinpay.io"
 DEFAULT_TIMEOUT = 30  # seconds
+
+# AIFP-1 self-declared client attribution header. Attached to every outbound
+# SDK request (402 flow + AiFinPay API) when ``framework`` is configured.
+# No default — the header is absent unless the integrator declares it.
+FRAMEWORK_HEADER = "AIFP-Agent-Framework"
+_FRAMEWORK_RE = re.compile(r"^[a-z0-9-]{1,32}$")
+
+
+def _normalize_framework(value: Optional[str]) -> Optional[str]:
+    """Lowercase + validate an AIFP-1 framework token ([a-z0-9-]{1,32})."""
+    if value is None:
+        return None
+    v = value.strip().lower()
+    if not _FRAMEWORK_RE.match(v):
+        raise AiFinPayError(
+            f"framework must be a short token matching [a-z0-9-]{{1,32}}, got {value!r}"
+        )
+    return v
 
 
 @dataclass
@@ -52,13 +71,45 @@ class Agent:
         signing_key: nacl.signing.SigningKey,
         base_url: str = DEFAULT_BASE_URL,
         timeout: int = DEFAULT_TIMEOUT,
+        framework: Optional[str] = None,
     ):
+        """
+        :param framework: AIFP-1 self-declared client attribution. When set,
+            every HTTP request the SDK makes — the x402 flow (initial request
+            + paid retry) and AiFinPay API calls (quote/pay/invoice/…) —
+            carries the ``AIFP-Agent-Framework: <value>`` header.
+            Well-known values: ``chatgpt``, ``claude``, ``perplexity``,
+            ``gemini``, ``cursor``, ``openai-agents``, ``windsurf``,
+            ``custom`` — but any short token matching ``[a-z0-9-]{1,32}``
+            is accepted (input is lowercased first). No default: the header
+            is simply absent when not configured — honest self-declaration,
+            not fingerprinting.
+        """
         self._sk = signing_key
         self._vk = signing_key.verify_key
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self._session = requests.Session()
         self._session.headers["User-Agent"] = "aifinpay-agent-py/1.0.0"
+        # Central attribution point: every SDK request goes through
+        # self._session, so setting the header here covers the 402 flow
+        # (pay()) and all AiFinPay API paths (quote_split, invoices, …).
+        self.framework = framework
+
+    # ── AIFP-1 client attribution ────────────────────────────────────────
+
+    @property
+    def framework(self) -> Optional[str]:
+        """AIFP-1 self-declared framework token, or None (header omitted)."""
+        return self._framework
+
+    @framework.setter
+    def framework(self, value: Optional[str]) -> None:
+        self._framework = _normalize_framework(value)
+        if self._framework:
+            self._session.headers[FRAMEWORK_HEADER] = self._framework
+        else:
+            self._session.headers.pop(FRAMEWORK_HEADER, None)
 
     # ── Constructors ────────────────────────────────────────────────────────
 

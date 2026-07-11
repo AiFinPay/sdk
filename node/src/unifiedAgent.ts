@@ -883,7 +883,14 @@ export class AiFinPayAgent {
 
     const buildInit = (extraHeaders: Record<string, string> = {}): RequestInit => ({
       method:  opts.method ?? "POST",
-      headers: { "content-type": "application/json", ...extraHeaders },
+      // attributionHeaders() carries the SDK user-agent and — when the
+      // integrator declared one — the AIFP-1 `AIFP-Agent-Framework` header,
+      // on both the initial 402 probe and the paid retry.
+      headers: {
+        "content-type": "application/json",
+        ...this.inner.attributionHeaders(),
+        ...extraHeaders,
+      },
       body:    opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
       // CallOptions.timeoutMs was previously declared but never applied.
       signal:  opts.signal

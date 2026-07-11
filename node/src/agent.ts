@@ -11,6 +11,24 @@ const DEFAULT_BASE_URL = "https://aifinpay.io";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const SDK_UA = "aifinpay-agent-node/0.3.0";
 
+// AIFP-1 self-declared client attribution header. Sent on every outbound
+// SDK request (402 flow + AiFinPay API) when `framework` is configured.
+// No default — the header is absent unless the integrator declares it.
+const FRAMEWORK_HEADER = "AIFP-Agent-Framework";
+const FRAMEWORK_RE = /^[a-z0-9-]{1,32}$/;
+
+/** Lowercase + validate an AIFP-1 framework token ([a-z0-9-]{1,32}). */
+function normalizeFramework(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const v = value.trim().toLowerCase();
+  if (!FRAMEWORK_RE.test(v)) {
+    throw new AiFinPayError(
+      `framework must be a short token matching [a-z0-9-]{1,32}, got ${JSON.stringify(value)}`,
+    );
+  }
+  return v;
+}
+
 export interface Invoice {
   amountUsd: number;
   treasuryVault: string;
@@ -23,6 +41,20 @@ export interface AgentOptions {
   baseUrl?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  /**
+   * AIFP-1 self-declared client attribution. When set, every HTTP request
+   * the SDK makes — the x402 flow (initial request + paid retry) and
+   * AiFinPay API calls (quote/pay/invoice/…) — carries the header
+   * `AIFP-Agent-Framework: <value>`.
+   *
+   * Well-known values: `chatgpt`, `claude`, `perplexity`, `gemini`,
+   * `cursor`, `openai-agents`, `windsurf`, `custom` — but any short token
+   * matching `[a-z0-9-]{1,32}` is accepted (input is lowercased first).
+   *
+   * No default: the header is simply absent when not configured — this is
+   * honest self-declaration, not fingerprinting.
+   */
+  framework?: string;
 }
 
 export interface PayInit extends Omit<RequestInit, "method"> {
@@ -38,6 +70,8 @@ export class Agent {
   readonly timeoutMs: number;
   /** Internal — facilitators reach for this when they need to refetch from the backend. */
   readonly fetchImpl: typeof fetch;
+  /** AIFP-1 self-declared framework token, or undefined (header omitted). */
+  readonly framework?: string;
 
   private constructor(
     secretKey: Uint8Array,
@@ -48,6 +82,7 @@ export class Agent {
     this.publicKey = publicKey;
     this.baseUrl = (opts.baseUrl || DEFAULT_BASE_URL).replace(/\/$/, "");
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.framework = normalizeFramework(opts.framework);
     this.fetchImpl = opts.fetchImpl ?? globalThis.fetch;
     if (!this.fetchImpl) {
       throw new AiFinPayError(
@@ -105,6 +140,18 @@ export class Agent {
   /** 64-byte base58 secret. Save this safely — server never sees it. */
   get secretB58(): string {
     return bs58.encode(this.secretKey);
+  }
+
+  /**
+   * Internal — the single place outbound attribution headers are built.
+   * Every SDK request (402 flow, quote/pay, backend JSON calls) spreads
+   * this in; `AIFP-Agent-Framework` appears only when `framework` is set.
+   */
+  attributionHeaders(): Record<string, string> {
+    return {
+      "user-agent": SDK_UA,
+      ...(this.framework ? { [FRAMEWORK_HEADER]: this.framework } : {}),
+    };
   }
 
   // ── Discovery ──────────────────────────────────────────────────────────
@@ -239,7 +286,7 @@ export class Agent {
     const url = new URL(`${this.baseUrl}/api/b2b/quote-split`);
     url.searchParams.set(param, String(args.merchantAmount));
     const r = await this.fetchImpl(url.toString(), {
-      headers: { accept: "application/json", "user-agent": SDK_UA },
+      headers: { accept: "application/json", ...this.attributionHeaders() },
     });
     if (!r.ok) {
       throw new AiFinPayError(`GET /api/b2b/quote-split → ${r.status}`);
@@ -282,7 +329,7 @@ export class Agent {
       headers: {
         accept: "application/json",
         "content-type": "application/json",
-        "user-agent": SDK_UA,
+        ...this.attributionHeaders(),
       },
       body: JSON.stringify({
         chain: args.chain,
@@ -338,7 +385,10 @@ export class Agent {
         body: body ?? rest.body,
       });
 
-    let resp = await send(method, { ...baseHeaders, "user-agent": SDK_UA });
+    let resp = await send(method, {
+      ...baseHeaders,
+      ...this.attributionHeaders(),
+    });
     let attempt = 0;
 
     while (resp.status === 402 && attempt < maxRetries) {
@@ -349,7 +399,7 @@ export class Agent {
       );
       const auth = await facilitator.buildAuth(resp, this, options);
       const merged = mergeHeaders(baseHeaders, auth.headers);
-      merged["user-agent"] = SDK_UA;
+      Object.assign(merged, this.attributionHeaders());
       resp = await send(auth.method ?? method, merged, auth.body);
     }
 
@@ -397,7 +447,7 @@ export class Agent {
       method,
       headers: {
         accept: "application/json",
-        "user-agent": SDK_UA,
+        ...this.attributionHeaders(),
         ...(body ? { "content-type": "application/json" } : {}),
       },
     };
