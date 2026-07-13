@@ -1,0 +1,19 @@
+{
+  "name": "gateway-merchant-example",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Reference merchant API behind the AiFinPay hosted gateway — emits the AIFP-Billing response header per named action.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@aifinpay/agent": "^1.2.0",
+    "express": "^4.19.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

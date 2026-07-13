@@ -52,6 +52,10 @@ from .cross_chain import (
     bridge_wait_for_arrival,
 )
 
+# Merchant-side helper — emit the AIFP-Billing response header when your
+# API runs behind the AiFinPay hosted gateway (gateway.aifinpay.io).
+from .merchant_billing import AIFP_BILLING_HEADER, billing_header
+
 # Phase 1+ unified surface — at parity with @aifinpay/agent JS SDK.
 # Lazy import so installs without the EVM/Solana extras keep working with
 # the legacy Agent class.
@@ -90,4 +94,7 @@ __all__ = [
     "bridge_quote",
     "bridge_execute",
     "bridge_wait_for_arrival",
+    # Merchant-side (hosted gateway)
+    "AIFP_BILLING_HEADER",
+    "billing_header",
 ]

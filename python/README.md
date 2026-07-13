@@ -104,6 +104,28 @@ The server verifies the signature, checks the agent's on-chain payment
 proof (Seat PDA for AiFinPay, settled tx for Coinbase x402), and serves
 the resource.
 
+## Behind the AiFinPay gateway — emitting `AIFP-Billing`
+
+If you're a **merchant** whose API runs behind the hosted gateway
+(`gateway.aifinpay.io/{slug}/…`), the gateway meters billing units and signs
+a per-action Billing Receipt for the agent. Describe each action with one
+response header (FastAPI shown; Flask: set it on the response object):
+
+```python
+from aifinpay import billing_header, AIFP_BILLING_HEADER
+
+@app.post("/deep-research")
+def deep_research(q: Query, response: Response):
+    result = run_deep_research(q)
+    response.headers[AIFP_BILLING_HEADER] = billing_header("deep_research", cost_units=10)
+    return result
+```
+
+`action` is required; `cost_units` is an informational hint (the gateway's
+action registry weight is the billing authority); `category`,
+`execution_time_ms`, `bytes`, `tokens`, `status` are optional telemetry.
+Full reference: [`examples/gateway-merchant`](../examples/gateway-merchant).
+
 ## Privacy
 
 - **The server never sees your private key.** Period.

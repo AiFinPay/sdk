@@ -88,6 +88,29 @@ For every gated request the SDK:
 The server verifies the signature, checks the agent has a live Seat PDA
 on-chain, and serves the resource.
 
+## Behind the AiFinPay gateway — emitting `AIFP-Billing`
+
+If you're a **merchant** whose API runs behind the hosted gateway
+(`gateway.aifinpay.io/{slug}/…`), the gateway meters billing units and signs
+a per-action Billing Receipt for the agent. Describe each action with one
+response header:
+
+```js
+import { withBilling } from "@aifinpay/agent";
+
+app.use(withBilling()); // attaches res.setAifpBilling(meta)
+app.post("/deep-research", (req, res) => {
+  res.setAifpBilling({ action: "deep_research", cost_units: 10 });
+  res.json(report);
+});
+```
+
+`action` is required; `cost_units` is an informational hint (the gateway's
+action registry weight is the billing authority); `category`,
+`execution_time_ms`, `bytes`, `tokens`, `status` are optional telemetry.
+Outside Express, use `billingHeader(meta)` to build the raw header value.
+Full reference: [`examples/gateway-merchant`](../examples/gateway-merchant).
+
 ## Privacy
 
 - **The server never sees your private key.** Period.

@@ -61,6 +61,14 @@ export type {
   EvmChainName,
 } from "./crossChain.js";
 
+// ── Merchant-side helpers (behind the AiFinPay hosted gateway) ──────────
+export {
+  AIFP_BILLING_HEADER,
+  billingHeader,
+  withBilling,
+} from "./merchant/billing.js";
+export type { BillingMeta, BillingResponse } from "./merchant/billing.js";
+
 // ── Legacy chain-aware surface (kept for back-compat) ───────────────────
 export { Agent } from "./agent.js";
 export type { AgentOptions, Invoice, PayInit } from "./agent.js";
