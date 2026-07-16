@@ -31,12 +31,12 @@ or Cursor's `~/.cursor/mcp.json`:
 
 ```json
 {
- "mcpServers": {
- "aifinpay": {
- "command": "npx",
- "args": ["@aifinpay/mcp"]
- }
- }
+  "mcpServers": {
+    "aifinpay": {
+      "command": "npx",
+      "args": ["@aifinpay/mcp"]
+    }
+  }
 }
 ```
 
@@ -85,10 +85,10 @@ resp = agent.pay("https://api.example.com/v1/data")
 # Direct fee-on-top split — merchant gets 100% of merchant_amount;
 # AiFinPay 1% on top.
 invoice = agent.pay_with_split_invoice(
- chain="polygon",
- merchant_wallet="0xMerchant...",
- merchant_amount=10**18,
- order_id="search-1",
+    chain="polygon",
+    merchant_wallet="0xMerchant...",
+    merchant_amount=10**18,
+    order_id="search-1",
 )
 ```
 
@@ -103,10 +103,10 @@ console.log("Fund this address:", agent.address);
 const res = await agent.pay("https://api.example.com/v1/data");
 
 const invoice = await agent.payWithSplitInvoice({
- chain: "polygon",
- merchantWallet: "0xMerchant...",
- merchantAmount: 10n ** 18n,
- orderId: "search-1",
+  chain: "polygon",
+  merchantWallet: "0xMerchant...",
+  merchantAmount: 10n ** 18n,
+  orderId: "search-1",
 });
 ```
 
@@ -114,16 +114,16 @@ const invoice = await agent.payWithSplitInvoice({
 
 ```json
 {
- "mcpServers": {
- "aifinpay": {
- "command": "npx",
- "args": ["@aifinpay/mcp"],
- "env": {
- "AIFINPAY_AGENT_SECRET": "<base58 secret>",
- "AIFINPAY_MAX_USD": "0.50"
- }
- }
- }
+  "mcpServers": {
+    "aifinpay": {
+      "command": "npx",
+      "args": ["@aifinpay/mcp"],
+      "env": {
+        "AIFINPAY_AGENT_SECRET": "<base58 secret>",
+        "AIFINPAY_MAX_USD": "0.50"
+      }
+    }
+  }
 }
 ```
 
@@ -134,11 +134,11 @@ Restart Claude Desktop. The model now has five payment tools —
 
 ```mermaid
 sequenceDiagram
- Agent->>Server: GET /api/...
- Server-->>Agent: 402 + manifest + nonce
- Agent->>Agent: sign SHA256("AiFinPay-x402:{nonce}:{pubkey}")
- Agent->>Server: GET /api/... + 3 auth headers
- Server-->>Agent: 200 + payload
+    Agent->>Server: GET /api/...
+    Server-->>Agent: 402 + manifest + nonce
+    Agent->>Agent: sign SHA256("AiFinPay-x402:{nonce}:{pubkey}")
+    Agent->>Server: GET /api/... + 3 auth headers
+    Server-->>Agent: 200 + payload
 ```
 
 For a partner who wants to **accept** AiFinPay payments, the simplest
@@ -196,21 +196,21 @@ Two on-chain proofs that the full stack works end-to-end:
 
 ```
 sdk/
-├── python/ aifinpay-agent (PyPI)
-├── node/ @aifinpay/agent (npm)
-├── mcp/ @aifinpay/mcp (npm)
-├── docs/ QUICKSTART.md, MCP_CONFIG.md, integrations
+├── python/                  aifinpay-agent (PyPI)
+├── node/                    @aifinpay/agent (npm)
+├── mcp/                     @aifinpay/mcp (npm)
+├── docs/                    QUICKSTART.md, MCP_CONFIG.md, integrations
 └── examples/
- ├── openai-agent/ OpenAI Agents SDK tool
- ├── claude-mcp/ Claude Desktop MCP config + walkthrough
- ├── langchain/ LangChain BaseTool wrapper
- ├── crewai/ CrewAI multi-agent crew that pays
- ├── flowise/ Flowise custom node
- ├── autogpt/ Headless self-funding agent loop
- ├── echo-x402-server/ reference partner integration (~70 lines)
- ├── io-net-x402-bridge/ live io.net bridge
- ├── exa-x402-bridge/ live Exa bridge
- └── venice-x402-bridge/ live Venice bridge
+    ├── openai-agent/        OpenAI Agents SDK tool
+    ├── claude-mcp/          Claude Desktop MCP config + walkthrough
+    ├── langchain/           LangChain BaseTool wrapper
+    ├── crewai/              CrewAI multi-agent crew that pays
+    ├── flowise/             Flowise custom node
+    ├── autogpt/             Headless self-funding agent loop
+    ├── echo-x402-server/    reference partner integration (~70 lines)
+    ├── io-net-x402-bridge/  live io.net bridge
+    ├── exa-x402-bridge/     live Exa bridge
+    └── venice-x402-bridge/  live Venice bridge
 ```
 
 ## Releasing
@@ -231,7 +231,7 @@ npm publish
 
 # MCP
 cd ../mcp
-npm install # so it can resolve @aifinpay/agent
+npm install                 # so it can resolve @aifinpay/agent
 npm run build
 npm publish
 ```
