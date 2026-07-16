@@ -61,7 +61,7 @@ export async function runPayWithSplit(
   args: Record<string, unknown>,
 ) {
   const chain = args.chain as "solana" | "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm" | undefined;
-  if (!["solana", "polygon", "base", "optimism", "unichain", "botchain", "xrplevm"].includes(chain ?? "")) {
+  if (!chain || !["solana", "polygon", "base", "optimism", "unichain", "botchain", "xrplevm"].includes(chain)) {
     return errorResult("chain must be 'solana', 'polygon', 'base', 'optimism', 'unichain', 'botchain' or 'xrplevm'");
   }
   const merchantWallet = String(args.merchant_wallet ?? "");
@@ -79,7 +79,10 @@ export async function runPayWithSplit(
 
   try {
     const invoice = await ctx.agent.inner.payWithSplitInvoice({
-      chain,
+      // published @aifinpay/agent (<=1.3.0) still types this "solana"|"polygon";
+      // the value is forwarded verbatim to the backend, which accepts all 7.
+      // Drop the cast once agent >=1.3.1 (widened types) is published.
+      chain: chain as "solana" | "polygon",
       merchantWallet,
       merchantAmount,
       orderId,
@@ -122,14 +125,15 @@ export async function runQuoteSplit(
   args: Record<string, unknown>,
 ) {
   const chain = args.chain as "solana" | "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm" | undefined;
-  if (!["solana", "polygon", "base", "optimism", "unichain", "botchain", "xrplevm"].includes(chain ?? "")) {
+  if (!chain || !["solana", "polygon", "base", "optimism", "unichain", "botchain", "xrplevm"].includes(chain)) {
     return errorResult("chain must be 'solana', 'polygon', 'base', 'optimism', 'unichain', 'botchain' or 'xrplevm'");
   }
   const merchantAmount = String(args.merchant_amount ?? "");
   if (!merchantAmount) return errorResult("merchant_amount required");
 
   try {
-    const quote = await ctx.agent.inner.quoteSplit({ chain, merchantAmount });
+    // Same published-type lag as above — cast until agent >=1.3.1 ships.
+    const quote = await ctx.agent.inner.quoteSplit({ chain: chain as "solana" | "polygon", merchantAmount });
     return {
       content: [{ type: "text", text: JSON.stringify(quote, null, 2) }],
     };
