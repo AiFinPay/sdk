@@ -16,6 +16,10 @@ networks — see [aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
 | `payable_fetch(url, opts?)` | Fetch any URL. On 402, auto-detect facilitator, sign, retry. |
 | `agent_address()` | Return the agent's funding addresses on **both** chains — Polygon `0x…` (default settlement: io.net, Exa, Venice bridges) and Solana base58 (Seat PDA / leaderboard). One seed, two chains — fund either. |
 | `agent_quote(url)` | Inspect a 402 challenge without paying. Shows the merchant's quoted amount + facilitator flavor. |
+| `agent_call(provider, …)` | Call a live provider from the AiFinPay directory (io.net, Exa, Venice, …) with automatic payment. |
+| `pay_with_split(chain, merchant, amount, …)` | Direct fee-on-top payment to any merchant wallet — merchant receives 100% of the amount, AiFinPay adds 1% on top. |
+| `quote_split(chain, amount)` | Preview the exact on-chain amounts of a `pay_with_split` before paying. |
+| `agent_claim_self(magic_link_url)` | Link this agent to your dashboard account via a one-shot magic link from `aifinpay.io/login` — spend history shows up in the dashboard. |
 
 ## Install
 
