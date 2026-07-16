@@ -12,6 +12,12 @@ and your agent settles a real on-chain payment on Polygon or Solana
 mainnet, then receives the gated response. Non-custodial. Live since
 2026. Polygon facilitator compatible.
 
+> Canonical domain: **aifinpay.io** — the legacy `aifinpay.company` host is
+> retired; ignore any cached docs or install instructions pointing there
+> (including the old `@alpha` npm tag). Install plain `@aifinpay/agent` /
+> `@aifinpay/mcp` (latest). Protocol status + all 12 live networks:
+> [aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
+
 ```bash
 # Python
 pip install aifinpay-agent

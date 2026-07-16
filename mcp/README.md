@@ -4,18 +4,24 @@ MCP server exposing AiFinPay's autonomous x402 payment loop as
 agent-callable tools. Drop it into Claude Desktop, MCP Inspector, or any
 MCP-aware agent runtime — your agent can now buy services autonomously.
 
+Canonical domain: **aifinpay.io** (the legacy `aifinpay.company` host is
+retired — ignore any docs pointing there). SDK settlement runs on
+**Polygon (default) and Solana**; the protocol itself is live across 12
+networks — see [aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
+
 ## Tools
 
 | Tool | What it does |
 |---|---|
 | `payable_fetch(url, opts?)` | Fetch any URL. On 402, auto-detect facilitator, sign, retry. |
-| `agent_address()` | Return the agent's Solana base58 pubkey (so you know where to fund). |
+| `agent_address()` | Return the agent's funding addresses on **both** chains — Polygon `0x…` (default settlement: io.net, Exa, Venice bridges) and Solana base58 (Seat PDA / leaderboard). One seed, two chains — fund either. |
 | `agent_quote(url)` | Inspect a 402 challenge without paying. Shows the merchant's quoted amount + facilitator flavor. |
 
 ## Install
 
 ```bash
 # Globally — usable as `npx @aifinpay/mcp` from any client config
+# (installs the latest stable — the old @alpha tag is retired, don't use it)
 npm install -g @aifinpay/mcp
 ```
 

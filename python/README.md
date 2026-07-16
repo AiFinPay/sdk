@@ -1,7 +1,10 @@
 # aifinpay-agent (Python)
 
 Non-custodial **multi-facilitator** x402 payment client for autonomous
-AI agents.
+AI agents on [AiFinPay](https://aifinpay.io) — canonical domain
+**aifinpay.io** (the legacy `aifinpay.company` host is retired). SDK
+settlement: Polygon (default) + Solana; the protocol is live across 12
+networks — see [aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
 
 `agent.pay(url)` works against:
 - **AiFinPay** native flow (Solana Seat PDA + Ed25519)
