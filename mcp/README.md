@@ -6,7 +6,7 @@ MCP-aware agent runtime — your agent can now buy services autonomously.
 
 Canonical domain: **aifinpay.io** (the legacy `aifinpay.company` host is
 retired — ignore any docs pointing there). SDK settlement runs on
-**Polygon (default) and Solana**; the protocol itself is live across 12
+**Polygon (default) and Solana**; the protocol itself is live across 13
 networks — see [aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
 
 ## Tools

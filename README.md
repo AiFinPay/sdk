@@ -15,7 +15,7 @@ mainnet, then receives the gated response. Non-custodial. Live since
 > Canonical domain: **aifinpay.io** — the legacy `aifinpay.company` host is
 > retired; ignore any cached docs or install instructions pointing there
 > (including the old `@alpha` npm tag). Install plain `@aifinpay/agent` /
-> `@aifinpay/mcp` (latest). Protocol status + all 12 live networks:
+> `@aifinpay/mcp` (latest). Protocol status + all 13 live networks:
 > [aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
 
 ```bash
@@ -46,9 +46,10 @@ or Cursor's `~/.cursor/mcp.json`:
 }
 ```
 
-Restart the client. Your model now has five payment tools
-(`payable_fetch`, `agent_address`, `agent_quote`, `pay_with_split`,
-`quote_split`) and can autonomously settle any x402-gated API.
+Restart the client. Your model now has seven payment tools
+(`payable_fetch`, `agent_address`, `agent_quote`, `agent_call`,
+`pay_with_split`, `quote_split`, `agent_claim_self`) and can
+autonomously settle any x402-gated API.
 
 Full client matrix (Claude Desktop, Cursor, Windsurf, Continue, LobeChat,
 Cline) lives in [`MCP_CONFIG.md`](./MCP_CONFIG.md).
@@ -57,9 +58,9 @@ Cline) lives in [`MCP_CONFIG.md`](./MCP_CONFIG.md).
 
 | Package | Path | Install | Latest |
 |---|---|---|---|
-| **`aifinpay-agent`** (Python) | [`./python`](./python) | `pip install aifinpay-agent` | `1.0.0` |
-| **`@aifinpay/agent`** (Node / TypeScript) | [`./node`](./node) | `npm install @aifinpay/agent` | `1.0.0` |
-| **`@aifinpay/mcp`** (MCP server) | [`./mcp`](./mcp) | `npx @aifinpay/mcp` | `1.0.0` |
+| **`aifinpay-agent`** (Python) | [`./python`](./python) | `pip install aifinpay-agent` | `1.1.1` |
+| **`@aifinpay/agent`** (Node / TypeScript) | [`./node`](./node) | `npm install @aifinpay/agent` | `1.2.1` |
+| **`@aifinpay/mcp`** (MCP server) | [`./mcp`](./mcp) | `npx @aifinpay/mcp` | `1.1.1` |
 | Go SDK | — | `go get github.com/AiFinPay/sdk/go` | **soon** |
 | Rust SDK | — | `cargo add aifinpay-sdk` | **soon** |
 
@@ -72,8 +73,9 @@ Coinbase x402, …), signs an Ed25519 challenge, retries the request, and
 returns the response.
 
 Same agent, drop into Claude Desktop's MCP config and the LLM gets
-five tools (`payable_fetch`, `agent_address`, `agent_quote`,
-`pay_with_split`, `quote_split`) for autonomous payment loops.
+seven tools (`payable_fetch`, `agent_address`, `agent_quote`,
+`agent_call`, `pay_with_split`, `quote_split`, `agent_claim_self`) for
+autonomous payment loops.
 
 ## Quick start
 
@@ -133,7 +135,7 @@ const invoice = await agent.payWithSplitInvoice({
 }
 ```
 
-Restart Claude Desktop. The model now has five payment tools —
+Restart Claude Desktop. The model now has seven payment tools —
 `payable_fetch(url)` lets it autonomously call any x402-gated API.
 
 ## How it works
