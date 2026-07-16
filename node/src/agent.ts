@@ -229,7 +229,7 @@ export class Agent {
    * is rarely needed anymore. Kept for back-compat through 1.0.0.
    */
   async quoteSplit(args: {
-    chain: "solana" | "polygon";
+    chain: "solana" | "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm";
     merchantAmount: bigint | number | string;
   }): Promise<Record<string, unknown>> {
     const param =
@@ -267,7 +267,7 @@ export class Agent {
    * onboarding message).
    */
   async payWithSplitInvoice(args: {
-    chain: "solana" | "polygon";
+    chain: "solana" | "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm";
     merchantWallet: string;
     merchantAmount: bigint | number | string;
     orderId: string;

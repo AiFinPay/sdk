@@ -2,13 +2,14 @@ import type { ToolContext } from "../server.js";
 
 // NOTE on the chain enum below: pay_with_split and quote_split are
 // BACKEND-INVOICE-DRIVEN — they call the operator API
-// (POST /api/b2b/pay-with-split, GET /api/b2b/quote-split), which only
-// supports "solana" and "polygon" today. Do NOT widen the enum here
-// without backend support: the request would just be rejected server-side.
-// Direct multi-EVM splitter settlement (Base, Optimism, Unichain,
-// BOT Chain, XRPL EVM — native-token path) lives in the SDK's
-// AiFinPayAgent.call() (@aifinpay/agent >= 1.3.0) and is not exposed
-// through these two tools.
+// (POST /api/b2b/pay-with-split, GET /api/b2b/quote-split), which supports
+// solana + 6 on-chain-verified EVM chains (polygon, base, optimism,
+// unichain, botchain, xrplevm). Keep this enum in lockstep with the
+// backend's ../evm-chains.js registry — a chain listed here without
+// backend support would just be rejected server-side. Stables: USDC on
+// base/optimism/unichain, USDC+USDT on polygon; botchain/xrplevm are
+// native-token only. Direct (non-invoice) splitter settlement lives in
+// the SDK's AiFinPayAgent.call() (@aifinpay/agent >= 1.3.0).
 
 export function payWithSplitTool() {
   return {
@@ -25,7 +26,7 @@ export function payWithSplitTool() {
       properties: {
         chain: {
           type: "string",
-          enum: ["solana", "polygon"],
+          enum: ["solana", "polygon", "base", "optimism", "unichain", "botchain", "xrplevm"],
           description: "Chain to settle on.",
         },
         merchant_wallet: {
@@ -59,9 +60,9 @@ export async function runPayWithSplit(
   ctx: ToolContext,
   args: Record<string, unknown>,
 ) {
-  const chain = args.chain as "solana" | "polygon" | undefined;
-  if (chain !== "solana" && chain !== "polygon") {
-    return errorResult("chain must be 'solana' or 'polygon'");
+  const chain = args.chain as "solana" | "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm" | undefined;
+  if (!["solana", "polygon", "base", "optimism", "unichain", "botchain", "xrplevm"].includes(chain ?? "")) {
+    return errorResult("chain must be 'solana', 'polygon', 'base', 'optimism', 'unichain', 'botchain' or 'xrplevm'");
   }
   const merchantWallet = String(args.merchant_wallet ?? "");
   const merchantAmount = String(args.merchant_amount ?? "");
@@ -104,7 +105,7 @@ export function quoteSplitTool() {
     inputSchema: {
       type: "object",
       properties: {
-        chain: { type: "string", enum: ["solana", "polygon"] },
+        chain: { type: "string", enum: ["solana", "polygon", "base", "optimism", "unichain", "botchain", "xrplevm"] },
         merchant_amount: {
           type: "string",
           description:
@@ -120,9 +121,9 @@ export async function runQuoteSplit(
   ctx: ToolContext,
   args: Record<string, unknown>,
 ) {
-  const chain = args.chain as "solana" | "polygon" | undefined;
-  if (chain !== "solana" && chain !== "polygon") {
-    return errorResult("chain must be 'solana' or 'polygon'");
+  const chain = args.chain as "solana" | "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm" | undefined;
+  if (!["solana", "polygon", "base", "optimism", "unichain", "botchain", "xrplevm"].includes(chain ?? "")) {
+    return errorResult("chain must be 'solana', 'polygon', 'base', 'optimism', 'unichain', 'botchain' or 'xrplevm'");
   }
   const merchantAmount = String(args.merchant_amount ?? "");
   if (!merchantAmount) return errorResult("merchant_amount required");
