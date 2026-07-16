@@ -24,7 +24,8 @@ import {
   generatePrivateKey,
   type PrivateKeyAccount,
 } from "viem/accounts";
-import { polygon, base, arbitrum, optimism, bsc, mainnet, type Chain } from "viem/chains";
+import { defineChain } from "viem";
+import { polygon, base, arbitrum, optimism, bsc, mainnet, unichain, type Chain } from "viem/chains";
 import {
   Connection,
   Keypair,
@@ -53,7 +54,13 @@ import {
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export type ChainId = "solana" | "polygon";
+/**
+ * Chains the unified agent can settle on. "solana" uses the Anchor
+ * b2b_pay_with_split program; every other value is an EVM chain with a
+ * verified B2BSplitter deployment (see SPLITTER_DEPLOYMENTS below).
+ * Additive union — "polygon" remains the EVM default.
+ */
+export type ChainId = "solana" | SplitterChainName;
 
 export interface ProviderEntry {
   name:            string;
@@ -150,8 +157,11 @@ export interface AiFinPayAgentOptions extends AgentOptions {
   telemetry?:    boolean;    // default true
   polygonRpc?:   string;     // default: https://polygon.drpc.org
   solanaRpc?:    string;     // default: env AIFINPAY_SOLANA_RPC or mainnet-beta
-  /** RPC overrides for non-Polygon EVM chains used in bridge flows. */
-  evmRpcUrls?:   Partial<Record<EvmChainName, string>>;
+  /** RPC overrides for non-Polygon EVM chains — both bridge-flow chains
+   *  and splitter-settlement chains (base, optimism, unichain, botchain,
+   *  xrplevm). Splitter chains fall back to the public RPC listed in
+   *  SPLITTER_DEPLOYMENTS when no override is given. */
+  evmRpcUrls?:   Partial<Record<AnyEvmChainName, string>>;
 }
 
 // ── 402 challenge body shape returned by AiFinPay paid-proxy bridges ─────
@@ -162,7 +172,9 @@ interface PayMaticChallenge {
   service:  string;
   facilitator?: string;
   pay_matic?: {
-    chain:                 "polygon";
+    /** EVM chain the quote is denominated for. Legacy bridges emit
+     *  "polygon"; newer bridges may emit any SplitterChainName. */
+    chain:                 string;
     splitter:              string;
     merchant_wallet:       string;
     total_wei:             string;
@@ -195,7 +207,11 @@ interface PayMaticChallenge {
   instructions?: string[];
 }
 
-// ── B2BSplitter contract (deployed at 0xE34Fc0…8440 on Polygon mainnet) ──
+// ── B2BSplitter contract ABI ─────────────────────────────────────────────
+// `payMatic` is the splitter's generic NATIVE-token payment entrypoint —
+// the name is a Polygon-era legacy. On Base/Optimism/Unichain it settles
+// ETH, on BOT Chain BOT, on XRPL EVM XRP. There is no ERC-20/USDC path in
+// the deployed splitter payment flow yet — native-token only.
 
 const SPLITTER_PAY_MATIC_ABI = [
   {
@@ -211,6 +227,128 @@ const SPLITTER_PAY_MATIC_ABI = [
   },
 ] as const;
 
+// ── B2BSplitter multi-chain deployment registry ──────────────────────────
+//
+// Chains where the fee-on-top B2BSplitter contract is DEPLOYED AND VERIFIED
+// on-chain (eth_getCode returned bytecode for every address below,
+// 2026-07-15). Do NOT add chains here without re-running that check.
+//
+// BOT Chain (677) and XRPL EVM (1440000) are not shipped with viem/chains,
+// so we defineChain() them locally.
+
+const botchain: Chain = defineChain({
+  id:   677,
+  name: "BOT Chain",
+  nativeCurrency: { name: "BOT", symbol: "BOT", decimals: 18 },
+  rpcUrls: { default: { http: ["https://rpc.botchain.ai"] } },
+  blockExplorers: {
+    default: { name: "BOT Chain Explorer", url: "https://scan.botchain.ai" },
+  },
+});
+
+const xrplevm: Chain = defineChain({
+  id:   1440000,
+  name: "XRPL EVM",
+  nativeCurrency: { name: "XRP", symbol: "XRP", decimals: 18 },
+  rpcUrls: { default: { http: ["https://rpc.xrplevm.org"] } },
+  blockExplorers: {
+    default: { name: "XRPL EVM Explorer", url: "https://explorer.xrplevm.org" },
+  },
+});
+
+/** EVM chains with a live, on-chain-verified B2BSplitter deployment. */
+export type SplitterChainName =
+  | "polygon"
+  | "base"
+  | "optimism"
+  | "unichain"
+  | "botchain"
+  | "xrplevm";
+
+export interface SplitterDeployment {
+  chainId:    number;
+  /** viem chain object used for tx signing on this chain. */
+  chain:      Chain;
+  /** Public RPC used when no evmRpcUrls override is supplied. */
+  defaultRpc: string;
+  /** B2BSplitter contract address (payMatic native-token entrypoint). */
+  splitter:   `0x${string}`;
+  /**
+   * Circle-native USDC on this chain, when one exists. Informational for
+   * now: the splitter payment path is native-token only (payMatic) — no
+   * ERC-20 settlement path is implemented in the SDK or deployed splitter.
+   */
+  usdc?:      `0x${string}`;
+  explorer:   string;
+  /** Env var consulted for the native-token USD price used by the
+   *  pre-sign challenge guard, and its fallback default. */
+  nativeUsdEnv:     string;
+  nativeUsdDefault: number;
+}
+
+export const SPLITTER_DEPLOYMENTS: Record<SplitterChainName, SplitterDeployment> = {
+  polygon: {
+    chainId:    137,
+    chain:      polygon,
+    defaultRpc: "https://polygon.drpc.org",
+    splitter:   "0xE34Fc0E6694821c600Fa0955C0F74720ea6d8440",
+    usdc:       "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+    explorer:   "https://polygonscan.com",
+    nativeUsdEnv: "AIFINPAY_MATIC_USD", // legacy name kept for back-compat
+    nativeUsdDefault: 0.70,
+  },
+  base: {
+    chainId:    8453,
+    chain:      base,
+    defaultRpc: "https://mainnet.base.org",
+    splitter:   "0x8Ad9830D16b1f10333866a3f38C949CbB19f4BAD",
+    usdc:       "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    explorer:   "https://basescan.org",
+    nativeUsdEnv: "AIFINPAY_ETH_USD",
+    nativeUsdDefault: 3000,
+  },
+  optimism: {
+    chainId:    10,
+    chain:      optimism,
+    defaultRpc: "https://mainnet.optimism.io",
+    splitter:   "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB",
+    usdc:       "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+    explorer:   "https://optimistic.etherscan.io",
+    nativeUsdEnv: "AIFINPAY_ETH_USD",
+    nativeUsdDefault: 3000,
+  },
+  unichain: {
+    chainId:    130,
+    chain:      unichain,
+    defaultRpc: "https://mainnet.unichain.org",
+    splitter:   "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB",
+    usdc:       "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
+    explorer:   "https://uniscan.xyz",
+    nativeUsdEnv: "AIFINPAY_ETH_USD",
+    nativeUsdDefault: 3000,
+  },
+  botchain: {
+    chainId:    677,
+    chain:      botchain,
+    defaultRpc: "https://rpc.botchain.ai",
+    splitter:   "0x271870ABb6e6756D97191eBdb27C1873911bb587",
+    // no USDC on BOT Chain — native BOT only
+    explorer:   "https://scan.botchain.ai",
+    nativeUsdEnv: "AIFINPAY_BOT_USD",
+    nativeUsdDefault: 1, // no reliable public feed; set the env var
+  },
+  xrplevm: {
+    chainId:    1440000,
+    chain:      xrplevm,
+    defaultRpc: "https://rpc.xrplevm.org",
+    splitter:   "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB",
+    // no verified USDC on XRPL EVM — native XRP only
+    explorer:   "https://explorer.xrplevm.org",
+    nativeUsdEnv: "AIFINPAY_XRP_USD",
+    nativeUsdDefault: 2,
+  },
+};
+
 // ── EVM chain object lookup — viem chains keyed by our EvmChainName ─────
 
 const EVM_CHAIN_OBJECTS: Record<EvmChainName, Chain> = {
@@ -221,6 +359,20 @@ const EVM_CHAIN_OBJECTS: Record<EvmChainName, Chain> = {
   optimism,
   base,
 };
+
+/**
+ * Union of every EVM chain name the SDK knows an RPC/client for: LiFi
+ * bridge chains (EvmChainName) + splitter deployment chains. Used for
+ * evmRpcUrls overrides and the internal client cache.
+ */
+export type AnyEvmChainName = EvmChainName | SplitterChainName;
+
+function evmChainObject(name: AnyEvmChainName): Chain | undefined {
+  return (
+    (EVM_CHAIN_OBJECTS as Partial<Record<string, Chain>>)[name]
+    ?? (SPLITTER_DEPLOYMENTS as Partial<Record<string, SplitterDeployment>>)[name]?.chain
+  );
+}
 
 // Mainnet USDC SPL mint on Solana (Circle native, not Wormhole-wrapped USDCet)
 const USDC_SOLANA_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -329,8 +481,8 @@ export class AiFinPayAgent {
   private  _polygonWallet?: WalletClient;
   // Multi-chain client cache for cross-chain orchestration (bridge flows).
   // Keyed by EVM chain name (see crossChain.ts EVM_CHAINS).
-  private  _evmClients: Map<EvmChainName, { publicClient: PublicClient; walletClient: WalletClient }> = new Map();
-  private  evmRpcUrls: Partial<Record<EvmChainName, string>> = {};
+  private  _evmClients: Map<AnyEvmChainName, { publicClient: PublicClient; walletClient: WalletClient }> = new Map();
+  private  evmRpcUrls: Partial<Record<AnyEvmChainName, string>> = {};
 
   private constructor(
     inner:      Agent,
@@ -373,19 +525,22 @@ export class AiFinPayAgent {
     return { publicClient: this._polygonPublic, walletClient: this._polygonWallet };
   }
 
-  // Multi-EVM-chain client cache. Used by bridge orchestration to sign source
-  // and (optionally) dest transactions on chains other than Polygon. Picks
-  // viem's built-in chain definitions; an optional RPC override per chain
-  // can be supplied via opts.evmRpcUrls.
-  private evmClients(name: EvmChainName): { publicClient: PublicClient; walletClient: WalletClient } {
+  // Multi-EVM-chain client cache. Used by bridge orchestration AND splitter
+  // settlement on chains other than Polygon. Picks viem's built-in chain
+  // definitions (or our defineChain() entries for botchain/xrplevm); an
+  // optional RPC override per chain can be supplied via opts.evmRpcUrls,
+  // else splitter chains use SPLITTER_DEPLOYMENTS.defaultRpc, else viem's
+  // chain default.
+  private evmClients(name: AnyEvmChainName): { publicClient: PublicClient; walletClient: WalletClient } {
     const cached = this._evmClients.get(name);
     if (cached) return cached;
 
-    const chain = EVM_CHAIN_OBJECTS[name];
+    const chain = evmChainObject(name);
     if (!chain) {
       throw new AiFinPayError(`evmClients: unsupported EVM chain "${name}"`);
     }
-    const rpcUrl  = this.evmRpcUrls[name];
+    const rpcUrl = this.evmRpcUrls[name]
+      ?? (SPLITTER_DEPLOYMENTS as Partial<Record<string, SplitterDeployment>>)[name]?.defaultRpc;
     const transport = rpcUrl ? http(rpcUrl) : http();
 
     const publicClient = createPublicClient({ chain, transport });
@@ -393,6 +548,14 @@ export class AiFinPayAgent {
     const pair = { publicClient, walletClient };
     this._evmClients.set(name, pair);
     return pair;
+  }
+
+  // Clients for a splitter-settlement chain. Polygon keeps its dedicated
+  // client pair (honours the polygonRpc option byte-for-byte); every other
+  // registry chain goes through the generic evmClients cache.
+  private splitterClients(name: SplitterChainName): { publicClient: PublicClient; walletClient: WalletClient } {
+    if (name === "polygon") return this.polygonClients();
+    return this.evmClients(name);
   }
 
   // ── Constructors ─────────────────────────────────────────────────────────
@@ -822,9 +985,11 @@ export class AiFinPayAgent {
    * High-level paid call. Resolves the provider, picks a chain, builds the
    * payment, sends to the bridge, retries with payment proof.
    *
-   * Phase 1 implementation: Polygon per-call splitter via on-chain
-   * `B2BSplitter.payMatic()`. Solana per-call branch lights up after
-   * Phase 2 (b2b_pay_with_split deploy via Squads).
+   * EVM settlement: per-call splitter via on-chain `B2BSplitter.payMatic()`
+   * (generic native-token entrypoint) on any SPLITTER_DEPLOYMENTS chain —
+   * polygon (default), base, optimism, unichain, botchain, xrplevm. Pass
+   * `chain` in CallOptions to override (the provider must accept it).
+   * Solana settlement: b2b_pay_with_split (live since 2026-05-18).
    *
    * Returns `null` (instead of a `Response`) iff a budget cap was hit
    * AND budget.on_limit_exceeded is set to "skip" — the call is dropped
@@ -929,35 +1094,59 @@ export class AiFinPayAgent {
       return paidResp;
     }
 
-    // ── Polygon branch (B2BSplitter.payMatic atomic split, legacy default) ──
+    // ── EVM branch (B2BSplitter.payMatic — generic native-token atomic split) ──
+    // Settles on any chain in SPLITTER_DEPLOYMENTS (polygon default; base,
+    // optimism, unichain, botchain, xrplevm). Native token only — the
+    // deployed splitter payment path has no ERC-20/USDC entrypoint.
     if (!challenge.pay_matic) {
       throw new X402Error(
         `bridge ${provider.name} returned 402 but no pay_matic block — only legacy AiFinPay/Coinbase facilitators not yet wired into AiFinPayAgent.call()`,
       );
     }
     const pm = challenge.pay_matic;
+    const deployment = SPLITTER_DEPLOYMENTS[chain];
+    if (!deployment) {
+      throw new AiFinPayError(
+        `No B2BSplitter deployment registered for chain "${chain}" — supported: ${Object.keys(SPLITTER_DEPLOYMENTS).join(", ")}`,
+      );
+    }
+    // Refuse to pay a quote denominated for another chain's native token:
+    // total_wei quoted for POL on Polygon would be a massive overpay if
+    // blindly re-sent as ETH on Base. Legacy bridges always emit "polygon".
+    if (pm.chain && pm.chain !== chain) {
+      throw new X402Error(
+        `bridge ${provider.name} quoted pay_matic for chain "${pm.chain}" but the call was routed to "${chain}" — refusing cross-denomination payment`,
+      );
+    }
 
     // Guard: same ballpark check as the Solana branch — never sign for an
-    // amount wildly above the declared cost / per-call cap.
+    // amount wildly above the declared cost / per-call cap. Native-token
+    // USD price per chain via SPLITTER_DEPLOYMENTS.nativeUsdEnv.
     {
-      const wei      = Number(pm.total_wei);
-      const maticUsd = parseFloat(process.env.AIFINPAY_MATIC_USD ?? "0.70");
-      const estUsd   = (Number.isFinite(wei) ? wei / 1e18 : 0) * maticUsd;
-      const guarded  = this.guardChallengeAmount(estUsd, cost, provider.name);
+      const wei       = Number(pm.total_wei);
+      const nativeUsd = parseFloat(
+        process.env[deployment.nativeUsdEnv] ?? String(deployment.nativeUsdDefault),
+      );
+      const estUsd    = (Number.isFinite(wei) ? wei / 1e18 : 0) * nativeUsd;
+      const guarded   = this.guardChallengeAmount(estUsd, cost, provider.name);
       if (!guarded) return null;
     }
 
-    // 2. Submit B2BSplitter.payMatic on Polygon mainnet.
+    // 2. Submit B2BSplitter.payMatic on the selected chain's mainnet.
+    // Prefer the challenge's splitter address (current bridge behaviour);
+    // fall back to the registry address for bridges that omit it.
     // ipCreator routing: prefer the challenge's explicit ip_creator; else
     // route the royalty slot to the splitter's treasury (mirrors the Solana
     // branch). Passing address(0) would skip the transfer and permanently
     // strand the 1bp inside B2BSplitter — the contract has no sweep function.
+    const splitterAddress = (pm.splitter as `0x${string}` | undefined)
+      ?? deployment.splitter;
     const ipCreator = (pm.ip_creator as `0x${string}` | undefined)
-      ?? await this.splitterTreasury(pm.splitter as `0x${string}`)
+      ?? await this.splitterTreasury(splitterAddress, chain)
       ?? "0x0000000000000000000000000000000000000000";
-    const { publicClient, walletClient } = this.polygonClients();
+    const { publicClient, walletClient } = this.splitterClients(chain);
     const txHash = await walletClient.writeContract({
-      address:      pm.splitter as `0x${string}`,
+      address:      splitterAddress,
       abi:          SPLITTER_PAY_MATIC_ABI,
       functionName: "payMatic",
       args: [
@@ -966,14 +1155,14 @@ export class AiFinPayAgent {
         pm.order_id,
       ],
       value: BigInt(pm.total_wei),
-      chain: polygon,
+      chain: deployment.chain,
       account: this.evmAccount,
     });
 
-    // 3. Wait for receipt (we only need inclusion for Polygon's 2s blocks).
+    // 3. Wait for receipt (inclusion is enough on these fast-block chains).
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
     if (receipt.status !== "success") {
-      throw new AiFinPayError(`Polygon tx reverted: ${txHash}`);
+      throw new AiFinPayError(`${deployment.chain.name} tx reverted: ${txHash}`);
     }
 
     // 4. Retry the bridge with payment proof.
@@ -992,7 +1181,7 @@ export class AiFinPayAgent {
     if (this.telemetry) this.reportTelemetry({ kind: "call", provider: provider.name, chain, cost, tx: txHash });
     // @internal — see Solana branch above for rationale on property-attach.
     (paidResp as unknown as { aifinpayTx?: string; aifinpayChain?: ChainId }).aifinpayTx = txHash;
-    (paidResp as unknown as { aifinpayTx?: string; aifinpayChain?: ChainId }).aifinpayChain = "polygon";
+    (paidResp as unknown as { aifinpayTx?: string; aifinpayChain?: ChainId }).aifinpayChain = chain;
     return paidResp;
   }
 
@@ -1184,22 +1373,27 @@ export class AiFinPayAgent {
     }
   }
 
-  // Cache: splitter address → treasury address (constant per deployment).
+  // Cache: "chain:splitter address" → treasury address (constant per deployment).
   private splitterTreasuryCache = new Map<string, `0x${string}`>();
 
-  /** Read + cache B2BSplitter.treasury(). Returns null on RPC failure. */
-  private async splitterTreasury(splitter: `0x${string}`): Promise<`0x${string}` | null> {
-    const cached = this.splitterTreasuryCache.get(splitter.toLowerCase());
+  /** Read + cache B2BSplitter.treasury() on the given chain (default
+   *  polygon for back-compat). Returns null on RPC failure. */
+  private async splitterTreasury(
+    splitter: `0x${string}`,
+    chainName: SplitterChainName = "polygon",
+  ): Promise<`0x${string}` | null> {
+    const cacheKey = `${chainName}:${splitter.toLowerCase()}`;
+    const cached = this.splitterTreasuryCache.get(cacheKey);
     if (cached) return cached;
     try {
-      const { publicClient } = this.polygonClients();
+      const { publicClient } = this.splitterClients(chainName);
       const treasury = await publicClient.readContract({
         address:      splitter,
         abi:          SPLITTER_TREASURY_ABI,
         functionName: "treasury",
       }) as `0x${string}`;
       if (!treasury || treasury === "0x0000000000000000000000000000000000000000") return null;
-      this.splitterTreasuryCache.set(splitter.toLowerCase(), treasury);
+      this.splitterTreasuryCache.set(cacheKey, treasury);
       return treasury;
     } catch {
       return null;

@@ -1,5 +1,15 @@
 import type { ToolContext } from "../server.js";
 
+// NOTE on the chain enum below: pay_with_split and quote_split are
+// BACKEND-INVOICE-DRIVEN — they call the operator API
+// (POST /api/b2b/pay-with-split, GET /api/b2b/quote-split), which only
+// supports "solana" and "polygon" today. Do NOT widen the enum here
+// without backend support: the request would just be rejected server-side.
+// Direct multi-EVM splitter settlement (Base, Optimism, Unichain,
+// BOT Chain, XRPL EVM — native-token path) lives in the SDK's
+// AiFinPayAgent.call() (@aifinpay/agent >= 1.3.0) and is not exposed
+// through these two tools.
+
 export function payWithSplitTool() {
   return {
     name: "pay_with_split",

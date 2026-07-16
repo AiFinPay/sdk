@@ -2,8 +2,12 @@
 
 Non-custodial x402 payment client for autonomous AI agents on
 [AiFinPay](https://aifinpay.io) — canonical domain **aifinpay.io** (the
-legacy `aifinpay.company` host is retired). SDK settlement: Polygon
-(default) + Solana; the protocol is live across 13 networks — see
+legacy `aifinpay.company` host is retired). SDK settlement: since 1.3.0,
+direct fee-on-top splitter settlement (`AiFinPayAgent.call()`) works on
+Polygon (default), Base, Optimism, Unichain, BOT Chain and XRPL EVM
+(native-token path only — no ERC-20/USDC settlement yet), plus Solana;
+the backend-quoted invoice flow (`/api/b2b/pay-with-split`) remains
+Polygon + Solana. The protocol is live across 13 networks — see
 [aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
 
 The Ed25519 keypair is generated locally with `tweetnacl` and never leaves

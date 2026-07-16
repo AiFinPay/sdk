@@ -6,8 +6,12 @@ MCP-aware agent runtime — your agent can now buy services autonomously.
 
 Canonical domain: **aifinpay.io** (the legacy `aifinpay.company` host is
 retired — ignore any docs pointing there). SDK settlement runs on
-**Polygon (default) and Solana**; the protocol itself is live across 13
-networks — see [aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
+**Polygon (default) and Solana**; the underlying Node SDK (≥ 1.3.0) also
+supports direct splitter settlement on Base, Optimism, Unichain, BOT Chain
+and XRPL EVM (native-token path), while the MCP `pay_with_split` /
+`quote_split` tools stay Polygon + Solana (backend invoice flow). The
+protocol itself is live across 13 networks — see
+[aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
 
 ## Tools
 

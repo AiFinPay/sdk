@@ -4,6 +4,32 @@ All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
 `1.0.0` onward the public API is stable and changes follow semver.
 
+## @aifinpay/agent 1.3.0 — 2026-07-16
+
+### Added
+- **Multi-EVM splitter settlement (native token, direct path)** —
+  `AiFinPayAgent.call()` now settles `B2BSplitter.payMatic` on every
+  chain in the new exported `SPLITTER_DEPLOYMENTS` registry: Polygon
+  (default), Base, Optimism, Unichain, BOT Chain, XRPL EVM. All splitter
+  addresses verified on-chain (`eth_getCode`) before inclusion. `payMatic`
+  is the splitter's generic native-token entrypoint (POL/ETH/BOT/XRP) —
+  there is still **no ERC-20/USDC settlement path**.
+- `ChainId` widened (additive union) to `"solana" | SplitterChainName`;
+  new exported types `SplitterChainName`, `SplitterDeployment`,
+  `AnyEvmChainName`. `evmRpcUrls` now accepts overrides for the new
+  chains (public RPC fallbacks built in).
+- Safety: `call()` refuses a `pay_matic` challenge denominated for a
+  different chain than the one routed; per-chain native-USD guard envs
+  (`AIFINPAY_ETH_USD`, `AIFINPAY_BOT_USD`, `AIFINPAY_XRP_USD`;
+  `AIFINPAY_MATIC_USD` kept for Polygon back-compat).
+
+### Unchanged
+- Solana settlement (`b2b_pay_with_split`) byte-identical.
+- Backend-quoted invoice flow (`/api/b2b/pay-with-split`,
+  `/api/b2b/quote-split`, MCP `pay_with_split` / `quote_split` tools)
+  remains Polygon + Solana — backend constraint, documented in-code.
+- Python SDK direct settlement remains Polygon + Solana.
+
 ## 1.0.0 — 2026-06-16
 
 First stable release. The three packages graduate from alpha to a

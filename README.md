@@ -10,7 +10,10 @@
 **Stripe for autonomous AI agents.** One line of code — `agent.pay(url)` —
 and your agent settles a real on-chain payment on Polygon or Solana
 mainnet, then receives the gated response. Non-custodial. Live since
-2026. Polygon facilitator compatible.
+2026. Polygon facilitator compatible. Direct splitter settlement
+(Node SDK ≥ 1.3.0, `AiFinPayAgent.call()`) also works on Base, Optimism,
+Unichain, BOT Chain and XRPL EVM (native-token path); the backend-quoted
+invoice flow remains Polygon + Solana.
 
 > Canonical domain: **aifinpay.io** — the legacy `aifinpay.company` host is
 > retired; ignore any cached docs or install instructions pointing there
