@@ -93,13 +93,42 @@ const PRICE_LAMPORTS         = process.env.PRICE_LAMPORTS         || "50000";
 // dashboard. Set to e.g. https://aifinpay.io in prod.
 const OPERATOR_URL           = process.env.OPERATOR_URL || "";
 
+// Shared service secret used to sign operator reports. The operator rejects
+// unsigned bridge events, since anyone could otherwise inject fake
+// failures/settlements and corrupt its analytics. Must match the operator's
+// AIFP_INGEST_SECRET.
+const OPERATOR_INGEST_SECRET = process.env.AIFP_INGEST_SECRET || "";
+
+if (OPERATOR_URL && !OPERATOR_INGEST_SECRET) {
+  console.warn(
+    `[${SERVICE_NAME}] WARNING: OPERATOR_URL is set but AIFP_INGEST_SECRET is not — ` +
+      "operator reports will be rejected as unsigned.",
+  );
+}
+
 async function reportToOperator(kind, fields) {
   if (!OPERATOR_URL) return;
   try {
+    const body = JSON.stringify({
+      service: SERVICE_NAME,
+      kind,
+      ts: Math.floor(Date.now() / 1000),
+      ...fields,
+    });
+    const headers = { "content-type": "application/json" };
+    if (OPERATOR_INGEST_SECRET) {
+      // t=<unix>,v1=<hex hmac-sha256 of `${t}.${body}`> — same scheme as the
+      // operator's outbound webhook signatures.
+      const t = Math.floor(Date.now() / 1000);
+      const v1 = crypto.createHmac("sha256", OPERATOR_INGEST_SECRET)
+        .update(`${t}.${body}`)
+        .digest("hex");
+      headers["x-aifinpay-ingest"] = `t=${t},v1=${v1}`;
+    }
     await fetch(`${OPERATOR_URL.replace(/\/$/, "")}/api/internal/bridge-event`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ service: SERVICE_NAME, kind, ts: Math.floor(Date.now() / 1000), ...fields }),
+      headers,
+      body,
     });
   } catch { /* best-effort, never block the main flow */ }
 }
