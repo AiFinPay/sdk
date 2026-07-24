@@ -18,22 +18,24 @@ pip install aifinpay-agent
 ```
 
 ```python
-from aifinpay import Agent
+from aifinpay import AiFinPayAgent
 
-# Generate a fresh keypair. Persist `agent.secret_b58` if you want to
-# reuse this agent identity later.
-agent = Agent.new()
-print("Fund this address with a few cents of MATIC:", agent.address)
+# One agent identity, two addresses. Settlement is EVM (Polygon/Base/…), so
+# you fund the EVM address — NOT the Solana id. Reuse this identity later
+# with AiFinPayAgent.from_solana_secret(secret).
+agent = AiFinPayAgent.new()
+print("Fund THIS address (USDC or POL on Polygon):", agent.evm_address)
+print("Solana id (leaderboard / Seat PDA):        ", agent.solana_address)
 
-# Once funded, this autonomously settles the 402 challenge on-chain and
-# returns the gated response body.
-resp = agent.pay(
-    "https://bridge.aifinpay.io/io-net/chat/completions",
-    body={"model": "meta-llama/Llama-3.3-70B-Instruct",
-          "messages": [{"role": "user", "content": "Hello"}]},
-)
+# Once the EVM address is funded, this autonomously settles the 402 challenge
+# on-chain and returns the gated body. `provider` is a registry slug — no
+# hardcoded bridge URL.
+resp = agent.call("io-net", {
+    "model": "meta-llama/Llama-3.3-70B-Instruct",
+    "messages": [{"role": "user", "content": "Hello"}],
+})
 print(resp.json()["choices"][0]["message"]["content"])
-print("tx hash:", resp.headers.get("x-payment-receipt"))
+print("receipt:", resp.headers.get("x-payment-receipt"))
 ```
 
 ## Path 2 — Node / TypeScript SDK
@@ -43,16 +45,22 @@ npm install @aifinpay/agent
 ```
 
 ```ts
-import { Agent } from "@aifinpay/agent";
+import { AiFinPayAgent } from "@aifinpay/agent";
 
-const agent = Agent.new();
-console.log("Fund this address:", agent.address);
+// One agent identity, two addresses. Fund the EVM address (settlement is
+// EVM) — NOT the Solana id. Restore later via AiFinPayAgent.fromSolanaSecret.
+const agent = await AiFinPayAgent.new();
+console.log("Fund THIS address (USDC or POL on Polygon):", agent.evmAddress);
+console.log("Solana id (leaderboard / Seat PDA):        ", agent.solanaAddress);
 
-const res = await agent.pay(
-  "https://bridge.aifinpay.io/io-net/chat/completions",
-  { body: { model: "meta-llama/Llama-3.3-70B-Instruct",
-            messages: [{ role: "user", content: "Hello" }] } },
-);
+// `provider` is a registry slug — no hardcoded bridge URL. Returns null if a
+// budget cap is hit before paying.
+const res = await agent.call({
+  provider: "io-net",
+  body: { model: "meta-llama/Llama-3.3-70B-Instruct",
+          messages: [{ role: "user", content: "Hello" }] },
+});
+if (!res) throw new Error("budget cap hit before paying");
 const data = await res.json();
 console.log(data.choices[0].message.content);
 ```
@@ -93,7 +101,8 @@ Working examples for each framework live under
 
 ## How a payment actually settles
 
-1. Your code calls `agent.pay(url)`.
+1. Your code calls `agent.call({ provider })` (or `agent.pay(url)` on the
+   legacy `Agent`).
 2. The server returns **HTTP 402** with a JSON `accepts[]` block (or our
    `pay_matic` block). It lists: chain, asset, payTo, amount,
    `nonce`.

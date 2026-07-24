@@ -1,17 +1,21 @@
-// ── Bridge state store: Redis if REDIS_URL set, in-memory fallback. ───────
+// ── Bridge state store: shared Redis, FAIL CLOSED without it. ──────────────
 //
 // Two namespaces:
 //   bridge:order:<orderId>   → JSON { issuedAt, query }, TTL 10min
 //   bridge:consumed:<txHash> → "1", TTL 24h
 //
-// Survives restart when Redis-backed. Without Redis, falls back to a
-// process-local Map (fine for the pilot single-instance run).
+// Order state and the consumed-tx replay guard MUST survive restart and be
+// shared across instances. A process-local Map loses both on restart and is
+// not shared under failover — so it is refused in production. Set
+// ALLOW_MEMORY_STORE=1 only for a local single-process dev run.
 import Redis from "ioredis";
 
 const ORDER_TTL_S    = 10 * 60;
 const CONSUMED_TTL_S = 24 * 3600;
 const ORDER_PFX      = "bridge:order:";
 const CONSUMED_PFX   = "bridge:consumed:";
+
+const ALLOW_MEMORY = process.env.ALLOW_MEMORY_STORE === "1";
 
 let redis = null;
 let useRedis = false;
@@ -28,12 +32,25 @@ if (process.env.REDIS_URL) {
     useRedis = true;
     console.log("[store] Redis connected:", process.env.REDIS_URL);
   } catch (e) {
-    console.warn("[store] Redis connect failed, falling back to memory:", e.message);
+    if (!ALLOW_MEMORY) {
+      throw new Error(
+        `[store] REDIS_URL is set but the connection failed (${e.message}). ` +
+          "Refusing to start with an in-memory store — order/replay state would " +
+          "not survive a restart or failover. Fix Redis, or set ALLOW_MEMORY_STORE=1 for local dev.",
+      );
+    }
+    console.warn("[store] Redis connect failed, ALLOW_MEMORY_STORE=1 — using memory (dev only):", e.message);
     redis = null;
     useRedis = false;
   }
+} else if (ALLOW_MEMORY) {
+  console.warn("[store] REDIS_URL not set, ALLOW_MEMORY_STORE=1 — using in-memory store (dev only; not restart-safe)");
 } else {
-  console.log("[store] REDIS_URL not set — using in-memory store");
+  throw new Error(
+    "[store] REDIS_URL is not set. The bridge requires shared Redis so order " +
+      "state and the consumed-tx replay guard survive restart/failover. " +
+      "Set REDIS_URL, or ALLOW_MEMORY_STORE=1 for a local dev run.",
+  );
 }
 
 // In-memory fallbacks
@@ -90,11 +107,17 @@ export async function isTxConsumed(txHash) {
   return memConsumed.has(k);
 }
 
+// Atomically claim a tx as consumed. Returns true if THIS call marked it
+// (i.e. it was not already consumed) — use the return value as the replay
+// guard instead of a separate isTxConsumed() check, which races under
+// concurrency. `SET NX` makes the check-and-set a single atomic op.
 export async function markTxConsumed(txHash) {
   const k = txHash.toLowerCase();
   if (useRedis) {
-    await redis.set(CONSUMED_PFX + k, "1", "EX", CONSUMED_TTL_S);
-  } else {
-    memConsumed.add(k);
+    const res = await redis.set(CONSUMED_PFX + k, "1", "EX", CONSUMED_TTL_S, "NX");
+    return res === "OK";
   }
+  if (memConsumed.has(k)) return false;
+  memConsumed.add(k);
+  return true;
 }
