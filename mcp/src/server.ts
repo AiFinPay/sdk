@@ -43,13 +43,22 @@ export async function createServer(config: McpConfig = {}) {
           baseUrl:   config.baseUrl,
           timeoutMs: config.timeoutMs,
         });
+        // NEVER log private key material. stderr is captured by Docker,
+        // journald, CI logs, support bundles and monitoring, so printing the
+        // secret here leaked it into all of them.
+        //
+        // The old message also promised something untrue: this agent comes
+        // from AiFinPayAgent.new(), whose EVM key is independent of the Solana
+        // key. Saving the Solana secret would NOT restore the EVM address
+        // printed below, so anything funded here would be unreachable.
         log(
           "warn",
-          `[aifinpay-mcp] no AIFINPAY_AGENT_SECRET set — generated EPHEMERAL agent.\n` +
+          `[aifinpay-mcp] no AIFINPAY_AGENT_SECRET set — generated an EPHEMERAL, NON-RECOVERABLE agent.\n` +
             `  solana_address: ${a.solanaAddress}\n` +
             `  evm_address:    ${a.evmAddress}\n` +
-            `  solana_secret:  ${a.inner.secretB58}\n` +
-            `  >> Save the secret to AIFINPAY_AGENT_SECRET to keep the agent across restarts.`,
+            `  >> DO NOT FUND these addresses. This identity is lost when the process exits.\n` +
+            `  >> For a persistent wallet, create one from a seed you back up\n` +
+            `     (AiFinPayAgent.fromSeed / \`aifinpay init\`) and set AIFINPAY_AGENT_SECRET.`,
         );
         return a;
       })();
