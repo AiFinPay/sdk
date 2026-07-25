@@ -24,10 +24,9 @@ from aifinpay import AiFinPayAgent
 # ONE seed → both addresses, deterministically. Back up this seed and you can
 # restore the same Solana AND EVM address on any machine.
 #
-# Do NOT use AiFinPayAgent.new() for an agent you intend to fund: it generates
-# an EVM key that is independent of the Solana key, so restoring from the
-# Solana secret alone yields a DIFFERENT EVM address and the balance you
-# funded becomes unreachable.
+# `AiFinPayAgent.new()` also works and is now equally recoverable — it derives
+# both keys from a random seed. Starting from an explicit seed just makes the
+# backup artifact obvious.
 seed = secrets.token_hex(32)
 print("BACK UP THIS SEED — it is the only way to recover the wallet:", seed)
 
@@ -59,10 +58,9 @@ import { AiFinPayAgent } from "@aifinpay/agent";
 // ONE seed → both addresses, deterministically. Back up this seed and you can
 // restore the same Solana AND EVM address on any machine.
 //
-// Do NOT use AiFinPayAgent.new() for an agent you intend to fund: it generates
-// an EVM key that is independent of the Solana key, so restoring from the
-// Solana secret alone yields a DIFFERENT EVM address and the balance you
-// funded becomes unreachable.
+// `AiFinPayAgent.new()` also works and is now equally recoverable — it derives
+// both keys from a random seed. Starting from an explicit seed just makes the
+// backup artifact obvious.
 const seed = randomBytes(32).toString("hex");
 console.log("BACK UP THIS SEED — it is the only way to recover the wallet:", seed);
 
