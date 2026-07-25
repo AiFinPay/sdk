@@ -18,12 +18,20 @@ pip install aifinpay-agent
 ```
 
 ```python
+import secrets
 from aifinpay import AiFinPayAgent
 
-# One agent identity, two addresses. Settlement is EVM (Polygon/Base/…), so
-# you fund the EVM address — NOT the Solana id. Reuse this identity later
-# with AiFinPayAgent.from_solana_secret(secret).
-agent = AiFinPayAgent.new()
+# ONE seed → both addresses, deterministically. Back up this seed and you can
+# restore the same Solana AND EVM address on any machine.
+#
+# Do NOT use AiFinPayAgent.new() for an agent you intend to fund: it generates
+# an EVM key that is independent of the Solana key, so restoring from the
+# Solana secret alone yields a DIFFERENT EVM address and the balance you
+# funded becomes unreachable.
+seed = secrets.token_hex(32)
+print("BACK UP THIS SEED — it is the only way to recover the wallet:", seed)
+
+agent = AiFinPayAgent.from_seed(seed)     # later: AiFinPayAgent.from_seed(seed)
 print("Fund THIS address (USDC or POL on Polygon):", agent.evm_address)
 print("Solana id (leaderboard / Seat PDA):        ", agent.solana_address)
 
@@ -45,11 +53,20 @@ npm install @aifinpay/agent
 ```
 
 ```ts
+import { randomBytes } from "node:crypto";
 import { AiFinPayAgent } from "@aifinpay/agent";
 
-// One agent identity, two addresses. Fund the EVM address (settlement is
-// EVM) — NOT the Solana id. Restore later via AiFinPayAgent.fromSolanaSecret.
-const agent = await AiFinPayAgent.new();
+// ONE seed → both addresses, deterministically. Back up this seed and you can
+// restore the same Solana AND EVM address on any machine.
+//
+// Do NOT use AiFinPayAgent.new() for an agent you intend to fund: it generates
+// an EVM key that is independent of the Solana key, so restoring from the
+// Solana secret alone yields a DIFFERENT EVM address and the balance you
+// funded becomes unreachable.
+const seed = randomBytes(32).toString("hex");
+console.log("BACK UP THIS SEED — it is the only way to recover the wallet:", seed);
+
+const agent = await AiFinPayAgent.fromSeed(seed);   // later: fromSeed(seed)
 console.log("Fund THIS address (USDC or POL on Polygon):", agent.evmAddress);
 console.log("Solana id (leaderboard / Seat PDA):        ", agent.solanaAddress);
 
