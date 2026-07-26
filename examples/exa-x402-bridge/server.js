@@ -73,12 +73,18 @@ const USDT_ADDRESS           = process.env.USDT_POLYGON           || "0xc2132D05
 const X402_FACILITATOR_URL   = process.env.X402_FACILITATOR_URL   || "https://x402.polygon.technology";
 const X402_RESOURCE_URL      = process.env.X402_RESOURCE_URL      || "https://bridge.aifinpay.io/exa/search";
 // Standard-x402 stablecoin rail (ERC-3009 USDC/USDT via facilitator). OFF by
-// default: the POST /search handler has no `x-payment` branch yet, so
-// advertising these accepts produces a deterministic second 402 (audit P0
-// "bridge advertises standard x402 but never handles x-payment"). Turn ON only
-// after the x-payment handler is wired to verifyX402Payment() AND a
-// clean-machine paid E2E passes (audit P0 "no release gate"). Until then we
-// advertise only the rails this bridge actually settles (POL + Solana).
+// default *for this bridge only*: the POST /search handler here has no
+// `x-payment` branch, so advertising these accepts produces a deterministic
+// second 402 (audit P0 "bridge advertises standard x402 but never handles
+// x-payment").
+//
+// Scope matters — the sibling bridges are NOT affected: io-net and venice both
+// implement the branch (verify via the facilitator, then forward upstream) and
+// their stable rail works, so they are deliberately left advertising it. exa is
+// the only one where the rail is advertised with nothing behind it.
+//
+// Turn ON here only after the handler is wired to verifyX402Payment() AND a
+// clean-machine paid E2E passes (audit P0 "no release gate").
 const X402_STABLE_ENABLED    = process.env.X402_STABLE_ENABLED === "1";
 
 // ── Solana payment option (atomic b2b_pay_with_split, live 2026-05-18) ──
