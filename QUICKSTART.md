@@ -18,22 +18,31 @@ pip install aifinpay-agent
 ```
 
 ```python
-from aifinpay import Agent
+import secrets
+from aifinpay import AiFinPayAgent
 
-# Generate a fresh keypair. Persist `agent.secret_b58` if you want to
-# reuse this agent identity later.
-agent = Agent.new()
-print("Fund this address with a few cents of MATIC:", agent.address)
+# ONE seed → both addresses, deterministically. Back up this seed and you can
+# restore the same Solana AND EVM address on any machine.
+#
+# `AiFinPayAgent.new()` also works and is now equally recoverable — it derives
+# both keys from a random seed. Starting from an explicit seed just makes the
+# backup artifact obvious.
+seed = secrets.token_hex(32)
+print("BACK UP THIS SEED — it is the only way to recover the wallet:", seed)
 
-# Once funded, this autonomously settles the 402 challenge on-chain and
-# returns the gated response body.
-resp = agent.pay(
-    "https://bridge.aifinpay.io/io-net/chat/completions",
-    body={"model": "meta-llama/Llama-3.3-70B-Instruct",
-          "messages": [{"role": "user", "content": "Hello"}]},
-)
+agent = AiFinPayAgent.from_seed(seed)     # later: AiFinPayAgent.from_seed(seed)
+print("Fund THIS address (USDC or POL on Polygon):", agent.evm_address)
+print("Solana id (leaderboard / Seat PDA):        ", agent.solana_address)
+
+# Once the EVM address is funded, this autonomously settles the 402 challenge
+# on-chain and returns the gated body. `provider` is a registry slug — no
+# hardcoded bridge URL.
+resp = agent.call("io-net", {
+    "model": "meta-llama/Llama-3.3-70B-Instruct",
+    "messages": [{"role": "user", "content": "Hello"}],
+})
 print(resp.json()["choices"][0]["message"]["content"])
-print("tx hash:", resp.headers.get("x-payment-receipt"))
+print("receipt:", resp.headers.get("x-payment-receipt"))
 ```
 
 ## Path 2 — Node / TypeScript SDK
@@ -43,16 +52,30 @@ npm install @aifinpay/agent
 ```
 
 ```ts
-import { Agent } from "@aifinpay/agent";
+import { randomBytes } from "node:crypto";
+import { AiFinPayAgent } from "@aifinpay/agent";
 
-const agent = Agent.new();
-console.log("Fund this address:", agent.address);
+// ONE seed → both addresses, deterministically. Back up this seed and you can
+// restore the same Solana AND EVM address on any machine.
+//
+// `AiFinPayAgent.new()` also works and is now equally recoverable — it derives
+// both keys from a random seed. Starting from an explicit seed just makes the
+// backup artifact obvious.
+const seed = randomBytes(32).toString("hex");
+console.log("BACK UP THIS SEED — it is the only way to recover the wallet:", seed);
 
-const res = await agent.pay(
-  "https://bridge.aifinpay.io/io-net/chat/completions",
-  { body: { model: "meta-llama/Llama-3.3-70B-Instruct",
-            messages: [{ role: "user", content: "Hello" }] } },
-);
+const agent = await AiFinPayAgent.fromSeed(seed);   // later: fromSeed(seed)
+console.log("Fund THIS address (USDC or POL on Polygon):", agent.evmAddress);
+console.log("Solana id (leaderboard / Seat PDA):        ", agent.solanaAddress);
+
+// `provider` is a registry slug — no hardcoded bridge URL. Returns null if a
+// budget cap is hit before paying.
+const res = await agent.call({
+  provider: "io-net",
+  body: { model: "meta-llama/Llama-3.3-70B-Instruct",
+          messages: [{ role: "user", content: "Hello" }] },
+});
+if (!res) throw new Error("budget cap hit before paying");
 const data = await res.json();
 console.log(data.choices[0].message.content);
 ```
@@ -93,7 +116,8 @@ Working examples for each framework live under
 
 ## How a payment actually settles
 
-1. Your code calls `agent.pay(url)`.
+1. Your code calls `agent.call({ provider })` (or `agent.pay(url)` on the
+   legacy `Agent`).
 2. The server returns **HTTP 402** with a JSON `accepts[]` block (or our
    `pay_matic` block). It lists: chain, asset, payTo, amount,
    `nonce`.
