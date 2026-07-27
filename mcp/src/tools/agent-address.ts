@@ -13,6 +13,17 @@ export function agentAddressTool() {
       type: "object",
       properties: {},
     },
+    // OpenAI Apps SDK requires impact hints on every tool (omitting = validation error).
+    annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
+    outputSchema: {
+      type: "object",
+      properties: {
+        solana: { type: "string", description: "Solana base58 address" },
+        evm:    { type: "string", description: "Polygon/EVM address" },
+        note:   { type: "string" },
+      },
+      required: ["solana", "evm"],
+    },
   };
 }
 
@@ -32,5 +43,6 @@ export async function runAgentAddress(
     content: [
       { type: "text", text: JSON.stringify(payload, null, 2) },
     ],
+    structuredContent: payload,
   };
 }

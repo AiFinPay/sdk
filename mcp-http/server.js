@@ -21,9 +21,22 @@ import crypto from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { createServer } from "@aifinpay/mcp";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 const PORT = process.env.PORT || 3010;
 const PUBLIC_URL = process.env.MCP_PUBLIC_URL || "https://mcp.aifinpay.io/mcp";
+
+// ── OAuth 2.1 config (ChatGPT Apps linking flow, RFC 9728 / 8414) ──────────
+// Discovery lives on THIS server; the authorization server is your IdP
+// (WorkOS / Clerk / Stytch / Auth0 / Scalekit). AUTH_REQUIRED stays OFF until
+// an IdP is wired, so existing anonymous BYO-MCP connectors keep working.
+const ISSUER = process.env.AIFINPAY_OAUTH_ISSUER || ""; // e.g. https://auth.aifinpay.io
+const RESOURCE = process.env.MCP_RESOURCE_URL || PUBLIC_URL; // token `aud` must equal this
+const SCOPES = (process.env.AIFINPAY_OAUTH_SCOPES ||
+  "openid email profile aifinpay.read aifinpay.pay").split(/\s+/).filter(Boolean);
+const AUTH_REQUIRED = process.env.AIFINPAY_AUTH_REQUIRED === "true";
+const PRM_URL = RESOURCE.replace(/\/mcp$/, "") + "/.well-known/oauth-protected-resource";
+const REQUIRED_SCOPE = process.env.AIFINPAY_REQUIRED_SCOPE || ""; // e.g. "aifinpay.read"
 
 const app = express();
 app.set("trust proxy", 1);
@@ -67,6 +80,90 @@ app.get("/", (_req, res) =>
     },
   }),
 );
+
+// ── OAuth 2.1 discovery (RFC 9728) — required by ChatGPT Apps for the
+//    account-linking flow. protected-resource lives here and points ChatGPT at
+//    the authorization server; the IdP serves its own RFC 8414 metadata.
+app.get("/.well-known/oauth-protected-resource", (_req, res) => {
+  res.set("cache-control", "public, max-age=3600");
+  res.json({
+    resource: RESOURCE,
+    authorization_servers: ISSUER ? [ISSUER] : [],
+    scopes_supported: SCOPES,
+    bearer_methods_supported: ["header"],
+    resource_documentation: "https://aifinpay.io/docs",
+  });
+});
+
+// Optional: if you self-host the auth server, advertise where its RFC 8414
+// metadata lives. Normally the IdP serves this at ISSUER directly.
+app.get("/.well-known/oauth-authorization-server", (_req, res) => {
+  if (!ISSUER) {
+    return res.status(404).json({
+      error: "no_authorization_server_configured",
+      note: "Set AIFINPAY_OAUTH_ISSUER; the IdP serves its own RFC 8414 metadata.",
+    });
+  }
+  res.json({
+    issuer: ISSUER,
+    authorization_server_metadata: ISSUER + "/.well-known/oauth-authorization-server",
+  });
+});
+
+// Lazily resolve the IdP's JWKS by discovering jwks_uri from its OIDC/OAuth
+// metadata (provider-agnostic — works with WorkOS / Stytch / Clerk / Auth0 /
+// Scalekit or any standards-compliant issuer).
+let _jwks = null;
+async function getJwks() {
+  if (_jwks) return _jwks;
+  if (!ISSUER) throw new Error("AIFINPAY_OAUTH_ISSUER unset");
+  const base = ISSUER.replace(/\/$/, "");
+  let jwksUri = `${base}/.well-known/jwks.json`;
+  try {
+    const meta = await fetch(`${base}/.well-known/openid-configuration`).then((r) => r.json());
+    if (meta?.jwks_uri) jwksUri = meta.jwks_uri;
+  } catch {
+    // fall back to the conventional path above
+  }
+  _jwks = createRemoteJWKSet(new URL(jwksUri));
+  return _jwks;
+}
+
+// Bearer gate. OFF unless AIFINPAY_AUTH_REQUIRED=true (keeps anonymous BYO-MCP
+// connectors working). When ON, a missing/invalid token returns 401 +
+// WWW-Authenticate — exactly what triggers ChatGPT's account-linking UI.
+// Real verification: JWT signature (IdP JWKS) + iss + aud(===RESOURCE) + exp + scope.
+async function maybeAuth(req, res, next) {
+  if (!AUTH_REQUIRED) return next();
+  const challenge = (msg) => {
+    res.set("WWW-Authenticate", `Bearer resource_metadata="${PRM_URL}"`);
+    return res.status(401).json({
+      jsonrpc: "2.0",
+      error: { code: -32001, message: `Unauthorized: ${msg || "OAuth required"}` },
+      _meta: { "mcp/www_authenticate": `Bearer resource_metadata="${PRM_URL}"` },
+      id: null,
+    });
+  };
+  const h = String(req.headers["authorization"] || "");
+  const token = h.startsWith("Bearer ") ? h.slice(7).trim() : "";
+  if (!token) return challenge();
+  try {
+    const jwks = await getJwks();
+    const { payload } = await jwtVerify(token, jwks, {
+      issuer: ISSUER || undefined,
+      audience: RESOURCE, // ChatGPT mints the token with aud = our resource URL
+    });
+    if (REQUIRED_SCOPE) {
+      const scopes = String(payload.scope || payload.scp || "").split(/\s+/).filter(Boolean);
+      if (!scopes.includes(REQUIRED_SCOPE)) return challenge("insufficient_scope");
+    }
+    req.auth = { sub: payload.sub, scope: payload.scope ?? payload.scp, verified: true };
+    return next();
+  } catch (e) {
+    sessionLog("warn", `token verify failed: ${e?.message || e}`);
+    return challenge("invalid_token");
+  }
+}
 
 // ── Static tool spec — for catalogs that just GET (Google Vertex MCP,
 //    Smithery preview, etc.) and can't speak Streamable HTTP handshake.
@@ -140,7 +237,7 @@ function sessionLog(level, msg) {
   process.stderr.write(`[mcp-http] ${level}: ${msg}\n`);
 }
 
-app.post("/mcp", mcpLimiter, async (req, res) => {
+app.post("/mcp", mcpLimiter, maybeAuth, async (req, res) => {
   try {
     const sessionId = req.headers["mcp-session-id"];
     let session = sessionId ? sessions.get(sessionId) : null;
@@ -276,4 +373,11 @@ app.delete("/mcp", async (req, res) => {
 
 app.listen(PORT, () => {
   sessionLog("info", `listening on :${PORT}, public URL ${PUBLIC_URL}`);
+  sessionLog("info", `oauth: required=${AUTH_REQUIRED} issuer=${ISSUER || "(none)"} resource=${RESOURCE}`);
+  if (AUTH_REQUIRED && !ISSUER) {
+    sessionLog("error", "AIFINPAY_AUTH_REQUIRED=true but AIFINPAY_OAUTH_ISSUER is unset — clients will 401 with nowhere to link.");
+  }
+  if (AUTH_REQUIRED && ISSUER) {
+    sessionLog("info", `Bearer gate ON — verifying JWT against ${ISSUER} JWKS (aud=${RESOURCE}${REQUIRED_SCOPE ? `, scope=${REQUIRED_SCOPE}` : ""}).`);
+  }
 });

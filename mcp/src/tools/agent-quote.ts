@@ -20,6 +20,9 @@ export function agentQuoteTool() {
       },
       required: ["url"],
     },
+    // Read-only probe, but reaches arbitrary external URLs → openWorldHint true.
+    annotations: { readOnlyHint: true, openWorldHint: true, destructiveHint: false },
+    outputSchema: { type: "object" },
   };
 }
 
