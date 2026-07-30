@@ -4,6 +4,21 @@ All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
 `1.0.0` onward the public API is stable and changes follow semver.
 
+## @aifinpay/agent 1.3.2 · aifinpay-agent 1.1.2 — 2026-07-30
+
+### Fixed
+- **Provider registry lookup 404'd against production**, so
+  `agent.call({provider})` / `agent.call(provider=...)` could not resolve any
+  provider through `api.aifinpay.io`. Both SDKs defaulted the registry to
+  `https://api.aifinpay.io/api/providers`, but that host rewrites `^/(.*)` to
+  `/api/$1`, so the request arrived as `/api/api/providers`. The registry lives
+  at `/providers` there; a backend reached directly still serves it at
+  `/api/providers`, so both are now tried, edge first. Only a `404` advances to
+  the next candidate — any other status is the registry answering badly and is
+  raised as-is rather than masked by a retry against a different path. An
+  explicitly configured `registryUrl` / `AIFINPAY_REGISTRY_URL` is honoured
+  exactly and never retried elsewhere.
+
 ## @aifinpay/agent 1.3.0 — 2026-07-16
 
 ### Added
