@@ -4,6 +4,26 @@ All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
 `1.0.0` onward the public API is stable and changes follow semver.
 
+## @aifinpay/agent 1.3.3 · aifinpay-agent 1.1.3 — 2026-07-30
+
+### Fixed
+- **1.3.2 broke the default registry lookup it was meant to fix.** That release
+  reordered the candidate paths to try `/providers` first, which is right for
+  `api.aifinpay.io` but wrong for the Node SDK's default base of
+  `https://aifinpay.io`, where `/providers` hits the single-page-app catch-all
+  and returns **200 with HTML**. The fallback only advanced on a 404, so it
+  accepted the HTML and failed inside `JSON.parse`. The Node default had in fact
+  been working before 1.3.2; only the Python default (which points at
+  `api.aifinpay.io/api/providers`, a genuine 404) was broken.
+- `/api/providers` is now tried first — correct for the default base, and a wrong
+  guess there is a clean 404 rather than a 200 of HTML — and a response is only
+  accepted when it parses as JSON containing a `providers` array. A 200 that is
+  not a registry document is treated as a miss and the next candidate is tried,
+  so a proxy or SPA catch-all can no longer masquerade as the registry.
+- Verified against production with both base URLs and with an explicit
+  `registryUrl` pointed at the SPA path, which now fails with
+  `200 but not JSON` instead of an opaque parse error.
+
 ## @aifinpay/agent 1.3.2 · aifinpay-agent 1.1.2 — 2026-07-30
 
 ### Fixed

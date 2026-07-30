@@ -151,8 +151,8 @@ export interface SessionReceipt {
 }
 
 export interface AiFinPayAgentOptions extends AgentOptions {
-  registryUrl?:  string;     // default: ${baseUrl}/providers, falling
-                             // back to /api/providers
+  registryUrl?:  string;     // default: ${baseUrl}/api/providers,
+                             // falling back to /providers
   evmPrivateKey?: `0x${string}`; // optional override; otherwise derived/generated
   budgetCaps?:   BudgetCaps;
   telemetry?:    boolean;    // default true
@@ -450,11 +450,18 @@ class SpendTracker {
 
 // ── Main class ─────────────────────────────────────────────────────────────
 
-// Edge-first, origin-second. api.aifinpay.io rewrites ^/(.*) → /api/$1, so the
-// public registry lives at /providers there; a backend reached directly (or via
-// a proxy that does not rewrite) serves it at /api/providers. Published SDKs
-// 1.3.1 / 1.1.1 only ever tried the second and so 404'd against production.
-const DEFAULT_REGISTRY_PATHS = ["/providers", "/api/providers"] as const;
+// Which path serves the registry depends on the host, and the two disagree:
+//
+//   aifinpay.io/api/providers      → JSON   (this is the default base; it works)
+//   aifinpay.io/providers          → 200 HTML — the SPA catch-all, NOT an error
+//   api.aifinpay.io/providers      → JSON   (that host rewrites ^/(.*) → /api/$1)
+//   api.aifinpay.io/api/providers  → 404
+//
+// /api/providers therefore goes first: it is correct for the default base URL,
+// and guessing wrong there returns a clean 404 instead of 200-with-HTML.
+// Ordering it the other way — as 1.3.2 shipped — makes the default base fetch
+// the SPA shell and die inside JSON.parse.
+const DEFAULT_REGISTRY_PATHS = ["/api/providers", "/providers"] as const;
 const DEFAULT_REGISTRY_PATH = DEFAULT_REGISTRY_PATHS[0];
 
 /**
@@ -671,8 +678,22 @@ export class AiFinPayAgent {
       if (!r.ok) {
         throw new AiFinPayError(`provider registry ${url} → ${r.status}`);
       }
-      const j = (await r.json()) as { providers?: ProviderEntry[] };
-      this.cachedRegistry = j.providers ?? [];
+      // A 200 is not proof this was the registry: a single-page-app catch-all
+      // answers 200 with HTML for any unknown path. Treat anything that is not
+      // a registry document as a miss and keep looking, instead of dying inside
+      // JSON.parse with an error that points nowhere near the real cause.
+      let j: { providers?: ProviderEntry[] };
+      try {
+        j = (await r.json()) as { providers?: ProviderEntry[] };
+      } catch {
+        attempts.push(`${url} → 200 but not JSON`);
+        continue;
+      }
+      if (!Array.isArray(j?.providers)) {
+        attempts.push(`${url} → 200 JSON without a providers array`);
+        continue;
+      }
+      this.cachedRegistry = j.providers;
       return this.cachedRegistry;
     }
     throw new AiFinPayError(

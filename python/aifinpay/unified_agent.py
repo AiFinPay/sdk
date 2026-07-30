@@ -5,7 +5,7 @@ Mirrors `@aifinpay/agent`'s `AiFinPayAgent` TypeScript class. One seed
 derives BOTH a Solana base58 pubkey AND a Polygon EVM 0x address.
 Per-call payment via `agent.call(provider=…)` does:
 
-  1. Registry lookup at /providers (falls back to /api/providers)
+  1. Registry lookup at /api/providers (falls back to /providers)
   2. POST to the bridge → expect HTTP 402
   3. Build + sign + send the on-chain payment:
        - Polygon  → B2BSplitter.payMatic(merchant, ipCreator, orderId)
@@ -93,10 +93,17 @@ except ImportError as e:  # pragma: no cover
 
 # Canonical domain is aifinpay.io. The legacy aifinpay.company host is
 # fully retired (DNS removed) — do not use it.
-# Edge-first, origin-second. api.aifinpay.io rewrites ^/(.*) -> /api/$1, so the
-# public registry is at /providers there, while a backend reached directly serves
-# it at /api/providers. Published SDKs only tried the latter and 404'd on prod.
-DEFAULT_REGISTRY_PATHS = ("/providers", "/api/providers")
+# Which path serves the registry depends on the host, and the two disagree:
+#
+#   aifinpay.io/api/providers      -> JSON
+#   aifinpay.io/providers          -> 200 HTML (the SPA catch-all, not an error)
+#   api.aifinpay.io/providers      -> JSON  (that host rewrites ^/(.*) -> /api/$1)
+#   api.aifinpay.io/api/providers  -> 404
+#
+# /api/providers goes first because guessing wrong with it yields a clean 404,
+# while guessing wrong with /providers yields 200-with-HTML that looks like a
+# success. Content is validated below for the same reason.
+DEFAULT_REGISTRY_PATHS = ("/api/providers", "/providers")
 DEFAULT_REGISTRY_URL = "https://api.aifinpay.io" + DEFAULT_REGISTRY_PATHS[0]
 DEFAULT_POLYGON_RPC  = "https://polygon.drpc.org"
 DEFAULT_SOLANA_RPC   = "https://api.mainnet-beta.solana.com"
@@ -346,8 +353,17 @@ class AiFinPayAgent:
                 attempts.append(f"{url} -> 404")
                 continue
             r.raise_for_status()
-            data = r.json()
-            providers = data.get("providers", [])
+            # A 200 is not proof this was the registry: an SPA catch-all answers
+            # 200 with HTML for any unknown path.
+            try:
+                data = r.json()
+            except ValueError:
+                attempts.append(f"{url} -> 200 but not JSON")
+                continue
+            providers = data.get("providers") if isinstance(data, dict) else None
+            if not isinstance(providers, list):
+                attempts.append(f"{url} -> 200 JSON without a providers array")
+                continue
             self._registry_cache = [ProviderEntry.from_dict(p) for p in providers]
             self.registry_url = url
             return self._registry_cache
