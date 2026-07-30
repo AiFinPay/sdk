@@ -49,6 +49,9 @@ export function payableFetchTool() {
       },
       required: ["url"],
     },
+    // Auto-pays a 402 challenge for an arbitrary URL → write + open-world + irreversible.
+    annotations: { readOnlyHint: false, openWorldHint: true, destructiveHint: true },
+    outputSchema: { type: "object" },
   };
 }
 

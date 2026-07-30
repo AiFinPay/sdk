@@ -60,6 +60,9 @@ export function agentCallTool() {
       },
       required: ["provider"],
     },
+    // Settles a real on-chain payment to an arbitrary registered provider.
+    annotations: { readOnlyHint: false, openWorldHint: true, destructiveHint: true },
+    outputSchema: { type: "object" },
   };
 }
 

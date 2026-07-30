@@ -53,6 +53,9 @@ export function agentClaimSelfTool() {
       },
       required: ["magic_link_url"],
     },
+    // Binds the agent to a user account (bounded to AiFinPay; not fund-moving).
+    annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false },
+    outputSchema: { type: "object" },
   };
 }
 

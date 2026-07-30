@@ -4,6 +4,7 @@ import { sha256 } from "./crypto.js";
 import { AiFinPayError, FundingTimeoutError, X402Error } from "./errors.js";
 import { detectFacilitator } from "./facilitators/detect.js";
 import type { PayOptions } from "./facilitators/base.js";
+import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 
 // Canonical domain is aifinpay.io. The legacy aifinpay.company host is
 // fully retired (DNS removed) — do not use it.
@@ -105,6 +106,28 @@ export class Agent {
   /** 64-byte base58 secret. Save this safely — server never sees it. */
   get secretB58(): string {
     return bs58.encode(this.secretKey);
+  }
+
+  private _evm?: PrivateKeyAccount;
+  /**
+   * The agent's EVM account (viem), derived from the same 32-byte seed as the
+   * Solana key via domain-separated SHA-256 ("aifinpay:evm:v1\0" || seed) —
+   * byte-for-byte identical to AiFinPayAgent's EVM address. Used by the
+   * standard x402 (EIP-3009) facilitator. Node-only (sync SHA-256).
+   */
+  async evmAccount(): Promise<PrivateKeyAccount> {
+    if (this._evm) return this._evm;
+    const { createHash } = await import("node:crypto");
+    const h = createHash("sha256");
+    h.update("aifinpay:evm:v1\0");
+    h.update(this.secretKey.subarray(0, 32));
+    this._evm = privateKeyToAccount(`0x${h.digest("hex")}` as `0x${string}`);
+    return this._evm;
+  }
+
+  /** The agent's EVM (Polygon / Base / …) address. */
+  async evmAddress(): Promise<string> {
+    return (await this.evmAccount()).address;
   }
 
   // ── Discovery ──────────────────────────────────────────────────────────

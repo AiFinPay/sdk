@@ -72,6 +72,20 @@ const USDT_ADDRESS           = process.env.USDT_POLYGON           || "0xc2132D05
 // broadcasting a tx themselves.
 const X402_FACILITATOR_URL   = process.env.X402_FACILITATOR_URL   || "https://x402.polygon.technology";
 const X402_RESOURCE_URL      = process.env.X402_RESOURCE_URL      || "https://bridge.aifinpay.io/exa/search";
+// Standard-x402 stablecoin rail (ERC-3009 USDC/USDT via facilitator). OFF by
+// default *for this bridge only*: the POST /search handler here has no
+// `x-payment` branch, so advertising these accepts produces a deterministic
+// second 402 (audit P0 "bridge advertises standard x402 but never handles
+// x-payment").
+//
+// Scope matters — the sibling bridges are NOT affected: io-net and venice both
+// implement the branch (verify via the facilitator, then forward upstream) and
+// their stable rail works, so they are deliberately left advertising it. exa is
+// the only one where the rail is advertised with nothing behind it.
+//
+// Turn ON here only after the handler is wired to verifyX402Payment() AND a
+// clean-machine paid E2E passes (audit P0 "no release gate").
+const X402_STABLE_ENABLED    = process.env.X402_STABLE_ENABLED === "1";
 
 // ── Solana payment option (atomic b2b_pay_with_split, live 2026-05-18) ──
 const SOLANA_RPC             = process.env.SOLANA_RPC             || "https://api.mainnet-beta.solana.com";
@@ -85,13 +99,42 @@ const PRICE_LAMPORTS         = process.env.PRICE_LAMPORTS         || "50000";
 // dashboard. Set to e.g. https://aifinpay.io in prod.
 const OPERATOR_URL           = process.env.OPERATOR_URL || "";
 
+// Shared service secret used to sign operator reports. The operator rejects
+// unsigned bridge events, since anyone could otherwise inject fake
+// failures/settlements and corrupt its analytics. Must match the operator's
+// AIFP_INGEST_SECRET.
+const OPERATOR_INGEST_SECRET = process.env.AIFP_INGEST_SECRET || "";
+
+if (OPERATOR_URL && !OPERATOR_INGEST_SECRET) {
+  console.warn(
+    `[${SERVICE_NAME}] WARNING: OPERATOR_URL is set but AIFP_INGEST_SECRET is not — ` +
+      "operator reports will be rejected as unsigned.",
+  );
+}
+
 async function reportToOperator(kind, fields) {
   if (!OPERATOR_URL) return;
   try {
+    const body = JSON.stringify({
+      service: SERVICE_NAME,
+      kind,
+      ts: Math.floor(Date.now() / 1000),
+      ...fields,
+    });
+    const headers = { "content-type": "application/json" };
+    if (OPERATOR_INGEST_SECRET) {
+      // t=<unix>,v1=<hex hmac-sha256 of `${t}.${body}`> — same scheme as the
+      // operator's outbound webhook signatures.
+      const t = Math.floor(Date.now() / 1000);
+      const v1 = crypto.createHmac("sha256", OPERATOR_INGEST_SECRET)
+        .update(`${t}.${body}`)
+        .digest("hex");
+      headers["x-aifinpay-ingest"] = `t=${t},v1=${v1}`;
+    }
     await fetch(`${OPERATOR_URL.replace(/\/$/, "")}/api/internal/bridge-event`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ service: SERVICE_NAME, kind, ts: Math.floor(Date.now() / 1000), ...fields }),
+      headers,
+      body,
     });
   } catch { /* best-effort, never block the main flow */ }
 }
@@ -152,9 +195,11 @@ async function challenge402(res, query) {
     protocol: "AiFinPay v5.3",
     service: SERVICE_NAME,
 
-    // Standard x402 path (Polygon facilitator, ERC-3009 USDC/USDT)
+    // Standard x402 path (Polygon facilitator, ERC-3009 USDC/USDT).
+    // Only advertised when the handler can actually settle it — see
+    // X402_STABLE_ENABLED above.
     x402Version: 1,
-    accepts: [
+    accepts: X402_STABLE_ENABLED ? [
       {
         scheme:            "exact"        ,
         network:           "polygon",
@@ -179,7 +224,7 @@ async function challenge402(res, query) {
         maxTimeoutSeconds: Math.floor(ORDER_TTL_MS / 1000),
         extra:             { name: "Tether USD", version: "1", facilitator: X402_FACILITATOR_URL },
       },
-    ],
+    ] : [],
     error_code: "Payment Required",
 
     // Legacy AiFinPay-pay-matic path (native POL via B2BSplitter)
@@ -223,7 +268,7 @@ async function challenge402(res, query) {
 
     retry: {
       legacy_pay_matic:    { method: "POST", headers: ["x-tx-hash", "x-order-id"], same_body: true },
-      standard_x402:       { method: "POST", headers: ["x-payment"],               same_body: true },
+      ...(X402_STABLE_ENABLED ? { standard_x402: { method: "POST", headers: ["x-payment"], same_body: true } } : {}),
       ...(BRIDGE_MERCHANT_SOLANA ? {
         solana_b2b_split:  { method: "POST", headers: ["x-solana-tx", "x-order-id"], same_body: true },
       } : {}),

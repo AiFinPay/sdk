@@ -2,6 +2,7 @@ import { UnsupportedFacilitatorError } from "../errors.js";
 import { AiFinPayFacilitator } from "./aifinpay.js";
 import type { Facilitator, FacilitatorClass } from "./base.js";
 import { CoinbaseX402Facilitator } from "./coinbase.js";
+import { StandardX402Facilitator } from "./standard-x402.js";
 
 /**
  * Order matters: most-specific detector first. A response that matches
@@ -10,6 +11,7 @@ import { CoinbaseX402Facilitator } from "./coinbase.js";
  */
 export const REGISTERED: FacilitatorClass[] = [
   AiFinPayFacilitator,
+  StandardX402Facilitator,
   CoinbaseX402Facilitator,
 ];
 

@@ -279,11 +279,25 @@ class AiFinPayAgent:
         self._registry_cache: Optional[list[ProviderEntry]] = None
 
     @classmethod
-    def new(cls, **kwargs) -> "AiFinPayAgent":
-        """Fresh dual-chain identity: random Solana keypair + random EVM key."""
-        inner = Agent.new()
-        evm_pk = "0x" + os.urandom(32).hex()
-        return cls(inner, evm_pk, **kwargs)
+    def new(cls, *, evm_private_key: Optional[str] = None, **kwargs) -> "AiFinPayAgent":
+        """
+        Fresh dual-chain identity, derived from ONE random 32-byte seed.
+
+        This previously generated a random EVM key independent of the Solana
+        key, which made ``new()`` the only constructor whose EVM key could not
+        be reproduced from anything the user could back up: every recovery path
+        derives the EVM key from the Solana seed, so restoring produced a
+        DIFFERENT EVM address and any balance funded on the original was
+        unreachable.
+
+        Deriving both from one seed makes the Solana secret a complete backup —
+        ``from_solana_secret()`` reads the same 32-byte seed and lands on the
+        same EVM address. Pass ``evm_private_key`` to import a pre-existing
+        EVM wallet instead.
+        """
+        if evm_private_key:
+            return cls(Agent.new(), evm_private_key, **kwargs)
+        return cls.from_seed(os.urandom(32).hex(), **kwargs)
 
     @classmethod
     def from_seed(cls, seed_hex: str, **kwargs) -> "AiFinPayAgent":

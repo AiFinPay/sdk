@@ -1,0 +1,125 @@
+name: CI
+
+# Release gate for the AiFinPay SDK monorepo.
+# Every job here was verified to pass locally (Node 20.20.2, Python 3.13)
+# before being committed. Requires no secrets.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node-sdk:
+    name: node — @aifinpay/agent (build + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: node
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: node/package-lock.json
+
+      # `npm ci` (not `npm install`) so the lockfile is authoritative and a bad
+      # upstream release cannot silently redden CI with no change on our side.
+      # The lockfile was stale — missing @solana/web3.js and its whole subtree —
+      # and has been regenerated; keep it in sync or this step fails loudly,
+      # which is the point.
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build (tsc)
+        run: npm run build
+
+      - name: Test (vitest)
+        run: npm test
+
+      # Catches a broken `files`/exports config before it reaches npm.
+      - name: Verify publishable tarball
+        run: npm pack --dry-run
+
+  mcp-server:
+    name: mcp — @aifinpay/mcp (build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mcp/package-lock.json
+
+      # Lockfile regenerated alongside node/ — `npm ci` keeps it authoritative.
+      # Note: mcp depends on the *published* @aifinpay/agent from npm, not on
+      # the sibling node/ directory, so this job validates the MCP server
+      # against the released SDK.
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build (tsc)
+        run: npm run build
+
+      - name: Syntax-check bin entrypoint
+        run: node --check bin/aifinpay-mcp.js
+
+      - name: Verify publishable tarball
+        run: npm pack --dry-run
+
+      # No `npm test` step: mcp/ has zero test files, so `vitest run` exits 1
+      # ("No test files found"). Adding tests is tracked separately.
+
+  python-sdk:
+    name: python — aifinpay-agent (install + pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: python/pyproject.toml
+
+      - name: Install package + test deps
+        run: python -m pip install -e . pytest
+
+      - name: Test (pytest)
+        run: python -m pytest tests -q
+
+  examples-syntax:
+    name: examples — syntax gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Cheap parse-only gate. Examples are not built or installed in CI;
+      # this only guarantees the shipped reference bridges are valid JS.
+      - name: node --check reference bridges
+        run: |
+          files=$(find examples mcp-http -maxdepth 2 \( -name 'server.js' -o -name 'store.js' \) -not -path '*/node_modules/*' | sort)
+          for f in $files; do
+            echo "checking $f"
+            node --check "$f"
+          done

@@ -11,7 +11,7 @@
 // ──────────────────────────────────────────────────────────────────────────
 import nacl from "tweetnacl";
 import bs58 from "bs58";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   createPublicClient,
   createWalletClient,
@@ -21,7 +21,6 @@ import {
 } from "viem";
 import {
   privateKeyToAccount,
-  generatePrivateKey,
   type PrivateKeyAccount,
 } from "viem/accounts";
 import { defineChain } from "viem";
@@ -583,10 +582,24 @@ export class AiFinPayAgent {
    * Use `fromSeed()` to derive both from a single backup phrase instead.
    */
   static async new(opts: AiFinPayAgentOptions = {}): Promise<AiFinPayAgent> {
-    const inner = Agent.new(opts);
-    const evmKey = opts.evmPrivateKey ?? generatePrivateKey();
-    const evmAccount = privateKeyToAccount(evmKey);
-    return new AiFinPayAgent(inner, evmAccount, opts);
+    // Seed-derived, NOT an independent random EVM key.
+    //
+    // This used to be `generatePrivateKey()`, which made `new()` the only
+    // constructor whose EVM key could not be reproduced from anything the user
+    // was able to back up: every recovery path (fromSeed, fromSolanaSecret)
+    // derives the EVM key from the Solana seed, so restoring returned a
+    // DIFFERENT EVM address and any balance funded on the original was
+    // unreachable.
+    //
+    // Deriving from one random seed makes the Solana secret a complete backup —
+    // `fromSolanaSecret()` reads the same 32-byte seed and lands on the same
+    // EVM address. An explicit `evmPrivateKey` still overrides, for callers
+    // importing a pre-existing EVM wallet.
+    if (opts.evmPrivateKey) {
+      const inner = Agent.new(opts);
+      return new AiFinPayAgent(inner, privateKeyToAccount(opts.evmPrivateKey), opts);
+    }
+    return AiFinPayAgent.fromSeed(bytesToHex(randomBytes(32)), opts);
   }
 
   /**
