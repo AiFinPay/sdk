@@ -5,7 +5,7 @@ Mirrors `@aifinpay/agent`'s `AiFinPayAgent` TypeScript class. One seed
 derives BOTH a Solana base58 pubkey AND a Polygon EVM 0x address.
 Per-call payment via `agent.call(provider=…)` does:
 
-  1. Registry lookup at /api/providers
+  1. Registry lookup at /providers (falls back to /api/providers)
   2. POST to the bridge → expect HTTP 402
   3. Build + sign + send the on-chain payment:
        - Polygon  → B2BSplitter.payMatic(merchant, ipCreator, orderId)
@@ -93,7 +93,11 @@ except ImportError as e:  # pragma: no cover
 
 # Canonical domain is aifinpay.io. The legacy aifinpay.company host is
 # fully retired (DNS removed) — do not use it.
-DEFAULT_REGISTRY_URL = "https://api.aifinpay.io/api/providers"
+# Edge-first, origin-second. api.aifinpay.io rewrites ^/(.*) -> /api/$1, so the
+# public registry is at /providers there, while a backend reached directly serves
+# it at /api/providers. Published SDKs only tried the latter and 404'd on prod.
+DEFAULT_REGISTRY_PATHS = ("/providers", "/api/providers")
+DEFAULT_REGISTRY_URL = "https://api.aifinpay.io" + DEFAULT_REGISTRY_PATHS[0]
 DEFAULT_POLYGON_RPC  = "https://polygon.drpc.org"
 DEFAULT_SOLANA_RPC   = "https://api.mainnet-beta.solana.com"
 
@@ -253,10 +257,15 @@ class AiFinPayAgent:
                 base58.b58decode(inner.secret_b58)[:32]
             ).encode(),
         )
-        self.registry_url = registry_url or os.environ.get(
-            "AIFINPAY_REGISTRY_URL",
-            (base_url or "https://api.aifinpay.io").rstrip("/") + "/api/providers",
+        _api_base = (base_url or "https://api.aifinpay.io").rstrip("/")
+        _pinned = registry_url or os.environ.get("AIFINPAY_REGISTRY_URL")
+        # An explicitly pinned URL is honoured exactly; only the default is
+        # retried across candidate paths.
+        self._registry_candidates = (
+            [_pinned] if _pinned
+            else [_api_base + path for path in DEFAULT_REGISTRY_PATHS]
         )
+        self.registry_url = self._registry_candidates[0]
         self.polygon_rpc = polygon_rpc or os.environ.get("AIFINPAY_POLYGON_RPC", DEFAULT_POLYGON_RPC)
         self.solana_rpc  = solana_rpc  or os.environ.get("AIFINPAY_SOLANA_RPC",  DEFAULT_SOLANA_RPC)
         self._w3: Optional[Web3] = None
@@ -323,12 +332,28 @@ class AiFinPayAgent:
     def fetch_registry(self, force: bool = False) -> list[ProviderEntry]:
         if self._registry_cache and not force:
             return self._registry_cache
-        r = requests.get(self.registry_url, timeout=10)
-        r.raise_for_status()
-        data = r.json()
-        providers = data.get("providers", [])
-        self._registry_cache = [ProviderEntry.from_dict(p) for p in providers]
-        return self._registry_cache
+        # Only a 404 moves on to the next candidate; any other failure is the
+        # registry answering badly and is raised as-is rather than masked by a
+        # retry against a different path.
+        attempts: list[str] = []
+        for url in self._registry_candidates:
+            try:
+                r = requests.get(url, timeout=10)
+            except requests.RequestException as err:
+                attempts.append(f"{url} -> {err}")
+                continue
+            if r.status_code == 404:
+                attempts.append(f"{url} -> 404")
+                continue
+            r.raise_for_status()
+            data = r.json()
+            providers = data.get("providers", [])
+            self._registry_cache = [ProviderEntry.from_dict(p) for p in providers]
+            self.registry_url = url
+            return self._registry_cache
+        raise AiFinPayError(
+            "provider registry unreachable (tried " + ", ".join(attempts) + ")"
+        )
 
     def resolve_provider(self, name: str) -> ProviderEntry:
         for p in self.fetch_registry():

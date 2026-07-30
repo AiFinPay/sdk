@@ -151,7 +151,8 @@ export interface SessionReceipt {
 }
 
 export interface AiFinPayAgentOptions extends AgentOptions {
-  registryUrl?:  string;     // default: ${baseUrl}/api/providers
+  registryUrl?:  string;     // default: ${baseUrl}/providers, falling
+                             // back to /api/providers
   evmPrivateKey?: `0x${string}`; // optional override; otherwise derived/generated
   budgetCaps?:   BudgetCaps;
   telemetry?:    boolean;    // default true
@@ -449,7 +450,12 @@ class SpendTracker {
 
 // ── Main class ─────────────────────────────────────────────────────────────
 
-const DEFAULT_REGISTRY_PATH = "/api/providers";
+// Edge-first, origin-second. api.aifinpay.io rewrites ^/(.*) → /api/$1, so the
+// public registry lives at /providers there; a backend reached directly (or via
+// a proxy that does not rewrite) serves it at /api/providers. Published SDKs
+// 1.3.1 / 1.1.1 only ever tried the second and so 404'd against production.
+const DEFAULT_REGISTRY_PATHS = ["/providers", "/api/providers"] as const;
+const DEFAULT_REGISTRY_PATH = DEFAULT_REGISTRY_PATHS[0];
 
 /**
  * A published entry in the public AiFinPay agent network — what `search()`
@@ -471,6 +477,8 @@ export class AiFinPayAgent {
   readonly inner:        Agent;            // existing Solana-flavoured agent
   readonly evmAccount:   PrivateKeyAccount;
   readonly registryUrl:  string;
+  /** Fallback registry URLs, tried in order when `registryUrl` was defaulted. */
+  private  registryCandidates: string[];
   readonly polygonRpc:   string;
   readonly solanaRpc:    string;
   private  cachedRegistry?: ProviderEntry[];
@@ -493,6 +501,9 @@ export class AiFinPayAgent {
     this.evmAccount  = evmAccount;
     this.registryUrl = opts.registryUrl
       ?? `${inner.baseUrl}${DEFAULT_REGISTRY_PATH}`;
+    this.registryCandidates = opts.registryUrl
+      ? [opts.registryUrl]
+      : DEFAULT_REGISTRY_PATHS.map((path) => `${inner.baseUrl}${path}`);
     this.budgetCaps  = opts.budgetCaps ?? {};
     this.telemetry   = opts.telemetry !== false;
     this.polygonRpc  = opts.polygonRpc ?? "https://polygon.drpc.org";
@@ -641,13 +652,32 @@ export class AiFinPayAgent {
 
   async fetchRegistry(force = false): Promise<ProviderEntry[]> {
     if (this.cachedRegistry && !force) return this.cachedRegistry;
-    const r = await fetch(this.registryUrl);
-    if (!r.ok) {
-      throw new AiFinPayError(`provider registry ${this.registryUrl} → ${r.status}`);
+    // Only a 404 moves on to the next candidate — any other status is the
+    // registry answering badly, and retrying a different path would just hide
+    // it behind a misleading error about the last URL tried.
+    const attempts: string[] = [];
+    for (const url of this.registryCandidates) {
+      let r: Response;
+      try {
+        r = await fetch(url);
+      } catch (err) {
+        attempts.push(`${url} → ${(err as Error).message}`);
+        continue;
+      }
+      if (r.status === 404) {
+        attempts.push(`${url} → 404`);
+        continue;
+      }
+      if (!r.ok) {
+        throw new AiFinPayError(`provider registry ${url} → ${r.status}`);
+      }
+      const j = (await r.json()) as { providers?: ProviderEntry[] };
+      this.cachedRegistry = j.providers ?? [];
+      return this.cachedRegistry;
     }
-    const j = (await r.json()) as { providers?: ProviderEntry[] };
-    this.cachedRegistry = j.providers ?? [];
-    return this.cachedRegistry;
+    throw new AiFinPayError(
+      `provider registry unreachable (tried ${attempts.join(", ")})`,
+    );
   }
 
   async resolveProvider(name: string): Promise<ProviderEntry> {
