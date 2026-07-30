@@ -150,7 +150,8 @@ export interface SessionReceipt {
 }
 
 export interface AiFinPayAgentOptions extends AgentOptions {
-  registryUrl?:  string;     // default: ${baseUrl}/api/providers
+  registryUrl?:  string;     // default: ${baseUrl}/api/providers,
+                             // falling back to /providers
   evmPrivateKey?: `0x${string}`; // optional override; otherwise derived/generated
   budgetCaps?:   BudgetCaps;
   telemetry?:    boolean;    // default true
@@ -448,7 +449,19 @@ class SpendTracker {
 
 // ── Main class ─────────────────────────────────────────────────────────────
 
-const DEFAULT_REGISTRY_PATH = "/api/providers";
+// Which path serves the registry depends on the host, and the two disagree:
+//
+//   aifinpay.io/api/providers      → JSON   (this is the default base; it works)
+//   aifinpay.io/providers          → 200 HTML — the SPA catch-all, NOT an error
+//   api.aifinpay.io/providers      → JSON   (that host rewrites ^/(.*) → /api/$1)
+//   api.aifinpay.io/api/providers  → 404
+//
+// /api/providers therefore goes first: it is correct for the default base URL,
+// and guessing wrong there returns a clean 404 instead of 200-with-HTML.
+// Ordering it the other way — as 1.3.2 shipped — makes the default base fetch
+// the SPA shell and die inside JSON.parse.
+const DEFAULT_REGISTRY_PATHS = ["/api/providers", "/providers"] as const;
+const DEFAULT_REGISTRY_PATH = DEFAULT_REGISTRY_PATHS[0];
 
 /**
  * A published entry in the public AiFinPay agent network — what `search()`
@@ -470,6 +483,8 @@ export class AiFinPayAgent {
   readonly inner:        Agent;            // existing Solana-flavoured agent
   readonly evmAccount:   PrivateKeyAccount;
   readonly registryUrl:  string;
+  /** Fallback registry URLs, tried in order when `registryUrl` was defaulted. */
+  private  registryCandidates: string[];
   readonly polygonRpc:   string;
   readonly solanaRpc:    string;
   private  cachedRegistry?: ProviderEntry[];
@@ -492,6 +507,9 @@ export class AiFinPayAgent {
     this.evmAccount  = evmAccount;
     this.registryUrl = opts.registryUrl
       ?? `${inner.baseUrl}${DEFAULT_REGISTRY_PATH}`;
+    this.registryCandidates = opts.registryUrl
+      ? [opts.registryUrl]
+      : DEFAULT_REGISTRY_PATHS.map((path) => `${inner.baseUrl}${path}`);
     this.budgetCaps  = opts.budgetCaps ?? {};
     this.telemetry   = opts.telemetry !== false;
     this.polygonRpc  = opts.polygonRpc ?? "https://polygon.drpc.org";
@@ -654,13 +672,46 @@ export class AiFinPayAgent {
 
   async fetchRegistry(force = false): Promise<ProviderEntry[]> {
     if (this.cachedRegistry && !force) return this.cachedRegistry;
-    const r = await fetch(this.registryUrl);
-    if (!r.ok) {
-      throw new AiFinPayError(`provider registry ${this.registryUrl} → ${r.status}`);
+    // Only a 404 moves on to the next candidate — any other status is the
+    // registry answering badly, and retrying a different path would just hide
+    // it behind a misleading error about the last URL tried.
+    const attempts: string[] = [];
+    for (const url of this.registryCandidates) {
+      let r: Response;
+      try {
+        r = await fetch(url);
+      } catch (err) {
+        attempts.push(`${url} → ${(err as Error).message}`);
+        continue;
+      }
+      if (r.status === 404) {
+        attempts.push(`${url} → 404`);
+        continue;
+      }
+      if (!r.ok) {
+        throw new AiFinPayError(`provider registry ${url} → ${r.status}`);
+      }
+      // A 200 is not proof this was the registry: a single-page-app catch-all
+      // answers 200 with HTML for any unknown path. Treat anything that is not
+      // a registry document as a miss and keep looking, instead of dying inside
+      // JSON.parse with an error that points nowhere near the real cause.
+      let j: { providers?: ProviderEntry[] };
+      try {
+        j = (await r.json()) as { providers?: ProviderEntry[] };
+      } catch {
+        attempts.push(`${url} → 200 but not JSON`);
+        continue;
+      }
+      if (!Array.isArray(j?.providers)) {
+        attempts.push(`${url} → 200 JSON without a providers array`);
+        continue;
+      }
+      this.cachedRegistry = j.providers;
+      return this.cachedRegistry;
     }
-    const j = (await r.json()) as { providers?: ProviderEntry[] };
-    this.cachedRegistry = j.providers ?? [];
-    return this.cachedRegistry;
+    throw new AiFinPayError(
+      `provider registry unreachable (tried ${attempts.join(", ")})`,
+    );
   }
 
   async resolveProvider(name: string): Promise<ProviderEntry> {
