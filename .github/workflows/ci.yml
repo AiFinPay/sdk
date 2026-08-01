@@ -16,6 +16,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  version-gate:
+    name: version bumped when published files change
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need history back to the merge base to compare versions.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check
+        env:
+          BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.event.pull_request.base.ref) || 'origin/main' }}
+        run: node scripts/check-version-bump.mjs "$BASE_REF"
+
   node-sdk:
     name: node — @aifinpay/agent (build + test)
     runs-on: ubuntu-latest
