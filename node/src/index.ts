@@ -20,7 +20,7 @@
  */
 
 // ── Unified surface (Phase 1+) ───────────────────────────────────────────
-export { AiFinPayAgent, SPLITTER_DEPLOYMENTS } from "./unifiedAgent.js";
+export { AiFinPayAgent, SPLITTER_DEPLOYMENTS, paymentIdFor } from "./unifiedAgent.js";
 export type {
   AiFinPayAgentOptions,
   CallOptions,
