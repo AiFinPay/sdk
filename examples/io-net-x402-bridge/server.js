@@ -37,7 +37,9 @@ import {
   hasOrder,
   consumeOrder,
   isTxConsumed,
-  markTxConsumed,
+  claimTxLease,
+  confirmTxConsumed,
+  releaseTxClaim,
 } from "./store.js";
 
 const PORT                   = process.env.PORT                   || 3003;
@@ -374,6 +376,31 @@ async function verifySolanaTx(txHash, expectedOrderId) {
     return { ok: false, reason: `order_id "${expectedOrderId}" not found in tx data` };
   }
 
+  // Everything above proves the transaction TOUCHED the right program, the
+  // right merchant and the right order. None of it proves an amount. A payer
+  // could invoke the program with a single lamport, satisfy every check above,
+  // and be served — while the EVM path in this same file has always compared
+  // totalAmount against the price. The asymmetry was not deliberate.
+  //
+  // The balance delta is used rather than the instruction arguments because it
+  // is what actually happened, and it stays correct if the program's encoding
+  // changes. Unreadable balances refuse rather than assume: a payment we
+  // cannot measure is not a payment we can accept.
+  const merchantIdx = keyStrs.indexOf(BRIDGE_MERCHANT_SOLANA);
+  const preBal  = tx.meta?.preBalances?.[merchantIdx];
+  const postBal = tx.meta?.postBalances?.[merchantIdx];
+  if (merchantIdx < 0 || typeof preBal !== "number" || typeof postBal !== "number") {
+    return { ok: false, reason: "cannot read the merchant's balance change — refusing to assume payment" };
+  }
+  const receivedLamports = BigInt(postBal) - BigInt(preBal);
+  const expectedLamports = BigInt(PRICE_LAMPORTS);
+  if (receivedLamports < expectedLamports) {
+    return {
+      ok: false,
+      reason: `underpaid: merchant received ${receivedLamports} lamports, price is ${expectedLamports}`,
+    };
+  }
+
   // Payer = fee payer = first signer account
   const payer = keyStrs[0];
   return { ok: true, payer, tx: txHash };
@@ -490,6 +517,19 @@ app.post("/chat/completions", challengeLimiter, async (req, res) => {
     if (!settled.ok) {
       return res.status(402).json({ error: "payment_verification_failed", detail: settled.reason });
     }
+    // Same claim-before-upstream rule as the two branches below. The
+    // facilitator settles on-chain and normally hands back the tx hash; when it
+    // does not, the signed authorisation is the payment's only identity, and it
+    // is exactly what a replay resends.
+    const x402Tx = settled.tx
+      || `x402:${crypto.createHash("sha256").update(paymentHeader).digest("hex")}`;
+    if (!(await claimTxLease(x402Tx))) {
+      return res.status(409).json({
+        error:  "tx_already_consumed",
+        detail: "This transaction is already being served, or has been. One payment buys one call.",
+      });
+    }
+
     // Forward to upstream and set the standard x402 receipt header.
     let upstreamRes;
     try {
@@ -499,8 +539,24 @@ app.post("/chat/completions", challengeLimiter, async (req, res) => {
         body:    JSON.stringify(req.body),
       });
     } catch (e) {
+      await releaseTxClaim(x402Tx);
       return res.status(502).json({ error: "upstream_unreachable", detail: e.message });
     }
+    if (upstreamRes.status >= 500) {
+      let body; try { body = await upstreamRes.text(); } catch { body = "<unreadable>"; }
+      await releaseTxClaim(x402Tx);
+      return res.status(502).json({ error: "upstream_5xx", upstream_status: upstreamRes.status, upstream_body: body.slice(0, 500) });
+    }
+    if ([401, 402, 403].includes(upstreamRes.status)) {
+      // Our key or our credit, not the agent's request. This branch proxied the
+      // 402 straight through and kept the payment.
+      await releaseTxClaim(x402Tx);
+      return res.status(503).json({
+        error:  "provider_unavailable",
+        detail: `IO Intelligence refused this bridge's request (${upstreamRes.status}). Your payment was not consumed — retry with the same headers.`,
+      });
+    }
+    await confirmTxConsumed(x402Tx);
     const upstreamBody = await upstreamRes.text();
     res.set("x-payment-response", Buffer.from(JSON.stringify({
       success:     true,
@@ -523,6 +579,16 @@ app.post("/chat/completions", challengeLimiter, async (req, res) => {
     if (!verified.ok) {
       return res.status(402).json({ error: "payment_verification_failed", detail: verified.reason });
     }
+    // Same claim-before-upstream rule as the EVM branch below. Guarding only
+    // one of this bridge's three upstream calls leaves the payment replayable
+    // for whoever pays on the unguarded chain.
+    if (!(await claimTxLease(solanaTx))) {
+      return res.status(409).json({
+        error:  "tx_already_consumed",
+        detail: "This transaction is already being served, or has been. One payment buys one call.",
+      });
+    }
+
     let upstreamRes;
     try {
       upstreamRes = await fetch(IONET_API_URL, {
@@ -531,13 +597,23 @@ app.post("/chat/completions", challengeLimiter, async (req, res) => {
         body: JSON.stringify(req.body),
       });
     } catch (e) {
+      await releaseTxClaim(solanaTx);
       return res.status(502).json({ error: "upstream_unreachable", detail: e.message });
     }
     if (upstreamRes.status >= 500) {
       let body; try { body = await upstreamRes.text(); } catch { body = "<unreadable>"; }
+      await releaseTxClaim(solanaTx);
       return res.status(502).json({ error: "upstream_5xx", upstream_status: upstreamRes.status, upstream_body: body.slice(0, 500) });
     }
-    await Promise.all([consumeOrder(orderId), markTxConsumed(solanaTx)]);
+    if ([401, 402, 403].includes(upstreamRes.status)) {
+      // Our key or our credit, not the agent's request.
+      await releaseTxClaim(solanaTx);
+      return res.status(503).json({
+        error:  "provider_unavailable",
+        detail: `IO Intelligence refused this bridge's request (${upstreamRes.status}). Your payment was not consumed — retry with the same headers.`,
+      });
+    }
+    await Promise.all([consumeOrder(orderId), confirmTxConsumed(solanaTx)]);
     let payload;
     try { payload = await upstreamRes.json(); } catch { payload = { error: "upstream_non_json" }; }
     res.set("x-payment-receipt", JSON.stringify({
@@ -567,6 +643,25 @@ app.post("/chat/completions", challengeLimiter, async (req, res) => {
     return res.status(402).json({ error: "payment_verification_failed", detail: verified.reason });
   }
 
+  // Claim the payment before IO Intelligence's credit is spent on it.
+  //
+  // The isTxConsumed() check inside verifyTx() is an early rejection, not a
+  // guard: two requests carrying the same proof both pass it before either
+  // reaches the commit below. That was observed live — one transaction bought
+  // two upstream calls, and both answers cited it.
+  //
+  // The claim is a short lease rather than a permanent mark, which keeps the
+  // property the old ordering was reaching for: if this process dies before
+  // answering, the lease expires and the agent retries with the same proof
+  // instead of losing the payment. Every path from here that does not deliver
+  // the service releases it explicitly.
+  if (!(await claimTxLease(txHash))) {
+    return res.status(409).json({
+      error:  "tx_already_consumed",
+      detail: "This transaction is already being served, or has been. One payment buys one call.",
+    });
+  }
+
   let upstreamRes;
   try {
     upstreamRes = await fetch(IONET_API_URL, {
@@ -575,6 +670,8 @@ app.post("/chat/completions", challengeLimiter, async (req, res) => {
       body: JSON.stringify(req.body),
     });
   } catch (e) {
+    // Nothing was delivered and nothing was spent — hand the payment back.
+    await releaseTxClaim(txHash);
     return res.status(502).json({
       error: "upstream_unreachable",
       detail: `IO Intelligence call failed: ${e.message}. Retry with same headers.`,
@@ -584,14 +681,33 @@ app.post("/chat/completions", challengeLimiter, async (req, res) => {
   if (upstreamRes.status >= 500) {
     let body;
     try { body = await upstreamRes.text(); } catch { body = "<unreadable>"; }
+    await releaseTxClaim(txHash);
     return res.status(502).json({
       error: "upstream_5xx",
+      detail: `IO Intelligence returned ${upstreamRes.status}. Retry with same headers — your payment is preserved.`,
       upstream_status: upstreamRes.status,
       upstream_body: body.slice(0, 500),
     });
   }
 
-  await Promise.all([consumeOrder(orderId), markTxConsumed(txHash)]);
+  // 401/402/403 are about US, not the agent: our key is wrong, or the account
+  // behind this bridge is out of credit. This is the case that stranded an
+  // agent — the provider answered 402 for lack of the bridge's own credit, the
+  // order was consumed anyway, and the payment bought nothing and could not be
+  // retried. Give the payment back and say the provider is unavailable.
+  if ([401, 402, 403].includes(upstreamRes.status)) {
+    await releaseTxClaim(txHash);
+    return res.status(503).json({
+      error:  "provider_unavailable",
+      detail: `IO Intelligence refused this bridge's request (${upstreamRes.status}). Your payment was not consumed — retry with the same headers.`,
+    });
+  }
+
+  // Upstream answered on the agent's behalf — promote the lease to the full
+  // retention window and consume the order. A remaining 4xx (malformed body,
+  // unknown model) is a delivered service: the request was wrong, not the
+  // bridge.
+  await Promise.all([consumeOrder(orderId), confirmTxConsumed(txHash)]);
 
   let payload;
   try { payload = await upstreamRes.json(); } catch { payload = { error: "upstream_non_json" }; }

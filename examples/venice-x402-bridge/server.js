@@ -275,6 +275,31 @@ async function verifySolanaTx(txHash, expectedOrderId) {
     return data.includes(orderIdBytes);
   });
   if (!orderIdMatches) return { ok: false, reason: `order_id "${expectedOrderId}" not found in tx data` };
+  // Everything above proves the transaction TOUCHED the right program, the
+  // right merchant and the right order. None of it proves an amount. A payer
+  // could invoke the program with a single lamport, satisfy every check above,
+  // and be served — while the EVM path in this same file has always compared
+  // totalAmount against the price. The asymmetry was not deliberate.
+  //
+  // The balance delta is used rather than the instruction arguments because it
+  // is what actually happened, and it stays correct if the program's encoding
+  // changes. Unreadable balances refuse rather than assume: a payment we
+  // cannot measure is not a payment we can accept.
+  const merchantIdx = keyStrs.indexOf(BRIDGE_MERCHANT_SOLANA);
+  const preBal  = tx.meta?.preBalances?.[merchantIdx];
+  const postBal = tx.meta?.postBalances?.[merchantIdx];
+  if (merchantIdx < 0 || typeof preBal !== "number" || typeof postBal !== "number") {
+    return { ok: false, reason: "cannot read the merchant's balance change — refusing to assume payment" };
+  }
+  const receivedLamports = BigInt(postBal) - BigInt(preBal);
+  const expectedLamports = BigInt(PRICE_LAMPORTS);
+  if (receivedLamports < expectedLamports) {
+    return {
+      ok: false,
+      reason: `underpaid: merchant received ${receivedLamports} lamports, price is ${expectedLamports}`,
+    };
+  }
+
   return { ok: true, payer: keyStrs[0], tx: txHash };
 }
 

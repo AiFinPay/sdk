@@ -103,3 +103,20 @@ test("every upstream call is claimed first", () => {
     "a path still bills the agent when the provider refuses us for credit",
   );
 });
+
+test("the Solana path verifies how much was paid", () => {
+  // Every other check in verifySolanaTx proves the transaction touched the
+  // right program, merchant and order. None proved an amount, so a payer could
+  // invoke the program with one lamport and be served — while the EVM path in
+  // the same file compared totalAmount against the price throughout. The hole
+  // was latent only because Solana is not configured in production; it would
+  // have opened the moment it was.
+  const src = readFileSync(new URL("./server.js", import.meta.url), "utf8");
+  const fn = src.slice(src.indexOf("async function verifySolanaTx"));
+  const body = fn.slice(0, fn.indexOf("\n}\n"));
+  assert.ok(body.length > 0, "verifySolanaTx not found — has the bridge changed shape?");
+  assert.match(body, /PRICE_LAMPORTS/, "the Solana path does not consult the price");
+  assert.match(body, /underpaid/, "an underpayment is not rejected");
+  // Refusing when the amount cannot be read is the half that is easy to drop.
+  assert.match(body, /refusing to assume payment/, "an unreadable balance is treated as paid");
+});
