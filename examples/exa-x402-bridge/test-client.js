@@ -3,7 +3,7 @@
 //
 // Drives the full autonomous-commerce loop:
 //   1. POST /search without auth → expect 402 with pay_matic details
-//   2. Submit B2BSplitter.payMatic(merchant, address(0), orderId) on
+//   2. Submit B2BSplitter.payNative(paymentId, merchant, address(0), orderId) on
 //      Polygon, msg.value = total_wei. Contract splits 98.99/1/0.01.
 //   3. Wait for confirmation.
 //   4. Retry POST /search with x-tx-hash + x-order-id headers — bridge
@@ -20,6 +20,8 @@ import {
   createWalletClient,
   http,
   formatEther,
+  keccak256,
+  toHex,
   isHex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -36,11 +38,16 @@ if (!PRIVATE_KEY || !isHex(PRIVATE_KEY) || PRIVATE_KEY.length !== 66) {
   process.exit(1);
 }
 
+// B2BSplitter v1.2. The bytes32 paymentId is not cosmetic: the contract records
+// it before moving any funds and refuses one it has already settled, so it is
+// what makes a retried payment safe. It must be derived from the order — a
+// random id would satisfy the contract while protecting nothing.
 const SPLITTER_ABI = [{
   type: "function",
-  name: "payMatic",
+  name: "payNative",
   stateMutability: "payable",
   inputs: [
+    { type: "bytes32", name: "paymentId" },
     { type: "address", name: "merchant" },
     { type: "address", name: "ipCreator" },
     { type: "string",  name: "orderId" },
@@ -67,16 +74,20 @@ async function searchPaid(query) {
     throw new Error(`unexpected initial status ${r.status}: ${await r.text()}`);
   }
   const challenge = await r.json();
-  const pm = challenge.pay_matic;
+  const pm = challenge.pay_native;
   console.log(`[client] received 402 — order_id=${pm.order_id} merchant=${pm.merchant_wallet}`);
   console.log(`[client] sending ${pm.total_wei} wei (${formatEther(BigInt(pm.total_wei))} MATIC); merchant gets ≈ ${formatEther(BigInt(pm.merchant_amount_wei))} MATIC`);
 
-  console.log(`[client] submitting B2BSplitter.payMatic(...) on Polygon...`);
+  console.log(`[client] submitting B2BSplitter.payNative(...) on Polygon...`);
   const txHash = await walletClient.writeContract({
     address:      pm.splitter,
     abi:          SPLITTER_ABI,
-    functionName: "payMatic",
+    functionName: "payNative",
     args: [
+      // The bridge sends this in the 402; falling back to deriving it locally
+      // keeps the client working against a bridge that has not been updated,
+      // and both sides must agree or the replay guard protects nothing.
+      pm.payment_id ?? keccak256(toHex(pm.order_id)),
       pm.merchant_wallet,
       "0x0000000000000000000000000000000000000000",
       pm.order_id,

@@ -3,7 +3,7 @@
 // (managed LLM inference on io.net's GPU pool).
 //
 // Same Polygon-pilot pattern as exa- and venice-x402-bridge: agent calls
-// B2BSplitter.payMatic(merchant, address(0), orderId), bridge verifies
+// B2BSplitter.payNative(paymentId, merchant, address(0), orderId), bridge verifies
 // the receipt and forwards the request to api.intelligence.io.solutions
 // using the bridge operator's pooled API key.
 //
@@ -26,6 +26,9 @@ import {
   parseEventLogs,
   getAddress,
   isAddress,
+  keccak256,
+  toHex,
+  toBytes,
 } from "viem";
 import { polygon } from "viem/chains";
 import { Connection, PublicKey } from "@solana/web3.js";
@@ -46,7 +49,7 @@ const IONET_API_KEY          = process.env.IONET_API_KEY          || "";
 const IONET_AUTH_SCHEME      = process.env.IONET_AUTH_SCHEME      || "bearer";
 const POLYGON_RPC            = process.env.POLYGON_RPC            || "https://1rpc.io/matic";
 const SPLITTER_ADDRESS       = process.env.SPLITTER_ADDRESS_POLYGON
-                            || "0xE34Fc0E6694821c600Fa0955C0F74720ea6d8440";
+                            || "0xbD1fa5453f212F096c0213788a645eC597FB4DDe";
 const BRIDGE_MERCHANT_WALLET = process.env.BRIDGE_MERCHANT_WALLET || "";
 // Default 0.25 POL (~$0.025) per inference call. IO Intelligence per-token
 // pricing on llama-3-70B ≈ $0.001-0.005 per typical agent call — leaves
@@ -54,11 +57,16 @@ const BRIDGE_MERCHANT_WALLET = process.env.BRIDGE_MERCHANT_WALLET || "";
 const PRICE_WEI              = process.env.PRICE_WEI              || "250000000000000000";
 const ORDER_TTL_MS           = 10 * 60_000;
 
-// ── Stablecoin pricing (v5.3 B2BSplitter.payStable path) ────────────────
+// ── Stablecoin pricing (B2BSplitter v1.2 payStable path) ────────────────
 // USD-cent denominated price for USDC / USDT settlement. 6-decimal units
 // match the on-chain ERC-20 contract. 25_000 units = $0.025 USDC.
-const PRICE_USDC_UNITS       = process.env.PRICE_USDC_UNITS       || "25000";
-const PRICE_USDT_UNITS       = process.env.PRICE_USDT_UNITS       || "25000";
+// 100_000 units = $0.10, which is B2BSplitter v1.2's MIN_PAYMENT — not a
+// pricing preference. The previous default of 25_000 ($0.025) predates v1.2,
+// which introduced the floor; the old contract had no MIN_PAYMENT view at all.
+// Anything below this reverts with PaymentBelowMinimum, so the bridge would
+// quote a price that cannot be settled.
+const PRICE_USDC_UNITS       = process.env.PRICE_USDC_UNITS       || "100000";
+const PRICE_USDT_UNITS       = process.env.PRICE_USDT_UNITS       || "100000";  // see PRICE_USDC_UNITS: v1.2 MIN_PAYMENT
 const USDC_ADDRESS           = process.env.USDC_POLYGON           || "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
 const USDT_ADDRESS           = process.env.USDT_POLYGON           || "0xc2132D05D31c914a87C6611C10748AEb04B58e8F";
 // Standard x402 facilitator URL — Polygon's x402-rs deployment. The
@@ -87,13 +95,19 @@ if (!isAddress(BRIDGE_MERCHANT_WALLET)) {
   process.exit(1);
 }
 
+// B2BSplitter v1.2. The event changed shape on 2026-07-31: a bytes32 paymentId
+// was prepended and `token` stopped being indexed, so topic0 is different.
+// Decoding a v1.2 payment with the old signature matches NOTHING — parseEventLogs
+// simply returns an empty list and the bridge reports "Payment event not found",
+// which reads like the agent never paid.
 const SPLITTER_EVENT_ABI = [{
   type: "event",
   name: "Payment",
   inputs: [
+    { type: "bytes32", name: "paymentId",        indexed: true  },
     { type: "address", name: "payer",            indexed: true  },
     { type: "address", name: "merchant",         indexed: true  },
-    { type: "address", name: "token",            indexed: true  },
+    { type: "address", name: "token",            indexed: false },
     { type: "uint256", name: "totalAmount",      indexed: false },
     { type: "uint256", name: "merchantAmount",   indexed: false },
     { type: "uint256", name: "treasuryAmount",   indexed: false },
@@ -171,8 +185,8 @@ async function challenge402(res) {
     // Power-user clients (our own SDK) that want atomic POL split call
     // this directly without facilitator overhead. Stays backward-compat
     // with v0.2.x of @aifinpay/agent.
-    facilitator: "aifinpay-pay-matic",
-    pay_matic: {
+    facilitator: "aifinpay-pay-native",
+    pay_native: {
       chain:                 "polygon",
       splitter:              SPLITTER_ADDRESS,
       merchant_wallet:       BRIDGE_MERCHANT_WALLET,
@@ -181,12 +195,18 @@ async function challenge402(res) {
       treasury_amount_wei:   treasuryAmt.toString(),
       ip_creator_amount_wei: ipAmt.toString(),
       order_id:              orderId,
-      function_signature:    "payMatic(address,address,string)",
+      // Derived from the order, not random: v1.2 refuses a paymentId it has
+      // already settled, and that replay guard only protects an order if the
+      // id is a function of it. keccak256 — NOT sha3-256, which is a different
+      // algorithm producing a different digest for the same input.
+      payment_id:            keccak256(toHex(orderId)),
+      function_signature:    "payNative(bytes32,address,address,string)",
       ttl_seconds:           Math.floor(ORDER_TTL_MS / 1000),
     },
 
     // ── Solana b2b_pay_with_split path (advertised only if operator opts in) ─
-    // FEE-ON-TOP semantics — same as Polygon B2BSplitter:
+    // FEE-INCLUSIVE semantics — same as Polygon B2BSplitter v1.2: the amount
+    //   sent IS the total, and merchant + treasury + creator sum back to it.
     //   PRICE_LAMPORTS = base merchant amount (what the bridge merchant earns)
     //   contract adds: +1% treasury + 0.01% ip_creator on top
     //   agent pays = merchant + treasury_fee + ip_creator_fee
@@ -229,7 +249,7 @@ async function challenge402(res) {
       `     - Sign ERC-3009 transferWithAuthorization for USDC/USDT to ${BRIDGE_MERCHANT_WALLET}`,
       `     - Resend with x-payment: base64(<JSON payload>)`,
       `  B) Legacy aifinpay-pay-matic (atomic POL split):`,
-      `     - Call B2BSplitter.payMatic(${BRIDGE_MERCHANT_WALLET}, address(0), "${orderId}") with msg.value=${totalWei} wei`,
+      `     - Call B2BSplitter.payNative(keccak256("${orderId}"), ${BRIDGE_MERCHANT_WALLET}, address(0), "${orderId}") with msg.value=${totalWei} wei`,
       `     - Resend with x-tx-hash + x-order-id headers`,
       ...(BRIDGE_MERCHANT_SOLANA ? [
         `  C) Solana atomic split (live 2026-05-18):`,
@@ -587,6 +607,48 @@ app.post("/chat/completions", challengeLimiter, async (req, res) => {
   }));
   return res.status(upstreamRes.status).json(payload);
 });
+
+
+/**
+ * Refuse to start against a splitter that does not have the entrypoint we
+ * advertise.
+ *
+ * The address used to be a hardcoded fallback, and it went stale: it still
+ * named the pre-v1.2 contract months after the migration. Nothing failed —
+ * agents were told to pay a superseded contract, that contract happily accepted
+ * the money, and the payments were invisible to the indexer that watches the
+ * current one. The wrong answer worked, which is why it survived.
+ *
+ * Checking the deployed bytecode for the selector turns that silence into a
+ * refusal to boot. It costs one RPC call and no gas.
+ */
+const PAY_NATIVE_SELECTOR = keccak256(toBytes("payNative(bytes32,address,address,string)")).slice(2, 10);
+
+async function assertSplitterIsCurrent() {
+  let code;
+  try {
+    code = await client.getBytecode({ address: getAddress(SPLITTER_ADDRESS) });
+  } catch (e) {
+    // An unreachable RPC says nothing about the contract, so do not claim it does.
+    console.warn(`[${SERVICE_NAME}] WARNING: could not verify splitter bytecode (${e.shortMessage || e.message}) — starting anyway`);
+    return;
+  }
+  if (!code || code === "0x") {
+    console.error(`[${SERVICE_NAME}] FATAL: no contract at SPLITTER_ADDRESS_POLYGON ${SPLITTER_ADDRESS}`);
+    process.exit(1);
+  }
+  if (!code.includes(PAY_NATIVE_SELECTOR)) {
+    console.error(
+      `[${SERVICE_NAME}] FATAL: the contract at ${SPLITTER_ADDRESS} has no ` +
+      `payNative(bytes32,address,address,string). This bridge advertises v1.2 ` +
+      `and agents following it would revert. Set SPLITTER_ADDRESS_POLYGON to a ` +
+      `v1.2 splitter, or use a bridge build that matches the deployment.`,
+    );
+    process.exit(1);
+  }
+}
+
+await assertSplitterIsCurrent();
 
 app.listen(PORT, () => {
   console.log(`[${SERVICE_NAME}] x402 paid-proxy bridge on port ${PORT}`);
