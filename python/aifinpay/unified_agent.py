@@ -236,6 +236,40 @@ def _evm_key_from_seed(seed: bytes) -> bytes:
     return hashlib.sha256(b"aifinpay:evm:v1\0" + seed).digest()
 
 
+def casper_identity_from_seed(seed: bytes) -> dict:
+    """Casper identity for the agent, derived from the same seed as the rest.
+
+    Must stay byte-for-byte identical to `casperIdentityFromSeed()` in the Node
+    SDK (node/src/unifiedAgent.ts). The two SDKs deriving different Casper
+    accounts from one seed is the failure that matters: an agent restored in the
+    other language would look correct and control nothing, and whatever was sent
+    to the first account would be unreachable.
+
+    Verified against Casper mainnet rather than documentation. Public key
+    01000e6fce75...eeee resolves through state_get_account_info to account hash
+    e386a6e2d67ab4c7...807a, and this reproduces it exactly.
+
+    Domain-separated from the EVM path so a compromise on one chain does not
+    carry to another — same reasoning as `_evm_key_from_seed`.
+    """
+    if len(seed) != 32:
+        raise AiFinPayError(f"seed must be 32 bytes, got {len(seed)}")
+    casper_seed = hashlib.sha256(b"aifinpay:casper:v1\0" + seed).digest()
+    signing = nacl.signing.SigningKey(casper_seed)
+    pub = bytes(signing.verify_key)
+    # Casper account hash: blake2b256(algorithm-name || 0x00 || public key).
+    account_hash = hashlib.blake2b(
+        b"ed25519" + b"\x00" + pub, digest_size=32
+    ).hexdigest()
+    return {
+        # 01 tags ed25519; 02 would be secp256k1. Casper rejects an untagged key,
+        # and the tag also feeds the hash — the wrong one derives a different,
+        # wrong account from identical bytes.
+        "public_key": "01" + pub.hex(),
+        "account_hash": "account-hash-" + account_hash,
+    }
+
+
 def _signed_raw_tx(signed: Any) -> bytes:
     """web3 v7 renamed SignedTransaction.rawTransaction → raw_transaction.
     Support both so the pinned range web3>=6.0 actually works."""
@@ -376,6 +410,23 @@ class AiFinPayAgent:
     @property
     def evm_address(self) -> str:
         return self.evm_account.address
+
+    @property
+    def casper(self) -> dict:
+        """Casper identity, derived from the same seed as the other two.
+
+        A property rather than a stored field, for the same reason the EVM key
+        is derived rather than generated: the agent's identity on every chain
+        has to be reproducible from one secret. Anything else means an address
+        that changes on restart, and funds sent to the old one are lost.
+        """
+        seed = base58.b58decode(self.inner.secret_b58)[:32]
+        return casper_identity_from_seed(seed)
+
+    @property
+    def casper_address(self) -> str:
+        """The account hash — what a Casper explorer and the deposit flow want."""
+        return self.casper["account_hash"]
 
     # ── Registry ──────────────────────────────────────────────────────────
 
