@@ -34,10 +34,17 @@ export async function runAgentAddress(
   const payload = {
     solana: ctx.agent.solanaAddress,
     evm:    ctx.agent.evmAddress,
+    // Casper was absent here while the project counted it among its live
+    // networks, so an agent could not be told its own address on a chain we
+    // advertise. Same seed as the other two; the account hash is what a Casper
+    // explorer expects.
+    casper: ctx.agent.casperAddress,
     note:
       "Polygon (EVM) is the default settlement chain for live bridges " +
       "(io.net, Exa, Venice). Solana is supported via Seat PDA payments. " +
-      "Same seed derives both — funding either enables the corresponding chain.",
+      "Casper has a deployed settlement contract and the SDK derives the " +
+      "address, but does not yet sign Casper deploys. " +
+      "One seed derives all three — funding any enables that chain.",
   };
   return {
     content: [
