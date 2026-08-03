@@ -2,7 +2,9 @@
 AiFinPayAgent — unified, chain-opaque developer surface (Phase 1+).
 
 Mirrors `@aifinpay/agent`'s `AiFinPayAgent` TypeScript class. One seed
-derives BOTH a Solana base58 pubkey AND a Polygon EVM 0x address.
+derives a Solana base58 pubkey, a Polygon EVM 0x address, and a Casper
+account hash. Casper is identity only — the address is derived and can be
+funded, but this SDK does not sign Casper deploys.
 Per-call payment via `agent.call(provider=…)` does:
 
   1. Registry lookup at /api/providers (falls back to /providers)
