@@ -21,6 +21,7 @@ import {
   toHex,
   type PublicClient,
   type WalletClient,
+  toFunctionSelector,
 } from "viem";
 import {
   privateKeyToAccount,
@@ -1283,12 +1284,21 @@ export class AiFinPayAgent {
     // paymentId and rejects one it has already settled, while Base and Unichain
     // still run v1.1. Sending v1.2 calldata to a v1.1 contract reverts with no
     // useful reason, so this must be decided per chain.
-    // When the server overrides the address it must also say which contract it
-    // is, otherwise a server pointing at v1.2 on a chain this registry still
-    // records as v1.1 would be called with the wrong ABI. The server wins
-    // because it is the one that knows what it just deployed.
+    // An explicit `splitter_version` wins — a server that states it knows what
+    // it deployed. What it must NOT fall back to is this registry's
+    // chain -> version entry, because the ADDRESS came from the challenge and
+    // the version would come from a table: two sources that can disagree.
+    //
+    // In production they did. The Exa bridge still hands out the pre-v1.2
+    // splitter 0xE34Fc0E6… and sends no version; the table says "polygon is
+    // 1.2"; the SDK called payNative on a contract that only has payMatic, and
+    // the payment reverted with nothing in the reason to explain it.
+    //
+    // So when the server is silent, ask the contract at the address we were
+    // actually handed. The registry is used only if the chain cannot be read.
     const splitterVersion =
-      (pm.splitter_version as "1.1" | "1.2" | undefined) ?? deployment.version;
+      (pm.splitter_version as "1.1" | "1.2" | undefined)
+      ?? await this.detectSplitterVersion(splitterAddress, chain, deployment.version);
     const txHash = splitterVersion === "1.2"
       ? await walletClient.writeContract({
           address:      splitterAddress,
@@ -1537,6 +1547,50 @@ export class AiFinPayAgent {
 
   /** Read + cache B2BSplitter.treasury() on the given chain (default
    *  polygon for back-compat). Returns null on RPC failure. */
+  /**
+   * Which Splitter generation is actually deployed at this address.
+   *
+   * The version used to come from a chain -> version table while the ADDRESS
+   * came from the bridge's 402 challenge. Two different sources, and they can
+   * disagree — in production they did. The Exa bridge still hands out the
+   * pre-v1.2 splitter 0xE34Fc0E6… and sends no version, the table says
+   * "polygon is 1.2", and the SDK called payNative on a contract that only has
+   * payMatic. The payment reverted with nothing in the reason to explain it.
+   *
+   * A table keyed by chain cannot be right when the address is variable input,
+   * so this asks the contract instead. payNative's 4-byte selector appears in a
+   * v1.2 dispatcher and is absent from v1.1 — the same check used to verify all
+   * six registry chains against mainnet.
+   *
+   * One eth_getCode, cached per (chain, address). Falls back to the registry
+   * only when the code cannot be read: guessing beats refusing to pay, and for
+   * the addresses we deployed the guess is right.
+   */
+  private splitterVersionCache = new Map<string, "1.1" | "1.2">();
+
+  private async detectSplitterVersion(
+    splitter: `0x${string}`,
+    chainName: SplitterChainName,
+    fallback: "1.1" | "1.2",
+  ): Promise<"1.1" | "1.2"> {
+    const key = `${chainName}:${splitter.toLowerCase()}`;
+    const cached = this.splitterVersionCache.get(key);
+    if (cached) return cached;
+    try {
+      const { publicClient } = this.splitterClients(chainName);
+      const code = await publicClient.getBytecode({ address: splitter });
+      if (!code || code === "0x") return fallback;
+      const sel = toFunctionSelector(
+        "function payNative(bytes32,address,address,string)",
+      ).slice(2);
+      const version: "1.1" | "1.2" = code.includes(sel) ? "1.2" : "1.1";
+      this.splitterVersionCache.set(key, version);
+      return version;
+    } catch {
+      return fallback;
+    }
+  }
+
   private async splitterTreasury(
     splitter: `0x${string}`,
     chainName: SplitterChainName = "polygon",
