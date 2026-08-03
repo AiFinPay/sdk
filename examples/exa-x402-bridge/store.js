@@ -99,6 +99,63 @@ export async function consumeOrder(orderId) {
   }
 }
 
+// ── Claiming a payment before the provider's credit is spent ───────────────
+//
+// The bridges checked isTxConsumed(), called upstream, then marked the tx
+// consumed afterwards. Two requests carrying the same proof both passed the
+// check before either reached the mark, so one payment bought two upstream
+// calls — observed live, with both responses citing the same transaction.
+//
+// The claim below is the authoritative guard, and it is taken BEFORE upstream.
+// It is a lease rather than a permanent mark: if this process dies between
+// claiming and serving, the claim expires and the agent can retry with the
+// same proof instead of losing the payment to a crash. On a served request the
+// lease is promoted to the full retention window; on a provider-side failure
+// it is released immediately.
+//
+//   claimTxLease  -> claimed   (SET NX, short TTL)
+//   confirmTx     -> served    (SET, 24h)
+//   releaseTx     -> failed    (DEL — the agent may retry)
+
+const CLAIM_LEASE_S = 120;
+
+/** Take the claim. Returns false if someone else holds it — that is a replay. */
+export async function claimTxLease(txHash) {
+  const k = txHash.toLowerCase();
+  if (useRedis) {
+    return (await redis.set(CONSUMED_PFX + k, "claimed", "EX", CLAIM_LEASE_S, "NX")) === "OK";
+  }
+  if (memConsumed.has(k)) return false;
+  memConsumed.add(k);
+  return true;
+}
+
+/** The service was delivered — hold the tx for the full retention window. */
+export async function confirmTxConsumed(txHash) {
+  const k = txHash.toLowerCase();
+  if (useRedis) {
+    await redis.set(CONSUMED_PFX + k, "1", "EX", CONSUMED_TTL_S);
+    return;
+  }
+  memConsumed.add(k);
+}
+
+/**
+ * The service was NOT delivered — drop the claim so the agent can retry.
+ *
+ * Only for failures on our side of the exchange: the provider was unreachable,
+ * returned 5xx, or refused us for lack of credit. A 4xx caused by the agent's
+ * own request is a delivered service and must stay consumed.
+ */
+export async function releaseTxClaim(txHash) {
+  const k = txHash.toLowerCase();
+  if (useRedis) {
+    await redis.del(CONSUMED_PFX + k);
+    return;
+  }
+  memConsumed.delete(k);
+}
+
 export async function isTxConsumed(txHash) {
   const k = txHash.toLowerCase();
   if (useRedis) {
@@ -120,4 +177,19 @@ export async function markTxConsumed(txHash) {
   if (memConsumed.has(k)) return false;
   memConsumed.add(k);
   return true;
+}
+
+/**
+ * Release the Redis connection.
+ *
+ * Only tests need this: an open client keeps the event loop alive, so a suite
+ * that finishes cleanly still fails on a timeout. The first attempt at working
+ * around that called process.exit(0) from an `after` hook, which killed the
+ * runner before any test ran — and the file reported one passing test, so the
+ * suppression looked like success.
+ */
+export async function closeStore() {
+  if (useRedis && redis) {
+    try { await redis.quit(); } catch { /* already gone */ }
+  }
 }

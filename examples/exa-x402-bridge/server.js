@@ -45,6 +45,9 @@ import {
   consumeOrder,
   isTxConsumed,
   markTxConsumed,
+  claimTxLease,
+  confirmTxConsumed,
+  releaseTxClaim,
 } from "./store.js";
 
 const PORT                   = process.env.PORT                   || 3001;
@@ -445,6 +448,17 @@ app.post("/search", challengeLimiter, async (req, res) => {
     if (!verifiedSol.ok) {
       return res.status(402).json({ error: "payment_verification_failed", detail: verifiedSol.reason });
     }
+    // Same claim-before-upstream rule as the EVM branch below. This path was
+    // missed on the first pass at the fix and the test caught it: the bridge
+    // has two upstream calls, and guarding only one leaves the payment
+    // replayable for anyone who pays in SOL.
+    if (!(await claimTxLease(solanaTx))) {
+      return res.status(409).json({
+        error:  "tx_already_consumed",
+        detail: "This transaction is already being served, or has been. One payment buys one call.",
+      });
+    }
+
     let upstreamRes;
     try {
       upstreamRes = await fetch(EXA_API_URL, {
@@ -453,13 +467,23 @@ app.post("/search", challengeLimiter, async (req, res) => {
         body: JSON.stringify({ query }),
       });
     } catch (e) {
+      await releaseTxClaim(solanaTx);
       return res.status(502).json({ error: "upstream_unreachable", detail: e.message });
     }
     if (upstreamRes.status >= 500) {
       let body; try { body = await upstreamRes.text(); } catch { body = "<unreadable>"; }
+      await releaseTxClaim(solanaTx);
       return res.status(502).json({ error: "upstream_5xx", upstream_status: upstreamRes.status, upstream_body: body.slice(0, 500) });
     }
-    await Promise.all([consumeOrder(orderId), markTxConsumed(solanaTx)]);
+    if ([401, 402, 403].includes(upstreamRes.status)) {
+      // Our key or our credit, not the agent's request.
+      await releaseTxClaim(solanaTx);
+      return res.status(503).json({
+        error:  "provider_unavailable",
+        detail: `Exa refused this bridge's request (${upstreamRes.status}). Your payment was not consumed — retry with the same headers.`,
+      });
+    }
+    await Promise.all([consumeOrder(orderId), confirmTxConsumed(solanaTx)]);
     let payload;
     try { payload = await upstreamRes.json(); } catch { payload = { error: "upstream_non_json" }; }
     res.set("x-payment-receipt", JSON.stringify({
@@ -495,8 +519,25 @@ app.post("/search", challengeLimiter, async (req, res) => {
     });
   }
 
-  // Forward to upstream Exa BEFORE consuming the order/tx — if upstream
-  // fails, the agent can retry the same headers without re-paying.
+  // Claim the payment before Exa's credit is spent on it.
+  //
+  // The isTxConsumed() check inside verifyTx() is an early rejection, not a
+  // guard: two requests carrying the same proof both pass it before either
+  // reaches the commit below. That was observed live — one transaction bought
+  // two upstream calls, and both answers cited it.
+  //
+  // The claim is a short lease rather than a permanent mark, which keeps the
+  // property the old ordering was reaching for: if this process dies before
+  // answering, the lease expires and the agent retries with the same proof
+  // instead of losing the payment. Every path from here that does not deliver
+  // the service releases it explicitly.
+  if (!(await claimTxLease(txHash))) {
+    return res.status(409).json({
+      error:  "tx_already_consumed",
+      detail: "This transaction is already being served, or has been. One payment buys one call.",
+    });
+  }
+
   let upstreamRes;
   try {
     upstreamRes = await fetch(EXA_API_URL, {
@@ -509,6 +550,8 @@ app.post("/search", challengeLimiter, async (req, res) => {
       body: JSON.stringify({ ...req.body, query }),
     });
   } catch (e) {
+    // Nothing was delivered and nothing was spent — hand the payment back.
+    await releaseTxClaim(txHash);
     return res.status(502).json({
       error: "upstream_unreachable",
       detail: `Exa /search call failed: ${e.message}. Retry with the same x-tx-hash + x-order-id headers.`,
@@ -523,6 +566,7 @@ app.post("/search", challengeLimiter, async (req, res) => {
       tx_hash:  txHash,
       order_id: orderId,
     });
+    await releaseTxClaim(txHash);
     return res.status(502).json({
       error: "upstream_5xx",
       detail: `Exa returned ${upstreamRes.status}. Retry with same headers — your payment is preserved.`,
@@ -531,11 +575,30 @@ app.post("/search", challengeLimiter, async (req, res) => {
     });
   }
 
-  // Upstream answered (any 2xx/4xx) — commit the order and tx so they
-  // can't be replayed. 4xx from Exa (bad query, exceeded quota) still
-  // counts as "service rendered" for billing purposes; the agent's
-  // request was malformed, not the bridge's fault.
-  await Promise.all([consumeOrder(orderId), markTxConsumed(txHash)]);
+  // 401/402/403 are about US, not the agent: our key is wrong, or the
+  // account behind this bridge is out of credit. Billing the agent for a
+  // service we could not buy is how a Venice payment was taken while the
+  // upstream answered 402 twice and the order was consumed anyway, leaving
+  // the agent unable to retry. Give the payment back and say the provider is
+  // unavailable.
+  if ([401, 402, 403].includes(upstreamRes.status)) {
+    reportToOperator("upstream_provider_denied", {
+      reason:   `upstream_status_${upstreamRes.status}`,
+      tx_hash:  txHash,
+      order_id: orderId,
+    });
+    await releaseTxClaim(txHash);
+    return res.status(503).json({
+      error:  "provider_unavailable",
+      detail: `Exa refused this bridge's request (${upstreamRes.status}). Your payment was not consumed — retry with the same headers.`,
+    });
+  }
+
+  // Upstream answered on the agent's behalf — promote the lease to the full
+  // retention window and consume the order. A remaining 4xx (bad query,
+  // agent's quota) is a delivered service: the request was malformed, not the
+  // bridge's fault.
+  await Promise.all([consumeOrder(orderId), confirmTxConsumed(txHash)]);
   reportToOperator("settled", {
     tx_hash:  txHash,
     order_id: orderId,
