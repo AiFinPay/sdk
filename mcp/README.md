@@ -62,8 +62,8 @@ keypair and **prints it to stderr** at startup:
 
 ```
 [warn] no AIFINPAY_AGENT_SECRET set — generated EPHEMERAL agent.
-  address: 9HucVaL5yinJ4MfBKCFnz5QJBGwK33bfSQKw15pSe3Ch
-  secret:  2vfeWAYfkpTNGSgDpBonzmjkckrTKa5GTnhhztY141YcSKYrqCvtojVukQAQiJbbRLgdcfEdyqHbRMsUft6Pb7nD
+  address: 9xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  secret:  4xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
   >> Save this secret to AIFINPAY_AGENT_SECRET to keep the agent across restarts.
 ```
 
