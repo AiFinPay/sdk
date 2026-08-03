@@ -10,6 +10,7 @@
 // wired up as the migration progresses (see Obsidian/22 - Migration Roadmap).
 // ──────────────────────────────────────────────────────────────────────────
 import nacl from "tweetnacl";
+import { blake2b } from "@noble/hashes/blake2b";
 import bs58 from "bs58";
 import { createHash, randomBytes } from "node:crypto";
 import {
@@ -717,6 +718,24 @@ export class AiFinPayAgent {
   }
   get solanaAddress(): string { return this.inner.address; }
   get evmAddress():    string { return this.evmAccount.address; }
+
+  /**
+   * Casper identity, derived from the same seed as the other two.
+   *
+   * A getter rather than a stored field, for the same reason the EVM key is
+   * derived rather than generated: the agent's identity on every chain has to
+   * be reproducible from one secret. Anything else means an address that
+   * changes on restart, and funds sent to the old one are unrecoverable.
+   *
+   * Returns the tagged public key Casper tooling expects (01 = ed25519) and the
+   * account hash. Verified against mainnet — see casperIdentityFromSeed.
+   */
+  get casper(): { publicKey: string; accountHash: string } {
+    return casperIdentityFromSeed(this.inner.secretKey.subarray(0, 32));
+  }
+
+  /** Convenience: the account hash, which is what a Casper explorer wants. */
+  get casperAddress(): string { return this.casper.accountHash; }
 
   // ── Registry ────────────────────────────────────────────────────────────
 
@@ -1616,6 +1635,54 @@ function bytesToHex(b: Uint8Array): string {
  * BIP-39 mnemonic support. This helper is stop-gap so the unified API can ship
  * before audit-grade derivation lands.
  */
+
+/**
+ * Casper identity for the agent, derived from the same seed as everything else.
+ *
+ * The SDK produced EVM and Solana addresses and nothing for Casper, while the
+ * project publicly counts Casper among its live networks — a contract is
+ * deployed there and has settled real payments. Anyone integrating had no way
+ * to get an address, and deriving one by hand is the dangerous path: Casper
+ * tags the key type and hashes with blake2b, so a plausible-looking guess
+ * produces a valid-looking address for a keypair that controls nothing.
+ *
+ * Derivation is verified against Casper mainnet, not against documentation.
+ * Public key 01000e6fce75…eeee resolves on chain to account hash
+ * e386a6e2d67ab4c7…807a, and this code reproduces that exactly.
+ *
+ * Domain-separated like the EVM path rather than reusing the Solana key: the
+ * two chains stay independent, so a compromise on one does not carry.
+ */
+function casperSeed(seed: Uint8Array): Uint8Array {
+  const h = createHash("sha256");
+  h.update("aifinpay:casper:v1\0");
+  h.update(seed);
+  return new Uint8Array(h.digest());
+}
+
+/** Casper account hash: blake2b256(algorithm-name || 0x00 || public key). */
+function casperAccountHash(publicKey: Uint8Array): string {
+  const name = new TextEncoder().encode("ed25519");
+  const buf = new Uint8Array(name.length + 1 + publicKey.length);
+  buf.set(name, 0);
+  buf[name.length] = 0;
+  buf.set(publicKey, name.length + 1);
+  return bytesToHex(blake2b(buf, { dkLen: 32 }));
+}
+
+/** The pair Casper tooling expects: tagged public key and account hash. */
+export function casperIdentityFromSeed(seed: Uint8Array): {
+  publicKey: string;
+  accountHash: string;
+} {
+  const kp = nacl.sign.keyPair.fromSeed(casperSeed(seed));
+  return {
+    // 01 tags ed25519; 02 would be secp256k1. Casper rejects an untagged key.
+    publicKey: "01" + bytesToHex(kp.publicKey),
+    accountHash: "account-hash-" + casperAccountHash(kp.publicKey),
+  };
+}
+
 function crypto32(seed: Uint8Array): Uint8Array {
   // Must stay sync (constructors call it). Uses the createHash imported at
   // the top of this file — a bare `require()` is a ReferenceError here
