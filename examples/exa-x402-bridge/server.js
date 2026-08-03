@@ -3,7 +3,7 @@
 //
 // Polygon-pilot pattern. Frontend = a real third-party API (here: Exa AI's
 // /search). Bridge gates calls behind a B2BSplitter on-chain payment in
-// MATIC: agent calls `payMatic(merchant, ipCreator, orderId)`; the contract
+// MATIC: agent calls `payNative(paymentId, merchant, ipCreator, orderId)`; the contract
 // splits msg.value 98.99% / 1.00% / 0.01% (merchant / treasury / ipCreator)
 // fee-from-top. Bridge verifies the receipt via viem, then forwards to Exa
 // using the bridge operator's pooled API key.
@@ -12,7 +12,7 @@
 //   1. agent → POST /search { query }                                ↵
 //   2. server → 402 with pay_matic { splitter, merchant, total_wei,
 //               unique order_id, retry instructions }                 ↵
-//   3. agent  → calls B2BSplitter.payMatic(merchant, address(0),
+//   3. agent  → calls B2BSplitter.payNative(merchant, address(0),
 //               order_id) on Polygon, msg.value = total_wei            ↵
 //   4. agent  → resends POST /search with x-tx-hash + x-order-id      ↵
 //   5. server fetches tx receipt via viem, parses Payment event,
@@ -45,6 +45,9 @@ import {
   consumeOrder,
   isTxConsumed,
   markTxConsumed,
+  claimTxLease,
+  confirmTxConsumed,
+  releaseTxClaim,
 } from "./store.js";
 
 const PORT                   = process.env.PORT                   || 3001;
@@ -53,7 +56,7 @@ const EXA_API_URL            = process.env.EXA_API_URL            || "https://ap
 const EXA_API_KEY            = process.env.EXA_API_KEY            || "";
 const POLYGON_RPC            = process.env.POLYGON_RPC            || "https://polygon.drpc.org";
 const SPLITTER_ADDRESS       = process.env.SPLITTER_ADDRESS_POLYGON
-                            || "0xE34Fc0E6694821c600Fa0955C0F74720ea6d8440";
+                            || "0xbD1fa5453f212F096c0213788a645eC597FB4DDe";
 const BRIDGE_MERCHANT_WALLET = process.env.BRIDGE_MERCHANT_WALLET || "";
 const PRICE_WEI              = process.env.PRICE_WEI              || "15000000000000000";
 const ORDER_TTL_MS           = 10 * 60_000;
@@ -61,8 +64,12 @@ const ORDER_TTL_MS           = 10 * 60_000;
 // ── Stablecoin pricing (v5.3 B2BSplitter.payStable path) ────────────────
 // USD-cent denominated price for USDC / USDT settlement. 6-decimal units
 // match the on-chain ERC-20 contract. 25_000 units = $0.025 USDC.
-const PRICE_USDC_UNITS       = process.env.PRICE_USDC_UNITS       || "25000";
-const PRICE_USDT_UNITS       = process.env.PRICE_USDT_UNITS       || "25000";
+// 100_000 units = $0.10, which is B2BSplitter v1.2's MIN_PAYMENT — a contract
+// floor, not a pricing choice. The old default of 25_000 ($0.025) predates
+// v1.2; the previous contract had no minimum at all, so this quietly became
+// unsettleable at the migration rather than at the time it was written.
+const PRICE_USDC_UNITS       = process.env.PRICE_USDC_UNITS       || "100000";
+const PRICE_USDT_UNITS       = process.env.PRICE_USDT_UNITS       || "100000";  // see PRICE_USDC_UNITS: v1.2 MIN_PAYMENT
 const USDC_ADDRESS           = process.env.USDC_POLYGON           || "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
 const USDT_ADDRESS           = process.env.USDT_POLYGON           || "0xc2132D05D31c914a87C6611C10748AEb04B58e8F";
 // Standard x402 facilitator URL — Polygon's x402-rs deployment. The
@@ -72,6 +79,20 @@ const USDT_ADDRESS           = process.env.USDT_POLYGON           || "0xc2132D05
 // broadcasting a tx themselves.
 const X402_FACILITATOR_URL   = process.env.X402_FACILITATOR_URL   || "https://x402.polygon.technology";
 const X402_RESOURCE_URL      = process.env.X402_RESOURCE_URL      || "https://bridge.aifinpay.io/exa/search";
+// Standard-x402 stablecoin rail (ERC-3009 USDC/USDT via facilitator). OFF by
+// default *for this bridge only*: the POST /search handler here has no
+// `x-payment` branch, so advertising these accepts produces a deterministic
+// second 402 (audit P0 "bridge advertises standard x402 but never handles
+// x-payment").
+//
+// Scope matters — the sibling bridges are NOT affected: io-net and venice both
+// implement the branch (verify via the facilitator, then forward upstream) and
+// their stable rail works, so they are deliberately left advertising it. exa is
+// the only one where the rail is advertised with nothing behind it.
+//
+// Turn ON here only after the handler is wired to verifyX402Payment() AND a
+// clean-machine paid E2E passes (audit P0 "no release gate").
+const X402_STABLE_ENABLED    = process.env.X402_STABLE_ENABLED === "1";
 
 // ── Solana payment option (atomic b2b_pay_with_split, live 2026-05-18) ──
 const SOLANA_RPC             = process.env.SOLANA_RPC             || "https://api.mainnet-beta.solana.com";
@@ -85,13 +106,42 @@ const PRICE_LAMPORTS         = process.env.PRICE_LAMPORTS         || "50000";
 // dashboard. Set to e.g. https://aifinpay.io in prod.
 const OPERATOR_URL           = process.env.OPERATOR_URL || "";
 
+// Shared service secret used to sign operator reports. The operator rejects
+// unsigned bridge events, since anyone could otherwise inject fake
+// failures/settlements and corrupt its analytics. Must match the operator's
+// AIFP_INGEST_SECRET.
+const OPERATOR_INGEST_SECRET = process.env.AIFP_INGEST_SECRET || "";
+
+if (OPERATOR_URL && !OPERATOR_INGEST_SECRET) {
+  console.warn(
+    `[${SERVICE_NAME}] WARNING: OPERATOR_URL is set but AIFP_INGEST_SECRET is not — ` +
+      "operator reports will be rejected as unsigned.",
+  );
+}
+
 async function reportToOperator(kind, fields) {
   if (!OPERATOR_URL) return;
   try {
+    const body = JSON.stringify({
+      service: SERVICE_NAME,
+      kind,
+      ts: Math.floor(Date.now() / 1000),
+      ...fields,
+    });
+    const headers = { "content-type": "application/json" };
+    if (OPERATOR_INGEST_SECRET) {
+      // t=<unix>,v1=<hex hmac-sha256 of `${t}.${body}`> — same scheme as the
+      // operator's outbound webhook signatures.
+      const t = Math.floor(Date.now() / 1000);
+      const v1 = crypto.createHmac("sha256", OPERATOR_INGEST_SECRET)
+        .update(`${t}.${body}`)
+        .digest("hex");
+      headers["x-aifinpay-ingest"] = `t=${t},v1=${v1}`;
+    }
     await fetch(`${OPERATOR_URL.replace(/\/$/, "")}/api/internal/bridge-event`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ service: SERVICE_NAME, kind, ts: Math.floor(Date.now() / 1000), ...fields }),
+      headers,
+      body,
     });
   } catch { /* best-effort, never block the main flow */ }
 }
@@ -109,9 +159,10 @@ const SPLITTER_EVENT_ABI = [{
   type: "event",
   name: "Payment",
   inputs: [
+    { type: "bytes32", name: "paymentId",        indexed: true  },
     { type: "address", name: "payer",            indexed: true  },
     { type: "address", name: "merchant",         indexed: true  },
-    { type: "address", name: "token",            indexed: true  }, // 0x0 = MATIC
+    { type: "address", name: "token",            indexed: false  }, // 0x0 = MATIC
     { type: "uint256", name: "totalAmount",      indexed: false },
     { type: "uint256", name: "merchantAmount",   indexed: false },
     { type: "uint256", name: "treasuryAmount",   indexed: false },
@@ -152,9 +203,11 @@ async function challenge402(res, query) {
     protocol: "AiFinPay v5.3",
     service: SERVICE_NAME,
 
-    // Standard x402 path (Polygon facilitator, ERC-3009 USDC/USDT)
+    // Standard x402 path (Polygon facilitator, ERC-3009 USDC/USDT).
+    // Only advertised when the handler can actually settle it — see
+    // X402_STABLE_ENABLED above.
     x402Version: 1,
-    accepts: [
+    accepts: X402_STABLE_ENABLED ? [
       {
         scheme:            "exact"        ,
         network:           "polygon",
@@ -179,12 +232,12 @@ async function challenge402(res, query) {
         maxTimeoutSeconds: Math.floor(ORDER_TTL_MS / 1000),
         extra:             { name: "Tether USD", version: "1", facilitator: X402_FACILITATOR_URL },
       },
-    ],
+    ] : [],
     error_code: "Payment Required",
 
     // Legacy AiFinPay-pay-matic path (native POL via B2BSplitter)
-    facilitator: "aifinpay-pay-matic",
-    pay_matic: {
+    facilitator: "aifinpay-pay-native",
+    pay_native: {
       chain:                 "polygon",
       splitter:              SPLITTER_ADDRESS,
       merchant_wallet:       BRIDGE_MERCHANT_WALLET,
@@ -193,7 +246,7 @@ async function challenge402(res, query) {
       treasury_amount_wei:   treasuryAmt.toString(),
       ip_creator_amount_wei: ipAmt.toString(),
       order_id:              orderId,
-      function_signature:    "payMatic(address,address,string)",
+      function_signature:    "payNative(bytes32,address,address,string)",
       ttl_seconds:           Math.floor(ORDER_TTL_MS / 1000),
     },
 
@@ -223,7 +276,7 @@ async function challenge402(res, query) {
 
     retry: {
       legacy_pay_matic:    { method: "POST", headers: ["x-tx-hash", "x-order-id"], same_body: true },
-      standard_x402:       { method: "POST", headers: ["x-payment"],               same_body: true },
+      ...(X402_STABLE_ENABLED ? { standard_x402: { method: "POST", headers: ["x-payment"], same_body: true } } : {}),
       ...(BRIDGE_MERCHANT_SOLANA ? {
         solana_b2b_split:  { method: "POST", headers: ["x-solana-tx", "x-order-id"], same_body: true },
       } : {}),
@@ -292,6 +345,31 @@ async function verifySolanaTx(txHash, expectedOrderId) {
     return data.includes(orderIdBytes);
   });
   if (!orderIdMatches) return { ok: false, reason: `order_id "${expectedOrderId}" not found in tx data` };
+  // Everything above proves the transaction TOUCHED the right program, the
+  // right merchant and the right order. None of it proves an amount. A payer
+  // could invoke the program with a single lamport, satisfy every check above,
+  // and be served — while the EVM path in this same file has always compared
+  // totalAmount against the price. The asymmetry was not deliberate.
+  //
+  // The balance delta is used rather than the instruction arguments because it
+  // is what actually happened, and it stays correct if the program's encoding
+  // changes. Unreadable balances refuse rather than assume: a payment we
+  // cannot measure is not a payment we can accept.
+  const merchantIdx = keyStrs.indexOf(BRIDGE_MERCHANT_SOLANA);
+  const preBal  = tx.meta?.preBalances?.[merchantIdx];
+  const postBal = tx.meta?.postBalances?.[merchantIdx];
+  if (merchantIdx < 0 || typeof preBal !== "number" || typeof postBal !== "number") {
+    return { ok: false, reason: "cannot read the merchant's balance change — refusing to assume payment" };
+  }
+  const receivedLamports = BigInt(postBal) - BigInt(preBal);
+  const expectedLamports = BigInt(PRICE_LAMPORTS);
+  if (receivedLamports < expectedLamports) {
+    return {
+      ok: false,
+      reason: `underpaid: merchant received ${receivedLamports} lamports, price is ${expectedLamports}`,
+    };
+  }
+
   return { ok: true, payer: keyStrs[0], tx: txHash };
 }
 
@@ -369,7 +447,7 @@ app.get("/", (_req, res) => res.json({
 
 app.get("/.well-known/x402.json", (_req, res) => res.json({
   protocol: "AiFinPay v5.3",
-  facilitator: "aifinpay-pay-matic",
+  facilitator: "aifinpay-pay-native",
   chain: "polygon",
   splitter: SPLITTER_ADDRESS,
   merchant_wallet: BRIDGE_MERCHANT_WALLET,
@@ -395,6 +473,17 @@ app.post("/search", challengeLimiter, async (req, res) => {
     if (!verifiedSol.ok) {
       return res.status(402).json({ error: "payment_verification_failed", detail: verifiedSol.reason });
     }
+    // Same claim-before-upstream rule as the EVM branch below. This path was
+    // missed on the first pass at the fix and the test caught it: the bridge
+    // has two upstream calls, and guarding only one leaves the payment
+    // replayable for anyone who pays in SOL.
+    if (!(await claimTxLease(solanaTx))) {
+      return res.status(409).json({
+        error:  "tx_already_consumed",
+        detail: "This transaction is already being served, or has been. One payment buys one call.",
+      });
+    }
+
     let upstreamRes;
     try {
       upstreamRes = await fetch(EXA_API_URL, {
@@ -403,13 +492,23 @@ app.post("/search", challengeLimiter, async (req, res) => {
         body: JSON.stringify({ query }),
       });
     } catch (e) {
+      await releaseTxClaim(solanaTx);
       return res.status(502).json({ error: "upstream_unreachable", detail: e.message });
     }
     if (upstreamRes.status >= 500) {
       let body; try { body = await upstreamRes.text(); } catch { body = "<unreadable>"; }
+      await releaseTxClaim(solanaTx);
       return res.status(502).json({ error: "upstream_5xx", upstream_status: upstreamRes.status, upstream_body: body.slice(0, 500) });
     }
-    await Promise.all([consumeOrder(orderId), markTxConsumed(solanaTx)]);
+    if ([401, 402, 403].includes(upstreamRes.status)) {
+      // Our key or our credit, not the agent's request.
+      await releaseTxClaim(solanaTx);
+      return res.status(503).json({
+        error:  "provider_unavailable",
+        detail: `Exa refused this bridge's request (${upstreamRes.status}). Your payment was not consumed — retry with the same headers.`,
+      });
+    }
+    await Promise.all([consumeOrder(orderId), confirmTxConsumed(solanaTx)]);
     let payload;
     try { payload = await upstreamRes.json(); } catch { payload = { error: "upstream_non_json" }; }
     res.set("x-payment-receipt", JSON.stringify({
@@ -445,8 +544,25 @@ app.post("/search", challengeLimiter, async (req, res) => {
     });
   }
 
-  // Forward to upstream Exa BEFORE consuming the order/tx — if upstream
-  // fails, the agent can retry the same headers without re-paying.
+  // Claim the payment before Exa's credit is spent on it.
+  //
+  // The isTxConsumed() check inside verifyTx() is an early rejection, not a
+  // guard: two requests carrying the same proof both pass it before either
+  // reaches the commit below. That was observed live — one transaction bought
+  // two upstream calls, and both answers cited it.
+  //
+  // The claim is a short lease rather than a permanent mark, which keeps the
+  // property the old ordering was reaching for: if this process dies before
+  // answering, the lease expires and the agent retries with the same proof
+  // instead of losing the payment. Every path from here that does not deliver
+  // the service releases it explicitly.
+  if (!(await claimTxLease(txHash))) {
+    return res.status(409).json({
+      error:  "tx_already_consumed",
+      detail: "This transaction is already being served, or has been. One payment buys one call.",
+    });
+  }
+
   let upstreamRes;
   try {
     upstreamRes = await fetch(EXA_API_URL, {
@@ -459,6 +575,8 @@ app.post("/search", challengeLimiter, async (req, res) => {
       body: JSON.stringify({ ...req.body, query }),
     });
   } catch (e) {
+    // Nothing was delivered and nothing was spent — hand the payment back.
+    await releaseTxClaim(txHash);
     return res.status(502).json({
       error: "upstream_unreachable",
       detail: `Exa /search call failed: ${e.message}. Retry with the same x-tx-hash + x-order-id headers.`,
@@ -473,6 +591,7 @@ app.post("/search", challengeLimiter, async (req, res) => {
       tx_hash:  txHash,
       order_id: orderId,
     });
+    await releaseTxClaim(txHash);
     return res.status(502).json({
       error: "upstream_5xx",
       detail: `Exa returned ${upstreamRes.status}. Retry with same headers — your payment is preserved.`,
@@ -481,11 +600,30 @@ app.post("/search", challengeLimiter, async (req, res) => {
     });
   }
 
-  // Upstream answered (any 2xx/4xx) — commit the order and tx so they
-  // can't be replayed. 4xx from Exa (bad query, exceeded quota) still
-  // counts as "service rendered" for billing purposes; the agent's
-  // request was malformed, not the bridge's fault.
-  await Promise.all([consumeOrder(orderId), markTxConsumed(txHash)]);
+  // 401/402/403 are about US, not the agent: our key is wrong, or the
+  // account behind this bridge is out of credit. Billing the agent for a
+  // service we could not buy is how a Venice payment was taken while the
+  // upstream answered 402 twice and the order was consumed anyway, leaving
+  // the agent unable to retry. Give the payment back and say the provider is
+  // unavailable.
+  if ([401, 402, 403].includes(upstreamRes.status)) {
+    reportToOperator("upstream_provider_denied", {
+      reason:   `upstream_status_${upstreamRes.status}`,
+      tx_hash:  txHash,
+      order_id: orderId,
+    });
+    await releaseTxClaim(txHash);
+    return res.status(503).json({
+      error:  "provider_unavailable",
+      detail: `Exa refused this bridge's request (${upstreamRes.status}). Your payment was not consumed — retry with the same headers.`,
+    });
+  }
+
+  // Upstream answered on the agent's behalf — promote the lease to the full
+  // retention window and consume the order. A remaining 4xx (bad query,
+  // agent's quota) is a delivered service: the request was malformed, not the
+  // bridge's fault.
+  await Promise.all([consumeOrder(orderId), confirmTxConsumed(txHash)]);
   reportToOperator("settled", {
     tx_hash:  txHash,
     order_id: orderId,
