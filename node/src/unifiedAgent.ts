@@ -22,6 +22,7 @@ import {
   type PublicClient,
   type WalletClient,
   toFunctionSelector,
+  formatEther,
 } from "viem";
 import {
   privateKeyToAccount,
@@ -327,7 +328,13 @@ export interface SplitterDeployment {
   usdc?:      `0x${string}`;
   explorer:   string;
   /** Env var consulted for the native-token USD price used by the
-   *  pre-sign challenge guard, and its fallback default. */
+   *  pre-sign challenge guard. An operator who sets it means it, so it wins.
+   *
+   *  `nativeUsdDefault` is NOT consulted by the guard any more — see
+   *  nativeUsdFor(). It survives as published reference data only. A constant
+   *  in a blocking guard is what made this SDK reject valid payments: POL sat
+   *  at 0.70 here while trading near 0.073, so every quote looked ten times
+   *  its cost and BudgetCapExceededError fired before any money moved. */
   nativeUsdEnv:     string;
   nativeUsdDefault: number;
 }
@@ -342,7 +349,7 @@ export const SPLITTER_DEPLOYMENTS: Record<SplitterChainName, SplitterDeployment>
     usdc:       "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
     explorer:   "https://polygonscan.com",
     nativeUsdEnv: "AIFINPAY_MATIC_USD", // legacy name kept for back-compat
-    nativeUsdDefault: 0.70,
+    nativeUsdDefault: 0.073, // reference only; ~$0.073 on 2026-08-03
   },
   base: {
     version:    "1.1",
@@ -353,7 +360,7 @@ export const SPLITTER_DEPLOYMENTS: Record<SplitterChainName, SplitterDeployment>
     usdc:       "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     explorer:   "https://basescan.org",
     nativeUsdEnv: "AIFINPAY_ETH_USD",
-    nativeUsdDefault: 3000,
+    nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
   },
   optimism: {
     version:    "1.2",
@@ -364,7 +371,7 @@ export const SPLITTER_DEPLOYMENTS: Record<SplitterChainName, SplitterDeployment>
     usdc:       "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
     explorer:   "https://optimistic.etherscan.io",
     nativeUsdEnv: "AIFINPAY_ETH_USD",
-    nativeUsdDefault: 3000,
+    nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
   },
   unichain: {
     version:    "1.1",
@@ -375,7 +382,7 @@ export const SPLITTER_DEPLOYMENTS: Record<SplitterChainName, SplitterDeployment>
     usdc:       "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
     explorer:   "https://uniscan.xyz",
     nativeUsdEnv: "AIFINPAY_ETH_USD",
-    nativeUsdDefault: 3000,
+    nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
   },
   botchain: {
     version:    "1.2",
@@ -464,7 +471,23 @@ export class WrongChainBalanceError extends AiFinPayError {
   }
 }
 export class InsufficientFundsError extends AiFinPayError {
-  constructor(public needed_usd: number, public available_usd: number, msg: string) {
+  /**
+   * `details` carries the native amounts, which are what the caller acts on —
+   * the USD figures depend on a price feed that may be unavailable, and an
+   * error about missing funds is the worst possible place to invent a number.
+   */
+  constructor(
+    public needed_usd: number,
+    public available_usd: number,
+    msg: string,
+    public readonly details?: {
+      address: string;
+      chain: string;
+      symbol: string;
+      needed_wei: string;
+      available_wei: string;
+    },
+  ) {
     super(msg);
   }
 }
@@ -942,6 +965,121 @@ export class AiFinPayAgent {
    *
    * Returns false (skip) instead of throwing when on_limit_exceeded="skip".
    */
+  /**
+   * The native-token USD price for the pre-sign guard.
+   *
+   * Order: an explicit env var, then the protocol's own price feed, then
+   * nothing. "Nothing" is deliberate and is the whole point of this method.
+   * The guard used to fall back to a constant compiled into the SDK; POL sat
+   * at 0.70 while trading near 0.073, so a real $0.01 payment estimated at
+   * $0.096, cleared the $0.06 ceiling and threw BudgetCapExceededError. The
+   * payment never left, and the error blamed the bridge for demanding too
+   * much.
+   *
+   * A guard that blocks on a number it cannot justify is worse than no guard,
+   * so an unknown price returns NaN and guardChallengeAmount declines to
+   * block. Overpayment protection is given up only in the case where we have
+   * no basis for it, which is the honest trade.
+   */
+  private priceCache?: { at: number; usd: Record<string, number> };
+
+  private async nativeUsdFor(
+    deployment: SplitterDeployment,
+  ): Promise<{ usd: number; source: string }> {
+    const env = process.env[deployment.nativeUsdEnv];
+    if (env !== undefined) {
+      const v = parseFloat(env);
+      if (Number.isFinite(v) && v > 0) return { usd: v, source: deployment.nativeUsdEnv };
+    }
+
+    const symbol = deployment.chain.nativeCurrency.symbol.toUpperCase();
+    const fresh = this.priceCache && Date.now() - this.priceCache.at < 60_000;
+    if (!fresh) {
+      try {
+        const r = await this.inner.fetchImpl(`${this.inner.baseUrl}/api/price/native`, {
+          signal: AbortSignal.timeout(5_000),
+        });
+        if (r.ok) {
+          const body = (await r.json()) as { usd?: Record<string, number> };
+          if (body?.usd) this.priceCache = { at: Date.now(), usd: body.usd };
+        }
+      } catch {
+        // A feed that will not answer is not a payment failure. Fall through
+        // to "unknown" rather than to a guess.
+      }
+    }
+    const live = this.priceCache?.usd?.[symbol];
+    if (typeof live === "number" && Number.isFinite(live) && live > 0) {
+      return { usd: live, source: "aifinpay price feed" };
+    }
+    return { usd: NaN, source: "unknown" };
+  }
+
+  /**
+   * Refuse to broadcast a transaction the account cannot pay for, and say so
+   * in terms the caller can act on.
+   *
+   * Without this the SDK handed back viem's ContractFunctionExecutionError —
+   * several paragraphs explaining that cost is `gas * gas fee + value` — for
+   * the one condition an agent operator can fix in ten seconds. Worse, the SDK
+   * has exported an InsufficientFundsError since the first release and never
+   * threw it, so anyone who wrote `catch (e instanceof InsufficientFundsError)`
+   * had a branch that could not run.
+   */
+  private async assertCanAffordNative(
+    publicClient: PublicClient,
+    deployment: SplitterDeployment,
+    valueWei: bigint,
+  ): Promise<void> {
+    const address = this.evmAccount.address;
+    let balance: bigint;
+    let gasPrice: bigint;
+    try {
+      [balance, gasPrice] = await Promise.all([
+        publicClient.getBalance({ address }),
+        publicClient.getGasPrice(),
+      ]);
+    } catch {
+      // An RPC that will not answer must not turn into a funding error; let
+      // the actual send produce the actual failure.
+      return;
+    }
+
+    // A splitter payment lands around 120k gas; the headroom covers a fee
+    // spike between this check and inclusion. Being generous here only makes
+    // the check quieter, never wrong — a send that fails anyway still fails.
+    const gasBudget = gasPrice * 200_000n;
+    const needed = valueWei + gasBudget;
+    if (balance >= needed) return;
+
+    const symbol = deployment.chain.nativeCurrency.symbol;
+    const chainName = deployment.chain.name;
+    const short = (wei: bigint) => {
+      const s = formatEther(wei);
+      return s.includes(".") ? s.replace(/(\.\d{6})\d+$/, "$1").replace(/\.?0+$/, "") || "0" : s;
+    };
+    const { usd } = await this.nativeUsdFor(deployment);
+    const toUsd = (wei: bigint) =>
+      Number.isFinite(usd) ? (Number(wei) / 1e18) * usd : Number.NaN;
+
+    throw new InsufficientFundsError(
+      toUsd(needed),
+      toUsd(balance),
+      `Agent ${address} holds ${short(balance)} ${symbol} on ${chainName}, but this call needs ` +
+        `about ${short(needed)} ${symbol} — ${short(valueWei)} for the payment and up to ` +
+        `${short(gasBudget)} for gas. The gas figure is a ceiling: it assumes 200k gas at the ` +
+        `current price, while a splitter payment typically uses closer to 120k. Fund the ` +
+        `address with ${symbol} on ${chainName} and retry.`,
+      {
+        address,
+        chain: chainName,
+        symbol,
+        needed_wei: needed.toString(),
+        available_wei: balance.toString(),
+      },
+    );
+  }
+
   private guardChallengeAmount(estUsd: number, declaredCost: number, providerName: string): boolean {
     if (!Number.isFinite(estUsd) || estUsd <= 0) return true; // can't estimate — don't block
     const limits: number[] = [];
@@ -1257,12 +1395,12 @@ export class AiFinPayAgent {
     // amount wildly above the declared cost / per-call cap. Native-token
     // USD price per chain via SPLITTER_DEPLOYMENTS.nativeUsdEnv.
     {
-      const wei       = Number(pm.total_wei);
-      const nativeUsd = parseFloat(
-        process.env[deployment.nativeUsdEnv] ?? String(deployment.nativeUsdDefault),
-      );
-      const estUsd    = (Number.isFinite(wei) ? wei / 1e18 : 0) * nativeUsd;
-      const guarded   = this.guardChallengeAmount(estUsd, cost, provider.name);
+      const wei = Number(pm.total_wei);
+      const { usd: nativeUsd } = await this.nativeUsdFor(deployment);
+      // NaN when no price is known — guardChallengeAmount then declines to
+      // block rather than blocking on a guess. See nativeUsdFor().
+      const estUsd  = (Number.isFinite(wei) ? wei / 1e18 : 0) * nativeUsd;
+      const guarded = this.guardChallengeAmount(estUsd, cost, provider.name);
       if (!guarded) return null;
     }
 
@@ -1299,6 +1437,8 @@ export class AiFinPayAgent {
     const splitterVersion =
       (pm.splitter_version as "1.1" | "1.2" | undefined)
       ?? await this.detectSplitterVersion(splitterAddress, chain, deployment.version);
+    await this.assertCanAffordNative(publicClient, deployment, BigInt(pm.total_wei));
+
     const txHash = splitterVersion === "1.2"
       ? await walletClient.writeContract({
           address:      splitterAddress,
