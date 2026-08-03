@@ -108,7 +108,11 @@ DEFAULT_REGISTRY_URL = "https://api.aifinpay.io" + DEFAULT_REGISTRY_PATHS[0]
 DEFAULT_POLYGON_RPC  = "https://polygon.drpc.org"
 DEFAULT_SOLANA_RPC   = "https://api.mainnet-beta.solana.com"
 
-# Polygon B2BSplitter.payMatic ABI (single-function slice — full ABI not needed)
+# B2BSplitter native-payment ABIs. v1.2 (deployed 2026-07-31 on Polygon,
+# Optimism, BOT Chain and XRPL EVM) renamed the entrypoint and added a bytes32
+# paymentId replay guard; Base and Unichain still run v1.1. The address arrives
+# from the server, so the version does too — probing the contract would be
+# fragile and guessing would produce a revert with no useful reason.
 SPLITTER_PAY_MATIC_ABI = [{
     "type": "function",
     "name": "payMatic",
@@ -120,6 +124,31 @@ SPLITTER_PAY_MATIC_ABI = [{
     ],
     "outputs": [],
 }]
+
+SPLITTER_PAY_NATIVE_ABI = [{
+    "type": "function",
+    "name": "payNative",
+    "stateMutability": "payable",
+    "inputs": [
+        {"type": "bytes32", "name": "paymentId"},
+        {"type": "address", "name": "merchant"},
+        {"type": "address", "name": "ipCreator"},
+        {"type": "string",  "name": "memo"},
+    ],
+    "outputs": [],
+}]
+
+
+def payment_id_for(order_id: str) -> bytes:
+    """Derive the on-chain paymentId from the quote's order id.
+
+    Deterministic on purpose: v1.2 rejects a paymentId it has already settled,
+    and that only prevents paying the same order twice if the id is bound to the
+    order. A random id would satisfy the contract while defeating its purpose.
+    A retry after a reverted transaction is still fine — a revert settles nothing.
+    """
+    return Web3.keccak(text=order_id)
+
 
 # Anchor convention: discriminator = sha256("global:<fn_name>")[:8]
 B2B_PAY_WITH_SPLIT_DISC = hashlib.sha256(b"global:b2b_pay_with_split").digest()[:8]
@@ -710,6 +739,10 @@ class AiFinPayAgent:
             )
 
         w3 = self._web3()
+        splitter_v12 = w3.eth.contract(
+            address=Web3.to_checksum_address(pm["splitter"]),
+            abi=SPLITTER_PAY_NATIVE_ABI,
+        )
         splitter = w3.eth.contract(
             address=Web3.to_checksum_address(pm["splitter"]),
             abi=SPLITTER_PAY_MATIC_ABI,
@@ -730,7 +763,15 @@ class AiFinPayAgent:
 
         nonce = w3.eth.get_transaction_count(self.evm_address)
         gas_price = w3.eth.gas_price
-        tx = splitter.functions.payMatic(merchant, ip_creator, order_id).build_transaction({
+        # Defaults to 1.1 so an older backend that does not send the field keeps
+        # working unchanged.
+        if str(pm.get("splitter_version", "1.1")) == "1.2":
+            fn = splitter_v12.functions.payNative(
+                payment_id_for(order_id), merchant, ip_creator, order_id
+            )
+        else:
+            fn = splitter.functions.payMatic(merchant, ip_creator, order_id)
+        tx = fn.build_transaction({
             "from":     self.evm_address,
             "value":    total_wei,
             "nonce":    nonce,

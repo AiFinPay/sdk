@@ -16,6 +16,8 @@ import {
   createPublicClient,
   createWalletClient,
   http,
+  keccak256,
+  toHex,
   type PublicClient,
   type WalletClient,
 } from "viem";
@@ -176,6 +178,9 @@ interface PayMaticChallenge {
      *  "polygon"; newer bridges may emit any SplitterChainName. */
     chain:                 string;
     splitter:              string;
+    /** Which B2BSplitter the address above is. Absent on older bridges, which
+     *  is treated as "1.1" — the shape the entrypoint had before 2026-07-31. */
+    splitter_version?:     "1.1" | "1.2";
     merchant_wallet:       string;
     total_wei:             string;
     merchant_amount_wei?:  string;
@@ -227,6 +232,39 @@ const SPLITTER_PAY_MATIC_ABI = [
   },
 ] as const;
 
+// v1.2 entrypoint. The signature was read off the deployed contract rather than
+// from a spec: selector 0x8f0122bb, confirmed against the mainnet proof payment
+// 0xbffcdbd2…72d3. The redeploy note describes it as "payNative taking a
+// bytes32 paymentId", which is true but incomplete — it takes four arguments,
+// and calling it with one produces a revert that looks like a contract fault.
+const SPLITTER_PAY_NATIVE_ABI = [
+  {
+    type: "function",
+    name: "payNative",
+    stateMutability: "payable",
+    inputs: [
+      { type: "bytes32", name: "paymentId" },
+      { type: "address", name: "merchant" },
+      { type: "address", name: "ipCreator" },
+      { type: "string",  name: "memo" },
+    ],
+    outputs: [],
+  },
+] as const;
+
+/**
+ * Derive the on-chain paymentId from the quote's order id.
+ *
+ * Deliberately deterministic. v1.2 rejects a paymentId it has already settled,
+ * and that guarantee is only worth something if the id is bound to the order:
+ * a random id would let the same order be paid twice, which is precisely what
+ * the guard exists to prevent. A retry after a *reverted* transaction is still
+ * fine — a revert consumes nothing on-chain.
+ */
+export function paymentIdFor(orderId: string): `0x${string}` {
+  return keccak256(toHex(orderId));
+}
+
 // ── B2BSplitter multi-chain deployment registry ──────────────────────────
 //
 // Chains where the fee-on-top B2BSplitter contract is DEPLOYED AND VERIFIED
@@ -271,7 +309,13 @@ export interface SplitterDeployment {
   chain:      Chain;
   /** Public RPC used when no evmRpcUrls override is supplied. */
   defaultRpc: string;
-  /** B2BSplitter contract address (payMatic native-token entrypoint). */
+  /**
+   * Deployed B2BSplitter version. v1.2 added a bytes32 paymentId replay guard
+   * and renamed the native entrypoint, so the ABI differs per chain — Base and
+   * Unichain were not part of the 2026-07-31 rollout and still run v1.1.
+   */
+  version: "1.1" | "1.2";
+  /** B2BSplitter contract address (native-token entrypoint). */
   splitter:   `0x${string}`;
   /**
    * Circle-native USDC on this chain, when one exists. Informational for
@@ -288,16 +332,18 @@ export interface SplitterDeployment {
 
 export const SPLITTER_DEPLOYMENTS: Record<SplitterChainName, SplitterDeployment> = {
   polygon: {
+    version:    "1.2",
     chainId:    137,
     chain:      polygon,
     defaultRpc: "https://polygon.drpc.org",
-    splitter:   "0xE34Fc0E6694821c600Fa0955C0F74720ea6d8440",
+    splitter:   "0xbD1fa5453f212F096c0213788a645eC597FB4DDe",
     usdc:       "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
     explorer:   "https://polygonscan.com",
     nativeUsdEnv: "AIFINPAY_MATIC_USD", // legacy name kept for back-compat
     nativeUsdDefault: 0.70,
   },
   base: {
+    version:    "1.1",
     chainId:    8453,
     chain:      base,
     defaultRpc: "https://mainnet.base.org",
@@ -308,16 +354,18 @@ export const SPLITTER_DEPLOYMENTS: Record<SplitterChainName, SplitterDeployment>
     nativeUsdDefault: 3000,
   },
   optimism: {
+    version:    "1.2",
     chainId:    10,
     chain:      optimism,
     defaultRpc: "https://mainnet.optimism.io",
-    splitter:   "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB",
+    splitter:   "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74",
     usdc:       "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
     explorer:   "https://optimistic.etherscan.io",
     nativeUsdEnv: "AIFINPAY_ETH_USD",
     nativeUsdDefault: 3000,
   },
   unichain: {
+    version:    "1.1",
     chainId:    130,
     chain:      unichain,
     defaultRpc: "https://mainnet.unichain.org",
@@ -328,20 +376,22 @@ export const SPLITTER_DEPLOYMENTS: Record<SplitterChainName, SplitterDeployment>
     nativeUsdDefault: 3000,
   },
   botchain: {
+    version:    "1.2",
     chainId:    677,
     chain:      botchain,
     defaultRpc: "https://rpc.botchain.ai",
-    splitter:   "0x271870ABb6e6756D97191eBdb27C1873911bb587",
+    splitter:   "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
     // no USDC on BOT Chain — native BOT only
     explorer:   "https://scan.botchain.ai",
     nativeUsdEnv: "AIFINPAY_BOT_USD",
     nativeUsdDefault: 1, // no reliable public feed; set the env var
   },
   xrplevm: {
+    version:    "1.2",
     chainId:    1440000,
     chain:      xrplevm,
     defaultRpc: "https://rpc.xrplevm.org",
-    splitter:   "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB",
+    splitter:   "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
     // no verified USDC on XRPL EVM — native XRP only
     explorer:   "https://explorer.xrplevm.org",
     nativeUsdEnv: "AIFINPAY_XRP_USD",
@@ -1209,19 +1259,45 @@ export class AiFinPayAgent {
       ?? await this.splitterTreasury(splitterAddress, chain)
       ?? "0x0000000000000000000000000000000000000000";
     const { publicClient, walletClient } = this.splitterClients(chain);
-    const txHash = await walletClient.writeContract({
-      address:      splitterAddress,
-      abi:          SPLITTER_PAY_MATIC_ABI,
-      functionName: "payMatic",
-      args: [
-        pm.merchant_wallet as `0x${string}`,
-        ipCreator,
-        pm.order_id,
-      ],
-      value: BigInt(pm.total_wei),
-      chain: deployment.chain,
-      account: this.evmAccount,
-    });
+    // The entrypoint follows the deployed contract, not the SDK release: v1.2
+    // (Polygon, Optimism, BOT Chain, XRPL EVM as of 2026-07-31) takes a bytes32
+    // paymentId and rejects one it has already settled, while Base and Unichain
+    // still run v1.1. Sending v1.2 calldata to a v1.1 contract reverts with no
+    // useful reason, so this must be decided per chain.
+    // When the server overrides the address it must also say which contract it
+    // is, otherwise a server pointing at v1.2 on a chain this registry still
+    // records as v1.1 would be called with the wrong ABI. The server wins
+    // because it is the one that knows what it just deployed.
+    const splitterVersion =
+      (pm.splitter_version as "1.1" | "1.2" | undefined) ?? deployment.version;
+    const txHash = splitterVersion === "1.2"
+      ? await walletClient.writeContract({
+          address:      splitterAddress,
+          abi:          SPLITTER_PAY_NATIVE_ABI,
+          functionName: "payNative",
+          args: [
+            paymentIdFor(pm.order_id),
+            pm.merchant_wallet as `0x${string}`,
+            ipCreator,
+            pm.order_id,
+          ],
+          value: BigInt(pm.total_wei),
+          chain: deployment.chain,
+          account: this.evmAccount,
+        })
+      : await walletClient.writeContract({
+          address:      splitterAddress,
+          abi:          SPLITTER_PAY_MATIC_ABI,
+          functionName: "payMatic",
+          args: [
+            pm.merchant_wallet as `0x${string}`,
+            ipCreator,
+            pm.order_id,
+          ],
+          value: BigInt(pm.total_wei),
+          chain: deployment.chain,
+          account: this.evmAccount,
+        });
 
     // 3. Wait for receipt (inclusion is enough on these fast-block chains).
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });

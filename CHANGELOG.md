@@ -4,6 +4,28 @@ All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
 `1.0.0` onward the public API is stable and changes follow semver.
 
+## @aifinpay/agent 1.4.0 · aifinpay-agent 1.2.0 — 2026-08-01
+
+### Changed
+- **B2BSplitter v1.2 on Polygon, Optimism, BOT Chain and XRPL EVM.** The
+  entrypoint is now `payNative(bytes32 paymentId, address merchant, address
+  ipCreator, string memo)` and the contract rejects a paymentId it has already
+  settled. Base and Unichain were not part of that rollout and still use
+  `payMatic`, so the ABI is selected per chain rather than per release — sending
+  v1.2 calldata to a v1.1 contract reverts with no useful reason.
+- `paymentId` is derived deterministically from the quote's order id. Random ids
+  would satisfy the contract while defeating the guard: the point is that the
+  same order cannot be paid twice. A retry after a *reverted* transaction is
+  unaffected, since a revert settles nothing.
+- A bridge may now send `splitter_version` alongside `splitter`; it takes
+  precedence over the built-in registry, because the server knows what it just
+  deployed. Absent, it is treated as 1.1.
+
+### Fixed
+- The registry shipped the superseded Polygon splitter `0xE34F…8440`, which v1.2
+  replaced. Every address here was re-checked with `eth_getCode` on its own
+  chain on 2026-08-01.
+
 ## @aifinpay/agent 1.3.3 · aifinpay-agent 1.1.3 — 2026-07-30
 
 ### Fixed
