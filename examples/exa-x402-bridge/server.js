@@ -3,7 +3,7 @@
 //
 // Polygon-pilot pattern. Frontend = a real third-party API (here: Exa AI's
 // /search). Bridge gates calls behind a B2BSplitter on-chain payment in
-// MATIC: agent calls `payMatic(merchant, ipCreator, orderId)`; the contract
+// MATIC: agent calls `payNative(paymentId, merchant, ipCreator, orderId)`; the contract
 // splits msg.value 98.99% / 1.00% / 0.01% (merchant / treasury / ipCreator)
 // fee-from-top. Bridge verifies the receipt via viem, then forwards to Exa
 // using the bridge operator's pooled API key.
@@ -12,7 +12,7 @@
 //   1. agent → POST /search { query }                                ↵
 //   2. server → 402 with pay_matic { splitter, merchant, total_wei,
 //               unique order_id, retry instructions }                 ↵
-//   3. agent  → calls B2BSplitter.payMatic(merchant, address(0),
+//   3. agent  → calls B2BSplitter.payNative(merchant, address(0),
 //               order_id) on Polygon, msg.value = total_wei            ↵
 //   4. agent  → resends POST /search with x-tx-hash + x-order-id      ↵
 //   5. server fetches tx receipt via viem, parses Payment event,
@@ -53,7 +53,7 @@ const EXA_API_URL            = process.env.EXA_API_URL            || "https://ap
 const EXA_API_KEY            = process.env.EXA_API_KEY            || "";
 const POLYGON_RPC            = process.env.POLYGON_RPC            || "https://polygon.drpc.org";
 const SPLITTER_ADDRESS       = process.env.SPLITTER_ADDRESS_POLYGON
-                            || "0xE34Fc0E6694821c600Fa0955C0F74720ea6d8440";
+                            || "0xbD1fa5453f212F096c0213788a645eC597FB4DDe";
 const BRIDGE_MERCHANT_WALLET = process.env.BRIDGE_MERCHANT_WALLET || "";
 const PRICE_WEI              = process.env.PRICE_WEI              || "15000000000000000";
 const ORDER_TTL_MS           = 10 * 60_000;
@@ -61,8 +61,12 @@ const ORDER_TTL_MS           = 10 * 60_000;
 // ── Stablecoin pricing (v5.3 B2BSplitter.payStable path) ────────────────
 // USD-cent denominated price for USDC / USDT settlement. 6-decimal units
 // match the on-chain ERC-20 contract. 25_000 units = $0.025 USDC.
-const PRICE_USDC_UNITS       = process.env.PRICE_USDC_UNITS       || "25000";
-const PRICE_USDT_UNITS       = process.env.PRICE_USDT_UNITS       || "25000";
+// 100_000 units = $0.10, which is B2BSplitter v1.2's MIN_PAYMENT — a contract
+// floor, not a pricing choice. The old default of 25_000 ($0.025) predates
+// v1.2; the previous contract had no minimum at all, so this quietly became
+// unsettleable at the migration rather than at the time it was written.
+const PRICE_USDC_UNITS       = process.env.PRICE_USDC_UNITS       || "100000";
+const PRICE_USDT_UNITS       = process.env.PRICE_USDT_UNITS       || "100000";  // see PRICE_USDC_UNITS: v1.2 MIN_PAYMENT
 const USDC_ADDRESS           = process.env.USDC_POLYGON           || "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
 const USDT_ADDRESS           = process.env.USDT_POLYGON           || "0xc2132D05D31c914a87C6611C10748AEb04B58e8F";
 // Standard x402 facilitator URL — Polygon's x402-rs deployment. The
@@ -152,9 +156,10 @@ const SPLITTER_EVENT_ABI = [{
   type: "event",
   name: "Payment",
   inputs: [
+    { type: "bytes32", name: "paymentId",        indexed: true  },
     { type: "address", name: "payer",            indexed: true  },
     { type: "address", name: "merchant",         indexed: true  },
-    { type: "address", name: "token",            indexed: true  }, // 0x0 = MATIC
+    { type: "address", name: "token",            indexed: false  }, // 0x0 = MATIC
     { type: "uint256", name: "totalAmount",      indexed: false },
     { type: "uint256", name: "merchantAmount",   indexed: false },
     { type: "uint256", name: "treasuryAmount",   indexed: false },
@@ -228,8 +233,8 @@ async function challenge402(res, query) {
     error_code: "Payment Required",
 
     // Legacy AiFinPay-pay-matic path (native POL via B2BSplitter)
-    facilitator: "aifinpay-pay-matic",
-    pay_matic: {
+    facilitator: "aifinpay-pay-native",
+    pay_native: {
       chain:                 "polygon",
       splitter:              SPLITTER_ADDRESS,
       merchant_wallet:       BRIDGE_MERCHANT_WALLET,
@@ -238,7 +243,7 @@ async function challenge402(res, query) {
       treasury_amount_wei:   treasuryAmt.toString(),
       ip_creator_amount_wei: ipAmt.toString(),
       order_id:              orderId,
-      function_signature:    "payMatic(address,address,string)",
+      function_signature:    "payNative(bytes32,address,address,string)",
       ttl_seconds:           Math.floor(ORDER_TTL_MS / 1000),
     },
 
@@ -414,7 +419,7 @@ app.get("/", (_req, res) => res.json({
 
 app.get("/.well-known/x402.json", (_req, res) => res.json({
   protocol: "AiFinPay v5.3",
-  facilitator: "aifinpay-pay-matic",
+  facilitator: "aifinpay-pay-native",
   chain: "polygon",
   splitter: SPLITTER_ADDRESS,
   merchant_wallet: BRIDGE_MERCHANT_WALLET,
