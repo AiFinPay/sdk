@@ -2,15 +2,16 @@
 //
 // The bridges checked isTxConsumed(), called the provider, then marked the tx
 // consumed. Both steps were awaited, so two requests carrying the same proof
-// both passed the check before either reached the mark. Observed live on this
-// bridge: a single transaction authorised two Venice calls, and both responses
-// cited it. The atomic primitive already existed and its own comment said to
-// use the return value as the guard; the server used it as an afterthought.
+// both passed the check before either reached the mark. Observed live on the
+// sibling Venice bridge: a single transaction authorised two upstream calls,
+// and both responses cited it. The atomic primitive already existed and its own
+// comment said to use the return value as the guard; the server used it as an
+// afterthought.
 //
 // Claiming before upstream introduces the opposite hazard — a payment taken
-// for a service that was never delivered, which is how an order was consumed
-// here while Venice answered 402 for lack of the bridge's own credit. So the
-// claim is a lease that a failure gives back.
+// for a service that was never delivered, which is how a Venice order was
+// consumed while the provider answered 402 for lack of the bridge's own credit.
+// So the claim is a lease that a failure gives back.
 //
 //   node --test store.test.js     (uses ALLOW_MEMORY_STORE; set REDIS_URL to
 //                                  exercise the path production actually runs)
@@ -79,12 +80,15 @@ test("every upstream call is claimed first", () => {
   // The ordering is the whole fix and it is invisible in behaviour until a
   // second request arrives, so it is asserted in the source.
   //
-  // Counted rather than checked once: this bridge calls Venice from three
-  // payment paths — standard x402, Solana and the legacy EVM one — and the
-  // first pass at the same fix on the sibling exa bridge guarded a single one.
-  // An indexOf() comparison passed there while SOL payments stayed replayable.
+  // Counted rather than checked once: this bridge calls Gcore from two payment
+  // paths — standard x402 and the legacy EVM one — and the first pass at the
+  // same fix on the sibling exa bridge guarded a single one. An indexOf()
+  // comparison passed there while the other path stayed replayable.
+  //
+  // The upstream URL is a per-request variable here, not a module constant,
+  // because the multi-model config routes each model to its own deployment.
   const src = readFileSync(new URL("./server.js", import.meta.url), "utf8");
-  const upstreamCalls = [...src.matchAll(/await fetch\(VENICE_API_URL/g)].map((m) => m.index);
+  const upstreamCalls = [...src.matchAll(/await fetch\(upstreamUrl/g)].map((m) => m.index);
   const claims = [...src.matchAll(/await claimTxLease\(/g)].map((m) => m.index);
 
   assert.ok(upstreamCalls.length > 0, "no upstream call found — has the bridge changed shape?");
@@ -103,25 +107,4 @@ test("every upstream call is claimed first", () => {
     providerDenied, upstreamCalls.length,
     "a path still bills the agent when the provider refuses us for credit",
   );
-});
-
-test("the Solana path delegates to the shared, tested verifier", () => {
-  // The amount check used to be asserted here, inline in verifySolanaTx. It now
-  // lives in ../exa-x402-bridge/solana-verify.js, because four copies of the
-  // same verification are four chances to miss one — which is exactly what
-  // happened: none of them checked an amount at all until it was found, and
-  // the fix then had to be applied by hand three times.
-  //
-  // What this asserts is that the bridge still hands the decision to that
-  // module and still passes BOTH legs. Dropping the treasury minimum is the
-  // silent way to reopen the fee bypass, so it is named explicitly here.
-  // The attacks themselves are exercised in solana-verify.test.js.
-  const src = readFileSync(new URL("./server.js", import.meta.url), "utf8");
-  const fn = src.slice(src.indexOf("async function verifySolanaTx"));
-  const body = fn.slice(0, fn.indexOf("\n}\n"));
-  assert.ok(body.length > 0, "verifySolanaTx not found — has the bridge changed shape?");
-  assert.match(body, /verifySolanaPayment\(/, "the Solana path no longer uses the shared verifier");
-  assert.match(body, /minMerchantLamports:/, "the merchant's minimum is not passed");
-  assert.match(body, /minTreasuryLamports:/, "the treasury's minimum is not passed — the fee bypass is open");
-  assert.match(body, /treasury:\s*SOLANA_TREASURY/, "the treasury address is not passed");
 });

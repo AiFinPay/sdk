@@ -20,7 +20,16 @@ import crypto from "node:crypto";
 import { createPublicClient, http, parseEventLogs, getAddress, isAddress } from "viem";
 import { polygon } from "viem/chains";
 import { Connection, PublicKey } from "@solana/web3.js";
-import { putOrder, hasOrder, consumeOrder, isTxConsumed, markTxConsumed } from "./store.js";
+import { verifySolanaPayment } from "../exa-x402-bridge/solana-verify.js";
+import {
+  putOrder,
+  hasOrder,
+  consumeOrder,
+  isTxConsumed,
+  claimTxLease,
+  confirmTxConsumed,
+  releaseTxClaim,
+} from "./store.js";
 
 // ── Provider knobs (the only things that change per provider) ──────────────
 const PORT          = process.env.PORT          || 3000;
@@ -233,23 +242,30 @@ async function verifySolanaTx(txHash, expectedOrderId) {
   if (await isTxConsumed(txHash)) return { ok: false, reason: "tx already consumed (replay)" };
   let tx;
   try {
-    tx = await solanaConnection.getTransaction(txHash, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+    tx = await solanaConnection.getTransaction(txHash, {
+      commitment: "confirmed", maxSupportedTransactionVersion: 0,
+    });
   } catch (e) { return { ok: false, reason: `getTransaction failed: ${e.message}` }; }
-  if (!tx) return { ok: false, reason: "tx not found (still pending or wrong cluster)" };
-  if (tx.meta?.err) return { ok: false, reason: `tx failed on-chain: ${JSON.stringify(tx.meta.err)}` };
-  const keys = tx.transaction.message.staticAccountKeys ?? tx.transaction.message.accountKeys ?? [];
-  const keyStrs = keys.map((k) => k.toString());
-  if (!keyStrs.includes(SOLANA_PROGRAM_ID)) return { ok: false, reason: `tx did not invoke program ${SOLANA_PROGRAM_ID}` };
-  if (!keyStrs.includes(BRIDGE_MERCHANT_SOLANA)) return { ok: false, reason: `merchant ${BRIDGE_MERCHANT_SOLANA} not in account list` };
-  const orderIdBytes = Buffer.from(expectedOrderId, "utf8");
-  const ixs = tx.transaction.message.compiledInstructions ?? tx.transaction.message.instructions ?? [];
-  const orderIdMatches = ixs.some((ix) => {
-    const data = ix.data instanceof Uint8Array ? Buffer.from(ix.data)
-      : (typeof ix.data === "string" ? Buffer.from(ix.data, "base64") : Buffer.alloc(0));
-    return data.includes(orderIdBytes);
+
+  // Shared verifier — see ../exa-x402-bridge/solana-verify.js.
+  //
+  // This file is the scaffold partners copy, so a weakness here is a weakness
+  // in every bridge built from it. The checks it used to make — our program
+  // present in the account list, the order id somewhere in the transaction,
+  // and nothing at all about the amount — were satisfied by a plain transfer
+  // with a memo attached, which paid the merchant and skipped the protocol fee
+  // entirely. It also never compared what arrived against what was quoted.
+  const base = BigInt(PRICE_LAMPORTS);
+  const result = verifySolanaPayment({
+    tx,
+    programId:           SOLANA_PROGRAM_ID,
+    merchant:            BRIDGE_MERCHANT_SOLANA,
+    treasury:            SOLANA_TREASURY,
+    minMerchantLamports: base,
+    minTreasuryLamports: (base * 100n) / 10000n,
+    orderId:             expectedOrderId,
   });
-  if (!orderIdMatches) return { ok: false, reason: `order_id "${expectedOrderId}" not found in tx data` };
-  return { ok: true, payer: keyStrs[0], tx: txHash };
+  return result.ok ? { ok: true, payer: result.payer, tx: txHash } : result;
 }
 
 async function verifyTx(txHash, expectedOrderId) {
@@ -277,20 +293,50 @@ async function verifyTx(txHash, expectedOrderId) {
   };
 }
 
-async function forwardUpstream(req, res, commit) {
+/**
+ * Forward a paid request upstream.
+ *
+ * `tx` identifies the payment that bought this call, and the caller must
+ * already hold its claim — every path below that fails to deliver the service
+ * hands that claim back, which is the only reason the claim can be taken
+ * before the call instead of after it.
+ */
+async function forwardUpstream(req, res, tx, commit) {
   let upstreamRes;
   try {
     upstreamRes = await fetch(UPSTREAM_URL, {
       method: "POST", headers: upstreamHeaders(), body: JSON.stringify(req.body),
     });
-  } catch (e) { return res.status(502).json({ error: "upstream_unreachable", detail: e.message }); }
+  } catch (e) {
+    // Nothing was delivered and nothing was spent — hand the payment back.
+    await releaseTxClaim(tx);
+    return res.status(502).json({
+      error: "upstream_unreachable",
+      detail: `${e.message}. Retry with the same headers — your payment is preserved.`,
+    });
+  }
   if (upstreamRes.status >= 500) {
     let body; try { body = await upstreamRes.text(); } catch { body = "<unreadable>"; }
+    await releaseTxClaim(tx);
     return res.status(502).json({ error: "upstream_5xx", upstream_status: upstreamRes.status, upstream_body: body.slice(0, 500) });
+  }
+  // 401/402/403 are about US, not the agent: our key is wrong, or the account
+  // behind this bridge is out of credit. This is the case that stranded an
+  // agent on the Venice bridge — the provider answered 402 for lack of the
+  // bridge's own credit, the order was consumed anyway, and the payment bought
+  // nothing and could not be retried. Give the payment back and say the
+  // provider is unavailable.
+  if ([401, 402, 403].includes(upstreamRes.status)) {
+    await releaseTxClaim(tx);
+    return res.status(503).json({
+      error:  "provider_unavailable",
+      detail: `${SERVICE_LABEL} refused this bridge's request (${upstreamRes.status}). Your payment was not consumed — retry with the same headers.`,
+    });
   }
   // Upstream succeeded — settle the order NOW (not before forwarding), so an
   // upstream failure above leaves the order replayable and the agent never
-  // pays for a 5xx.
+  // pays for a 5xx. A remaining 4xx is a delivered service: the agent's request
+  // was wrong, not the bridge's.
   if (commit) { try { await commit(); } catch {} }
   const text = await upstreamRes.text();
   return res.status(upstreamRes.status).type("application/json").send(text);
@@ -342,10 +388,24 @@ app.post(ROUTE_PATH, challengeLimiter, async (req, res) => {
     };
     const settled = await verifyX402Payment(paymentHeader, requirements);
     if (!settled.ok) return res.status(402).json({ error: "payment_verification_failed", detail: settled.reason });
+    // Claim the payment before the provider's credit is spent on it. The
+    // facilitator settles on-chain and normally hands back the tx hash; when it
+    // does not, the signed authorisation is the payment's only identity, and it
+    // is exactly what a replay resends. Until now this branch recorded nothing
+    // at all, so an x-payment header was replayable for as long as the agent
+    // cared to resend it.
+    const x402Tx = settled.tx
+      || `x402:${crypto.createHash("sha256").update(paymentHeader).digest("hex")}`;
+    if (!(await claimTxLease(x402Tx))) {
+      return res.status(409).json({
+        error:  "tx_already_consumed",
+        detail: "This transaction is already being served, or has been. One payment buys one call.",
+      });
+    }
     res.set("x-payment-response", Buffer.from(JSON.stringify({
       success: true, transaction: settled.tx, payer: settled.payer,
     })).toString("base64"));
-    return forwardUpstream(req, res);
+    return forwardUpstream(req, res, x402Tx, () => confirmTxConsumed(x402Tx));
   }
 
   // 2. Solana atomic split path
@@ -356,10 +416,19 @@ app.post(ROUTE_PATH, challengeLimiter, async (req, res) => {
     if (!(await hasOrder(orderId))) return res.status(409).json({ error: "unknown_or_expired_order_id" });
     const verifiedSol = await verifySolanaTx(solanaTx, orderId);
     if (!verifiedSol.ok) return res.status(402).json({ error: "payment_verification_failed", detail: verifiedSol.reason });
+    // Same claim-before-upstream rule as the EVM branch below. Guarding only
+    // one of this bridge's three payment paths leaves the payment replayable
+    // for whoever pays on the unguarded chain.
+    if (!(await claimTxLease(solanaTx))) {
+      return res.status(409).json({
+        error:  "tx_already_consumed",
+        detail: "This transaction is already being served, or has been. One payment buys one call.",
+      });
+    }
     res.set("x-payment-receipt", JSON.stringify({
       paid_by: verifiedSol.payer, chain: "solana", tx_hash: solanaTx, total_lamports: PRICE_LAMPORTS, order_id: orderId,
     }));
-    return forwardUpstream(req, res, () => Promise.all([consumeOrder(orderId), markTxConsumed(solanaTx)]));
+    return forwardUpstream(req, res, solanaTx, () => Promise.all([consumeOrder(orderId), confirmTxConsumed(solanaTx)]));
   }
 
   // 3. Legacy AiFinPay pay-matic path (native POL)
@@ -371,12 +440,31 @@ app.post(ROUTE_PATH, challengeLimiter, async (req, res) => {
   }
   const verified = await verifyTx(txHash, orderId);
   if (!verified.ok) return res.status(402).json({ error: "payment_verification_failed", detail: verified.reason });
+
+  // Claim the payment before the provider's credit is spent on it.
+  //
+  // The isTxConsumed() check inside verifyTx() is an early rejection, not a
+  // guard: two requests carrying the same proof both pass it before either
+  // reaches the commit inside forwardUpstream(). That was observed live on the
+  // sibling Venice bridge — one transaction bought two upstream calls, and both
+  // answers cited it.
+  //
+  // The claim is a short lease rather than a permanent mark, which keeps the
+  // property the old ordering was reaching for: if this process dies before
+  // answering, the lease expires and the agent retries with the same proof
+  // instead of losing the payment.
+  if (!(await claimTxLease(txHash))) {
+    return res.status(409).json({
+      error:  "tx_already_consumed",
+      detail: "This transaction is already being served, or has been. One payment buys one call.",
+    });
+  }
   res.set("x-payment-receipt", JSON.stringify({
     paid_by: verified.payer, total_amount_wei: verified.totalAmountWei,
     merchant_amount_wei: verified.merchantAmountWei, tx_hash: txHash,
     block: verified.blockNumber, splitter: SPLITTER_ADDRESS, order_id: orderId,
   }));
-  return forwardUpstream(req, res, () => Promise.all([consumeOrder(orderId), markTxConsumed(txHash)]));
+  return forwardUpstream(req, res, txHash, () => Promise.all([consumeOrder(orderId), confirmTxConsumed(txHash)]));
 });
 
 app.listen(PORT, () => {

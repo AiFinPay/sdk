@@ -104,19 +104,23 @@ test("every upstream call is claimed first", () => {
   );
 });
 
-test("the Solana path verifies how much was paid", () => {
-  // Every other check in verifySolanaTx proves the transaction touched the
-  // right program, merchant and order. None proved an amount, so a payer could
-  // invoke the program with one lamport and be served — while the EVM path in
-  // the same file compared totalAmount against the price throughout. The hole
-  // was latent only because Solana is not configured in production; it would
-  // have opened the moment it was.
+test("the Solana path delegates to the shared, tested verifier", () => {
+  // The amount check used to be asserted here, inline in verifySolanaTx. It now
+  // lives in ../exa-x402-bridge/solana-verify.js, because four copies of the
+  // same verification are four chances to miss one — which is exactly what
+  // happened: none of them checked an amount at all until it was found, and
+  // the fix then had to be applied by hand three times.
+  //
+  // What this asserts is that the bridge still hands the decision to that
+  // module and still passes BOTH legs. Dropping the treasury minimum is the
+  // silent way to reopen the fee bypass, so it is named explicitly here.
+  // The attacks themselves are exercised in solana-verify.test.js.
   const src = readFileSync(new URL("./server.js", import.meta.url), "utf8");
   const fn = src.slice(src.indexOf("async function verifySolanaTx"));
   const body = fn.slice(0, fn.indexOf("\n}\n"));
   assert.ok(body.length > 0, "verifySolanaTx not found — has the bridge changed shape?");
-  assert.match(body, /PRICE_LAMPORTS/, "the Solana path does not consult the price");
-  assert.match(body, /underpaid/, "an underpayment is not rejected");
-  // Refusing when the amount cannot be read is the half that is easy to drop.
-  assert.match(body, /refusing to assume payment/, "an unreadable balance is treated as paid");
+  assert.match(body, /verifySolanaPayment\(/, "the Solana path no longer uses the shared verifier");
+  assert.match(body, /minMerchantLamports:/, "the merchant's minimum is not passed");
+  assert.match(body, /minTreasuryLamports:/, "the treasury's minimum is not passed — the fee bypass is open");
+  assert.match(body, /treasury:\s*SOLANA_TREASURY/, "the treasury address is not passed");
 });
