@@ -10,12 +10,27 @@ import { agentAddressTool, runAgentAddress } from "./tools/agent-address.js";
 import { agentQuoteTool, runAgentQuote } from "./tools/agent-quote.js";
 import { agentCallTool, runAgentCall } from "./tools/agent-call.js";
 import { agentClaimSelfTool, runAgentClaimSelf } from "./tools/agent-claim-self.js";
+import { makeSafeFetch } from "./safe-fetch.js";
 import {
   payWithSplitTool,
   runPayWithSplit,
   quoteSplitTool,
   runQuoteSplit,
 } from "./tools/pay-with-split.js";
+
+// Every request the agent makes goes through this, including redirects.
+//
+// payable_fetch hands a caller-supplied URL to the agent, which requests it
+// and, on a 402, pays and requests it again. Nothing checked the URL, so a
+// caller — or a prompt injection reaching the tool — could name
+// http://127.0.0.1:4001 or http://169.254.169.254/latest/meta-data/ and read
+// the answer. It is the tool exposed over HTTP today.
+//
+// Set AIFINPAY_ALLOW_PRIVATE_FETCH=1 to lift it, which is what a local bridge
+// on localhost needs and what a public deployment must never have.
+const safeFetch = makeSafeFetch({
+  allowPrivate: process.env.AIFINPAY_ALLOW_PRIVATE_FETCH === "1",
+});
 
 /**
  * Build an MCP server that wraps the AiFinPay agent SDK as MCP tools.
@@ -35,11 +50,13 @@ export async function createServer(config: McpConfig = {}) {
   // and print to stderr so the human knows what to fund.
   const agent = config.agentSecretB58
     ? await AiFinPayAgent.fromSolanaSecret(config.agentSecretB58, {
+        fetchImpl: safeFetch,
         baseUrl:   config.baseUrl,
         timeoutMs: config.timeoutMs,
       })
     : await (async () => {
         const a = await AiFinPayAgent.new({
+          fetchImpl: safeFetch,
           baseUrl:   config.baseUrl,
           timeoutMs: config.timeoutMs,
         });
@@ -47,10 +64,15 @@ export async function createServer(config: McpConfig = {}) {
         // journald, CI logs, support bundles and monitoring, so printing the
         // secret here leaked it into all of them.
         //
-        // The old message also promised something untrue: this agent comes
-        // from AiFinPayAgent.new(), whose EVM key is independent of the Solana
-        // key. Saving the Solana secret would NOT restore the EVM address
-        // printed below, so anything funded here would be unreachable.
+        // The warning below stays, but not for the reason it once gave. That
+        // reason — that new() produced an EVM key independent of the Solana
+        // one, so no backup could restore both — was fixed: everything now
+        // derives from a single random seed. What makes this identity
+        // ephemeral is narrower and still true: the seed is never printed and
+        // never written anywhere, deliberately, because stderr ends up in
+        // Docker, journald, CI logs and support bundles. Recoverable in
+        // principle, unrecoverable in practice, so still not an address to
+        // fund.
         log(
           "warn",
           `[aifinpay-mcp] no AIFINPAY_AGENT_SECRET set — generated an EPHEMERAL, NON-RECOVERABLE agent.\n` +
