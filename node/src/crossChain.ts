@@ -168,6 +168,88 @@ export interface BridgeReceipt {
  *
  * The agent signs and submits. AiFinPay never touches the funds.
  */
+// LiFi's sentinel for "the chain's own coin", plus the zero address some
+// integrators use for the same thing.
+const NATIVE_SENTINELS = new Set([
+  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "0x0000000000000000000000000000000000000000",
+]);
+
+// A bridge of this size should never need more than this much gas. The cap is
+// generous — real LiFi routes land far below it — and exists so a quote cannot
+// name a number that empties the wallet through the fee alone.
+const MAX_BRIDGE_GAS = 3_000_000n;
+
+/**
+ * Refuse to sign a transaction that does not match the quote it came with.
+ *
+ * bridgeExecute() previously took `to`, `data`, `value` and `gasLimit` straight
+ * from `raw_quote.transactionRequest` and checked only the chain id. Since
+ * bridgeExecute() accepts any object shaped like a BridgeQuote, and since
+ * raw_quote is whatever an HTTP response said, the effect was that an
+ * attacker-supplied or tampered quote could have the agent sign a transfer of
+ * its own funds to any address.
+ *
+ * The calldata is not something this SDK can meaningfully validate — it is a
+ * router's business. What it can do is refuse the shapes that move money in
+ * ways the quote never described:
+ *
+ *   Bridging an ERC-20 sends no native value at all. Any value on such a quote
+ *   is money leaving by a route the human-readable summary does not mention.
+ *
+ *   Bridging the native coin sends exactly the amount quoted. More than that
+ *   is, again, unquoted.
+ *
+ *   The destination must be a contract. A router is one; an attacker's wallet
+ *   is not, and a plain transfer to an address is the simplest form of this
+ *   attack.
+ */
+async function assertQuoteMatchesTransaction(
+  quote: BridgeQuote,
+  tx: { to: `0x${string}`; value?: string; gasLimit?: string },
+  publicClient: PublicClient,
+): Promise<void> {
+  const value = BigInt(tx.value || "0x0");
+  const fromToken = String(quote.from?.token ?? "").toLowerCase();
+  const quotedAmount = BigInt(quote.from?.amount ?? "0");
+  const bridgingNative = NATIVE_SENTINELS.has(fromToken);
+
+  if (!bridgingNative && value !== 0n) {
+    throw new AiFinPayError(
+      `bridgeExecute: quote bridges token ${quote.from?.token} but the transaction sends ` +
+        `${value} native units. A token bridge sends no native value — refusing to sign.`,
+    );
+  }
+  if (bridgingNative && value > quotedAmount) {
+    throw new AiFinPayError(
+      `bridgeExecute: transaction sends ${value} native units but the quote is for ` +
+        `${quotedAmount} — refusing to sign for more than was quoted.`,
+    );
+  }
+
+  const gas = tx.gasLimit ? BigInt(tx.gasLimit) : 0n;
+  if (gas > MAX_BRIDGE_GAS) {
+    throw new AiFinPayError(
+      `bridgeExecute: quote asks for ${gas} gas, above the ${MAX_BRIDGE_GAS} ceiling — refusing to sign.`,
+    );
+  }
+
+  let code: string | undefined;
+  try {
+    code = await publicClient.getBytecode({ address: tx.to });
+  } catch {
+    // An RPC that will not answer is not evidence of an attack; let the send
+    // fail on its own terms rather than inventing a security verdict.
+    return;
+  }
+  if (!code || code === "0x") {
+    throw new AiFinPayError(
+      `bridgeExecute: quote sends funds to ${tx.to}, which has no code. Bridge routers are ` +
+        `contracts — refusing to sign a transfer to a plain address.`,
+    );
+  }
+}
+
 export async function bridgeExecute(
   quote:          BridgeQuote,
   walletClient:   WalletClient,
@@ -193,6 +275,8 @@ export async function bridgeExecute(
   if (!account) {
     throw new AiFinPayError(`bridgeExecute: walletClient has no account — pass account: at creation`);
   }
+
+  await assertQuoteMatchesTransaction(quote, tx, publicClient);
 
   const hash = await walletClient.sendTransaction({
     account,
