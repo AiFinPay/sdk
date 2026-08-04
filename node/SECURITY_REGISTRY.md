@@ -29,6 +29,18 @@ Optimism, BOT Chain and XRPL EVM remain controlled by the single EOA
 - Standard x402 EIP-3009 signing is unavailable because its asset, decimals,
   payee and EIP-712 domain are supplied by the untrusted server.
 
+## Solana target binding
+
+The Solana route is bound to program
+`5g9zWHF1Vv6GiGpA2ZbJQbSCDZd5hAk9AyvabRJvKFx2` and the deployed Anchor
+`b2b_pay(u64,string)` instruction. The quote must identify the provider's
+registered merchant and an exact inclusive 100/1 bps fee decomposition.
+Before signing, the SDK verifies that the program account is executable; the
+Config, Passport, Partner and Vault PDAs exist and are owned by that program;
+and the quoted treasury equals the treasury stored in Vault. The creator is
+read from the agent's Passport PDA. The transaction then uses the exact
+nine-account IDL order and pays the total amount, not the merchant net amount.
+
 ## Missing signed-registry root
 
 AIFINP-62 requires a signed, independently reviewable registry and signer

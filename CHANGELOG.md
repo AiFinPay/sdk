@@ -19,12 +19,19 @@ Versioning follows [Semantic Versioning](https://semver.org/). From
 - Standard x402 EIP-3009 signing is disabled until a signed registry binds
   asset/codehash/decimals, `payTo`, EIP-712 domain and validity. Detection and
   a traceable error remain available; no account signing method is called.
+- Corrected Solana settlement to the deployed Anchor `b2b_pay` instruction.
+  The SDK previously encoded a nonexistent `b2b_pay_with_split` discriminator,
+  supplied 7 instead of 9 accounts, and passed the merchant net amount rather
+  than the total. Both SDKs now bind the exact program/instruction, derive and
+  validate Config/Passport/Partner/Vault PDAs, read creator/treasury on-chain,
+  and construct the IDL account order before signing.
 
 ### Tests
-- Added 19 adversarial target/metadata tests covering wrong target, chain,
+- Added 32 adversarial target/metadata tests covering wrong target, chain,
   version, merchant, royalty, fee components, expiry, disabled legacy routes,
   RPC timeout, wrong RPC chain, EOA/empty code, codehash mismatch and failed
-  contract introspection before signing.
+  contract introspection before signing, plus Solana program/instruction,
+  account layout, total amount and fee decomposition.
 
 ## @aifinpay/mcp 1.4.1 — 2026-08-04
 
@@ -41,7 +48,9 @@ Versioning follows [Semantic Versioning](https://semver.org/). From
 - Mirrored the Node fail-closed Polygon registry checks in Python: exact
   splitter/version/merchant/fee terms plus live chain/codehash/governance read.
 - Removed the Python v1.1 `payMatic` fallback and treasury-on-RPC-failure path.
-- Added 16 positive/adversarial tests; no transaction is constructed until the
+- Corrected Solana construction to the exact deployed `b2b_pay` IDL and added
+  quote/PDA/treasury validation before transaction construction.
+- Added 29 positive/adversarial tests; no transaction is constructed until the
   quote and runtime target both validate.
 
 ## @aifinpay/agent 1.4.0 · aifinpay-agent 1.2.0 — 2026-08-01

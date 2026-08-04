@@ -12,7 +12,7 @@ Per-call payment via `agent.call(provider=…)` does:
   3. Build + sign + send the on-chain payment:
        - Polygon  → validated B2BSplitter v1.2 payNative(paymentId, ...)
                     with msg.value = total_wei
-       - Solana   → b2b_pay_with_split(merchant_amount_lamports, order_id)
+       - Solana   → validated b2b_pay(total_lamports, order_id)
                     on program 5g9zWHF1…KFx2
   4. Retry the bridge POST with x-tx-hash + x-order-id (Polygon) or
      x-solana-tx + x-order-id (Solana)
@@ -27,6 +27,7 @@ Dependencies (declared in pyproject.toml):
 from __future__ import annotations
 
 import hashlib
+import base64
 import os
 import struct
 import time
@@ -38,7 +39,7 @@ import nacl.encoding
 import base58
 import requests
 
-from .errors import AiFinPayError, X402Error
+from .errors import AiFinPayError, UntrustedPaymentTargetError, X402Error
 from .client import Agent  # legacy Solana-only agent (we wrap it)
 from .cross_chain import (
     EVM_CHAINS,
@@ -49,7 +50,11 @@ from .cross_chain import (
     bridge_execute as _bridge_execute,
     bridge_wait_for_arrival as _bridge_wait_for_arrival,
 )
-from .payment_registry import validate_polygon_quote, validate_polygon_runtime
+from .payment_registry import (
+    validate_polygon_quote,
+    validate_polygon_runtime,
+    validate_solana_quote,
+)
 
 # ── EVM imports — heavyish, lazy via top-level so missing deps fail clearly ──
 try:
@@ -137,7 +142,7 @@ def payment_id_for(order_id: str) -> bytes:
 
 
 # Anchor convention: discriminator = sha256("global:<fn_name>")[:8]
-B2B_PAY_WITH_SPLIT_DISC = hashlib.sha256(b"global:b2b_pay_with_split").digest()[:8]
+B2B_PAY_DISC = hashlib.sha256(b"global:b2b_pay").digest()[:8]
 
 
 # ── Provider / Challenge types (lightweight, dict-backed) ──────────────────
@@ -634,7 +639,10 @@ class AiFinPayAgent:
             raise X402Error("bridge returned 402 with non-JSON body")
 
         if picked_chain == "solana":
-            return self._settle_solana(full_url, challenge, method, body, timeout, cost=cost)
+            return self._settle_solana(
+                full_url, challenge, method, body, timeout,
+                cost=cost, registered_merchant=p.merchant_wallet,
+            )
         return self._settle_polygon(
             full_url, challenge, method, body, timeout,
             cost=cost, registered_merchant=p.merchant_wallet,
@@ -815,11 +823,12 @@ class AiFinPayAgent:
             )
         return paid_resp
 
-    # ── Solana settlement (b2b_pay_with_split) ───────────────────────────
+    # ── Solana settlement (deployed Anchor b2b_pay) ──────────────────────
 
     def _settle_solana(self, full_url: str, challenge: dict, method: str,
                        body: Optional[dict], timeout: float,
-                       cost: Optional[float] = None) -> requests.Response:
+                       cost: Optional[float] = None,
+                       registered_merchant: str = "") -> requests.Response:
         ps = challenge.get("pay_solana")
         if not ps:
             raise X402Error(
@@ -827,36 +836,105 @@ class AiFinPayAgent:
                 f"set BRIDGE_MERCHANT_SOLANA. Use chain='polygon' instead."
             )
 
+        payment = validate_solana_quote(ps, registered_merchant)
         sol_usd = float(os.environ.get("AIFINPAY_SOL_USD", "200"))
-        lamports_est = int(ps.get("total_lamports") or ps["merchant_amount_lamports"])
+        lamports_est = payment["total_lamports"]
         _guard_challenge_usd(lamports_est / 1e9 * sol_usd, cost, full_url)
 
-        program_id = SolPubkey.from_string(ps["program_id"])
-        merchant   = SolPubkey.from_string(ps["merchant_wallet"])
-        treasury   = SolPubkey.from_string(ps["treasury"])
-        ip_creator = treasury  # default routing; future: per-merchant slot
-        order_id   = ps["order_id"]
-        merchant_amount_lamports = int(ps["merchant_amount_lamports"])
+        program_id = SolPubkey.from_string(payment["program_id"])
+        merchant   = SolPubkey.from_string(payment["merchant_wallet"])
+        quoted_treasury = SolPubkey.from_string(payment["treasury"])
+        order_id   = payment["order_id"]
+        total_lamports = payment["total_lamports"]
+        agent_pubkey = self.sol_keypair.pubkey()
 
-        # PDAs derived from program_id with seeds ["config"] and ["vault"]
+        # PDAs and account order are exact matches for the deployed B2bPay IDL.
         config_pda, _ = SolPubkey.find_program_address([b"config"], program_id)
+        passport_pda, _ = SolPubkey.find_program_address(
+            [b"passport", bytes(agent_pubkey)], program_id,
+        )
+        partner_pda, _ = SolPubkey.find_program_address(
+            [b"partner", bytes(merchant)], program_id,
+        )
         vault_pda,  _ = SolPubkey.find_program_address([b"vault"],  program_id)
+
+        def rpc_req(payload: dict) -> dict:
+            try:
+                response = requests.post(self.solana_rpc, json=payload, timeout=timeout)
+                response.raise_for_status()
+                return response.json()
+            except Exception as exc:
+                raise AiFinPayError("Solana RPC unavailable") from exc
+
+        try:
+            account_resp = rpc_req({
+                "jsonrpc": "2.0", "id": 1, "method": "getMultipleAccounts",
+                "params": [[
+                    str(program_id), str(config_pda), str(passport_pda),
+                    str(partner_pda), str(vault_pda),
+                ], {"encoding": "base64", "commitment": "confirmed"}],
+            })
+        except AiFinPayError as exc:
+            raise UntrustedPaymentTargetError(
+                "[PAY_TARGET_UNTRUSTED] solana_rpc_unavailable"
+            ) from exc
+        if "error" in account_resp:
+            raise UntrustedPaymentTargetError(
+                f"[PAY_TARGET_UNTRUSTED] solana_rpc_error: {account_resp['error']}"
+            )
+        try:
+            accounts = account_resp["result"]["value"]
+            program_info, config_info, passport_info, partner_info, vault_info = accounts
+        except (KeyError, TypeError, ValueError) as exc:
+            raise UntrustedPaymentTargetError(
+                "[PAY_TARGET_UNTRUSTED] solana_account_response_invalid"
+            ) from exc
+        if not program_info or not program_info.get("executable"):
+            raise UntrustedPaymentTargetError(
+                "[PAY_TARGET_UNTRUSTED] solana_program_not_executable"
+            )
+        for label, info in (
+            ("config", config_info), ("passport", passport_info),
+            ("partner", partner_info), ("vault", vault_info),
+        ):
+            if not info or info.get("owner") != str(program_id):
+                raise UntrustedPaymentTargetError(
+                    f"[PAY_TARGET_UNTRUSTED] solana_{label}_account_invalid"
+                )
+        try:
+            passport_data = base64.b64decode(passport_info["data"][0], validate=True)
+            vault_data = base64.b64decode(vault_info["data"][0], validate=True)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise UntrustedPaymentTargetError(
+                "[PAY_TARGET_UNTRUSTED] solana_account_data_invalid"
+            ) from exc
+        if len(passport_data) < 72 or len(vault_data) < 72:
+            raise UntrustedPaymentTargetError(
+                "[PAY_TARGET_UNTRUSTED] solana_account_data_invalid"
+            )
+        ip_creator = SolPubkey.from_bytes(passport_data[40:72])
+        treasury = SolPubkey.from_bytes(vault_data[40:72])
+        if treasury != quoted_treasury:
+            raise UntrustedPaymentTargetError(
+                "[PAY_TARGET_UNTRUSTED] solana_treasury_mismatch"
+            )
 
         # Instruction data: discriminator + Borsh(u64 + string)
         order_bytes = order_id.encode("utf-8")
         if len(order_bytes) > 64:
             raise AiFinPayError(f"order_id too long ({len(order_bytes)} bytes > 64)")
         data = (
-            B2B_PAY_WITH_SPLIT_DISC
-            + struct.pack("<Q", merchant_amount_lamports)
+            B2B_PAY_DISC
+            + struct.pack("<Q", total_lamports)
             + struct.pack("<I", len(order_bytes))
             + order_bytes
         )
 
-        agent_pubkey = self.sol_keypair.pubkey()
         keys = [
             AccountMeta(pubkey=config_pda,            is_signer=False, is_writable=False),
-            AccountMeta(pubkey=vault_pda,             is_signer=False, is_writable=False),
+            AccountMeta(pubkey=passport_pda,          is_signer=False, is_writable=True),
+            AccountMeta(pubkey=partner_pda,           is_signer=False, is_writable=True),
+            AccountMeta(pubkey=vault_pda,             is_signer=False, is_writable=True),
             AccountMeta(pubkey=agent_pubkey,          is_signer=True,  is_writable=True),
             AccountMeta(pubkey=treasury,              is_signer=False, is_writable=True),
             AccountMeta(pubkey=ip_creator,            is_signer=False, is_writable=True),
@@ -866,7 +944,6 @@ class AiFinPayAgent:
         ix = Instruction(program_id=program_id, accounts=keys, data=data)
 
         # Fetch recent blockhash + submit
-        rpc_req = lambda payload: requests.post(self.solana_rpc, json=payload, timeout=timeout).json()
         bh_resp = rpc_req({"jsonrpc": "2.0", "id": 1, "method": "getLatestBlockhash",
                            "params": [{"commitment": "confirmed"}]})
         blockhash = SolHash.from_string(bh_resp["result"]["value"]["blockhash"])

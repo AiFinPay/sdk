@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -7,13 +8,17 @@ from web3 import Web3
 from aifinpay.errors import UntrustedPaymentTargetError
 from aifinpay.payment_registry import (
     POLYGON_TARGET,
+    SOLANA_TARGET,
     validate_polygon_quote,
     validate_polygon_runtime,
+    validate_solana_quote,
 )
 
 
 MERCHANT = "0x1111111111111111111111111111111111111111"
 NOW = datetime(2026, 8, 5, tzinfo=timezone.utc)
+SOLANA_MERCHANT = "11111111111111111111111111111112"
+SOLANA_TREASURY = "SysvarRent111111111111111111111111111111111"
 
 
 def quote(**overrides):
@@ -141,3 +146,72 @@ def test_runtime_fails_closed(eth, reason):
     with patch.dict(POLYGON_TARGET, {"runtime_codehash": Web3.keccak(code).hex()}):
         with pytest.raises(UntrustedPaymentTargetError, match=reason):
             validate_polygon_runtime(_Web3(eth))
+
+
+def solana_quote(**overrides):
+    value = {
+        "chain": "solana",
+        "program_id": SOLANA_TARGET["program_id"],
+        "instruction": "b2b_pay",
+        "merchant_wallet": SOLANA_MERCHANT,
+        "treasury": SOLANA_TREASURY,
+        "total_lamports": "100000",
+        "merchant_amount_lamports": "98990",
+        "treasury_amount_lamports": "1000",
+        "ip_creator_amount_lamports": "10",
+        "order_id": "order-1",
+    }
+    value.update(overrides)
+    return value
+
+
+def test_solana_quote_accepts_deployed_instruction():
+    result = validate_solana_quote(solana_quote(), SOLANA_MERCHANT, now=NOW)
+    assert result["program_id"] == SOLANA_TARGET["program_id"]
+    assert result["merchant_wallet"] == SOLANA_MERCHANT
+    assert result["treasury"] == SOLANA_TREASURY
+    assert result["total_lamports"] == 100000
+
+
+@pytest.mark.parametrize("patch_value,reason", [
+    ({"chain": "polygon"}, "solana_chain_mismatch"),
+    ({"program_id": SOLANA_MERCHANT}, "solana_program_not_registered"),
+    ({"instruction": "b2b_pay_with_split"}, "solana_instruction_mismatch"),
+    ({"instruction": None}, "solana_instruction_mismatch"),
+    ({"merchant_wallet": SOLANA_TREASURY}, "solana_merchant_mismatch"),
+    ({"total_lamports": None}, "solana_total_lamports_invalid"),
+    ({"treasury_amount_lamports": "999"}, "solana_treasury_amount_lamports_mismatch"),
+    ({"ip_creator_amount_lamports": "9"}, "solana_ip_creator_amount_lamports_mismatch"),
+    ({"merchant_amount_lamports": "98989"}, "solana_merchant_amount_lamports_mismatch"),
+    ({"order_id": ""}, "solana_order_id_invalid"),
+])
+def test_solana_quote_rejects_untrusted_metadata(patch_value, reason):
+    with pytest.raises(UntrustedPaymentTargetError, match=reason):
+        validate_solana_quote(solana_quote(**patch_value), SOLANA_MERCHANT, now=NOW)
+
+
+def test_solana_registry_expiry_blocks_payment():
+    with pytest.raises(UntrustedPaymentTargetError, match="solana_registry_entry_expired"):
+        validate_solana_quote(
+            solana_quote(), SOLANA_MERCHANT,
+            now=datetime(2026, 9, 3, tzinfo=timezone.utc),
+        )
+
+
+def test_solana_builder_matches_deployed_anchor_accounts():
+    source = (Path(__file__).parents[1] / "aifinpay" / "unified_agent.py").read_text()
+    assert 'hashlib.sha256(b"global:b2b_pay")' in source
+    assert 'hashlib.sha256(b"global:b2b_pay_with_split")' not in source
+    account_lines = [
+        "pubkey=config_pda",
+        "pubkey=passport_pda",
+        "pubkey=partner_pda",
+        "pubkey=vault_pda",
+        "pubkey=agent_pubkey",
+        "pubkey=treasury",
+        "pubkey=ip_creator",
+        "pubkey=merchant",
+        "pubkey=SolPubkey.from_string(str(SYSTEM_PROGRAM_ID))",
+    ]
+    positions = [source.index(line) for line in account_lines]
+    assert positions == sorted(positions)
