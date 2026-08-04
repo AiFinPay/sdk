@@ -88,3 +88,12 @@ export type {
   FacilitatorClass,
   PayOptions,
 } from "./facilitators/index.js";
+
+// Spend accounting for the daily cap. Exported so an agent fleet spanning more
+// than one host can supply a ledger that can answer for all of them — a lock
+// file on one machine cannot.
+export {
+  type SpendLedger,
+  MemorySpendLedger,
+  FileSpendLedger,
+} from "./spendLedger.js";
