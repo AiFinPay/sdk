@@ -4,6 +4,7 @@ import { UntrustedPaymentTargetError } from "./errors.js";
 export const SOLANA_PROGRAM_ID = "5g9zWHF1Vv6GiGpA2ZbJQbSCDZd5hAk9AyvabRJvKFx2";
 const VALID_FROM = Date.parse("2026-08-04T00:00:00.000Z");
 const VALID_UNTIL = Date.parse("2026-09-03T00:00:00.000Z");
+export const SOLANA_ROUTE_ENABLED = false;
 
 export interface SolanaPaymentQuote {
   chain?: string;
@@ -37,6 +38,17 @@ function uint(value: unknown, label: string): bigint {
 }
 
 export function validateSolanaPaymentQuote(
+  quote: SolanaPaymentQuote,
+  registeredMerchant: string,
+  nowMs = Date.now(),
+): Required<Pick<SolanaPaymentQuote, "program_id" | "merchant_wallet" | "treasury" | "order_id">> & { totalLamports: bigint } {
+  if (!SOLANA_ROUTE_ENABLED) reject("route_disabled_pending_v0_6_upgrade");
+  return validateSolanaPaymentQuoteTerms(quote, registeredMerchant, nowMs);
+}
+
+/** Pure metadata validation retained for tests and upgrade tooling. It never
+ * authorizes signing; callers must use validateSolanaPaymentQuote(). */
+export function validateSolanaPaymentQuoteTerms(
   quote: SolanaPaymentQuote,
   registeredMerchant: string,
   nowMs = Date.now(),

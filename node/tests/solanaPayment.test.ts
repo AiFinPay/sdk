@@ -3,6 +3,7 @@ import { Keypair } from "@solana/web3.js";
 import {
   SOLANA_PROGRAM_ID,
   validateSolanaPaymentQuote,
+  validateSolanaPaymentQuoteTerms,
   type SolanaPaymentQuote,
 } from "../src/solanaPayment.js";
 
@@ -27,8 +28,14 @@ function quote(patch: Partial<SolanaPaymentQuote> = {}): SolanaPaymentQuote {
 }
 
 describe("Solana payment target", () => {
-  it("accepts the exact deployed b2b_pay quote", () => {
-    expect(validateSolanaPaymentQuote(quote(), MERCHANT, NOW)).toMatchObject({
+  it("quarantines signing until the replay-safe v0.6 upgrade is verified", () => {
+    expect(() => validateSolanaPaymentQuote(quote(), MERCHANT, NOW)).toThrow(
+      "route_disabled_pending_v0_6_upgrade",
+    );
+  });
+
+  it("accepts canonical v0.5 metadata for audit tooling only", () => {
+    expect(validateSolanaPaymentQuoteTerms(quote(), MERCHANT, NOW)).toMatchObject({
       program_id: SOLANA_PROGRAM_ID,
       merchant_wallet: MERCHANT,
       treasury: TREASURY,
@@ -49,12 +56,12 @@ describe("Solana payment target", () => {
     ["wrong merchant amount", { merchant_amount_lamports: "98989" }, "merchant_amount_lamports_mismatch"],
     ["empty order", { order_id: "" }, "order_id_invalid"],
   ])("rejects %s", (_name, patch, reason) => {
-    expect(() => validateSolanaPaymentQuote(quote(patch), MERCHANT, NOW)).toThrow(reason);
+    expect(() => validateSolanaPaymentQuoteTerms(quote(patch), MERCHANT, NOW)).toThrow(reason);
   });
 
   it("expires the compiled evidence window", () => {
     expect(() =>
-      validateSolanaPaymentQuote(
+      validateSolanaPaymentQuoteTerms(
         quote(),
         MERCHANT,
         Date.parse("2026-09-03T00:00:00.000Z"),

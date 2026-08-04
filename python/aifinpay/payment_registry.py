@@ -33,7 +33,7 @@ SOLANA_TARGET = {
     "ip_creator_bps": 1,
     "valid_from": "2026-08-04T00:00:00+00:00",
     "valid_until": "2026-09-03T00:00:00+00:00",
-    "enabled": True,
+    "enabled": False,
 }
 
 
@@ -75,7 +75,7 @@ def validate_solana_quote(
     valid_from = datetime.fromisoformat(target["valid_from"])
     valid_until = datetime.fromisoformat(target["valid_until"])
     if not target["enabled"]:
-        _reject("solana_route_disabled")
+        _reject("solana_route_disabled_pending_v0_6_upgrade")
     if now < valid_from or now >= valid_until:
         _reject("solana_registry_entry_expired")
     if ps.get("chain") != target["chain"]:

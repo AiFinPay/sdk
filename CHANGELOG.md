@@ -25,9 +25,13 @@ Versioning follows [Semantic Versioning](https://semver.org/). From
   than the total. Both SDKs now bind the exact program/instruction, derive and
   validate Config/Passport/Partner/Vault PDAs, read creator/treasury on-chain,
   and construct the IDL account order before signing.
+- Quarantined Solana signing after the contract audit confirmed that deployed
+  v0.5.3 has no replay receipt. The route remains disabled until v0.6.0 is
+  deployed and its ProgramData hash/upgrade authority are added to the trusted
+  registry; metadata validation remains available for migration tests only.
 
 ### Tests
-- Added 32 adversarial target/metadata tests covering wrong target, chain,
+- Added 33 adversarial target/metadata tests covering wrong target, chain,
   version, merchant, royalty, fee components, expiry, disabled legacy routes,
   RPC timeout, wrong RPC chain, EOA/empty code, codehash mismatch and failed
   contract introspection before signing, plus Solana program/instruction,
@@ -50,7 +54,8 @@ Versioning follows [Semantic Versioning](https://semver.org/). From
 - Removed the Python v1.1 `payMatic` fallback and treasury-on-RPC-failure path.
 - Corrected Solana construction to the exact deployed `b2b_pay` IDL and added
   quote/PDA/treasury validation before transaction construction.
-- Added 29 positive/adversarial tests; no transaction is constructed until the
+- Disabled Solana wallet signing pending the verified replay-safe v0.6 upgrade.
+- Added 30 positive/adversarial tests; no transaction is constructed until the
   quote and runtime target both validate.
 
 ## @aifinpay/agent 1.4.0 · aifinpay-agent 1.2.0 — 2026-08-01

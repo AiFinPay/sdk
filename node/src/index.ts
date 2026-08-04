@@ -30,7 +30,12 @@ export type {
   TrustedPaymentTarget,
   ValidatedNativePayment,
 } from "./paymentRegistry.js";
-export { SOLANA_PROGRAM_ID, validateSolanaPaymentQuote } from "./solanaPayment.js";
+export {
+  SOLANA_PROGRAM_ID,
+  SOLANA_ROUTE_ENABLED,
+  validateSolanaPaymentQuote,
+  validateSolanaPaymentQuoteTerms,
+} from "./solanaPayment.js";
 export type { SolanaPaymentQuote } from "./solanaPayment.js";
 export type {
   AiFinPayAgentOptions,

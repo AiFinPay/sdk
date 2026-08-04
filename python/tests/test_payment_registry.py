@@ -166,7 +166,8 @@ def solana_quote(**overrides):
 
 
 def test_solana_quote_accepts_deployed_instruction():
-    result = validate_solana_quote(solana_quote(), SOLANA_MERCHANT, now=NOW)
+    with patch.dict(SOLANA_TARGET, {"enabled": True}):
+        result = validate_solana_quote(solana_quote(), SOLANA_MERCHANT, now=NOW)
     assert result["program_id"] == SOLANA_TARGET["program_id"]
     assert result["merchant_wallet"] == SOLANA_MERCHANT
     assert result["treasury"] == SOLANA_TREASURY
@@ -186,16 +187,26 @@ def test_solana_quote_accepts_deployed_instruction():
     ({"order_id": ""}, "solana_order_id_invalid"),
 ])
 def test_solana_quote_rejects_untrusted_metadata(patch_value, reason):
-    with pytest.raises(UntrustedPaymentTargetError, match=reason):
-        validate_solana_quote(solana_quote(**patch_value), SOLANA_MERCHANT, now=NOW)
+    with patch.dict(SOLANA_TARGET, {"enabled": True}):
+        with pytest.raises(UntrustedPaymentTargetError, match=reason):
+            validate_solana_quote(solana_quote(**patch_value), SOLANA_MERCHANT, now=NOW)
 
 
 def test_solana_registry_expiry_blocks_payment():
-    with pytest.raises(UntrustedPaymentTargetError, match="solana_registry_entry_expired"):
-        validate_solana_quote(
-            solana_quote(), SOLANA_MERCHANT,
-            now=datetime(2026, 9, 3, tzinfo=timezone.utc),
-        )
+    with patch.dict(SOLANA_TARGET, {"enabled": True}):
+        with pytest.raises(UntrustedPaymentTargetError, match="solana_registry_entry_expired"):
+            validate_solana_quote(
+                solana_quote(), SOLANA_MERCHANT,
+                now=datetime(2026, 9, 3, tzinfo=timezone.utc),
+            )
+
+
+def test_solana_signing_route_is_quarantined():
+    with pytest.raises(
+        UntrustedPaymentTargetError,
+        match="solana_route_disabled_pending_v0_6_upgrade",
+    ):
+        validate_solana_quote(solana_quote(), SOLANA_MERCHANT, now=NOW)
 
 
 def test_solana_builder_matches_deployed_anchor_accounts():
