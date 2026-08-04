@@ -28,6 +28,7 @@ import {
 } from "viem";
 import { polygon } from "viem/chains";
 import { Connection, PublicKey } from "@solana/web3.js";
+import { verifySolanaPayment } from "../exa-x402-bridge/solana-verify.js";
 import {
   putOrder,
   hasOrder,
@@ -252,55 +253,26 @@ async function verifySolanaTx(txHash, expectedOrderId) {
       commitment: "confirmed", maxSupportedTransactionVersion: 0,
     });
   } catch (e) { return { ok: false, reason: `getTransaction failed: ${e.message}` }; }
-  if (!tx) return { ok: false, reason: "tx not found (still pending or wrong cluster)" };
-  if (tx.meta?.err) return { ok: false, reason: `tx failed on-chain: ${JSON.stringify(tx.meta.err)}` };
 
-  const keys = tx.transaction.message.staticAccountKeys
-    ?? tx.transaction.message.accountKeys ?? [];
-  const keyStrs = keys.map((k) => k.toString());
-  if (!keyStrs.includes(SOLANA_PROGRAM_ID)) {
-    return { ok: false, reason: `tx did not invoke program ${SOLANA_PROGRAM_ID}` };
-  }
-  if (!keyStrs.includes(BRIDGE_MERCHANT_SOLANA)) {
-    return { ok: false, reason: `merchant ${BRIDGE_MERCHANT_SOLANA} not in account list` };
-  }
-
-  const orderIdBytes = Buffer.from(expectedOrderId, "utf8");
-  const ixs = tx.transaction.message.compiledInstructions
-    ?? tx.transaction.message.instructions ?? [];
-  const orderIdMatches = ixs.some((ix) => {
-    const data = ix.data instanceof Uint8Array
-      ? Buffer.from(ix.data)
-      : (typeof ix.data === "string" ? Buffer.from(ix.data, "base64") : Buffer.alloc(0));
-    return data.includes(orderIdBytes);
-  });
-  if (!orderIdMatches) return { ok: false, reason: `order_id "${expectedOrderId}" not found in tx data` };
-  // Everything above proves the transaction TOUCHED the right program, the
-  // right merchant and the right order. None of it proves an amount. A payer
-  // could invoke the program with a single lamport, satisfy every check above,
-  // and be served — while the EVM path in this same file has always compared
-  // totalAmount against the price. The asymmetry was not deliberate.
+  // The checks live in ../exa-x402-bridge/solana-verify.js, shared by every
+  // bridge. They were inline and copied, which is how all four spent months
+  // accepting a payment without ever checking the amount, and how a direct
+  // transfer plus a memo could pass as a settlement while the protocol fee was
+  // skipped. One implementation, one place to audit.
   //
-  // The balance delta is used rather than the instruction arguments because it
-  // is what actually happened, and it stays correct if the program's encoding
-  // changes. Unreadable balances refuse rather than assume: a payment we
-  // cannot measure is not a payment we can accept.
-  const merchantIdx = keyStrs.indexOf(BRIDGE_MERCHANT_SOLANA);
-  const preBal  = tx.meta?.preBalances?.[merchantIdx];
-  const postBal = tx.meta?.postBalances?.[merchantIdx];
-  if (merchantIdx < 0 || typeof preBal !== "number" || typeof postBal !== "number") {
-    return { ok: false, reason: "cannot read the merchant's balance change — refusing to assume payment" };
-  }
-  const receivedLamports = BigInt(postBal) - BigInt(preBal);
-  const expectedLamports = BigInt(PRICE_LAMPORTS);
-  if (receivedLamports < expectedLamports) {
-    return {
-      ok: false,
-      reason: `underpaid: merchant received ${receivedLamports} lamports, price is ${expectedLamports}`,
-    };
-  }
-
-  return { ok: true, payer: keyStrs[0], tx: txHash };
+  // The fee split quoted in the challenge above is what is enforced here: the
+  // merchant must receive the base amount and the treasury its 1%.
+  const base = BigInt(PRICE_LAMPORTS);
+  const result = verifySolanaPayment({
+    tx,
+    programId:           SOLANA_PROGRAM_ID,
+    merchant:            BRIDGE_MERCHANT_SOLANA,
+    treasury:            SOLANA_TREASURY,
+    minMerchantLamports: base,
+    minTreasuryLamports: (base * 100n) / 10000n,
+    orderId:             expectedOrderId,
+  });
+  return result.ok ? { ok: true, payer: result.payer, tx: txHash } : result;
 }
 
 async function verifyTx(txHash, expectedOrderId) {
