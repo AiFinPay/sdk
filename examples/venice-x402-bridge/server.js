@@ -29,9 +29,11 @@ import {
 import { polygon } from "viem/chains";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { verifySolanaPayment } from "../exa-x402-bridge/solana-verify.js";
+import { canonicalRequestHash, requestMatchesOrder } from "../exa-x402-bridge/request-binding.js";
 import {
   putOrder,
   hasOrder,
+  getOrder,
   consumeOrder,
   isTxConsumed,
   claimTxLease,
@@ -106,13 +108,29 @@ const SPLITTER_EVENT_ABI = [{
 
 const client = createPublicClient({ chain: polygon, transport: http(POLYGON_RPC) });
 
+/**
+ * What this request is, for the purpose of being paid for.
+ *
+ * Computed identically when the 402 is issued and when the payment comes back,
+ * so the two can be compared. Headers are excluded on purpose — authentication
+ * and tracing legitimately differ between the two calls, and rejecting on them
+ * would break honest retries while adding nothing.
+ */
+function requestHashOf(req) {
+  return canonicalRequestHash({ method: req.method, path: req.path, body: req.body });
+}
+
 function issueOrderId() {
   return `venice-${crypto.randomUUID().slice(0, 18)}`;
 }
 
-async function challenge402(res) {
+async function challenge402(res, req) {
   const orderId = issueOrderId();
-  await putOrder(orderId, "");
+  // Binding the order to the request is what stops a quote taken for a cheap
+  // call — two messages, a small model — from being redeemed for a long
+  // conversation against a large one. This bridge charges a flat price per
+  // call, so the whole of that difference came out of the operator's key.
+  await putOrder(orderId, "", req ? requestHashOf(req) : undefined);
   const totalWei = BigInt(PRICE_WEI);
   const treasuryAmt = (totalWei * 100n) / 10000n;
   const ipAmt       = (totalWei * 1n)   / 10000n;
@@ -441,9 +459,18 @@ app.post("/chat/completions", challengeLimiter, async (req, res) => {
   const solanaTx = req.get("x-solana-tx");
   if (solanaTx && BRIDGE_MERCHANT_SOLANA) {
     const orderId = req.get("x-order-id");
-    if (!orderId) return challenge402(res);
-    if (!(await hasOrder(orderId))) {
+    if (!orderId) return challenge402(res, req);
+    const order = await getOrder(orderId);
+    if (!order) {
       return res.status(409).json({ error: "unknown_or_expired_order_id" });
+    }
+    if (!requestMatchesOrder(order.requestHash, requestHashOf(req)).ok) {
+      // Refused before the on-chain check and before upstream: the payment is
+      // real, it is simply not for this request.
+      return res.status(409).json({
+        error:  "proof_mismatch",
+        detail: "This order was issued for a different request. Request a new 402 for the body you are sending.",
+      });
     }
     const verifiedSol = await verifySolanaTx(solanaTx, orderId);
     if (!verifiedSol.ok) {
@@ -495,8 +522,16 @@ app.post("/chat/completions", challengeLimiter, async (req, res) => {
   const txHash  = req.get("x-tx-hash");
   const orderId = req.get("x-order-id");
 
-  if (!txHash || !orderId) return challenge402(res);
-  if (!(await hasOrder(orderId))) {
+  if (!txHash || !orderId) return challenge402(res, req);
+
+  const order = await getOrder(orderId);
+  if (order && !requestMatchesOrder(order.requestHash, requestHashOf(req)).ok) {
+    return res.status(409).json({
+      error:  "proof_mismatch",
+      detail: "This order was issued for a different request. Request a new 402 for the body you are sending.",
+    });
+  }
+  if (!order) {
     return res.status(409).json({
       error: "unknown_or_expired_order_id",
       detail: `Order "${orderId}" was not issued by this bridge or has expired.`,

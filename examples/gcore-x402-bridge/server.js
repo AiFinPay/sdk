@@ -31,9 +31,11 @@ import {
   toBytes,
 } from "viem";
 import { polygon } from "viem/chains";
+import { canonicalRequestHash, requestMatchesOrder } from "../exa-x402-bridge/request-binding.js";
 import {
   putOrder,
   hasOrder,
+  getOrder,
   consumeOrder,
   isTxConsumed,
   claimTxLease,
@@ -153,13 +155,30 @@ const SPLITTER_EVENT_ABI = [{
 
 const client = createPublicClient({ chain: polygon, transport: http(POLYGON_RPC) });
 
+/**
+ * What this request is, for the purpose of being paid for.
+ *
+ * Computed identically when the 402 is issued and when the payment comes back,
+ * so the two can be compared. Headers are excluded on purpose — authentication
+ * and tracing legitimately differ between the two calls, and rejecting on them
+ * would break honest retries while adding nothing.
+ */
+function requestHashOf(req) {
+  return canonicalRequestHash({ method: req.method, path: req.path, body: req.body });
+}
+
 function issueOrderId() {
   return `gcore-${crypto.randomUUID().slice(0, 18)}`;
 }
 
-async function challenge402(res, priceOverride) {
+async function challenge402(res, priceOverride, req) {
   const orderId = issueOrderId();
-  await putOrder(orderId, "");
+  // Binding the order to the request is what stops a quote taken for a cheap
+  // call from being redeemed for an expensive one. This bridge prices per
+  // deployment, so the body it was quoted for is literally what set the price
+  // below: quote the 8B model, pay the 8B price, then retry the same order id
+  // with `model` switched to the 70B one and the operator covers the gap.
+  await putOrder(orderId, "", req ? requestHashOf(req) : undefined);
   const wei  = priceOverride?.wei  || PRICE_WEI;
   const usdcUnits = priceOverride?.usdc_units || PRICE_USDC_UNITS;
   const usdtUnits = priceOverride?.usdt_units || PRICE_USDT_UNITS;
@@ -541,9 +560,17 @@ app.post("/chat/completions", challengeLimiter, async (req, res) => {
       usdc_units: priceUsdcUnits,
       usdt_units: priceUsdcUnits, // mirror USDC default; per-model USDT optional
       description: priceDescription,
+    }, req);
+  }
+
+  const order = await getOrder(orderId);
+  if (order && !requestMatchesOrder(order.requestHash, requestHashOf(req)).ok) {
+    return res.status(409).json({
+      error:  "proof_mismatch",
+      detail: "This order was issued for a different request. Request a new 402 for the body you are sending.",
     });
   }
-  if (!(await hasOrder(orderId))) {
+  if (!order) {
     return res.status(409).json({
       error: "unknown_or_expired_order_id",
       detail: `Order "${orderId}" was not issued by this bridge or has expired.`,
