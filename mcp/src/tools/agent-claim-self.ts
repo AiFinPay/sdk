@@ -59,6 +59,69 @@ export function agentClaimSelfTool() {
   };
 }
 
+// ── Who this tool may talk to, and what it may sign ─────────────────────────
+//
+// This tool took the API host out of the URL it was handed, checked only that
+// the string contained "/api/auth/verify?token=", fetched a challenge from that
+// host, and signed whatever came back with the agent's EVM key AND its Solana
+// secret — then posted both signatures back to the same host.
+//
+// That is a signing oracle with an SSRF in front of it. Anyone who can put a
+// URL in front of the agent, prompt injection included, could name their own
+// server, choose the text to be signed, and collect the signatures. Naming
+// 127.0.0.1 or 169.254.169.254 instead reached whatever the host could reach.
+//
+// Two independent barriers below, because either alone is one mistake away
+// from failing.
+
+const DEFAULT_CLAIM_ORIGINS = [
+  "https://aifinpay.io",
+  "https://www.aifinpay.io",
+  "https://dash.aifinpay.io",
+  "https://api.aifinpay.io",
+];
+
+/** Origins this tool will contact. Override deliberately, for staging. */
+function allowedOrigins(): string[] {
+  const raw = process.env.AIFINPAY_CLAIM_ORIGINS;
+  if (!raw) return DEFAULT_CLAIM_ORIGINS;
+  return raw.split(",").map((o) => o.trim().replace(/\/+$/, "")).filter(Boolean);
+}
+
+/** null when the URL may be used; otherwise the reason it may not. */
+function originRefusal(url: URL): string | null {
+  const origin = `${url.protocol}//${url.host}`;
+  const allowed = allowedOrigins();
+  if (!allowed.includes(origin)) {
+    return `refusing to use ${origin}: not an allowed AiFinPay origin. ` +
+      `Allowed: ${allowed.join(", ")}. Set AIFINPAY_CLAIM_ORIGINS to add one deliberately.`;
+  }
+  return null;
+}
+
+/**
+ * The only shape this agent will sign here.
+ *
+ * The server builds `AiFinPay-claim:<chain>:<address>:<nonce>` and nothing
+ * else. Checking that locally means even an allowed origin — compromised, or
+ * simply the wrong one — cannot choose the bytes. The address must be this
+ * agent's own, so a signature obtained here says only "I am this agent", which
+ * is the whole purpose of the exchange.
+ *
+ * EVM addresses compare case-insensitively because the server lowercases them.
+ * base58 is case-significant and compares exactly.
+ */
+function challengeIsWellFormed(message: unknown, address: string): boolean {
+  if (typeof message !== "string") return false;
+  const chain = address.startsWith("0x") ? "polygon" : "solana";
+  const prefix = `AiFinPay-claim:${chain}:${address}:`;
+  const matches = chain === "polygon"
+    ? message.toLowerCase().startsWith(prefix.toLowerCase())
+    : message.startsWith(prefix);
+  if (!matches) return false;
+  return /^[0-9a-f]{32}$/.test(message.slice(prefix.length));
+}
+
 export async function runAgentClaimSelf(
   ctx: ToolContext,
   args: Record<string, unknown>,
@@ -78,6 +141,10 @@ export async function runAgentClaimSelf(
   let apiBase: string;
   try {
     const u = new URL(magicLinkUrl);
+    const refusal = originRefusal(u);
+    if (refusal) {
+      return { isError: true, content: [{ type: "text", text: refusal }] };
+    }
     apiBase = `${u.protocol}//${u.host}`;
   } catch {
     return {
@@ -119,6 +186,7 @@ export async function runAgentClaimSelf(
     // 1) challenge
     const cr = await fetch(`${apiBase}/api/me/agents/challenge`, {
       method: "POST",
+      redirect: "error", // a redirect would leave the origin we vetted
       headers: { "content-type": "application/json", cookie: cookieHeader },
       body: JSON.stringify({ address }),
     });
@@ -126,7 +194,13 @@ export async function runAgentClaimSelf(
     if (!cr.ok || !cj.challenge_id || !cj.message) {
       return { ok: false as const, reason: cj.error || `challenge HTTP ${cr.status}` };
     }
-    // 2) sign
+    // 2) sign — but only the one shape this exchange is defined to produce.
+    if (!challengeIsWellFormed(cj.message, address)) {
+      return {
+        ok: false as const,
+        reason: "challenge is not a well-formed AiFinPay claim for this agent — refusing to sign it",
+      };
+    }
     let sigPayload: { signature?: string; signature_base58?: string };
     try {
       sigPayload = await sigFn(cj.message);
@@ -136,6 +210,7 @@ export async function runAgentClaimSelf(
     // 3) submit
     const sr = await fetch(`${apiBase}/api/me/agents/claim`, {
       method: "POST",
+      redirect: "error", // a redirect would leave the origin we vetted
       headers: { "content-type": "application/json", cookie: cookieHeader },
       body: JSON.stringify({ challenge_id: cj.challenge_id, label, ...sigPayload }),
     });
