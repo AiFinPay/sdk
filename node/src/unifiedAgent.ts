@@ -21,7 +21,6 @@ import {
   toHex,
   type PublicClient,
   type WalletClient,
-  toFunctionSelector,
   formatEther,
 } from "viem";
 import {
@@ -55,6 +54,11 @@ import {
   type BridgeQuoteOptions,
   type EvmChainName,
 } from "./crossChain.js";
+import {
+  validateQuotedNativePayment,
+  validateRuntimePaymentTarget,
+  type TrustedPaymentTarget,
+} from "./paymentRegistry.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -215,26 +219,6 @@ interface PayMaticChallenge {
   instructions?: string[];
 }
 
-// ── B2BSplitter contract ABI ─────────────────────────────────────────────
-// `payMatic` is the splitter's generic NATIVE-token payment entrypoint —
-// the name is a Polygon-era legacy. On Base/Optimism/Unichain it settles
-// ETH, on BOT Chain BOT, on XRPL EVM XRP. There is no ERC-20/USDC path in
-// the deployed splitter payment flow yet — native-token only.
-
-const SPLITTER_PAY_MATIC_ABI = [
-  {
-    type: "function",
-    name: "payMatic",
-    stateMutability: "payable",
-    inputs: [
-      { type: "address", name: "merchant" },
-      { type: "address", name: "ipCreator" },
-      { type: "string",  name: "orderId" },
-    ],
-    outputs: [],
-  },
-] as const;
-
 // v1.2 entrypoint. The signature was read off the deployed contract rather than
 // from a spec: selector 0x8f0122bb, confirmed against the mainnet proof payment
 // 0xbffcdbd2…72d3. The redeploy note describes it as "payNative taking a
@@ -306,8 +290,7 @@ export type SplitterChainName =
   | "botchain"
   | "xrplevm";
 
-export interface SplitterDeployment {
-  chainId:    number;
+export interface SplitterDeployment extends TrustedPaymentTarget {
   /** viem chain object used for tx signing on this chain. */
   chain:      Chain;
   /** Public RPC used when no evmRpcUrls override is supplied. */
@@ -317,9 +300,7 @@ export interface SplitterDeployment {
    * and renamed the native entrypoint, so the ABI differs per chain — Base and
    * Unichain were not part of the 2026-07-31 rollout and still run v1.1.
    */
-  version: "1.1" | "1.2";
   /** B2BSplitter contract address (native-token entrypoint). */
-  splitter:   `0x${string}`;
   /**
    * Circle-native USDC on this chain, when one exists. Informational for
    * now: the splitter payment path is native-token only (payMatic) — no
@@ -341,66 +322,108 @@ export interface SplitterDeployment {
 
 export const SPLITTER_DEPLOYMENTS: Record<SplitterChainName, SplitterDeployment> = {
   polygon: {
+    enabled:    true,
     version:    "1.2",
     chainId:    137,
     chain:      polygon,
     defaultRpc: "https://polygon.drpc.org",
     splitter:   "0xbD1fa5453f212F096c0213788a645eC597FB4DDe",
+    runtimeCodeHash: "0x9001fbb7ec70097909415325dc70c5b2102c4312dcd8e01e7495cfcaca2edaff",
+    treasury:   "0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e",
+    treasuryBps: 100,
+    ipCreatorBps: 1,
+    validFrom:  "2026-08-04T00:00:00.000Z",
+    validUntil: "2026-09-03T00:00:00.000Z",
     usdc:       "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
     explorer:   "https://polygonscan.com",
     nativeUsdEnv: "AIFINPAY_MATIC_USD", // legacy name kept for back-compat
     nativeUsdDefault: 0.073, // reference only; ~$0.073 on 2026-08-03
   },
   base: {
+    enabled:    false,
     version:    "1.1",
     chainId:    8453,
     chain:      base,
     defaultRpc: "https://mainnet.base.org",
     splitter:   "0x8Ad9830D16b1f10333866a3f38C949CbB19f4BAD",
+    runtimeCodeHash: "0x545b3a4ba195edc6b728df8cc64f28da528c9e7805c15f1aa61ef58c3c562197",
+    treasury:   "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+    treasuryBps: 100,
+    ipCreatorBps: 1,
+    validFrom:  "2026-08-04T00:00:00.000Z",
+    validUntil: "2026-09-03T00:00:00.000Z",
     usdc:       "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     explorer:   "https://basescan.org",
     nativeUsdEnv: "AIFINPAY_ETH_USD",
     nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
   },
   optimism: {
+    enabled:    false,
     version:    "1.2",
     chainId:    10,
     chain:      optimism,
     defaultRpc: "https://mainnet.optimism.io",
     splitter:   "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74",
+    runtimeCodeHash: "0xcdf939fd4f9a189e3dba991c5d538bd77b3d493d2ce4e356b61e5742dbde1899",
+    treasury:   "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+    treasuryBps: 100,
+    ipCreatorBps: 1,
+    validFrom:  "2026-08-04T00:00:00.000Z",
+    validUntil: "2026-09-03T00:00:00.000Z",
     usdc:       "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
     explorer:   "https://optimistic.etherscan.io",
     nativeUsdEnv: "AIFINPAY_ETH_USD",
     nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
   },
   unichain: {
+    enabled:    false,
     version:    "1.1",
     chainId:    130,
     chain:      unichain,
     defaultRpc: "https://mainnet.unichain.org",
     splitter:   "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB",
+    runtimeCodeHash: "0x545b3a4ba195edc6b728df8cc64f28da528c9e7805c15f1aa61ef58c3c562197",
+    treasury:   "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+    treasuryBps: 100,
+    ipCreatorBps: 1,
+    validFrom:  "2026-08-04T00:00:00.000Z",
+    validUntil: "2026-09-03T00:00:00.000Z",
     usdc:       "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
     explorer:   "https://uniscan.xyz",
     nativeUsdEnv: "AIFINPAY_ETH_USD",
     nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
   },
   botchain: {
+    enabled:    false,
     version:    "1.2",
     chainId:    677,
     chain:      botchain,
     defaultRpc: "https://rpc.botchain.ai",
     splitter:   "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
+    runtimeCodeHash: "0xabd084ff64e98bb8ac7db7783d80c6a6bcc69716dfb8f64a4686bed5cf428d96",
+    treasury:   "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+    treasuryBps: 100,
+    ipCreatorBps: 1,
+    validFrom:  "2026-08-04T00:00:00.000Z",
+    validUntil: "2026-09-03T00:00:00.000Z",
     // no USDC on BOT Chain — native BOT only
     explorer:   "https://scan.botchain.ai",
     nativeUsdEnv: "AIFINPAY_BOT_USD",
     nativeUsdDefault: 1, // no reliable public feed; set the env var
   },
   xrplevm: {
+    enabled:    false,
     version:    "1.2",
     chainId:    1440000,
     chain:      xrplevm,
     defaultRpc: "https://rpc.xrplevm.org",
     splitter:   "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
+    runtimeCodeHash: "0xeb68cf314d335f888726a527dec10d989c26e2c5d6a8df68d117cc7d4dcec239",
+    treasury:   "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+    treasuryBps: 100,
+    ipCreatorBps: 1,
+    validFrom:  "2026-08-04T00:00:00.000Z",
+    validUntil: "2026-09-03T00:00:00.000Z",
     // no verified USDC on XRPL EVM — native XRP only
     explorer:   "https://explorer.xrplevm.org",
     nativeUsdEnv: "AIFINPAY_XRP_USD",
@@ -447,18 +470,6 @@ const ERC20_BALANCE_OF_ABI = [
     stateMutability: "view",
     inputs: [{ type: "address", name: "owner" }],
     outputs: [{ type: "uint256" }],
-  },
-] as const;
-
-// B2BSplitter.treasury() view — used to route the ipCreator royalty slot
-// when the bridge challenge doesn't name a recipient.
-const SPLITTER_TREASURY_ABI = [
-  {
-    type: "function",
-    name: "treasury",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ type: "address" }],
   },
 ] as const;
 
@@ -1391,11 +1402,22 @@ export class AiFinPayAgent {
       );
     }
 
+    // The bridge is untrusted input. Resolve every signing-critical field
+    // against the canonical target registry before deriving calldata.
+    const validatedPayment = validateQuotedNativePayment(
+      chain,
+      pm,
+      deployment,
+      provider.merchant_wallet,
+    );
+    const { publicClient, walletClient } = this.splitterClients(chain);
+    await validateRuntimePaymentTarget(publicClient, deployment);
+
     // Guard: same ballpark check as the Solana branch — never sign for an
     // amount wildly above the declared cost / per-call cap. Native-token
     // USD price per chain via SPLITTER_DEPLOYMENTS.nativeUsdEnv.
     {
-      const wei = Number(pm.total_wei);
+      const wei = Number(validatedPayment.totalWei);
       const { usd: nativeUsd } = await this.nativeUsdFor(deployment);
       // NaN when no price is known — guardChallengeAmount then declines to
       // block rather than blocking on a guess. See nativeUsdFor().
@@ -1404,69 +1426,23 @@ export class AiFinPayAgent {
       if (!guarded) return null;
     }
 
-    // 2. Submit B2BSplitter.payMatic on the selected chain's mainnet.
-    // Prefer the challenge's splitter address (current bridge behaviour);
-    // fall back to the registry address for bridges that omit it.
-    // ipCreator routing: prefer the challenge's explicit ip_creator; else
-    // route the royalty slot to the splitter's treasury (mirrors the Solana
-    // branch). Passing address(0) would skip the transfer and permanently
-    // strand the 1bp inside B2BSplitter — the contract has no sweep function.
-    const splitterAddress = (pm.splitter as `0x${string}` | undefined)
-      ?? deployment.splitter;
-    const ipCreator = (pm.ip_creator as `0x${string}` | undefined)
-      ?? await this.splitterTreasury(splitterAddress, chain)
-      ?? "0x0000000000000000000000000000000000000000";
-    const { publicClient, walletClient } = this.splitterClients(chain);
-    // The entrypoint follows the deployed contract, not the SDK release: v1.2
-    // (Polygon, Optimism, BOT Chain, XRPL EVM as of 2026-07-31) takes a bytes32
-    // paymentId and rejects one it has already settled, while Base and Unichain
-    // still run v1.1. Sending v1.2 calldata to a v1.1 contract reverts with no
-    // useful reason, so this must be decided per chain.
-    // An explicit `splitter_version` wins — a server that states it knows what
-    // it deployed. What it must NOT fall back to is this registry's
-    // chain -> version entry, because the ADDRESS came from the challenge and
-    // the version would come from a table: two sources that can disagree.
-    //
-    // In production they did. The Exa bridge still hands out the pre-v1.2
-    // splitter 0xE34Fc0E6… and sends no version; the table says "polygon is
-    // 1.2"; the SDK called payNative on a contract that only has payMatic, and
-    // the payment reverted with nothing in the reason to explain it.
-    //
-    // So when the server is silent, ask the contract at the address we were
-    // actually handed. The registry is used only if the chain cannot be read.
-    const splitterVersion =
-      (pm.splitter_version as "1.1" | "1.2" | undefined)
-      ?? await this.detectSplitterVersion(splitterAddress, chain, deployment.version);
-    await this.assertCanAffordNative(publicClient, deployment, BigInt(pm.total_wei));
-
-    const txHash = splitterVersion === "1.2"
-      ? await walletClient.writeContract({
-          address:      splitterAddress,
-          abi:          SPLITTER_PAY_NATIVE_ABI,
-          functionName: "payNative",
-          args: [
-            paymentIdFor(pm.order_id),
-            pm.merchant_wallet as `0x${string}`,
-            ipCreator,
-            pm.order_id,
-          ],
-          value: BigInt(pm.total_wei),
-          chain: deployment.chain,
-          account: this.evmAccount,
-        })
-      : await walletClient.writeContract({
-          address:      splitterAddress,
-          abi:          SPLITTER_PAY_MATIC_ABI,
-          functionName: "payMatic",
-          args: [
-            pm.merchant_wallet as `0x${string}`,
-            ipCreator,
-            pm.order_id,
-          ],
-          value: BigInt(pm.total_wei),
-          chain: deployment.chain,
-          account: this.evmAccount,
-        });
+    // 2. Only the canonical v1.2 route can reach signing. v1.1 and dynamic
+    // server-selected ABIs are intentionally unavailable.
+    await this.assertCanAffordNative(publicClient, deployment, validatedPayment.totalWei);
+    const txHash = await walletClient.writeContract({
+      address:      validatedPayment.splitter,
+      abi:          SPLITTER_PAY_NATIVE_ABI,
+      functionName: "payNative",
+      args: [
+        paymentIdFor(validatedPayment.orderId),
+        validatedPayment.merchant,
+        validatedPayment.ipCreator,
+        validatedPayment.orderId,
+      ],
+      value: validatedPayment.totalWei,
+      chain: deployment.chain,
+      account: this.evmAccount,
+    });
 
     // 3. Wait for receipt (inclusion is enough on these fast-block chains).
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
@@ -1679,77 +1655,6 @@ export class AiFinPayAgent {
       return total;
     } catch {
       return 0; // never block balance() on Solana RPC issues
-    }
-  }
-
-  // Cache: "chain:splitter address" → treasury address (constant per deployment).
-  private splitterTreasuryCache = new Map<string, `0x${string}`>();
-
-  /** Read + cache B2BSplitter.treasury() on the given chain (default
-   *  polygon for back-compat). Returns null on RPC failure. */
-  /**
-   * Which Splitter generation is actually deployed at this address.
-   *
-   * The version used to come from a chain -> version table while the ADDRESS
-   * came from the bridge's 402 challenge. Two different sources, and they can
-   * disagree — in production they did. The Exa bridge still hands out the
-   * pre-v1.2 splitter 0xE34Fc0E6… and sends no version, the table says
-   * "polygon is 1.2", and the SDK called payNative on a contract that only has
-   * payMatic. The payment reverted with nothing in the reason to explain it.
-   *
-   * A table keyed by chain cannot be right when the address is variable input,
-   * so this asks the contract instead. payNative's 4-byte selector appears in a
-   * v1.2 dispatcher and is absent from v1.1 — the same check used to verify all
-   * six registry chains against mainnet.
-   *
-   * One eth_getCode, cached per (chain, address). Falls back to the registry
-   * only when the code cannot be read: guessing beats refusing to pay, and for
-   * the addresses we deployed the guess is right.
-   */
-  private splitterVersionCache = new Map<string, "1.1" | "1.2">();
-
-  private async detectSplitterVersion(
-    splitter: `0x${string}`,
-    chainName: SplitterChainName,
-    fallback: "1.1" | "1.2",
-  ): Promise<"1.1" | "1.2"> {
-    const key = `${chainName}:${splitter.toLowerCase()}`;
-    const cached = this.splitterVersionCache.get(key);
-    if (cached) return cached;
-    try {
-      const { publicClient } = this.splitterClients(chainName);
-      const code = await publicClient.getBytecode({ address: splitter });
-      if (!code || code === "0x") return fallback;
-      const sel = toFunctionSelector(
-        "function payNative(bytes32,address,address,string)",
-      ).slice(2);
-      const version: "1.1" | "1.2" = code.includes(sel) ? "1.2" : "1.1";
-      this.splitterVersionCache.set(key, version);
-      return version;
-    } catch {
-      return fallback;
-    }
-  }
-
-  private async splitterTreasury(
-    splitter: `0x${string}`,
-    chainName: SplitterChainName = "polygon",
-  ): Promise<`0x${string}` | null> {
-    const cacheKey = `${chainName}:${splitter.toLowerCase()}`;
-    const cached = this.splitterTreasuryCache.get(cacheKey);
-    if (cached) return cached;
-    try {
-      const { publicClient } = this.splitterClients(chainName);
-      const treasury = await publicClient.readContract({
-        address:      splitter,
-        abi:          SPLITTER_TREASURY_ABI,
-        functionName: "treasury",
-      }) as `0x${string}`;
-      if (!treasury || treasury === "0x0000000000000000000000000000000000000000") return null;
-      this.splitterTreasuryCache.set(cacheKey, treasury);
-      return treasury;
-    } catch {
-      return null;
     }
   }
 
