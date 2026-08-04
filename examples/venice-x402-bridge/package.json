@@ -7,7 +7,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test:store": "ALLOW_MEMORY_STORE=1 node --test store.test.js"
+    "test:store": "ALLOW_MEMORY_STORE=1 node --test store.test.js request-binding.test.js"
   },
   "dependencies": {
     "@solana/web3.js": "^1.95.0",

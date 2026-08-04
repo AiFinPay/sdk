@@ -7,6 +7,7 @@
 // every bridge in front of the same payment rail agrees on what "consumed"
 // means — one transaction was seen buying two upstream calls on these bridges.
 export {
+  getOrder,
   putOrder,
   hasOrder,
   consumeOrder,

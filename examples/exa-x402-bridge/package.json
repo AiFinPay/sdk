@@ -9,7 +9,7 @@
     "start": "node server.js",
     "demo:client": "node test-client.js",
     "gen:wallet": "node gen-test-wallet.js",
-    "test:store": "ALLOW_MEMORY_STORE=1 node --test store.test.js solana-verify.test.js"
+    "test:store": "ALLOW_MEMORY_STORE=1 node --test store.test.js solana-verify.test.js request-binding.test.js"
   },
   "dependencies": {
     "@solana/web3.js": "^1.95.0",
