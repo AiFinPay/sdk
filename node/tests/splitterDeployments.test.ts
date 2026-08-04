@@ -42,6 +42,7 @@ describe("SPLITTER_DEPLOYMENTS registry", () => {
       expect(d.explorer).toMatch(/^https:\/\//);
       expect(d.nativeUsdEnv).toMatch(/^AIFINPAY_/);
       expect(d.nativeUsdDefault).toBeGreaterThan(0);
+      expect(typeof d.enabled).toBe("boolean");
     }
   });
 
