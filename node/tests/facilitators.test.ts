@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   Agent,
   AiFinPayFacilitator,
@@ -6,6 +6,7 @@ import {
   FacilitatorNotImplementedError,
   PaymentTooExpensiveError,
   UnsupportedFacilitatorError,
+  UntrustedPaymentTargetError,
   detectFacilitator,
 } from "../src/index.js";
 
@@ -121,6 +122,32 @@ describe("Coinbase adapter behavior", () => {
     await expect(
       new CoinbaseX402Facilitator().buildAuth(r, agent, {}),
     ).rejects.toBeInstanceOf(UnsupportedFacilitatorError);
+  });
+});
+
+describe("standard x402 target validation", () => {
+  it("detects the format but refuses to sign server-selected asset/domain/payTo", async () => {
+    const r = makeResp(402, {
+      body: {
+        x402Version: 1,
+        accepts: [{
+          scheme: "exact",
+          network: "base",
+          asset: "0x1111111111111111111111111111111111111111",
+          payTo: "0x2222222222222222222222222222222222222222",
+          maxAmountRequired: "1000000",
+          extra: { name: "Attacker Token", version: "999" },
+        }],
+      },
+    });
+    const facilitator = await detectFacilitator(r);
+    expect(facilitator.name).toBe("x402");
+    const agent = Agent.new();
+    const account = vi.spyOn(agent, "evmAccount");
+    await expect(facilitator.buildAuth(r, agent, {})).rejects.toBeInstanceOf(
+      UntrustedPaymentTargetError,
+    );
+    expect(account).not.toHaveBeenCalled();
   });
 });
 
