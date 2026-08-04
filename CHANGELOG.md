@@ -4,6 +4,46 @@ All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
 `1.0.0` onward the public API is stable and changes follow semver.
 
+## @aifinpay/agent 1.7.1 — 2026-08-04
+
+### Security
+- **AIFINP-62:** untrusted 402 responses can no longer choose a splitter,
+  ABI/version, merchant, royalty recipient, fee breakdown, asset domain, or
+  fallback route that reaches wallet signing.
+- The EVM route is bound to chain ID, exact address, runtime codehash,
+  version, treasury/governance, fee policy, merchant and a validity window.
+  RPC failures, empty code, stale entries and mismatches fail closed.
+- Legacy v1.1 signing and the dynamic `payMatic` fallback were removed.
+  Deployments controlled by the single-EOA treasury remain in inventory but
+  are disabled; only the Polygon v1.2 Safe-governed target is enabled.
+- Standard x402 EIP-3009 signing is disabled until a signed registry binds
+  asset/codehash/decimals, `payTo`, EIP-712 domain and validity. Detection and
+  a traceable error remain available; no account signing method is called.
+
+### Tests
+- Added 19 adversarial target/metadata tests covering wrong target, chain,
+  version, merchant, royalty, fee components, expiry, disabled legacy routes,
+  RPC timeout, wrong RPC chain, EOA/empty code, codehash mismatch and failed
+  contract introspection before signing.
+
+## @aifinpay/mcp 1.4.1 — 2026-08-04
+
+### Fixed
+- Declared `tweetnacl` and `bs58` as direct dependencies because
+  `agent-claim-self.ts` imports them directly. MCP builds no longer depend on
+  accidental transitive hoisting from `@aifinpay/agent`.
+- CI now rebuilds MCP against the Node SDK from the same commit, ensuring the
+  target-validation changes actually reach MCP payment tools before publish.
+
+## aifinpay-agent 1.3.1 — 2026-08-04
+
+### Security
+- Mirrored the Node fail-closed Polygon registry checks in Python: exact
+  splitter/version/merchant/fee terms plus live chain/codehash/governance read.
+- Removed the Python v1.1 `payMatic` fallback and treasury-on-RPC-failure path.
+- Added 16 positive/adversarial tests; no transaction is constructed until the
+  quote and runtime target both validate.
+
 ## @aifinpay/agent 1.4.0 · aifinpay-agent 1.2.0 — 2026-08-01
 
 ### Changed
