@@ -33,6 +33,16 @@ describe("B2BSplitter v1.2 migration", () => {
     // Marking these 1.2 would send v1.2 calldata to a v1.1 contract.
     expect(SPLITTER_DEPLOYMENTS.base.version).toBe("1.1");
     expect(SPLITTER_DEPLOYMENTS.unichain.version).toBe("1.1");
+    expect(SPLITTER_DEPLOYMENTS.base.enabled).toBe(false);
+    expect(SPLITTER_DEPLOYMENTS.unichain.enabled).toBe(false);
+  });
+
+  it("quarantines deployments that are not controlled by approved multisig governance", () => {
+    expect(SPLITTER_DEPLOYMENTS.polygon.enabled).toBe(true);
+    for (const chain of ["optimism", "botchain", "xrplevm"] as const) {
+      expect(SPLITTER_DEPLOYMENTS[chain].version).toBe("1.2");
+      expect(SPLITTER_DEPLOYMENTS[chain].enabled).toBe(false);
+    }
   });
 
   it("never leaves the superseded Polygon splitter anywhere in the registry", () => {
@@ -52,9 +62,13 @@ describe("B2BSplitter v1.2 migration", () => {
     expect(paymentIdFor("ord_abc")).toMatch(/^0x[0-9a-f]{64}$/);
   });
 
-  it("every registry entry declares a version", () => {
+  it("every registry entry binds codehash, governance, fees and validity", () => {
     for (const [chain, d] of Object.entries(SPLITTER_DEPLOYMENTS)) {
       expect(["1.1", "1.2"], `${chain}`).toContain(d.version);
+      expect(d.runtimeCodeHash, `${chain} codehash`).toMatch(/^0x[0-9a-f]{64}$/);
+      expect(d.treasuryBps, `${chain} treasury bps`).toBe(100);
+      expect(d.ipCreatorBps, `${chain} creator bps`).toBe(1);
+      expect(Date.parse(d.validFrom), `${chain} validFrom`).toBeLessThan(Date.parse(d.validUntil));
     }
   });
 });
