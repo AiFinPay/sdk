@@ -21,6 +21,22 @@
 
 // ── Unified surface (Phase 1+) ───────────────────────────────────────────
 export { AiFinPayAgent, SPLITTER_DEPLOYMENTS, paymentIdFor } from "./unifiedAgent.js";
+export {
+  validateQuotedNativePayment,
+  validateRuntimePaymentTarget,
+} from "./paymentRegistry.js";
+export type {
+  QuotedNativePayment,
+  TrustedPaymentTarget,
+  ValidatedNativePayment,
+} from "./paymentRegistry.js";
+export {
+  SOLANA_PROGRAM_ID,
+  SOLANA_ROUTE_ENABLED,
+  validateSolanaPaymentQuote,
+  validateSolanaPaymentQuoteTerms,
+} from "./solanaPayment.js";
+export type { SolanaPaymentQuote } from "./solanaPayment.js";
 export type {
   AiFinPayAgentOptions,
   CallOptions,
@@ -74,6 +90,7 @@ export {
   PaymentTooExpensiveError,
   SeatNotFoundError,
   UnsupportedFacilitatorError,
+  UntrustedPaymentTargetError,
   X402Error,
 } from "./errors.js";
 export {

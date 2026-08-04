@@ -3,6 +3,11 @@
 Non-custodial **multi-facilitator** x402 payment client for autonomous
 AI agents on [AiFinPay](https://aifinpay.io) — canonical domain
 **aifinpay.io** (the legacy `aifinpay.company` host is retired). SDK
+
+Python 1.3.1 validates Polygon payment targets against the same canonical
+address/codehash/governance/fee/merchant registry as the Node SDK. Missing or
+stale registry data, RPC failures, empty code and server-selected legacy v1.1
+routes fail before transaction signing.
 settlement: Polygon (default) + Solana; the protocol is live across 13
 networks — see [aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
 

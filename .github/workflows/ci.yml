@@ -92,6 +92,12 @@ jobs:
       - name: Build (tsc)
         run: npm run build
 
+      - name: Build against this PR's Node SDK
+        run: |
+          (cd ../node && npm ci --no-audit --no-fund && npm run build)
+          npm install --no-save --package-lock=false ../node
+          npm run build
+
       - name: Syntax-check bin entrypoint
         run: node --check bin/aifinpay-mcp.js
 

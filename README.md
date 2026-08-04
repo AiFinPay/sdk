@@ -11,8 +11,9 @@
 and your agent settles a real on-chain payment on Polygon or Solana
 mainnet, then receives the gated response. Non-custodial. Live since
 2026. Polygon facilitator compatible. Direct splitter settlement
-(Node SDK ≥ 1.3.0, `AiFinPayAgent.call()`) also works on Base, Optimism,
-Unichain, BOT Chain and XRPL EVM (native-token path); the backend-quoted
+(Node SDK ≥ 1.7.1, `AiFinPayAgent.call()`) is currently enabled only for the
+Polygon v1.2 Safe-governed target; Base, Optimism, Unichain, BOT Chain and
+XRPL EVM are quarantined pending multisig/v1.2 registry evidence. The backend-quoted
 invoice flow remains Polygon + Solana.
 
 > Canonical domain: **aifinpay.io** — the legacy `aifinpay.company` host is
@@ -52,7 +53,8 @@ or Cursor's `~/.cursor/mcp.json`:
 Restart the client. Your model now has seven payment tools
 (`payable_fetch`, `agent_address`, `agent_quote`, `agent_call`,
 `pay_with_split`, `quote_split`, `agent_claim_self`) and can
-autonomously settle any x402-gated API.
+autonomously negotiate supported x402 APIs. Standard x402 EIP-3009 signing is
+blocked until asset/payTo/domain metadata is backed by a signed target registry.
 
 Full client matrix (Claude Desktop, Cursor, Windsurf, Continue, LobeChat,
 Cline) lives in [`MCP_CONFIG.md`](./MCP_CONFIG.md).
