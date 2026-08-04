@@ -10,7 +10,7 @@ Per-call payment via `agent.call(provider=…)` does:
   1. Registry lookup at /api/providers (falls back to /providers)
   2. POST to the bridge → expect HTTP 402
   3. Build + sign + send the on-chain payment:
-       - Polygon  → B2BSplitter.payMatic(merchant, ipCreator, orderId)
+       - Polygon  → validated B2BSplitter v1.2 payNative(paymentId, ...)
                     with msg.value = total_wei
        - Solana   → b2b_pay_with_split(merchant_amount_lamports, order_id)
                     on program 5g9zWHF1…KFx2
@@ -49,6 +49,7 @@ from .cross_chain import (
     bridge_execute as _bridge_execute,
     bridge_wait_for_arrival as _bridge_wait_for_arrival,
 )
+from .payment_registry import validate_polygon_quote, validate_polygon_runtime
 
 # ── EVM imports — heavyish, lazy via top-level so missing deps fail clearly ──
 try:
@@ -110,23 +111,6 @@ DEFAULT_REGISTRY_URL = "https://api.aifinpay.io" + DEFAULT_REGISTRY_PATHS[0]
 DEFAULT_POLYGON_RPC  = "https://polygon.drpc.org"
 DEFAULT_SOLANA_RPC   = "https://api.mainnet-beta.solana.com"
 
-# B2BSplitter native-payment ABIs. v1.2 (deployed 2026-07-31 on Polygon,
-# Optimism, BOT Chain and XRPL EVM) renamed the entrypoint and added a bytes32
-# paymentId replay guard; Base and Unichain still run v1.1. The address arrives
-# from the server, so the version does too — probing the contract would be
-# fragile and guessing would produce a revert with no useful reason.
-SPLITTER_PAY_MATIC_ABI = [{
-    "type": "function",
-    "name": "payMatic",
-    "stateMutability": "payable",
-    "inputs": [
-        {"type": "address", "name": "merchant"},
-        {"type": "address", "name": "ipCreator"},
-        {"type": "string",  "name": "orderId"},
-    ],
-    "outputs": [],
-}]
-
 SPLITTER_PAY_NATIVE_ABI = [{
     "type": "function",
     "name": "payNative",
@@ -164,6 +148,7 @@ class ProviderEntry:
     service_type:     Optional[str]
     bridge_url:       Optional[str]
     price_usd:        Optional[float]
+    merchant_wallet:  str
     preferred_chain:  str = "polygon"
 
     @classmethod
@@ -173,6 +158,7 @@ class ProviderEntry:
             service_type    = d.get("service_type"),
             bridge_url      = d.get("bridge_url"),
             price_usd       = d.get("price_usd"),
+            merchant_wallet = d.get("merchant_wallet", ""),
             preferred_chain = d.get("preferred_chain", "polygon"),
         )
 
@@ -587,30 +573,6 @@ class AiFinPayAgent:
             self._w3 = w3
         return self._w3
 
-    def _splitter_treasury(self, splitter: str) -> Optional[str]:
-        """Read + cache B2BSplitter.treasury(). None on RPC failure."""
-        cache = getattr(self, "_treasury_cache", None)
-        if cache is None:
-            cache = self._treasury_cache = {}
-        key = splitter.lower()
-        if key in cache:
-            return cache[key]
-        try:
-            w3 = self._web3()
-            c = w3.eth.contract(
-                address=Web3.to_checksum_address(splitter),
-                abi=[{"type": "function", "name": "treasury",
-                      "stateMutability": "view", "inputs": [],
-                      "outputs": [{"type": "address"}]}],
-            )
-            treasury = c.functions.treasury().call()
-            if not treasury or int(treasury, 16) == 0:
-                return None
-            cache[key] = treasury
-            return treasury
-        except Exception:
-            return None
-
     # ── Public: chain-opaque call ─────────────────────────────────────────
 
     def call(self, provider: str, body: Optional[dict] = None, *,
@@ -673,7 +635,10 @@ class AiFinPayAgent:
 
         if picked_chain == "solana":
             return self._settle_solana(full_url, challenge, method, body, timeout, cost=cost)
-        return self._settle_polygon(full_url, challenge, method, body, timeout, cost=cost)
+        return self._settle_polygon(
+            full_url, challenge, method, body, timeout,
+            cost=cost, registered_merchant=p.merchant_wallet,
+        )
 
     # ── Cross-chain orchestration (Phase 1.5a: EVM↔EVM via LiFi) ───────────
     #
@@ -782,7 +747,8 @@ class AiFinPayAgent:
 
     def _settle_polygon(self, full_url: str, challenge: dict, method: str,
                         body: Optional[dict], timeout: float,
-                        cost: Optional[float] = None) -> requests.Response:
+                        cost: Optional[float] = None,
+                        registered_merchant: str = "") -> requests.Response:
         pm = challenge.get("pay_matic")
         if not pm:
             raise X402Error(
@@ -792,38 +758,25 @@ class AiFinPayAgent:
             )
 
         w3 = self._web3()
+        validated = validate_polygon_quote(pm, registered_merchant)
+        validate_polygon_runtime(w3)
         splitter_v12 = w3.eth.contract(
-            address=Web3.to_checksum_address(pm["splitter"]),
+            address=validated["splitter"],
             abi=SPLITTER_PAY_NATIVE_ABI,
         )
-        splitter = w3.eth.contract(
-            address=Web3.to_checksum_address(pm["splitter"]),
-            abi=SPLITTER_PAY_MATIC_ABI,
-        )
-        merchant = Web3.to_checksum_address(pm["merchant_wallet"])
-        # ipCreator routing: prefer the challenge's explicit ip_creator; else
-        # route the royalty slot to the splitter's treasury (mirrors the Node
-        # SDK + Solana branch). Passing address(0) would skip the transfer and
-        # permanently strand the 1bp inside B2BSplitter — no sweep function.
-        ip_creator = pm.get("ip_creator") or self._splitter_treasury(pm["splitter"]) \
-            or ("0x" + "00" * 20)
-        ip_creator = Web3.to_checksum_address(ip_creator)
-        order_id = pm["order_id"]
-        total_wei = int(pm["total_wei"])
+        merchant = validated["merchant"]
+        ip_creator = validated["ip_creator"]
+        order_id = validated["order_id"]
+        total_wei = validated["total_wei"]
 
         matic_usd = float(os.environ.get("AIFINPAY_MATIC_USD", "0.70"))
         _guard_challenge_usd(total_wei / 1e18 * matic_usd, cost, full_url)
 
         nonce = w3.eth.get_transaction_count(self.evm_address)
         gas_price = w3.eth.gas_price
-        # Defaults to 1.1 so an older backend that does not send the field keeps
-        # working unchanged.
-        if str(pm.get("splitter_version", "1.1")) == "1.2":
-            fn = splitter_v12.functions.payNative(
-                payment_id_for(order_id), merchant, ip_creator, order_id
-            )
-        else:
-            fn = splitter.functions.payMatic(merchant, ip_creator, order_id)
+        fn = splitter_v12.functions.payNative(
+            payment_id_for(order_id), merchant, ip_creator, order_id
+        )
         tx = fn.build_transaction({
             "from":     self.evm_address,
             "value":    total_wei,
