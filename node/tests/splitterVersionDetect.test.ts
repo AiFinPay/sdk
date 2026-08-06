@@ -48,9 +48,16 @@ describe("splitter version detection", () => {
     // Detection exists for silent bridges. A bridge that states its version
     // knows what it deployed, and the call path prefers it — asserted here so
     // the precedence is not quietly inverted later.
+    //
+    // This used to be one regex over the inline settlement code in call().
+    // Settlement now lives in settleSplitterNative(), so the precedence is
+    // two facts instead of one: call() must still FORWARD the challenge's
+    // version, and the settlement method must still PREFER it over detection.
+    // Dropping either one restores the original bug, so both are checked.
     const src = await import("node:fs").then((fs) =>
       fs.readFileSync(new URL("../src/unifiedAgent.ts", import.meta.url), "utf8"),
     );
-    expect(src).toMatch(/pm\.splitter_version[\s\S]{0,200}\?\?\s*await this\.detectSplitterVersion/);
+    expect(src).toMatch(/splitterVersion:\s*pm\.splitter_version/);
+    expect(src).toMatch(/p\.splitterVersion\s*\?\?\s*await this\.detectSplitterVersion/);
   });
 });
