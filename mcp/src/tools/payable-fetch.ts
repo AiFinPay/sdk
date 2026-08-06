@@ -38,8 +38,7 @@ export function payableFetchTool() {
         max_amount_usd: {
           type: "number",
           description:
-            "Refuse to pay if the facilitator wants more than this. " +
-            "Defaults to AIFINPAY_MAX_USD env or no cap.",
+            "Optional per-call ceiling. It may only reduce the operator's mandatory AIFINPAY_MAX_USD cap; it can never raise it.",
         },
         facilitator: {
           type: "string",
@@ -68,10 +67,25 @@ export async function runPayableFetch(
       ? (args.headers as Record<string, string>)
       : undefined;
 
-  const maxAmountUsd =
-    typeof args.max_amount_usd === "number"
+  const operatorCapUsd = ctx.config.maxAmountUsd;
+  if (!Number.isFinite(operatorCapUsd) || operatorCapUsd <= 0) {
+    return errorResult(
+      "payable_fetch is disabled because no positive operator spend cap is configured",
+      "Set AIFINPAY_MAX_USD to a conservative positive value before enabling autonomous payments.",
+    );
+  }
+
+  const requestedCapUsd =
+    typeof args.max_amount_usd === "number" && Number.isFinite(args.max_amount_usd)
       ? args.max_amount_usd
-      : ctx.config.maxAmountUsd;
+      : operatorCapUsd;
+
+  if (requestedCapUsd <= 0) {
+    return errorResult("max_amount_usd must be a positive finite number");
+  }
+
+  // Tool input is model-controlled. It may tighten the operator policy, never widen it.
+  const maxAmountUsd = Math.min(requestedCapUsd, operatorCapUsd);
 
   try {
     // Legacy URL-keyed path lives on the wrapped Solana-side Agent. For
