@@ -1,7 +1,7 @@
 {
   "name": "@aifinpay/agent",
-  "version": "1.7.0",
-  "description": "Unified agent-economy SDK for autonomous AI agents \u2014 chain-opaque AiFinPayAgent surface (call/openSession/balance/verify) over Solana and EVM execution environments (Polygon default; Base, Optimism, Unichain, BOT Chain, XRPL EVM splitter settlement).",
+  "version": "1.8.0",
+  "description": "Unified agent-economy SDK for autonomous AI agents — chain-opaque AiFinPayAgent surface (call/openSession/balance/verify) over Solana and EVM execution environments (Polygon default; Base, Optimism, Unichain, BOT Chain, XRPL EVM splitter settlement).",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
