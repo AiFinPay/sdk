@@ -1,0 +1,76 @@
+name: remediation-one-shot
+
+on:
+  push:
+    branches:
+      - security/audit-2026-08-06-remediation
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: security/audit-2026-08-06-remediation
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Remove stale Python price/chain constants and correct package claims
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          p = Path('python/aifinpay/unified_agent.py')
+          s = p.read_text()
+          replacements = {
+              'matic_usd = float(os.environ.get("AIFINPAY_MATIC_USD", "0.70"))': 'matic_usd = float(os.environ["AIFINPAY_MATIC_USD"])',
+              '"chainId":  137,  # Polygon mainnet': '"chainId":  w3.eth.chain_id,  # validated against canonical target before signing',
+              'sol_usd = float(os.environ.get("AIFINPAY_SOL_USD", "200"))': 'sol_usd = float(os.environ["AIFINPAY_SOL_USD"])',
+          }
+          for old, new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f'missing expected Python source fragment: {old}')
+              s = s.replace(old, new)
+          p.write_text(s)
+
+          node_pkg = Path('node/package.json')
+          node = json.loads(node_pkg.read_text())
+          node['description'] = (
+              'Unified agent payment SDK with fail-closed target validation. '
+              'Settlement rails are enabled only when backed by canonical deployment data and passing E2E evidence.'
+          )
+          node_pkg.write_text(json.dumps(node, indent=2) + '\n')
+
+          mcp_pkg = Path('mcp/package.json')
+          mcp = json.loads(mcp_pkg.read_text())
+          mcp['dependencies']['@aifinpay/agent'] = '^1.7.1'
+          mcp['dependencies']['@modelcontextprotocol/sdk'] = '~1.29.0'
+          mcp_pkg.write_text(json.dumps(mcp, indent=2) + '\n')
+          PY
+      - name: Re-lock MCP dependencies reproducibly
+        working-directory: mcp
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Source-level audit assertions
+        run: |
+          ! grep -n 'AIFINPAY_MATIC_USD.*,.*0.70' python/aifinpay/unified_agent.py
+          ! grep -n 'AIFINPAY_SOL_USD.*,.*200' python/aifinpay/unified_agent.py
+          ! grep -n '"chainId".*137' python/aifinpay/unified_agent.py
+          grep -q '"@modelcontextprotocol/sdk": "~1.29.0"' mcp/package.json
+          grep -q '"@aifinpay/agent": "^1.7.1"' mcp/package.json
+      - name: Commit deterministic remediation output
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add python/aifinpay/unified_agent.py node/package.json mcp/package.json mcp/package-lock.json
+          if git diff --cached --quiet; then
+            echo 'No patch required'
+            exit 0
+          fi
+          git commit -m 'security: remove stale pricing constants and pin payment dependencies'
+          git push origin HEAD:security/audit-2026-08-06-remediation
