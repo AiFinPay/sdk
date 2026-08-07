@@ -4,22 +4,14 @@ export function payableFetchTool() {
   return {
     name: "payable_fetch",
     description:
-      "USE THIS TOOL to fetch any URL that may require payment (HTTP 402). " +
-      "DO NOT use WebFetch for URLs that might be paid endpoints — WebFetch " +
-      "cannot sign x402 payment headers and will only see the 402 challenge " +
-      "without being able to settle it. " +
-      "Natural-language triggers: 'fetch <paid URL>', 'pay for <url>', " +
-      "'try this URL — it might be paid', 'pay the 402 and get the response'. " +
-      "The agent automatically detects the x402 facilitator flavor (AiFinPay " +
-      "or Coinbase x402), signs a payment from the agent's wallet, retries, " +
-      "and returns the response status, headers, and body. For known " +
-      "AiFinPay-registered providers (exa, io-net, venice, ...), prefer " +
-      "`agent_call` instead — it's higher-level and resolves the bridge URL " +
-      "from the registry.",
+      "Fetch a public HTTPS URL that may return HTTP 402 and pay it using the " +
+      "agent wallet. AIFINPAY_MAX_USD is a mandatory operator ceiling; optional " +
+      "max_amount_usd can only reduce that ceiling, never increase it. Prefer " +
+      "agent_call for AiFinPay-registered providers.",
     inputSchema: {
       type: "object",
       properties: {
-        url: { type: "string", description: "Target URL (https)." },
+        url: { type: "string", description: "Target public HTTPS URL." },
         method: {
           type: "string",
           enum: ["GET", "POST", "PUT", "PATCH", "DELETE"],
@@ -27,8 +19,7 @@ export function payableFetchTool() {
         },
         body: {
           type: "string",
-          description:
-            "Request body (string). Set Content-Type via headers if non-JSON.",
+          description: "Request body (string). Set Content-Type via headers if non-JSON.",
         },
         headers: {
           type: "object",
@@ -42,13 +33,11 @@ export function payableFetchTool() {
         },
         facilitator: {
           type: "string",
-          description:
-            "Force a facilitator: 'aifinpay' | 'coinbase-x402'. Default 'auto'.",
+          description: "Force a supported facilitator. Default 'auto'.",
         },
       },
       required: ["url"],
     },
-    // Auto-pays a 402 challenge for an arbitrary URL → write + open-world + irreversible.
     annotations: { readOnlyHint: false, openWorldHint: true, destructiveHint: true },
     outputSchema: { type: "object" },
   };
@@ -67,29 +56,34 @@ export async function runPayableFetch(
       ? (args.headers as Record<string, string>)
       : undefined;
 
-  const operatorCapUsd = ctx.config.maxAmountUsd;
-  if (!Number.isFinite(operatorCapUsd) || operatorCapUsd <= 0) {
+  const configuredCap = ctx.config.maxAmountUsd;
+  if (
+    typeof configuredCap !== "number" ||
+    !Number.isFinite(configuredCap) ||
+    configuredCap <= 0
+  ) {
     return errorResult(
       "payable_fetch is disabled because no positive operator spend cap is configured",
       "Set AIFINPAY_MAX_USD to a conservative positive value before enabling autonomous payments.",
     );
   }
+  const operatorCapUsd: number = configuredCap;
 
-  const requestedCapUsd =
-    typeof args.max_amount_usd === "number" && Number.isFinite(args.max_amount_usd)
-      ? args.max_amount_usd
-      : operatorCapUsd;
-
-  if (requestedCapUsd <= 0) {
-    return errorResult("max_amount_usd must be a positive finite number");
+  let requestedCapUsd: number = operatorCapUsd;
+  if (args.max_amount_usd !== undefined) {
+    if (
+      typeof args.max_amount_usd !== "number" ||
+      !Number.isFinite(args.max_amount_usd) ||
+      args.max_amount_usd <= 0
+    ) {
+      return errorResult("max_amount_usd must be a positive finite number when provided");
+    }
+    requestedCapUsd = args.max_amount_usd;
   }
 
-  // Tool input is model-controlled. It may tighten the operator policy, never widen it.
-  const maxAmountUsd = Math.min(requestedCapUsd, operatorCapUsd);
+  const maxAmountUsd: number = Math.min(requestedCapUsd, operatorCapUsd);
 
   try {
-    // Legacy URL-keyed path lives on the wrapped Solana-side Agent. For
-    // registry-resolved Polygon-native calls prefer the `agent_call` tool.
     const resp = await ctx.agent.inner.pay(url, {
       method,
       body,
@@ -97,7 +91,7 @@ export async function runPayableFetch(
       options: {
         maxAmountUsd,
         facilitator: typeof args.facilitator === "string"
-          ? (args.facilitator as string)
+          ? args.facilitator
           : undefined,
       },
     });
@@ -111,12 +105,7 @@ export async function runPayableFetch(
         {
           type: "text",
           text: JSON.stringify(
-            {
-              status: resp.status,
-              ok: resp.ok,
-              headers: respHeaders,
-              body: text,
-            },
+            { status: resp.status, ok: resp.ok, headers: respHeaders, body: text },
             null,
             2,
           ),
@@ -127,9 +116,7 @@ export async function runPayableFetch(
     const err = e as Error;
     return errorResult(
       `${err.constructor.name}: ${err.message}`,
-      `Tip: ensure agent ${ctx.agent.solanaAddress} has a funded Seat PDA, ` +
-        `or use the unified \`agent_call\` tool (Polygon settlement). ` +
-        `Docs: https://aifinpay.io/docs`,
+      `Tip: ensure agent ${ctx.agent.solanaAddress} has enough funds, or use agent_call for a registered provider.`,
     );
   }
 }
