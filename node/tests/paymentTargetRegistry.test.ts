@@ -29,24 +29,26 @@ afterEach(() => {
 function target(overrides: Partial<TrustedPaymentTarget> = {}): TrustedPaymentTarget {
   return {
     ...SPLITTER_DEPLOYMENTS.polygon,
+    version: "1.3",
     runtimeCodeHash: keccak256(CODE),
     ...overrides,
   };
 }
 
 function quote(overrides: Partial<QuotedNativePayment> = {}): QuotedNativePayment {
+  // Merchant gets exactly 100000. 1% treasury + 1bp creator are added on top.
   return {
     chain: "polygon",
     splitter: SPLITTER_DEPLOYMENTS.polygon.splitter,
-    splitter_version: "1.2",
+    splitter_version: "1.3",
     merchant_wallet: MERCHANT,
-    total_wei: "100000",
-    merchant_amount_wei: "98990",
+    total_wei: "101010",
+    merchant_amount_wei: "100000",
     treasury_amount_wei: "1000",
     ip_creator_amount_wei: "10",
     ip_creator: SPLITTER_DEPLOYMENTS.polygon.treasury,
     order_id: "order-1",
-    function_signature: "payNative(bytes32,address,address,string)",
+    function_signature: "payNative(bytes32,address,uint256,address,string)",
     ...overrides,
   };
 }
@@ -67,16 +69,32 @@ function reader(overrides: Partial<TargetReader> = {}): TargetReader {
 }
 
 describe("canonical payment target registry", () => {
-  it("accepts only the registered quote and runtime before signing", async () => {
-    const validated = validateQuotedNativePayment("polygon", quote(), target(), MERCHANT, NOW);
-    await expect(validateRuntimePaymentTarget(reader(), target())).resolves.toBeUndefined();
+  it("accepts a canonical v1.3 fee-on-top quote and runtime before signing", async () => {
+    const t = target();
+    const validated = validateQuotedNativePayment("polygon", quote(), t, MERCHANT, NOW);
+    await expect(validateRuntimePaymentTarget(reader(), t)).resolves.toBeUndefined();
     expect(validated).toMatchObject({
       splitter: SPLITTER_DEPLOYMENTS.polygon.splitter,
       merchant: MERCHANT,
       ipCreator: SPLITTER_DEPLOYMENTS.polygon.treasury,
-      totalWei: 100000n,
-      version: "1.2",
+      merchantAmountWei: 100000n,
+      treasuryAmountWei: 1000n,
+      ipCreatorAmountWei: 10n,
+      totalWei: 101010n,
+      version: "1.3",
     });
+  });
+
+  it("blocks the currently deployed fee-inclusive v1.2 route", () => {
+    expect(() =>
+      validateQuotedNativePayment(
+        "polygon",
+        quote({ splitter_version: "1.2" }),
+        target({ version: "1.2" }),
+        MERCHANT,
+        NOW,
+      ),
+    ).toThrow("fee_inclusive_splitter_disabled");
   });
 
   it("fails closed when the native/USD price is unavailable", () => {
@@ -116,10 +134,13 @@ describe("canonical payment target registry", () => {
     ["missing version", { splitter_version: undefined }, {}, "version_mismatch"],
     ["wrong merchant", { merchant_wallet: "0x3333333333333333333333333333333333333333" }, {}, "merchant_mismatch"],
     ["unregistered royalty", { ip_creator: "0x3333333333333333333333333333333333333333" }, {}, "ip_creator_not_registered"],
-    ["wrong fee component", { treasury_amount_wei: "999" }, {}, "treasury_amount_wei_mismatch"],
+    ["wrong treasury component", { treasury_amount_wei: "999" }, {}, "treasury_amount_wei_mismatch"],
+    ["wrong creator component", { ip_creator_amount_wei: "9" }, {}, "ip_creator_amount_wei_mismatch"],
+    ["wrong total", { total_wei: "100000" }, {}, "total_wei_mismatch"],
+    ["missing merchant amount", { merchant_amount_wei: undefined }, {}, "merchant_amount_wei_invalid"],
     ["expired entry", {}, {}, "registry_entry_expired", Date.parse("2026-09-03T00:00:00.000Z")],
     ["disabled route", {}, { enabled: false }, "route_disabled"],
-    ["legacy v1.1", { splitter_version: "1.1" }, { version: "1.1" }, "legacy_v1_1_disabled"],
+    ["legacy v1.1", { splitter_version: "1.1" }, { version: "1.1" }, "fee_inclusive_splitter_disabled"],
   ])("rejects %s", (_name, quotePatch, targetPatch, reason, now = NOW) => {
     expect(() =>
       validateQuotedNativePayment("polygon", quote(quotePatch), target(targetPatch), MERCHANT, now),
@@ -137,11 +158,12 @@ describe("canonical payment target registry", () => {
     await expect(validateRuntimePaymentTarget(reader(readerPatch), target())).rejects.toThrow(reason);
   });
 
-  it("removes the legacy payMatic signing route", async () => {
+  it("removes legacy payMatic and fee-inclusive v1.2 signing routes", async () => {
     const source = await import("node:fs").then((fs) =>
       fs.readFileSync(new URL("../src/unifiedAgent.ts", import.meta.url), "utf8"),
     );
     expect(source).not.toContain('functionName: "payMatic"');
+    expect(source).toContain("payNative");
     expect(source.indexOf("validateRuntimePaymentTarget")).toBeLessThan(
       source.indexOf("walletClient.writeContract"),
     );
