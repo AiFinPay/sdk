@@ -9,6 +9,7 @@ from aifinpay.errors import UntrustedPaymentTargetError
 from aifinpay.payment_registry import (
     POLYGON_TARGET,
     SOLANA_TARGET,
+    require_native_usd_price,
     validate_polygon_quote,
     validate_polygon_runtime,
     validate_solana_quote,
@@ -19,6 +20,11 @@ MERCHANT = "0x1111111111111111111111111111111111111111"
 NOW = datetime(2026, 8, 5, tzinfo=timezone.utc)
 SOLANA_MERCHANT = "11111111111111111111111111111112"
 SOLANA_TREASURY = "SysvarRent111111111111111111111111111111111"
+
+
+@pytest.fixture(autouse=True)
+def _operator_native_price(monkeypatch):
+    monkeypatch.setenv("AIFINPAY_MATIC_USD", "0.10")
 
 
 def quote(**overrides):
@@ -60,6 +66,26 @@ def test_quote_accepts_canonical_terms():
     assert result["merchant"] == Web3.to_checksum_address(MERCHANT)
     assert result["ip_creator"] == POLYGON_TARGET["treasury"]
     assert result["total_wei"] == 100000
+
+
+def test_native_price_missing_fails_closed(monkeypatch):
+    monkeypatch.delenv("AIFINPAY_MATIC_USD", raising=False)
+    with pytest.raises(UntrustedPaymentTargetError, match="native_price_unavailable"):
+        validate_polygon_quote(quote(), MERCHANT, now=NOW)
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "nan", "inf", "not-a-price"])
+def test_invalid_native_price_fails_closed(monkeypatch, value):
+    monkeypatch.setenv("AIFINPAY_MATIC_USD", value)
+    with pytest.raises(UntrustedPaymentTargetError, match="native_price_unavailable"):
+        require_native_usd_price(POLYGON_TARGET)
+
+
+def test_missing_native_price_policy_fails_closed():
+    target = dict(POLYGON_TARGET)
+    target.pop("native_usd_env", None)
+    with pytest.raises(UntrustedPaymentTargetError, match="native_price_policy_missing"):
+        require_native_usd_price(target)
 
 
 def test_expired_registry_blocks_payment():
