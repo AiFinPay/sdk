@@ -12,6 +12,8 @@ export interface TrustedPaymentTarget {
   enabled: boolean;
   validFrom: string;
   validUntil: string;
+  /** Operator-controlled native/USD oracle input used by the pre-sign guard. */
+  nativeUsdEnv?: string;
 }
 
 export interface QuotedNativePayment {
@@ -26,6 +28,7 @@ export interface QuotedNativePayment {
   ip_creator?: string;
   order_id?: string;
   function_signature?: string;
+  ttl_seconds?: number;
 }
 
 export interface ValidatedNativePayment {
@@ -52,6 +55,30 @@ function uint(value: unknown, label: string): bigint {
   return BigInt(value);
 }
 
+/**
+ * C-2 fail-closed gate.
+ *
+ * A payment cap expressed in USD is not a cap if the SDK cannot determine the
+ * USD value of the native-token amount. The previous guard returned `true` on
+ * NaN/timeout, exactly when protection was needed most. For every enabled
+ * native settlement target we therefore require an explicit positive
+ * operator-controlled native/USD value before a quote can reach signing.
+ *
+ * The runtime may still query a live feed for display/telemetry, but it may not
+ * use feed failure as permission to spend. Operators can refresh this env value
+ * as frequently as their risk policy requires.
+ */
+export function requireNativeUsdPrice(target: TrustedPaymentTarget): number {
+  const envName = target.nativeUsdEnv;
+  if (!envName) reject("native_price_policy_missing");
+  const raw = process.env[envName];
+  const value = raw === undefined ? Number.NaN : Number(raw);
+  if (!Number.isFinite(value) || value <= 0) {
+    reject(`native_price_unavailable:${envName}`);
+  }
+  return value;
+}
+
 export function validateQuotedNativePayment(
   chain: string,
   quote: QuotedNativePayment,
@@ -67,6 +94,12 @@ export function validateQuotedNativePayment(
     reject("registry_window_invalid");
   }
   if (nowMs < validFrom || nowMs >= validUntil) reject("registry_entry_expired");
+
+  // Require a usable operator price before accepting any bridge-controlled
+  // payment amount. This makes the later challenge guard fail-closed by
+  // construction instead of relying on a network price feed being available.
+  requireNativeUsdPrice(target);
+
   if (quote.chain !== chain) reject("chain_mismatch");
   if (!sameAddress(quote.splitter, target.splitter)) reject("splitter_not_registered");
   if (quote.splitter_version !== target.version) reject("version_mismatch");
