@@ -1,0 +1,76 @@
+name: v1.3 fee-on-top remediation
+
+on:
+  push:
+    branches:
+      - security/audit-2026-08-06-remediation
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: security/audit-2026-08-06-remediation
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Patch unified agent for v1.3 calldata while keeping v1.2 blocked
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('node/src/unifiedAgent.ts')
+          s = p.read_text()
+          s = s.replace(
+              'splitter_version?:     "1.1" | "1.2";',
+              'splitter_version?:     "1.1" | "1.2" | "1.3";',
+          )
+          s = s.replace(
+              '// v1.2 entrypoint. The signature was read off the deployed contract rather than\n// from a spec: selector 0x8f0122bb, confirmed against the mainnet proof payment\n// 0xbffcdbd2…72d3. The redeploy note describes it as "payNative taking a\n// bytes32 paymentId", which is true but incomplete — it takes four arguments,\n// and calling it with one produces a revert that looks like a contract fault.',
+              '// v1.3 fee-on-top entrypoint. v1.1/v1.2 remain recognized only so\n// the validator can reject them explicitly; they may not reach signing.',
+          )
+          old_inputs = '''    inputs: [\n      { type: "bytes32", name: "paymentId" },\n      { type: "address", name: "merchant" },\n      { type: "address", name: "ipCreator" },\n      { type: "string",  name: "memo" },\n    ],'''
+          new_inputs = '''    inputs: [\n      { type: "bytes32", name: "paymentId" },\n      { type: "address", name: "merchant" },\n      { type: "uint256", name: "merchantAmount" },\n      { type: "address", name: "ipCreator" },\n      { type: "string",  name: "memo" },\n    ],'''
+          if old_inputs in s:
+              s = s.replace(old_inputs, new_inputs, 1)
+          elif '{ type: "uint256", name: "merchantAmount" }' not in s:
+              raise SystemExit('payNative ABI input block not found')
+
+          s = s.replace(
+              '// 2. Only the canonical v1.2 route can reach signing. v1.1 and dynamic\n    // server-selected ABIs are intentionally unavailable.',
+              '// 2. Only a canonical v1.3 fee-on-top quote can reach signing.\n    // v1.1/v1.2 and dynamic server-selected ABIs are intentionally unavailable.',
+          )
+          old_args = '''      args: [\n        paymentIdFor(validatedPayment.orderId),\n        validatedPayment.merchant,\n        validatedPayment.ipCreator,\n        validatedPayment.orderId,\n      ],'''
+          new_args = '''      args: [\n        paymentIdFor(validatedPayment.orderId),\n        validatedPayment.merchant,\n        validatedPayment.merchantAmountWei,\n        validatedPayment.ipCreator,\n        validatedPayment.orderId,\n      ],'''
+          if old_args in s:
+              s = s.replace(old_args, new_args, 1)
+          elif 'validatedPayment.merchantAmountWei' not in s:
+              raise SystemExit('payNative call args not found')
+
+          p.write_text(s)
+          PY
+      - name: Assert v1.3 signature and merchant amount are present
+        run: |
+          grep -q '"1.1" | "1.2" | "1.3"' node/src/unifiedAgent.ts
+          grep -q 'name: "merchantAmount"' node/src/unifiedAgent.ts
+          grep -q 'validatedPayment.merchantAmountWei' node/src/unifiedAgent.ts
+      - name: Build and test Node SDK
+        run: |
+          cd node
+          npm ci
+          npm run build
+          npm test
+      - name: Commit v1.3 SDK wiring if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add node/src/unifiedAgent.ts
+          if git diff --cached --quiet; then
+            echo "v1.3 wiring already applied"
+            exit 0
+          fi
+          git commit -m "security: support fee-on-top v1.3 calldata and block legacy splitters"
+          git push origin HEAD:security/audit-2026-08-06-remediation
