@@ -146,28 +146,24 @@ export class Agent {
     >;
   }
 
-  // ── x402 auth (AiFinPay-native helpers, kept for backwards compat) ────
+  // ── x402 auth ────────────────────────────────────────────────────────
 
-  async fetchNonce(): Promise<{ nonce: string; expires_at: string }> {
-    return this.json("GET", "/nonce") as Promise<{
-      nonce: string;
-      expires_at: string;
-    }>;
+  /**
+   * @deprecated Generic nonces are intentionally not signable. Use `fetch()` /
+   * `request()` so the facilitator can sign the server's request-bound v2
+   * challenge (method + resource + expiry + value terms).
+   */
+  async fetchNonce(): Promise<never> {
+    throw new Error(
+      "Legacy /nonce flow retired: use the request-bound aifinpay-ed25519-v2 facilitator",
+    );
   }
 
-  /** Build a fresh AiFinPay-native x402 header set. */
-  async authHeaders(): Promise<Record<string, string>> {
-    const { nonce } = await this.fetchNonce();
-    const msg = new TextEncoder().encode(
-      `AiFinPay-x402:${nonce}:${this.address}`,
+  /** @deprecated Unbound generic nonce signatures are retired. */
+  async authHeaders(): Promise<never> {
+    throw new Error(
+      "Legacy authHeaders() retired: use fetch()/request() with a bound 402 challenge",
     );
-    const digest = await sha256(msg);
-    const sig = nacl.sign.detached(digest, this.secretKey);
-    return {
-      "x-agent-pubkey": this.address,
-      "x-nonce": nonce,
-      "x-signature": bs58.encode(sig),
-    };
   }
 
   // ── Seat / funding ────────────────────────────────────────────────────

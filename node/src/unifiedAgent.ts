@@ -1097,18 +1097,36 @@ export class AiFinPayAgent {
   }
 
   private guardChallengeAmount(estUsd: number, declaredCost: number, providerName: string): boolean {
-    if (!Number.isFinite(estUsd) || estUsd <= 0) return true; // can't estimate — don't block
+    if (!Number.isFinite(estUsd) || estUsd <= 0) {
+      throw new UntrustedPaymentTargetError(
+        `[PAY_VALUE_UNTRUSTED] cannot establish a positive USD value for ${providerName}; ` +
+          `autonomous payment is blocked until a trusted live price or explicit positive price is available`,
+      );
+    }
     const limits: number[] = [];
-    if (declaredCost > 0) limits.push(Math.max(declaredCost * 2, declaredCost + 0.05));
-    if (this.budgetCaps.per_call_usd !== undefined) limits.push(this.budgetCaps.per_call_usd);
-    if (!limits.length) return true; // no cap declared anywhere — caller opted out
+    if (Number.isFinite(declaredCost) && declaredCost > 0) {
+      limits.push(Math.max(declaredCost * 2, declaredCost + 0.05));
+    }
+    const operatorCap = this.budgetCaps.per_call_usd;
+    if (operatorCap !== undefined) {
+      if (!Number.isFinite(operatorCap) || operatorCap <= 0) {
+        throw new UntrustedPaymentTargetError(
+          `[PAY_VALUE_UNTRUSTED] configured per-call cap must be positive and finite`,
+        );
+      }
+      limits.push(operatorCap);
+    }
+    if (!limits.length) {
+      throw new UntrustedPaymentTargetError(
+        `[PAY_VALUE_UNTRUSTED] no positive declared cost or operator per-call ceiling for ${providerName}`,
+      );
+    }
     const limit = Math.min(...limits);
     if (estUsd <= limit) return true;
     const err = new BudgetCapExceededError(
       "per_call",
       `bridge ${providerName} challenge demands ≈$${estUsd.toFixed(4)} on-chain, ` +
-        `above the allowed $${limit.toFixed(4)} (declared cost/per-call cap). ` +
-        `Set AIFINPAY_MATIC_USD / AIFINPAY_SOL_USD for a tighter estimate.`,
+        `above the allowed $${limit.toFixed(4)} (declared cost/per-call cap).`,
     );
     if ((this.budgetCaps.on_limit_exceeded ?? "throw") === "skip") return false;
     throw err;
@@ -1359,7 +1377,7 @@ export class AiFinPayAgent {
       // signing anything. Stops a misquoting bridge from draining the agent.
       {
         const lamports = Number(validatedSolana.totalLamports);
-        const solUsd   = parseFloat(process.env.AIFINPAY_SOL_USD ?? "200");
+        const solUsd   = parseFloat(process.env.AIFINPAY_SOL_USD ?? "");
         const estUsd   = (Number.isFinite(lamports) ? lamports / 1e9 : 0) * solUsd;
         const guarded  = this.guardChallengeAmount(estUsd, cost, provider.name);
         if (!guarded) return null;
@@ -1428,8 +1446,8 @@ export class AiFinPayAgent {
     {
       const wei = Number(validatedPayment.totalWei);
       const { usd: nativeUsd } = await this.nativeUsdFor(deployment);
-      // NaN when no price is known — guardChallengeAmount then declines to
-      // block rather than blocking on a guess. See nativeUsdFor().
+      // NaN when no price is known — guardChallengeAmount fails closed.
+      // See nativeUsdFor().
       const estUsd  = (Number.isFinite(wei) ? wei / 1e18 : 0) * nativeUsd;
       const guarded = this.guardChallengeAmount(estUsd, cost, provider.name);
       if (!guarded) return null;
