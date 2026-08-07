@@ -12,22 +12,19 @@ import { isIP } from "node:net";
 const MAX_REDIRECTS = 5;
 
 const BLOCKED_V4: [number, number][] = [
-  [0x00000000, 0x00ffffff], // 0.0.0.0/8
-  [0x0a000000, 0x0affffff], // 10.0.0.0/8
-  [0x64400000, 0x647fffff], // 100.64.0.0/10
-  [0x7f000000, 0x7fffffff], // 127.0.0.0/8
-  [0xa9fe0000, 0xa9feffff], // 169.254.0.0/16 incl cloud metadata
-  [0xac100000, 0xac1fffff], // 172.16.0.0/12
-  [0xc0000000, 0xc00000ff], // 192.0.0.0/24
-  [0xc0a80000, 0xc0a8ffff], // 192.168.0.0/16
-  [0xc6120000, 0xc613ffff], // 198.18.0.0/15
-  [0xe0000000, 0xefffffff], // multicast
-  [0xf0000000, 0xffffffff], // reserved/broadcast
+  [0x00000000, 0x00ffffff],
+  [0x0a000000, 0x0affffff],
+  [0x64400000, 0x647fffff],
+  [0x7f000000, 0x7fffffff],
+  [0xa9fe0000, 0xa9feffff],
+  [0xac100000, 0xac1fffff],
+  [0xc0000000, 0xc00000ff],
+  [0xc0a80000, 0xc0a8ffff],
+  [0xc6120000, 0xc613ffff],
+  [0xe0000000, 0xefffffff],
+  [0xf0000000, 0xffffffff],
 ];
 
-// Headers below can authenticate the wallet/user or redeem a payment proof.
-// A redirect to another origin must never receive them. Header names are
-// case-insensitive; Headers normalizes them for deletion.
 const CROSS_ORIGIN_SENSITIVE_HEADERS = [
   "authorization",
   "proxy-authorization",
@@ -68,8 +65,8 @@ export function isBlockedAddress(addr: string): boolean {
     const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
     if (mapped) return isBlockedAddress(mapped[1]);
     if (lower === "::1" || lower === "::") return true;
-    if (/^f[cd][0-9a-f]{2}:/.test(lower)) return true; // fc00::/7
-    if (/^fe[89ab][0-9a-f]:/.test(lower)) return true; // fe80::/10
+    if (/^f[cd][0-9a-f]{2}:/.test(lower)) return true;
+    if (/^fe[89ab][0-9a-f]:/.test(lower)) return true;
     return false;
   }
   return true;
@@ -126,17 +123,14 @@ export async function assertRequestAllowed(
   return url;
 }
 
-function stripSensitiveRedirectHeaders(headersInit: HeadersInit | undefined): Headers {
+function stripSensitiveRedirectHeaders(
+  headersInit: RequestInit["headers"],
+): Headers {
   const headers = new Headers(headersInit);
   for (const name of CROSS_ORIGIN_SENSITIVE_HEADERS) headers.delete(name);
   return headers;
 }
 
-/**
- * A fetch implementation that validates every hop and follows redirects
- * manually. Manual following is required because the platform fetch API may
- * otherwise carry custom payment/auth headers to a different origin.
- */
 export function makeSafeFetch(opts: { allowPrivate?: boolean } = {}): typeof fetch {
   const safeFetch = async (
     input: Parameters<typeof fetch>[0],
@@ -149,7 +143,6 @@ export function makeSafeFetch(opts: { allowPrivate?: boolean } = {}): typeof fet
           ? input.toString()
           : (input as Request).url;
 
-    // Preserve Request headers when the caller supplied a Request object.
     const inputRequest = typeof input === "string" || input instanceof URL
       ? undefined
       : (input as Request);
@@ -175,7 +168,6 @@ export function makeSafeFetch(opts: { allowPrivate?: boolean } = {}): typeof fet
       if (!location) return res;
 
       const next = new URL(location, current);
-      // Validate before mutating request state or issuing the next request.
       await assertRequestAllowed(next.toString(), opts);
 
       if (next.origin !== current.origin) {
