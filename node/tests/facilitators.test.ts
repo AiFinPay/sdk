@@ -31,6 +31,35 @@ function makeResp(
   return response;
 }
 
+function boundChallenge(url = "https://aifinpay.io/paid?item=1") {
+  const u = new URL(url);
+  const expires = new Date(Date.now() + 60_000).toISOString();
+  const agreement = "a".repeat(64);
+  return makeResp(402, {
+    url,
+    body: {
+      error: "Payment Required",
+      protocol: "AiFinPay v5.3",
+      manifesto: "/manifesto.json",
+      treasury_vault: "AnbjcK3uD…",
+      min_usd: 0.01,
+      agreement_hash: agreement,
+      "x-nonce": "trusted-nonce",
+      "x-nonce-expires": expires,
+      signing: {
+        scheme: "aifinpay-ed25519-v2",
+        hash: "sha256",
+        message_version: 2,
+        method: "GET",
+        resource: `${u.pathname}${u.search}`,
+        expires,
+        min_usd: "0.01",
+        agreement_hash: agreement,
+      },
+    },
+  });
+}
+
 describe("detection", () => {
   it("AiFinPay matches the protocol field", async () => {
     const r = makeResp(402, {
@@ -95,8 +124,8 @@ describe("detection", () => {
   });
 });
 
-describe("AiFinPay native auth origin binding", () => {
-  it("refuses a hostile 402 origin before obtaining a nonce or signing", async () => {
+describe("AiFinPay native auth request binding", () => {
+  it("refuses a hostile 402 origin before signing", async () => {
     const r = makeResp(402, {
       url: "https://evil.example/paid",
       body: { protocol: "AiFinPay v5.3", "x-nonce": "attacker-nonce" },
@@ -110,25 +139,52 @@ describe("AiFinPay native auth origin binding", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("ignores responder nonces and obtains nonce only from the configured AiFinPay origin", async () => {
-    const r = makeResp(402, {
-      url: "https://aifinpay.io/paid",
-      body: { protocol: "AiFinPay v5.3", "x-nonce": "attacker-nonce" },
-    });
+  it("signs only a bound v2 challenge from the trusted origin", async () => {
+    const r = boundChallenge();
     const agent = Agent.new({
       baseUrl: "https://aifinpay.io",
-      fetchImpl: vi.fn(async (input: RequestInfo | URL) => {
-        expect(String(input)).toBe("https://aifinpay.io/nonce");
-        return new Response(JSON.stringify({ nonce: "trusted-nonce" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      }) as typeof fetch,
+      fetchImpl: vi.fn() as unknown as typeof fetch,
     });
 
     const auth = await new AiFinPayFacilitator().buildAuth(r, agent, {});
     expect(auth.headers?.["x-nonce"]).toBe("trusted-nonce");
-    expect(auth.headers?.["x-nonce"]).not.toBe("attacker-nonce");
+    expect(auth.headers?.["x-signature"]).toBeTruthy();
+    expect(auth.headers?.["x-aifinpay-signature-scheme"]).toBe(
+      "aifinpay-ed25519-v2",
+    );
+    expect(agent.fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("rejects a trusted-origin challenge bound to a different resource", async () => {
+    const r = boundChallenge("https://aifinpay.io/paid?item=1");
+    const body = await r.clone().json() as Record<string, any>;
+    body.signing.resource = "/admin";
+    const tampered = makeResp(402, {
+      url: r.url,
+      body,
+    });
+    const agent = Agent.new({ baseUrl: "https://aifinpay.io" });
+
+    await expect(
+      new AiFinPayFacilitator().buildAuth(tampered, agent, {}),
+    ).rejects.toBeInstanceOf(UntrustedPaymentTargetError);
+  });
+
+  it("rejects the legacy generic-nonce signing format", async () => {
+    const r = makeResp(402, {
+      url: "https://aifinpay.io/paid",
+      body: {
+        protocol: "AiFinPay v5.3",
+        "x-nonce": "legacy-nonce",
+        min_usd: 0.01,
+        agreement_hash: "a".repeat(64),
+      },
+    });
+    const agent = Agent.new({ baseUrl: "https://aifinpay.io" });
+
+    await expect(
+      new AiFinPayFacilitator().buildAuth(r, agent, {}),
+    ).rejects.toBeInstanceOf(UntrustedPaymentTargetError);
   });
 });
 
