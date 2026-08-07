@@ -3,22 +3,13 @@ import {
   AiFinPayAgent,
   InsufficientFundsError,
   SPLITTER_DEPLOYMENTS,
+  UntrustedPaymentTargetError,
 } from "../src/index.js";
 
-// Two failures that shared a cause: the SDK preferred a number compiled into
-// itself over admitting it did not know one.
-//
-// The pre-sign guard converted a challenge's wei into USD using
-// `nativeUsdDefault`, which said POL was $0.70 while it traded near $0.073.
-// Every quote therefore looked about ten times its real cost, and payments
-// above roughly half a cent were rejected with BudgetCapExceededError before
-// any money moved — an error naming the bridge for a fault in this table.
-//
-// Separately, an agent with no POL got viem's ContractFunctionExecutionError:
-// several paragraphs on how `gas * gas fee + value` is computed, for the one
-// condition an operator fixes in seconds. InsufficientFundsError had been
-// exported since the first release and thrown nowhere, so every
-// `catch (e instanceof InsufficientFundsError)` was dead code.
+// The SDK must never invent a native-token USD price. If a trusted live price
+// is available it can enforce the configured/declarative ceiling; if no price
+// can be established the signing path fails closed instead of authorizing an
+// amount it cannot value.
 
 const SEED = "a".repeat(64);
 const polygon = SPLITTER_DEPLOYMENTS.polygon;
@@ -43,17 +34,16 @@ function stubPriceFeed(body: unknown, ok = true) {
 }
 
 describe("the native price behind the pre-sign guard", () => {
-  it("takes the live feed over the value compiled into the SDK", async () => {
+  it("takes the live feed over a compiled guess", async () => {
     stubPriceFeed({ usd: { POL: 0.073 } });
     const agent = await AiFinPayAgent.fromSeed(SEED);
     const { usd, source } = await (agent as any).nativeUsdFor(polygon);
     expect(usd).toBe(0.073);
     expect(source).toBe("aifinpay price feed");
-    // The specific number that blocked real payments.
     expect(usd).not.toBe(0.70);
   });
 
-  it("lets an operator override the feed", async () => {
+  it("lets an operator override the feed with a positive finite value", async () => {
     stubPriceFeed({ usd: { POL: 0.073 } });
     process.env[polygon.nativeUsdEnv] = "0.5";
     const agent = await AiFinPayAgent.fromSeed(SEED);
@@ -62,7 +52,7 @@ describe("the native price behind the pre-sign guard", () => {
     expect(source).toBe(polygon.nativeUsdEnv);
   });
 
-  it("admits it does not know rather than falling back to a constant", async () => {
+  it("returns unknown rather than falling back to a constant", async () => {
     stubPriceFeed({ error: "price_feed_unavailable" }, false);
     const agent = await AiFinPayAgent.fromSeed(SEED);
     const { usd, source } = await (agent as any).nativeUsdFor(polygon);
@@ -70,29 +60,39 @@ describe("the native price behind the pre-sign guard", () => {
     expect(source).toBe("unknown");
   });
 
-  it("does not block a payment on a price it could not obtain", async () => {
+  it("fails closed when a payment cannot be valued", async () => {
     stubPriceFeed({ error: "price_feed_unavailable" }, false);
     const agent = await AiFinPayAgent.fromSeed(SEED);
     agent.setBudget({ per_call_usd: 0.01 });
-    // NaN in means "no basis to judge", and a guard with no basis must let the
-    // caller proceed — blocking on an unjustified number is the original bug.
-    const allowed = (agent as any).guardChallengeAmount(Number.NaN, 0.001, "exa");
-    expect(allowed).toBe(true);
+    expect(() =>
+      (agent as any).guardChallengeAmount(Number.NaN, 0.001, "exa"),
+    ).toThrow(UntrustedPaymentTargetError);
+  });
+
+  it("fails closed when no positive declared cost or operator ceiling exists", async () => {
+    const agent = await AiFinPayAgent.fromSeed(SEED);
+    expect(() =>
+      (agent as any).guardChallengeAmount(0.001, 0, "exa"),
+    ).toThrow(UntrustedPaymentTargetError);
   });
 
   it("still blocks a genuine overcharge when the price is known", async () => {
     const agent = await AiFinPayAgent.fromSeed(SEED);
     agent.setBudget({ per_call_usd: 0.01 });
-    // $5.00 demanded against a $0.001 declared cost is not a rounding dispute.
     expect(() => (agent as any).guardChallengeAmount(5, 0.001, "exa")).toThrow();
+  });
+
+  it("allows a known value only when it is within a positive ceiling", async () => {
+    const agent = await AiFinPayAgent.fromSeed(SEED);
+    agent.setBudget({ per_call_usd: 0.01 });
+    expect((agent as any).guardChallengeAmount(0.005, 0.004, "exa")).toBe(true);
   });
 });
 
 describe("an agent that cannot pay", () => {
-  // A client that answers the two reads the check makes, and nothing else.
   const clientWith = (balanceWei: bigint) => ({
     getBalance: async () => balanceWei,
-    getGasPrice: async () => 30_000_000_000n, // 30 gwei
+    getGasPrice: async () => 30_000_000_000n,
   });
 
   it("throws InsufficientFundsError instead of a viem internals dump", async () => {
@@ -103,12 +103,11 @@ describe("an agent that cannot pay", () => {
 
     expect(err).toBeInstanceOf(InsufficientFundsError);
     const e = err as InsufficientFundsError;
-    // The things an operator needs: which address, which chain, how much.
     expect(e.message).toContain(agent.evmAddress);
     expect(e.message).toContain("POL");
     expect(e.message).toContain("Polygon");
     expect(e.details?.available_wei).toBe("0");
-    expect(BigInt(e.details!.needed_wei)).toBeGreaterThan(10n ** 16n); // payment + gas
+    expect(BigInt(e.details!.needed_wei)).toBeGreaterThan(10n ** 16n);
   });
 
   it("says nothing when the balance covers payment and gas", async () => {
@@ -119,8 +118,6 @@ describe("an agent that cannot pay", () => {
   });
 
   it("treats an unreadable RPC as unknown, not as insufficient", async () => {
-    // Otherwise a flaky endpoint reports the agent as broke, and the operator
-    // funds an address that was never short.
     const broken = { getBalance: async () => { throw new Error("RPC down"); },
                      getGasPrice: async () => 30_000_000_000n };
     const agent = await AiFinPayAgent.fromSeed(SEED);
