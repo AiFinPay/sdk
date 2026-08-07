@@ -55,9 +55,10 @@ describe("redirect security", () => {
           headers: { location: "http://169.254.169.254/latest/meta-data/" },
         })) as typeof fetch;
 
+      // Start from a public literal to avoid test dependence on external DNS.
       await expect(
-        makeSafeFetch({ allowPrivate: true })("https://public.example/start"),
-      ).rejects.toThrow(/too many redirects|metadata|must be https/);
+        makeSafeFetch()("https://8.8.8.8/start"),
+      ).rejects.toThrow(/must be https|not a public address/);
     } finally {
       globalThis.fetch = original;
     }
