@@ -1,4 +1,4 @@
-name: Retire legacy auth helpers
+name: Security remediation patch
 
 on:
   push:
@@ -15,41 +15,90 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: security/audit-2026-08-06-remediation
-      - name: Remove generic-nonce signing surfaces
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Retire legacy generic nonce helpers and fail closed on unknown value
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
+          # Node legacy helper surface.
           p = Path('node/src/agent.ts')
           s = p.read_text()
-          old = '''  // ── x402 auth (AiFinPay-native helpers, kept for backwards compat) ────\n\n  async fetchNonce(): Promise<{ nonce: string; expires_at: string }> {\n    return this.json("GET", "/nonce") as Promise<{\n      nonce: string;\n      expires_at: string;\n    }>;\n  }\n\n  /** Build a fresh AiFinPay-native x402 header set. */\n  async authHeaders(): Promise<Record<string, string>> {\n    const { nonce } = await this.fetchNonce();\n    const msg = new TextEncoder().encode(\n      `AiFinPay-x402:${nonce}:${this.address}`,\n    );\n    const digest = await sha256(msg);\n    const sig = nacl.sign.detached(digest, this.secretKey);\n    return {\n      "x-agent-pubkey": this.address,\n      "x-nonce": nonce,\n      "x-signature": bs58.encode(sig),\n    };\n  }\n'''
-          new = '''  // ── x402 auth ────────────────────────────────────────────────────────\n\n  /**\n   * @deprecated Generic nonces are intentionally not signable. Use `fetch()` /\n   * `request()` so the AiFinPay facilitator can sign the server's request-bound\n   * v2 challenge (method + resource + expiry + value terms).\n   */\n  async fetchNonce(): Promise<never> {\n    throw new Error(\n      "Legacy /nonce flow retired: use the request-bound aifinpay-ed25519-v2 facilitator",\n    );\n  }\n\n  /** @deprecated Unbound `AiFinPay-x402:{nonce}:{agent}` signatures are retired. */\n  async authHeaders(): Promise<never> {\n    throw new Error(\n      "Legacy authHeaders() retired: use fetch()/request() with a bound 402 challenge",\n    );\n  }\n'''
-          if old not in s:
-              raise SystemExit('Node legacy auth helper block not found')
-          p.write_text(s.replace(old, new))
+          if 'AiFinPay-x402:${nonce}:${this.address}' in s:
+              pattern = re.compile(
+                  r'  // ── x402 auth \(AiFinPay-native helpers, kept for backwards compat\) ────.*?\n  // ── Seat / funding',
+                  re.S,
+              )
+              replacement = '''  // ── x402 auth ────────────────────────────────────────────────────────\n\n  /**\n   * @deprecated Generic nonces are intentionally not signable. Use `fetch()` /\n   * `request()` so the facilitator can sign the server's request-bound v2\n   * challenge (method + resource + expiry + value terms).\n   */\n  async fetchNonce(): Promise<never> {\n    throw new Error(\n      "Legacy /nonce flow retired: use the request-bound aifinpay-ed25519-v2 facilitator",\n    );\n  }\n\n  /** @deprecated Unbound generic nonce signatures are retired. */\n  async authHeaders(): Promise<never> {\n    throw new Error(\n      "Legacy authHeaders() retired: use fetch()/request() with a bound 402 challenge",\n    );\n  }\n\n  // ── Seat / funding'''
+              s2, count = pattern.subn(replacement, s, count=1)
+              if count != 1:
+                  raise SystemExit(f'Node legacy helper block replacement count={count}')
+              p.write_text(s2)
 
+          # Python legacy helper surface.
           p = Path('python/aifinpay/client.py')
           s = p.read_text()
-          start = s.find('    def fetch_nonce(')
-          end = s.find('\n    #', start)
-          if start < 0 or end < 0:
-              raise SystemExit('Python legacy auth helper block markers not found')
-          block = s[start:end]
-          if 'def auth_headers' not in block:
-              raise SystemExit('Python auth_headers not found in expected block')
-          new_block = '''    def fetch_nonce(self) -> None:\n        \"\"\"Deprecated: generic nonces cannot authorize protected resources.\"\"\"\n        raise RuntimeError(\n            \"Legacy /nonce flow retired: use request-bound aifinpay-ed25519-v2 auth\"\n        )\n\n    def auth_headers(self) -> None:\n        \"\"\"Deprecated: unbound AiFinPay-x402 signatures are retired.\"\"\"\n        raise RuntimeError(\n            \"Legacy auth_headers() retired: use the bound 402 facilitator flow\"\n        )\n'''
-          p.write_text(s[:start] + new_block + s[end:])
+          if 'AiFinPay-x402:{nonce}:{self.address}' in s:
+              pattern = re.compile(
+                  r'    # ── x402 auth \(AiFinPay native — kept for backwards compat\) ────────────.*?\n    # ── Funding / Seat',
+                  re.S,
+              )
+              replacement = '''    # ── x402 auth ─────────────────────────────────────────────────────\n\n    def _fetch_nonce(self) -> None:\n        \"\"\"Deprecated: generic nonces cannot authorize protected resources.\"\"\"\n        raise RuntimeError(\n            \"Legacy /nonce flow retired: use request-bound aifinpay-ed25519-v2 auth\"\n        )\n\n    def _sign_nonce(self, _nonce: str) -> None:\n        \"\"\"Deprecated: unbound generic nonce signatures are retired.\"\"\"\n        raise RuntimeError(\n            \"Legacy nonce signing retired: use the bound 402 facilitator flow\"\n        )\n\n    def auth_headers(self) -> None:\n        \"\"\"Deprecated: use the request-bound facilitator flow.\"\"\"\n        raise RuntimeError(\n            \"Legacy auth_headers() retired: use the bound 402 facilitator flow\"\n        )\n\n    # ── Funding / Seat'''
+              s2, count = pattern.subn(replacement, s, count=1)
+              if count != 1:
+                  raise SystemExit(f'Python legacy helper block replacement count={count}')
+              p.write_text(s2)
+
+          # Unified SDK C-2: unknown/missing value basis must never authorize an
+          # autonomous payment. A model/provider price may narrow a ceiling but
+          # the SDK must have a positive finite value basis before signing.
+          p = Path('node/src/unifiedAgent.ts')
+          s = p.read_text()
+          old_guard = '''  private guardChallengeAmount(estUsd: number, declaredCost: number, providerName: string): boolean {\n    if (!Number.isFinite(estUsd) || estUsd <= 0) return true; // can't estimate — don't block\n    const limits: number[] = [];\n    if (declaredCost > 0) limits.push(Math.max(declaredCost * 2, declaredCost + 0.05));\n    if (this.budgetCaps.per_call_usd !== undefined) limits.push(this.budgetCaps.per_call_usd);\n    if (!limits.length) return true; // no cap declared anywhere — caller opted out\n    const limit = Math.min(...limits);\n    if (estUsd <= limit) return true;\n    const err = new BudgetCapExceededError(\n      "per_call",\n      `bridge ${providerName} challenge demands ≈$${estUsd.toFixed(4)} on-chain, ` +\n        `above the allowed $${limit.toFixed(4)} (declared cost/per-call cap). ` +\n        `Set AIFINPAY_MATIC_USD / AIFINPAY_SOL_USD for a tighter estimate.`,\n    );\n    if ((this.budgetCaps.on_limit_exceeded ?? "throw") === "skip") return false;\n    throw err;\n  }'''
+          new_guard = '''  private guardChallengeAmount(estUsd: number, declaredCost: number, providerName: string): boolean {\n    if (!Number.isFinite(estUsd) || estUsd <= 0) {\n      throw new UntrustedPaymentTargetError(\n        `[PAY_VALUE_UNTRUSTED] cannot establish a positive USD value for ${providerName}; ` +\n          `autonomous payment is blocked until a trusted live price or explicit positive price is available`,\n      );\n    }\n    const limits: number[] = [];\n    if (Number.isFinite(declaredCost) && declaredCost > 0) {\n      limits.push(Math.max(declaredCost * 2, declaredCost + 0.05));\n    }\n    const operatorCap = this.budgetCaps.per_call_usd;\n    if (operatorCap !== undefined) {\n      if (!Number.isFinite(operatorCap) || operatorCap <= 0) {\n        throw new UntrustedPaymentTargetError(\n          `[PAY_VALUE_UNTRUSTED] configured per-call cap must be positive and finite`,\n        );\n      }\n      limits.push(operatorCap);\n    }\n    if (!limits.length) {\n      throw new UntrustedPaymentTargetError(\n        `[PAY_VALUE_UNTRUSTED] no positive declared cost or operator per-call ceiling for ${providerName}`,\n      );\n    }\n    const limit = Math.min(...limits);\n    if (estUsd <= limit) return true;\n    const err = new BudgetCapExceededError(\n      "per_call",\n      `bridge ${providerName} challenge demands ≈$${estUsd.toFixed(4)} on-chain, ` +\n        `above the allowed $${limit.toFixed(4)} (declared cost/per-call cap).`,\n    );\n    if ((this.budgetCaps.on_limit_exceeded ?? "throw") === "skip") return false;\n    throw err;\n  }'''
+          if old_guard in s:
+              s = s.replace(old_guard, new_guard, 1)
+          elif '[PAY_VALUE_UNTRUSTED] cannot establish a positive USD value' not in s:
+              raise SystemExit('guardChallengeAmount block not found')
+
+          s = s.replace(
+              'const solUsd   = parseFloat(process.env.AIFINPAY_SOL_USD ?? "200");',
+              'const solUsd   = parseFloat(process.env.AIFINPAY_SOL_USD ?? "");',
+          )
+          s = s.replace(
+              '// A guard that blocks on a number it cannot justify is worse than no guard,\n   * so an unknown price returns NaN and guardChallengeAmount declines to\n   * block. Overpayment protection is given up only in the case where we have\n   * no basis for it, which is the honest trade.',
+              '// An unknown price returns NaN. The signing guard treats that as an\n   * untrusted value state and fails closed: autonomous payment cannot proceed\n   * until a positive price can be established from a trusted source.',
+          )
+          s = s.replace(
+              '// NaN when no price is known — guardChallengeAmount then declines to\n      // block rather than blocking on a guess. See nativeUsdFor().',
+              '// NaN when no price is known — guardChallengeAmount fails closed.\n      // See nativeUsdFor().',
+          )
+          p.write_text(s)
           PY
-      - name: Assert retired signing string is absent from production SDK sources
+      - name: Assert unsafe patterns are gone
         run: |
-          if grep -R -n 'AiFinPay-x402:${nonce}' node/src python/aifinpay; then
-            echo 'Legacy signing format remains' >&2
-            exit 1
-          fi
-      - name: Commit auth retirement
+          ! grep -R -n 'AiFinPay-x402:${nonce}:${this.address}' node/src
+          ! grep -R -n 'AiFinPay-x402:{nonce}:{self.address}' python/aifinpay
+          ! grep -n 'AIFINPAY_SOL_USD ?? "200"' node/src/unifiedAgent.ts
+          ! grep -n 'can.t estimate.*don.t block' node/src/unifiedAgent.ts
+      - name: Validate source trees
+        run: |
+          python -m compileall -q python/aifinpay
+          cd node
+          npm ci
+          npm run build
+          npm test
+      - name: Commit remediation if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add node/src/agent.ts python/aifinpay/client.py
-          git commit -m "security: retire legacy generic nonce signing helpers"
+          git add node/src/agent.ts python/aifinpay/client.py node/src/unifiedAgent.ts
+          if git diff --cached --quiet; then
+            echo "Security source patch already applied"
+            exit 0
+          fi
+          git commit -m "security: fail closed on unknown payment value and retire legacy auth"
           git push origin HEAD:security/audit-2026-08-06-remediation
