@@ -12,7 +12,7 @@ import {
 
 function makeResp(
   status: number,
-  init: { headers?: Record<string, string>; body?: unknown } = {},
+  init: { headers?: Record<string, string>; body?: unknown; url?: string } = {},
 ): Response {
   const headers = new Headers(init.headers);
   let body: BodyInit | null = null;
@@ -26,7 +26,9 @@ function makeResp(
       body = String(init.body);
     }
   }
-  return new Response(body, { status, headers });
+  const response = new Response(body, { status, headers });
+  if (init.url) Object.defineProperty(response, "url", { value: init.url });
+  return response;
 }
 
 describe("detection", () => {
@@ -90,6 +92,43 @@ describe("detection", () => {
     await expect(detectFacilitator(r, "not-real")).rejects.toBeInstanceOf(
       UnsupportedFacilitatorError,
     );
+  });
+});
+
+describe("AiFinPay native auth origin binding", () => {
+  it("refuses a hostile 402 origin before obtaining a nonce or signing", async () => {
+    const r = makeResp(402, {
+      url: "https://evil.example/paid",
+      body: { protocol: "AiFinPay v5.3", "x-nonce": "attacker-nonce" },
+    });
+    const agent = Agent.new({ baseUrl: "https://aifinpay.io" });
+    const fetchSpy = vi.spyOn(agent, "fetchImpl");
+
+    await expect(new AiFinPayFacilitator().buildAuth(r, agent, {})).rejects.toBeInstanceOf(
+      UntrustedPaymentTargetError,
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("ignores responder nonces and obtains nonce only from the configured AiFinPay origin", async () => {
+    const r = makeResp(402, {
+      url: "https://aifinpay.io/paid",
+      body: { protocol: "AiFinPay v5.3", "x-nonce": "attacker-nonce" },
+    });
+    const agent = Agent.new({
+      baseUrl: "https://aifinpay.io",
+      fetchImpl: vi.fn(async (input: RequestInfo | URL) => {
+        expect(String(input)).toBe("https://aifinpay.io/nonce");
+        return new Response(JSON.stringify({ nonce: "trusted-nonce" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }) as typeof fetch,
+    });
+
+    const auth = await new AiFinPayFacilitator().buildAuth(r, agent, {});
+    expect(auth.headers?.["x-nonce"]).toBe("trusted-nonce");
+    expect(auth.headers?.["x-nonce"]).not.toBe("attacker-nonce");
   });
 });
 
