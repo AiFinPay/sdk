@@ -55,7 +55,8 @@ export function agentCallTool() {
         },
         cost: {
           type: "number",
-          description: "Optional override of the registry-quoted price (USD). Use to enforce a stricter budget cap.",
+          description:
+            "Optional per-call ceiling in USD. It may only reduce the operator's mandatory AIFINPAY_MAX_USD cap; it can never raise it.",
         },
       },
       required: ["provider"],
@@ -73,7 +74,6 @@ export async function runAgentCall(
   const provider = args.provider as string | undefined;
   const body     = args.body     as Record<string, unknown> | undefined;
   const method   = (args.method  as "GET" | "POST" | undefined) ?? "POST";
-  const cost     = args.cost     as number | undefined;
 
   if (!provider) {
     return {
@@ -81,6 +81,28 @@ export async function runAgentCall(
       content: [{ type: "text", text: "`provider` is required (e.g. 'exa', 'io-net')" }],
     };
   }
+
+  const operatorCapUsd = ctx.config.maxAmountUsd;
+  if (!Number.isFinite(operatorCapUsd) || operatorCapUsd <= 0) {
+    return errorResult(
+      "agent_call is disabled because no positive operator spend cap is configured",
+      "Set AIFINPAY_MAX_USD to a conservative positive value before enabling autonomous payments.",
+    );
+  }
+
+  const requestedCapUsd =
+    typeof args.cost === "number" && Number.isFinite(args.cost)
+      ? args.cost
+      : operatorCapUsd;
+
+  if (requestedCapUsd <= 0) {
+    return errorResult("cost must be a positive finite number when provided");
+  }
+
+  // Tool input is model-controlled. It may tighten the operator policy, never widen it.
+  // Passing the effective ceiling as `cost` also ensures guardChallengeAmount has a
+  // declared limit even when the model omits cost entirely.
+  const cost = Math.min(requestedCapUsd, operatorCapUsd);
 
   try {
     const resp = await ctx.agent.call({
@@ -125,7 +147,7 @@ export async function runAgentCall(
     const message = err instanceof Error ? err.message : String(err);
     const hint =
       message.toLowerCase().includes("budget")
-        ? "Tip: increase the per-call cost cap or use `agent_quote` to preview before paying."
+        ? "Tip: lower the requested per-call ceiling or increase AIFINPAY_MAX_USD only if the operator explicitly intends to allow larger payments."
         : message.toLowerCase().includes("revert") || message.toLowerCase().includes("insufficient")
           ? `Tip: ensure the EVM address ${ctx.agent.evmAddress} holds enough POL on Polygon for gas + payment.`
           : `Provider may be misconfigured. Check https://aifinpay.io/api/providers.`;
@@ -134,4 +156,11 @@ export async function runAgentCall(
       content: [{ type: "text", text: `agent_call failed: ${message}\n\n${hint}` }],
     };
   }
+}
+
+function errorResult(...lines: string[]) {
+  return {
+    isError: true,
+    content: lines.map((line) => ({ type: "text", text: line })),
+  };
 }
