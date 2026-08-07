@@ -2,17 +2,14 @@
   "$schema": "https://modelcontextprotocol.io/schemas/server.json",
   "name": "aifinpay",
   "version": "1.0.0",
-  "description": "Stripe for AI agents. Pay for any HTTP API in stablecoins or native tokens on Polygon and Solana mainnet with one MCP call. Non-custodial, on-chain settlement.",
-  "vendor": "CoinSecurities (SECCO)",
+  "description": "Non-custodial AiFinPay payment and quote tools for AI agents. Fund-moving paths are fail-closed unless operator spend limits, trusted pricing and canonical audited deployment targets are verified.",
+  "vendor": "AiFinPay",
   "license": "MIT",
   "homepage": "https://aifinpay.io",
   "repository": "https://github.com/AiFinPay/sdk",
   "icon": "https://aifinpay.io/favicon.png",
-  "categories": ["payments", "web3", "agent-tools"],
-  "tags": [
-    "payments", "ai-agents", "x402", "polygon", "solana",
-    "stablecoins", "usdc", "usdt", "stripe-for-ai", "non-custodial"
-  ],
+  "categories": ["payments", "agent-tools"],
+  "tags": ["payments", "ai-agents", "x402", "non-custodial", "payment-infrastructure"],
   "install": {
     "command": "npx",
     "args": ["@aifinpay/mcp"]
@@ -26,42 +23,39 @@
     }
   },
   "env": {
-    "AIFINPAY_AGENT_SECRET": "base58 Ed25519 secret (persistent agent identity; Solana + EVM addresses both derive from it)",
-    "AIFINPAY_MAX_USD": "hard cap per paid call (agent_call + payable_fetch), default 0.10",
-    "AIFINPAY_BASE_URL": "override the AiFinPay backend endpoint, default https://aifinpay.io"
+    "AIFINPAY_AGENT_SECRET": "local agent wallet credential; omit only for an unfunded ephemeral testing identity",
+    "AIFINPAY_MAX_USD": "mandatory positive finite operator ceiling for fund-moving tools",
+    "AIFINPAY_BASE_URL": "trusted AiFinPay origin, default https://aifinpay.io"
   },
   "tools": [
     {
       "name": "agent_call",
-      "description": "Registry-resolved paid call to a named provider (exa, io-net, venice, ...). Settles on-chain, returns the upstream response + tx hash."
-    },
-    {
-      "name": "agent_claim_self",
-      "description": "Attach this agent to a user's AiFinPay account via magic-link + key signature."
+      "description": "Registry-resolved provider call. Payment is refused unless operator spend limits and the canonical payment target pass all trust checks."
     },
     {
       "name": "payable_fetch",
-      "description": "Fetch any URL; auto-settle 402 on-chain and retry. Returns the gated response body."
+      "description": "Fetch a URL and handle a supported 402 only when request-bound authorization, value and target validation all pass."
     },
     {
       "name": "agent_address",
-      "description": "Return the agent's wallet addresses (Polygon + Solana, for funding)."
+      "description": "Return locally derived wallet identities. No funds move."
     },
     {
       "name": "agent_quote",
-      "description": "Get a price quote for a 402-gated endpoint without paying."
+      "description": "Inspect a 402 quote without paying."
     },
     {
       "name": "pay_with_split",
-      "description": "On-chain instructions for a payment through the splitter contract for B2B endpoints (atomic fee-on-top split)."
+      "description": "Fee-on-top settlement tool. Legacy fee-inclusive splitter versions and not-yet-audited deployments are rejected."
     },
     {
       "name": "quote_split",
-      "description": "Pure-view fee breakdown for an atomic split payment."
+      "description": "Preview fee-on-top payment components without signing."
     }
   ],
-  "live_evidence": [
-    { "chain": "polygon", "use_case": "Exa search", "tx": "0xeb13c5ed59c8700" },
-    { "chain": "polygon", "use_case": "io.net Llama-3.3-70B, $0.025", "tx": "0x7c6ca0ff129f0a" }
+  "production_support_policy": "A chain or asset is production-supported only when the exact published artifact is mapped to the canonical deployment registry, runtime-verified, covered by reproducible E2E tests and approved by the final security audit.",
+  "historical_evidence": [
+    { "chain": "polygon", "use_case": "historical Exa paid search", "tx": "0xeb13c5ed59c8700", "current_support_proof": false },
+    { "chain": "polygon", "use_case": "historical io.net inference", "tx": "0x7c6ca0ff129f0a", "current_support_proof": false }
   ]
 }
