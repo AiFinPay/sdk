@@ -14,6 +14,9 @@ export class SeatNotFoundError extends AiFinPayError {}
 /** The 402 response did not match any known facilitator flavor. */
 export class UnsupportedFacilitatorError extends X402Error {}
 
+/** Payment metadata did not resolve to a trusted, canonical target. */
+export class UntrustedPaymentTargetError extends X402Error {}
+
 /** Required payment exceeds the caller's maxAmountUsd budget. */
 export class PaymentTooExpensiveError extends X402Error {}
 

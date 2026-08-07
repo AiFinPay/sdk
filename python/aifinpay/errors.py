@@ -18,6 +18,10 @@ class UnsupportedFacilitatorError(X402Error):
     """The 402 response did not match any known facilitator flavor."""
 
 
+class UntrustedPaymentTargetError(X402Error):
+    """Payment metadata did not resolve to a trusted canonical target."""
+
+
 class PaymentTooExpensiveError(X402Error):
     """Required payment exceeds the caller's max_amount_usd budget."""
 

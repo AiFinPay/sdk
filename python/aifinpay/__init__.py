@@ -27,6 +27,7 @@ from .errors import (
     PaymentTooExpensiveError,
     SeatNotFoundError,
     UnsupportedFacilitatorError,
+    UntrustedPaymentTargetError,
     X402Error,
 )
 from .facilitators import (
@@ -61,7 +62,7 @@ def __getattr__(name: str):
         return getattr(unified_agent, name)
     raise AttributeError(name)
 
-__version__ = "1.0.0"
+__version__ = "1.3.1"
 __all__ = [
     "Agent",
     "AiFinPayAgent",
@@ -72,6 +73,7 @@ __all__ = [
     "SeatNotFoundError",
     "X402Error",
     "UnsupportedFacilitatorError",
+    "UntrustedPaymentTargetError",
     "PaymentTooExpensiveError",
     "FacilitatorNotImplementedError",
     "PayOptions",

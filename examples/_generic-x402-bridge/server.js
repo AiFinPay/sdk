@@ -21,11 +21,9 @@ import { createPublicClient, http, parseEventLogs, getAddress, isAddress } from 
 import { polygon } from "viem/chains";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { verifySolanaPayment } from "../exa-x402-bridge/solana-verify.js";
-import { canonicalRequestHash, requestMatchesOrder } from "../exa-x402-bridge/request-binding.js";
 import {
   putOrder,
   hasOrder,
-  getOrder,
   consumeOrder,
   isTxConsumed,
   claimTxLease,
@@ -121,31 +119,13 @@ const SPLITTER_EVENT_ABI = [{
 
 const client = createPublicClient({ chain: polygon, transport: http(POLYGON_RPC) });
 
-/**
- * What this request is, for the purpose of being paid for.
- *
- * Computed identically when the 402 is issued and when the payment comes back,
- * so the two can be compared. Headers are excluded on purpose — authentication
- * and tracing legitimately differ between the two calls, and rejecting on them
- * would break honest retries while adding nothing.
- */
-function requestHashOf(req) {
-  return canonicalRequestHash({ method: req.method, path: req.path, body: req.body });
-}
-
 function issueOrderId() {
   return `${SLUG}-${crypto.randomUUID().slice(0, 18)}`;
 }
 
-async function challenge402(res, req) {
+async function challenge402(res) {
   const orderId = issueOrderId();
-  // Binding the order to the request is what stops a quote taken for a cheap
-  // call from being redeemed for an expensive one. This is the scaffold every
-  // new provider is cut from, so an unbound order id here becomes an unbound
-  // order id in each of them: whatever the upstream charges by — tokens,
-  // results, seconds of audio — the flat price is quoted once and the retry
-  // decides how much it actually buys.
-  await putOrder(orderId, "", req ? requestHashOf(req) : undefined);
+  await putOrder(orderId, "");
   const totalWei    = BigInt(PRICE_WEI);
   const treasuryAmt = (totalWei * 100n) / 10000n;
   const ipAmt       = (totalWei * 1n)   / 10000n;
@@ -432,17 +412,8 @@ app.post(ROUTE_PATH, challengeLimiter, async (req, res) => {
   const solanaTx = req.get("x-solana-tx");
   if (solanaTx && BRIDGE_MERCHANT_SOLANA) {
     const orderId = req.get("x-order-id");
-    if (!orderId) return challenge402(res, req);
-    const order = await getOrder(orderId);
-    if (!order) return res.status(409).json({ error: "unknown_or_expired_order_id" });
-    if (!requestMatchesOrder(order.requestHash, requestHashOf(req)).ok) {
-      // Refused before the on-chain check and before upstream: the payment is
-      // real, it is simply not for this request.
-      return res.status(409).json({
-        error:  "proof_mismatch",
-        detail: "This order was issued for a different request. Request a new 402 for the body you are sending.",
-      });
-    }
+    if (!orderId) return challenge402(res);
+    if (!(await hasOrder(orderId))) return res.status(409).json({ error: "unknown_or_expired_order_id" });
     const verifiedSol = await verifySolanaTx(solanaTx, orderId);
     if (!verifiedSol.ok) return res.status(402).json({ error: "payment_verification_failed", detail: verifiedSol.reason });
     // Same claim-before-upstream rule as the EVM branch below. Guarding only
@@ -463,15 +434,8 @@ app.post(ROUTE_PATH, challengeLimiter, async (req, res) => {
   // 3. Legacy AiFinPay pay-matic path (native POL)
   const txHash  = req.get("x-tx-hash");
   const orderId = req.get("x-order-id");
-  if (!txHash || !orderId) return challenge402(res, req);
-  const order = await getOrder(orderId);
-  if (order && !requestMatchesOrder(order.requestHash, requestHashOf(req)).ok) {
-    return res.status(409).json({
-      error:  "proof_mismatch",
-      detail: "This order was issued for a different request. Request a new 402 for the body you are sending.",
-    });
-  }
-  if (!order) {
+  if (!txHash || !orderId) return challenge402(res);
+  if (!(await hasOrder(orderId))) {
     return res.status(409).json({ error: "unknown_or_expired_order_id", detail: `Order "${orderId}" was not issued by this bridge or has expired.` });
   }
   const verified = await verifyTx(txHash, orderId);
