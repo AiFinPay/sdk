@@ -12,6 +12,7 @@ from aifinpay.errors import (
     FacilitatorNotImplementedError,
     PaymentTooExpensiveError,
     UnsupportedFacilitatorError,
+    UntrustedPaymentTargetError,
 )
 from aifinpay.facilitators import (
     AiFinPayFacilitator,
@@ -20,9 +21,10 @@ from aifinpay.facilitators import (
 )
 
 
-def _resp(status: int, *, headers=None, body=None) -> requests.Response:
+def _resp(status: int, *, headers=None, body=None, url: str = "") -> requests.Response:
     r = requests.Response()
     r.status_code = status
+    r.url = url
     if headers:
         for k, v in headers.items():
             r.headers[k] = v
@@ -41,7 +43,6 @@ def _resp(status: int, *, headers=None, body=None) -> requests.Response:
 
 
 def test_aifinpay_detects_protocol_field():
-    """Real production 402 body — fingerprint via `protocol: "AiFinPay vX"`."""
     resp = _resp(
         402,
         body={
@@ -58,8 +59,6 @@ def test_aifinpay_detects_protocol_field():
 
 
 def test_aifinpay_fallback_fingerprint_without_protocol():
-    """If a proxy strips `protocol`, the agreement_hash + treasury_vault pair
-    is still a strong signal."""
     resp = _resp(
         402,
         body={
@@ -78,26 +77,6 @@ def test_aifinpay_does_not_match_non_402():
 def test_aifinpay_does_not_match_random_402_body():
     resp = _resp(402, body={"error": "pay up"})
     assert AiFinPayFacilitator.detect(resp) is False
-
-
-def test_aifinpay_inband_nonce_extraction():
-    """The server returns `x-nonce` directly in the 402 body — SDK should
-    use it instead of GETting /nonce."""
-    resp = _resp(
-        402,
-        body={
-            "protocol": "AiFinPay v5.3",
-            "x-nonce": "in-band-nonce-xyz",
-            "agreement_hash": "h",
-            "treasury_vault": "t",
-        },
-    )
-    assert AiFinPayFacilitator._inband_nonce(resp) == "in-band-nonce-xyz"
-
-
-def test_aifinpay_inband_nonce_absent():
-    resp = _resp(402, body={"protocol": "AiFinPay v5.3", "agreement_hash": "h"})
-    assert AiFinPayFacilitator._inband_nonce(resp) is None
 
 
 def test_coinbase_detects_payment_required_header():
@@ -144,8 +123,6 @@ def test_coinbase_budget_cap_blocks_expensive():
     resp = _resp(402, headers={"PAYMENT-REQUIRED": enc})
     agent = Agent.new()
     opts = PayOptions(max_amount_usd=0.10)
-    # Budget enforcement runs before NotImplemented — caller learns
-    # "this is too expensive" without learning we can't pay it anyway.
     with pytest.raises(PaymentTooExpensiveError):
         CoinbaseX402Facilitator().build_auth(resp, agent, opts)
 
@@ -157,7 +134,7 @@ def test_coinbase_malformed_header_raises():
         CoinbaseX402Facilitator().build_auth(resp, agent, PayOptions())
 
 
-# ── aifinpay adapter signing ─────────────────────────────────────────────
+# ── aifinpay adapter signing / C-8 ──────────────────────────────────────
 
 
 def test_aifinpay_signature_is_deterministic_for_same_nonce():
@@ -165,7 +142,7 @@ def test_aifinpay_signature_is_deterministic_for_same_nonce():
     fac = AiFinPayFacilitator()
     sig_a = fac._sign_nonce(agent, "abc-123")
     sig_b = fac._sign_nonce(agent, "abc-123")
-    assert sig_a == sig_b  # Ed25519 is deterministic per (key, msg)
+    assert sig_a == sig_b
 
 
 def test_aifinpay_signature_changes_with_nonce():
@@ -174,6 +151,60 @@ def test_aifinpay_signature_changes_with_nonce():
     sig_a = fac._sign_nonce(agent, "nonce-1")
     sig_b = fac._sign_nonce(agent, "nonce-2")
     assert sig_a != sig_b
+
+
+def test_aifinpay_refuses_hostile_origin_before_nonce_request(monkeypatch):
+    agent = Agent.new()
+    fac = AiFinPayFacilitator(base_url="https://aifinpay.io")
+    called = False
+
+    def should_not_call(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("nonce endpoint must not be called for hostile origin")
+
+    monkeypatch.setattr(agent._session, "get", should_not_call)
+    resp = _resp(
+        402,
+        url="https://evil.example/paid",
+        body={"protocol": "AiFinPay v5.3", "x-nonce": "attacker-nonce"},
+    )
+    with pytest.raises(UntrustedPaymentTargetError, match="refusing legacy AiFinPay signature"):
+        fac.build_auth(resp, agent, PayOptions())
+    assert called is False
+
+
+def test_aifinpay_ignores_inband_nonce_and_uses_trusted_nonce(monkeypatch):
+    agent = Agent.new()
+    fac = AiFinPayFacilitator(base_url="https://aifinpay.io")
+
+    def trusted_nonce(url, **kwargs):
+        assert url == "https://aifinpay.io/nonce"
+        assert kwargs.get("allow_redirects") is False
+        return _resp(200, url=url, body={"nonce": "trusted-nonce"})
+
+    monkeypatch.setattr(agent._session, "get", trusted_nonce)
+    resp = _resp(
+        402,
+        url="https://aifinpay.io/paid",
+        body={"protocol": "AiFinPay v5.3", "x-nonce": "attacker-nonce"},
+    )
+    auth = fac.build_auth(resp, agent, PayOptions())
+    assert auth["headers"]["x-nonce"] == "trusted-nonce"
+    assert auth["headers"]["x-nonce"] != "attacker-nonce"
+
+
+def test_aifinpay_nonce_redirect_is_rejected(monkeypatch):
+    agent = Agent.new()
+    fac = AiFinPayFacilitator(base_url="https://aifinpay.io")
+
+    def redirected(url, **_kwargs):
+        return _resp(302, url=url, headers={"Location": "https://evil.example/nonce"})
+
+    monkeypatch.setattr(agent._session, "get", redirected)
+    resp = _resp(402, url="https://aifinpay.io/paid", body={"protocol": "AiFinPay v5.3"})
+    with pytest.raises(UntrustedPaymentTargetError, match="nonce endpoint redirected"):
+        fac.build_auth(resp, agent, PayOptions())
 
 
 # ── agent ergonomics ────────────────────────────────────────────────────
