@@ -9,7 +9,6 @@ import { payableFetchTool, runPayableFetch } from "./tools/payable-fetch.js";
 import { agentAddressTool, runAgentAddress } from "./tools/agent-address.js";
 import { agentQuoteTool, runAgentQuote } from "./tools/agent-quote.js";
 import { agentCallTool, runAgentCall } from "./tools/agent-call.js";
-import { agentClaimSelfTool, runAgentClaimSelf } from "./tools/agent-claim-self.js";
 import {
   payWithSplitTool,
   runPayWithSplit,
@@ -23,16 +22,16 @@ import {
  * Returned server is unstarted — caller wires up a transport (stdio, SSE,
  * etc.) via the official `@modelcontextprotocol/sdk` package.
  *
- * As of 0.1.0-alpha.3 the wrapped identity is `AiFinPayAgent` — dual-chain
- * (Solana base58 pubkey AND Polygon EVM address from one secret). Tools
- * that previously called legacy `Agent` methods now reach them via
- * `agent.inner.*`.
+ * Account attachment intentionally does NOT accept user login/magic-link
+ * bearer credentials. The retired `agent_claim_self` flow established a full
+ * user session inside an autonomous tool. Ownership binding now happens via
+ * the dashboard's address-specific challenge/claim flow.
  */
 export async function createServer(config: McpConfig = {}) {
   const log = config.logFn ?? defaultLog;
 
   // Agent identity: load from env secret if provided, else generate one
-  // and print to stderr so the human knows what to fund.
+  // and print only the public identities. Never log private key material.
   const agent = config.agentSecretB58
     ? await AiFinPayAgent.fromSolanaSecret(config.agentSecretB58, {
         baseUrl:   config.baseUrl,
@@ -43,14 +42,6 @@ export async function createServer(config: McpConfig = {}) {
           baseUrl:   config.baseUrl,
           timeoutMs: config.timeoutMs,
         });
-        // NEVER log private key material. stderr is captured by Docker,
-        // journald, CI logs, support bundles and monitoring, so printing the
-        // secret here leaked it into all of them.
-        //
-        // The old message also promised something untrue: this agent comes
-        // from AiFinPayAgent.new(), whose EVM key is independent of the Solana
-        // key. Saving the Solana secret would NOT restore the EVM address
-        // printed below, so anything funded here would be unreachable.
         log(
           "warn",
           `[aifinpay-mcp] no AIFINPAY_AGENT_SECRET set — generated an EPHEMERAL, NON-RECOVERABLE agent.\n` +
@@ -63,17 +54,19 @@ export async function createServer(config: McpConfig = {}) {
         return a;
       })();
 
-  // AIFINPAY_MAX_USD is the documented "hard cap on a single payment".
-  // payable_fetch enforces it via PayOptions, but agent_call settles through
-  // AiFinPayAgent.call() which only honours the agent's budget caps — wire
-  // the cap there too, otherwise the primary tool has NO runaway protection.
-  if (config.maxAmountUsd !== undefined && Number.isFinite(config.maxAmountUsd)) {
+  // Operator ceiling is applied to the unified agent. Individual fund-moving
+  // tools also enforce a positive finite cap before they can authorize value.
+  if (
+    config.maxAmountUsd !== undefined &&
+    Number.isFinite(config.maxAmountUsd) &&
+    config.maxAmountUsd > 0
+  ) {
     agent.setBudget({ per_call_usd: config.maxAmountUsd });
     log("info", `[aifinpay-mcp] per-call cap: $${config.maxAmountUsd} (AIFINPAY_MAX_USD)`);
   } else {
     log(
       "warn",
-      "[aifinpay-mcp] AIFINPAY_MAX_USD not set — agent_call/payable_fetch have NO per-payment cap. Strongly recommended.",
+      "[aifinpay-mcp] no positive AIFINPAY_MAX_USD configured — fund-moving tools will fail closed.",
     );
   }
 
@@ -96,7 +89,6 @@ export async function createServer(config: McpConfig = {}) {
       tools: [
         agentAddressTool(),
         agentCallTool(),
-        agentClaimSelfTool(),
         payableFetchTool(),
         agentQuoteTool(),
         payWithSplitTool(),
@@ -113,8 +105,6 @@ export async function createServer(config: McpConfig = {}) {
         return runAgentAddress(ctx, args ?? {});
       case "agent_call":
         return runAgentCall(ctx, args ?? {});
-      case "agent_claim_self":
-        return runAgentClaimSelf(ctx, args ?? {});
       case "payable_fetch":
         return runPayableFetch(ctx, args ?? {});
       case "agent_quote":
