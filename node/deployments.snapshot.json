@@ -1,0 +1,61 @@
+{
+  "schema": "aifinpay-sdk-payment-targets/v1",
+  "source": {
+    "repository": "AiFinPay/knowledge-vault",
+    "path": "docs/10-projects/aifinpay/evidence/deployments.json",
+    "commit": "c4829c19e711d9509bb0a06575375a60ece3229f",
+    "source_precedence": "deployed bytecode and verified deployment evidence"
+  },
+  "fee_model_observed_on_deployed_v11_v12": "fee-inclusive",
+  "fee_model_target": "fee-on-top-v1.3",
+  "targets": {
+    "polygon": {
+      "chainId": 137,
+      "version": "1.2",
+      "splitter": "0xbD1fa5453f212F096c0213788a645eC597FB4DDe",
+      "treasury": "0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e",
+      "treasuryBps": 100,
+      "ipCreatorBps": 1
+    },
+    "base": {
+      "chainId": 8453,
+      "version": "1.1",
+      "splitter": "0x8Ad9830D16b1f10333866a3f38C949CbB19f4BAD",
+      "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+      "treasuryBps": 100,
+      "ipCreatorBps": 1
+    },
+    "optimism": {
+      "chainId": 10,
+      "version": "1.2",
+      "splitter": "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74",
+      "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+      "treasuryBps": 100,
+      "ipCreatorBps": 1
+    },
+    "unichain": {
+      "chainId": 130,
+      "version": "1.1",
+      "splitter": "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB",
+      "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+      "treasuryBps": 100,
+      "ipCreatorBps": 1
+    },
+    "botchain": {
+      "chainId": 677,
+      "version": "1.2",
+      "splitter": "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
+      "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+      "treasuryBps": 100,
+      "ipCreatorBps": 1
+    },
+    "xrplevm": {
+      "chainId": 1440000,
+      "version": "1.2",
+      "splitter": "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
+      "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+      "treasuryBps": 100,
+      "ipCreatorBps": 1
+    }
+  }
+}
