@@ -777,7 +777,7 @@ class AiFinPayAgent:
         order_id = validated["order_id"]
         total_wei = validated["total_wei"]
 
-        matic_usd = float(os.environ.get("AIFINPAY_MATIC_USD", "0.70"))
+        matic_usd = float(os.environ["AIFINPAY_MATIC_USD"])
         _guard_challenge_usd(total_wei / 1e18 * matic_usd, cost, full_url)
 
         nonce = w3.eth.get_transaction_count(self.evm_address)
@@ -790,7 +790,7 @@ class AiFinPayAgent:
             "value":    total_wei,
             "nonce":    nonce,
             "gasPrice": gas_price,
-            "chainId":  137,  # Polygon mainnet
+            "chainId":  w3.eth.chain_id,  # validated against canonical target before signing
         })
         # Estimate gas with a small buffer
         try:
@@ -837,7 +837,7 @@ class AiFinPayAgent:
             )
 
         payment = validate_solana_quote(ps, registered_merchant)
-        sol_usd = float(os.environ.get("AIFINPAY_SOL_USD", "200"))
+        sol_usd = float(os.environ["AIFINPAY_SOL_USD"])
         lamports_est = payment["total_lamports"]
         _guard_challenge_usd(lamports_est / 1e9 * sol_usd, cost, full_url)
 

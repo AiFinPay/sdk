@@ -1,7 +1,7 @@
 {
   "name": "@aifinpay/agent",
   "version": "1.7.1",
-  "description": "Unified agent-economy SDK for autonomous AI agents — chain-opaque AiFinPayAgent surface (call/openSession/balance/verify) over Solana and EVM execution environments (Polygon default; Base, Optimism, Unichain, BOT Chain, XRPL EVM splitter settlement).",
+  "description": "Unified agent payment SDK with fail-closed target validation. Settlement rails are enabled only when backed by canonical deployment data and passing E2E evidence.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
