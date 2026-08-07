@@ -1,0 +1,55 @@
+name: Retire legacy auth helpers
+
+on:
+  push:
+    branches:
+      - security/audit-2026-08-06-remediation
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: security/audit-2026-08-06-remediation
+      - name: Remove generic-nonce signing surfaces
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('node/src/agent.ts')
+          s = p.read_text()
+          old = '''  // ── x402 auth (AiFinPay-native helpers, kept for backwards compat) ────\n\n  async fetchNonce(): Promise<{ nonce: string; expires_at: string }> {\n    return this.json("GET", "/nonce") as Promise<{\n      nonce: string;\n      expires_at: string;\n    }>;\n  }\n\n  /** Build a fresh AiFinPay-native x402 header set. */\n  async authHeaders(): Promise<Record<string, string>> {\n    const { nonce } = await this.fetchNonce();\n    const msg = new TextEncoder().encode(\n      `AiFinPay-x402:${nonce}:${this.address}`,\n    );\n    const digest = await sha256(msg);\n    const sig = nacl.sign.detached(digest, this.secretKey);\n    return {\n      "x-agent-pubkey": this.address,\n      "x-nonce": nonce,\n      "x-signature": bs58.encode(sig),\n    };\n  }\n'''
+          new = '''  // ── x402 auth ────────────────────────────────────────────────────────\n\n  /**\n   * @deprecated Generic nonces are intentionally not signable. Use `fetch()` /\n   * `request()` so the AiFinPay facilitator can sign the server's request-bound\n   * v2 challenge (method + resource + expiry + value terms).\n   */\n  async fetchNonce(): Promise<never> {\n    throw new Error(\n      "Legacy /nonce flow retired: use the request-bound aifinpay-ed25519-v2 facilitator",\n    );\n  }\n\n  /** @deprecated Unbound `AiFinPay-x402:{nonce}:{agent}` signatures are retired. */\n  async authHeaders(): Promise<never> {\n    throw new Error(\n      "Legacy authHeaders() retired: use fetch()/request() with a bound 402 challenge",\n    );\n  }\n'''
+          if old not in s:
+              raise SystemExit('Node legacy auth helper block not found')
+          p.write_text(s.replace(old, new))
+
+          p = Path('python/aifinpay/client.py')
+          s = p.read_text()
+          start = s.find('    def fetch_nonce(')
+          end = s.find('\n    #', start)
+          if start < 0 or end < 0:
+              raise SystemExit('Python legacy auth helper block markers not found')
+          block = s[start:end]
+          if 'def auth_headers' not in block:
+              raise SystemExit('Python auth_headers not found in expected block')
+          new_block = '''    def fetch_nonce(self) -> None:\n        \"\"\"Deprecated: generic nonces cannot authorize protected resources.\"\"\"\n        raise RuntimeError(\n            \"Legacy /nonce flow retired: use request-bound aifinpay-ed25519-v2 auth\"\n        )\n\n    def auth_headers(self) -> None:\n        \"\"\"Deprecated: unbound AiFinPay-x402 signatures are retired.\"\"\"\n        raise RuntimeError(\n            \"Legacy auth_headers() retired: use the bound 402 facilitator flow\"\n        )\n'''
+          p.write_text(s[:start] + new_block + s[end:])
+          PY
+      - name: Assert retired signing string is absent from production SDK sources
+        run: |
+          if grep -R -n 'AiFinPay-x402:${nonce}' node/src python/aifinpay; then
+            echo 'Legacy signing format remains' >&2
+            exit 1
+          fi
+      - name: Commit auth retirement
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add node/src/agent.ts python/aifinpay/client.py
+          git commit -m "security: retire legacy generic nonce signing helpers"
+          git push origin HEAD:security/audit-2026-08-06-remediation
