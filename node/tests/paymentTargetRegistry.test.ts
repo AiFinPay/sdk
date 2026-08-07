@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { keccak256 } from "viem";
 import {
+  requireNativeUsdPrice,
   validateQuotedNativePayment,
   validateRuntimePaymentTarget,
   type QuotedNativePayment,
@@ -12,6 +13,18 @@ import { SPLITTER_DEPLOYMENTS } from "../src/unifiedAgent.js";
 const MERCHANT = "0x1111111111111111111111111111111111111111";
 const CODE = "0x6000" as const;
 const NOW = Date.parse("2026-08-05T00:00:00.000Z");
+const PRICE_ENV = "AIFINPAY_MATIC_USD";
+let originalPrice: string | undefined;
+
+beforeEach(() => {
+  originalPrice = process.env[PRICE_ENV];
+  process.env[PRICE_ENV] = "0.10";
+});
+
+afterEach(() => {
+  if (originalPrice === undefined) delete process.env[PRICE_ENV];
+  else process.env[PRICE_ENV] = originalPrice;
+});
 
 function target(overrides: Partial<TrustedPaymentTarget> = {}): TrustedPaymentTarget {
   return {
@@ -64,6 +77,36 @@ describe("canonical payment target registry", () => {
       totalWei: 100000n,
       version: "1.2",
     });
+  });
+
+  it("fails closed when the native/USD price is unavailable", () => {
+    delete process.env[PRICE_ENV];
+    expect(() => requireNativeUsdPrice(target())).toThrow("native_price_unavailable");
+    expect(() =>
+      validateQuotedNativePayment("polygon", quote(), target(), MERCHANT, NOW),
+    ).toThrow("native_price_unavailable");
+  });
+
+  it.each(["0", "-1", "NaN", "Infinity", "not-a-price"])(
+    "fails closed for invalid operator native/USD price %s",
+    (value) => {
+      process.env[PRICE_ENV] = value;
+      expect(() => validateQuotedNativePayment("polygon", quote(), target(), MERCHANT, NOW)).toThrow(
+        "native_price_unavailable",
+      );
+    },
+  );
+
+  it("requires every enabled target to declare its price policy", () => {
+    expect(() =>
+      validateQuotedNativePayment(
+        "polygon",
+        quote(),
+        target({ nativeUsdEnv: undefined }),
+        MERCHANT,
+        NOW,
+      ),
+    ).toThrow("native_price_policy_missing");
   });
 
   it.each([
