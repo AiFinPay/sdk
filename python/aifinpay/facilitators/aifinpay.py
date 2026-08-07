@@ -3,25 +3,39 @@ from __future__ import annotations
 
 import hashlib
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
 import base58
 import requests
 
 from .base import Facilitator, PayOptions
+from ..errors import UntrustedPaymentTargetError
 
 if TYPE_CHECKING:
     from ..client import Agent
 
 
+def _origin(url: str) -> tuple[str, str, int | None]:
+    parsed = urlsplit(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise UntrustedPaymentTargetError(
+            "[AIFINPAY_AUTH_UNTRUSTED] unable to determine response/base origin"
+        )
+    return parsed.scheme.lower(), parsed.hostname.lower(), parsed.port
+
+
 class AiFinPayFacilitator:
     """Adapter for the AiFinPay native x402 flow.
 
-    Wire format:
-        - 402 carries a JSON body with `program_id`, `manifesto`,
-          `agreement_hash`, `treasury_vault`, …
-        - Client retries with three headers:
-            x-agent-pubkey, x-nonce, x-signature
-        - Signature: Ed25519 over SHA-256("AiFinPay-x402:{nonce}:{pubkey}")
+    Security policy:
+        - never accept a nonce from the 402 responder;
+        - obtain the nonce only from the configured AiFinPay base URL;
+        - never emit the legacy bearer-style signature to another origin.
+
+    The production verifier still expects the legacy signature
+    ``AiFinPay-x402:{nonce}:{pubkey}``. Origin restriction closes the arbitrary
+    endpoint signing-oracle path while request-bound origin/resource/amount/
+    expiry signatures are implemented end-to-end on both client and verifier.
     """
 
     name = "aifinpay"
@@ -36,27 +50,34 @@ class AiFinPayFacilitator:
             return False
         if not isinstance(body, dict):
             return False
-        # AiFinPay 402 carries `protocol: "AiFinPay vX.Y"` plus either
-        # `agreement_hash` (most common) or `manifesto` ref.
         protocol = body.get("protocol", "")
         if isinstance(protocol, str) and protocol.startswith("AiFinPay"):
             return True
-        # Fallback fingerprint when an upstream proxy strips `protocol`.
         return ("agreement_hash" in body or "manifesto" in body) and (
             "treasury_vault" in body or "program_id" in body
         )
 
     def __init__(self, base_url: str = "https://aifinpay.io", timeout: int = 30):
-        # base_url is needed to fetch a fresh nonce. Defaults to the
-        # canonical AiFinPay backend; can be pointed at a self-hosted
-        # facilitator in tests.
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
     def _fetch_nonce(self, session: requests.Session) -> str:
-        r = session.get(f"{self.base_url}/nonce", timeout=self.timeout)
+        r = session.get(
+            f"{self.base_url}/nonce",
+            timeout=self.timeout,
+            allow_redirects=False,
+        )
+        if 300 <= r.status_code < 400:
+            raise UntrustedPaymentTargetError(
+                "[AIFINPAY_AUTH_UNTRUSTED] nonce endpoint redirected"
+            )
         r.raise_for_status()
-        return r.json()["nonce"]
+        nonce = r.json().get("nonce")
+        if not isinstance(nonce, str) or not nonce:
+            raise UntrustedPaymentTargetError(
+                "[AIFINPAY_AUTH_UNTRUSTED] nonce endpoint returned no nonce"
+            )
+        return nonce
 
     @staticmethod
     def _sign_nonce(agent: "Agent", nonce: str) -> str:
@@ -71,30 +92,17 @@ class AiFinPayFacilitator:
         agent: "Agent",
         opts: PayOptions,
     ) -> dict:
-        # AiFinPay 402 means the agent has no live Seat PDA. The SDK
-        # cannot transparently "pay" — that requires submitting an
-        # on-chain reserve_seat tx through Solana. We sign whatever
-        # nonce the server gave us; if the server still 402s after that,
-        # the caller must fund a Seat first.
-        nonce = self._inband_nonce(resp) or self._fetch_nonce(agent._session)
+        response_url = getattr(resp, "url", "") or ""
+        if _origin(response_url) != _origin(self.base_url):
+            raise UntrustedPaymentTargetError(
+                f"[AIFINPAY_AUTH_UNTRUSTED] refusing legacy AiFinPay signature for {response_url}"
+            )
+
+        # C-8: the responder cannot choose bytes that the wallet signs.
+        nonce = self._fetch_nonce(agent._session)
         headers = {
             "x-agent-pubkey": agent.address,
             "x-nonce": nonce,
             "x-signature": self._sign_nonce(agent, nonce),
         }
         return {"headers": headers}
-
-    @staticmethod
-    def _inband_nonce(resp: requests.Response) -> str | None:
-        """Return the nonce the server included inside the 402 body, if any.
-
-        Saves a round-trip vs. always GETting /nonce.
-        """
-        try:
-            body = resp.json()
-        except ValueError:
-            return None
-        if not isinstance(body, dict):
-            return None
-        candidate = body.get("x-nonce") or body.get("nonce")
-        return candidate if isinstance(candidate, str) and candidate else None
