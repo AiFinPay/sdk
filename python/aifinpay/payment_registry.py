@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import math
+import os
 from typing import Any
 
 import base58
@@ -20,6 +22,7 @@ POLYGON_TARGET = {
     "treasury": "0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e",
     "treasury_bps": 100,
     "ip_creator_bps": 1,
+    "native_usd_env": "AIFINPAY_MATIC_USD",
     "valid_from": "2026-08-04T00:00:00+00:00",
     "valid_until": "2026-09-03T00:00:00+00:00",
     "enabled": True,
@@ -60,6 +63,21 @@ def _pubkey(value: Any, label: str) -> str:
         _reject(f"solana_{label}_invalid")
     if len(decoded) != 32 or base58.b58encode(decoded).decode("ascii") != value:
         _reject(f"solana_{label}_invalid")
+    return value
+
+
+def require_native_usd_price(target: dict) -> float:
+    """C-2: never let a USD-denominated spend guard fail open on unknown price."""
+    env_name = target.get("native_usd_env")
+    if not isinstance(env_name, str) or not env_name:
+        _reject("native_price_policy_missing")
+    raw = os.environ.get(env_name)
+    try:
+        value = float(raw) if raw is not None else float("nan")
+    except (TypeError, ValueError):
+        value = float("nan")
+    if not math.isfinite(value) or value <= 0:
+        _reject(f"native_price_unavailable:{env_name}")
     return value
 
 
@@ -125,6 +143,11 @@ def validate_polygon_quote(pm: dict, registered_merchant: str, *, now: datetime 
         _reject("legacy_v1_1_disabled")
     if now < valid_from or now >= valid_until:
         _reject("registry_entry_expired")
+
+    # No explicit operator price means no wallet signing. The old code used a
+    # stale $0.70 default and therefore mis-valued every payment.
+    require_native_usd_price(target)
+
     if pm.get("chain") != target["chain"]:
         _reject("chain_mismatch")
     if not _address(pm.get("splitter"), target["splitter"]):
