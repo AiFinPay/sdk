@@ -192,7 +192,7 @@ interface PayMaticChallenge {
     splitter:              string;
     /** Which B2BSplitter the address above is. Absent on older bridges, which
      *  is treated as "1.1" — the shape the entrypoint had before 2026-07-31. */
-    splitter_version?:     "1.1" | "1.2";
+    splitter_version?:     "1.1" | "1.2" | "1.3";
     merchant_wallet:       string;
     total_wei:             string;
     merchant_amount_wei?:  string;
@@ -224,11 +224,8 @@ interface PayMaticChallenge {
   instructions?: string[];
 }
 
-// v1.2 entrypoint. The signature was read off the deployed contract rather than
-// from a spec: selector 0x8f0122bb, confirmed against the mainnet proof payment
-// 0xbffcdbd2…72d3. The redeploy note describes it as "payNative taking a
-// bytes32 paymentId", which is true but incomplete — it takes four arguments,
-// and calling it with one produces a revert that looks like a contract fault.
+// v1.3 fee-on-top entrypoint. v1.1/v1.2 remain recognized only so
+// the validator can reject them explicitly; they may not reach signing.
 const SPLITTER_PAY_NATIVE_ABI = [
   {
     type: "function",
@@ -237,6 +234,7 @@ const SPLITTER_PAY_NATIVE_ABI = [
     inputs: [
       { type: "bytes32", name: "paymentId" },
       { type: "address", name: "merchant" },
+      { type: "uint256", name: "merchantAmount" },
       { type: "address", name: "ipCreator" },
       { type: "string",  name: "memo" },
     ],
@@ -1453,8 +1451,8 @@ export class AiFinPayAgent {
       if (!guarded) return null;
     }
 
-    // 2. Only the canonical v1.2 route can reach signing. v1.1 and dynamic
-    // server-selected ABIs are intentionally unavailable.
+    // 2. Only a canonical v1.3 fee-on-top quote can reach signing.
+    // v1.1/v1.2 and dynamic server-selected ABIs are intentionally unavailable.
     await this.assertCanAffordNative(publicClient, deployment, validatedPayment.totalWei);
     const txHash = await walletClient.writeContract({
       address:      validatedPayment.splitter,
@@ -1463,6 +1461,7 @@ export class AiFinPayAgent {
       args: [
         paymentIdFor(validatedPayment.orderId),
         validatedPayment.merchant,
+        validatedPayment.merchantAmountWei,
         validatedPayment.ipCreator,
         validatedPayment.orderId,
       ],
