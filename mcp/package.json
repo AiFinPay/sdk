@@ -58,7 +58,7 @@
   "bugs": "https://github.com/AiFinPay/sdk/issues",
   "dependencies": {
     "@aifinpay/agent": "^1.7.0",
-    "@modelcontextprotocol/sdk": "~1.29.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
     "bs58": "^6.0.0",
     "tweetnacl": "^1.0.3"
   },
