@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/mcp",
-  "version": "1.5.0",
+  "version": "1.6.0-rc.1",
   "description": "Pay-per-call MCP server for autonomous AI agents \u2014 registered-provider payments with fail-closed spend controls; settlement rails are enabled only after per-network E2E verification.",
   "type": "module",
   "main": "dist/index.js",

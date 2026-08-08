@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/agent",
-  "version": "1.8.0",
+  "version": "1.9.0-rc.1",
   "description": "Unified agent payment SDK with fail-closed target validation. Settlement rails are enabled only when backed by canonical deployment data and passing E2E evidence.",
   "type": "module",
   "main": "dist/index.js",
