@@ -45,6 +45,12 @@ import {
 } from "./errors.js";
 import { Agent, type AgentOptions } from "./agent.js";
 import {
+  aifp1Fetch,
+  Aifp1ReceiptCache,
+  type Aifp1Deps,
+  type Aifp1FetchOptions,
+} from "./aifp1.js";
+import {
   bridgeQuote     as crossChainQuote,
   bridgeExecute   as crossChainExecute,
   bridgeWaitForArrival,
@@ -58,6 +64,7 @@ import {
 import {
   validateQuotedNativePayment,
   validateRuntimePaymentTarget,
+  type QuotedNativePayment,
   type TrustedPaymentTarget,
 } from "./paymentRegistry.js";
 import {
@@ -1753,6 +1760,151 @@ export class AiFinPayAgent {
   }
 
   // ── Telemetry (opt-out) ─────────────────────────────────────────────────
+
+  // ── AIFP-1 merchant paywall (gateway.aifinpay.io) ───────────────────────
+  //
+  // The protocol lives in aifp1.ts; this is the wiring. Two things only the
+  // agent can supply: the on-chain settlement, and the budget caps — aifp1Fetch
+  // owns neither, exactly as call() owns them for the bridge flow.
+
+  private readonly _aifp1Cache = new Aifp1ReceiptCache();
+
+  /**
+   * The prepaid batches this agent is holding.
+   *
+   * Exposed because a batch is money the agent has already spent and has not
+   * finished using: an operator deciding whether to shut an agent down, or a
+   * test asserting that a receipt was reused, both need to see it. The entries
+   * contain bearer JWTs — treat them like keys, and do not log them.
+   */
+  get aifp1Receipts(): Aifp1ReceiptCache { return this._aifp1Cache; }
+
+  /**
+   * Settle a native-token splitter payment, v1.3 fee-on-top only.
+   *
+   * Shared by call() and the AIFP-1 flow so both reach the chain through the
+   * same gate. Everything signing-critical — splitter address, contract
+   * version, merchant, and each fee component — is resolved against the
+   * trusted registry by validateQuotedNativePayment and the deployed runtime
+   * is checked by validateRuntimePaymentTarget before any calldata is built.
+   *
+   * There is deliberately no version detection and no v1.1/v1.2 branch. The
+   * deployed fee-INCLUSIVE splitters pay the merchant less than the quoted
+   * merchant amount, so settling against them under a fee-on-top quote
+   * short-pays the merchant silently. A quote that does not describe a
+   * registered v1.3 route is refused rather than downgraded.
+   */
+  private async settleSplitterNative(p: {
+    chain:    SplitterChainName;
+    quote:    QuotedNativePayment;
+    merchant: string;
+  }): Promise<`0x${string}`> {
+    const deployment = SPLITTER_DEPLOYMENTS[p.chain];
+    if (!deployment) {
+      throw new AiFinPayError(
+        `No B2BSplitter deployment registered for chain "${p.chain}" — supported: ${Object.keys(SPLITTER_DEPLOYMENTS).join(", ")}`,
+      );
+    }
+    const validated = validateQuotedNativePayment(p.chain, p.quote, deployment, p.merchant);
+    const { publicClient, walletClient } = this.splitterClients(p.chain);
+    await validateRuntimePaymentTarget(publicClient, deployment);
+    await this.assertCanAffordNative(publicClient, deployment, validated.totalWei);
+
+    const txHash = await walletClient.writeContract({
+      address:      validated.splitter,
+      abi:          SPLITTER_PAY_NATIVE_ABI,
+      functionName: "payNative",
+      args: [
+        paymentIdFor(validated.orderId),
+        validated.merchant,
+        validated.merchantAmountWei,
+        validated.ipCreator,
+        validated.orderId,
+      ],
+      value: validated.totalWei,
+      chain: deployment.chain,
+      account: this.evmAccount,
+    });
+
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    if (receipt.status !== "success") {
+      throw new AiFinPayError(`${deployment.chain.name} tx reverted: ${txHash}`);
+    }
+    return txHash;
+  }
+
+  /**
+   * Fetch a paywalled URL, paying the AIFP-1 gateway if it asks.
+   *
+   *   const res = await agent.fetchPaid("https://gateway.aifinpay.io/acme/articles/2026/x");
+   *
+   * A URL that is not paywalled — or that answers a 402 belonging to some
+   * other protocol — comes back untouched and costs nothing. A paywalled one
+   * is quoted, settled on-chain, exchanged for a receipt and retried, and the
+   * receipt is kept: subsequent calls it covers cost a header rather than a
+   * transaction. See aifp1.ts for why that reuse is the entire design.
+   *
+   * Returns `null` on the same terms as call(): a budget cap was hit and
+   * `budgetCaps.on_limit_exceeded` is "skip".
+   */
+  async fetchPaid(
+    url:  string,
+    init: RequestInit = {},
+    opts: Aifp1FetchOptions & { splitter?: `0x${string}` } = {},
+  ): Promise<Response | null> {
+    const deps: Aifp1Deps = {
+      fetchImpl: this.inner.fetchImpl,
+      cache:     this._aifp1Cache,
+      // A 0x address, because AIFP agent policies are address-keyed
+      // (backend/aifp/agent-policy.js normalizeAddress) — a Solana pubkey here
+      // would silently opt the agent out of its owner's own limits.
+      agentId:   opts.agentId ?? this.evmAddress,
+      settle: (p) => this.settleSplitterNative({
+        // Polygon-only, and not by preference: /v1/pay verifies the settlement
+        // by reading the Splitter's Payment event, and that verifier implements
+        // Polygon alone (backend/aifp/verify-settlement.js — Solana returns
+        // notImplemented, anything else unsupported_chain). Settling elsewhere
+        // would move real money for a receipt that can never be issued.
+        chain: "polygon",
+        merchant: p.merchantWallet,
+        // The gateway states the amounts; the registry states the route. The
+        // splitter address and version are NOT taken from the gateway — it
+        // does not send them — so they come from this SDK's verified registry,
+        // and validateQuotedNativePayment still has to agree that every
+        // component matches that registry's fee-on-top model. A gateway still
+        // quoting the old fee-inclusive split fails there rather than here.
+        quote: {
+          chain:                 "polygon",
+          splitter:              opts.splitter ?? SPLITTER_DEPLOYMENTS.polygon.splitter,
+          splitter_version:      SPLITTER_DEPLOYMENTS.polygon.version,
+          merchant_wallet:       p.merchantWallet,
+          order_id:              p.orderId,
+          total_wei:             p.totalWei.toString(),
+          merchant_amount_wei:   p.merchantAmountWei?.toString(),
+          treasury_amount_wei:   p.treasuryAmountWei?.toString(),
+          ip_creator_amount_wei: p.ipCreatorAmountWei?.toString(),
+        },
+      }),
+      // The remediation branch replaced the file-backed reservation ledger
+      // with in-memory caps, so there is no reservation to resolve: checkBudget
+      // covers both per-call and daily, and onPaid records the spend once the
+      // money has actually moved.
+      checkPerCall: (usd) => this.checkBudget(usd),
+      reserveDaily: (usd) => Promise.resolve(this.checkBudget(usd) ? null : "skip"),
+      commit:  () => Promise.resolve(),
+      release: () => Promise.resolve(),
+      onPaid: ({ merchantId, amountUsd, txRef }) => {
+        this.spend24h.add(amountUsd);
+        if (this.telemetry) {
+          this.reportTelemetry({
+            kind: "aifp1", merchant: merchantId, chain: "polygon",
+            cost: amountUsd, tx: txRef,
+          });
+        }
+      },
+    };
+    return aifp1Fetch(deps, url, init, opts);
+  }
 
   private reportTelemetry(payload: Record<string, unknown>): void {
     // Fire-and-forget. No body content, only metadata.

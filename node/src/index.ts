@@ -61,6 +61,37 @@ export {
   SessionExpiredError,
 } from "./unifiedAgent.js";
 
+// ── AIFP-1 merchant paywall (gateway.aifinpay.io) ────────────────────────
+// The flow is normally reached as a method — `agent.fetchPaid(url)` — which
+// wires in the agent's own settlement and budget caps. The pieces below are
+// exported for callers who need to reason about a batch without making one:
+// inspect held receipts, ask whether a scope covers a path, or drive the
+// protocol from a wallet that is not an AiFinPayAgent.
+export {
+  aifp1Fetch,
+  Aifp1ReceiptCache,
+  scopeCovers,
+  prefixHint,
+  parseGatewayUrl,
+  idempotencyKeyFor,
+} from "./aifp1.js";
+export type {
+  Aifp1Scope,
+  Aifp1Challenge,
+  Aifp1Quote,
+  Aifp1PayResult,
+  Aifp1CachedReceipt,
+  Aifp1FetchOptions,
+  Aifp1Deps,
+} from "./aifp1.js";
+export {
+  Aifp1Error,
+  Aifp1QuoteError,
+  Aifp1PayError,
+  Aifp1SettlementUnsupportedError,
+  Aifp1ReceiptRejectedError,
+} from "./aifp1.js";
+
 // ── Cross-chain orchestration (Phase 1.5a — EVM↔EVM via LiFi) ────────────
 // Standalone primitives — also exposed as methods on AiFinPayAgent.
 // Use the methods (agent.bridgeQuote / agent.bridgeExecute) unless you
