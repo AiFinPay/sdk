@@ -1,4 +1,4 @@
-// Guards the v1.2 migration (audit C-01).
+// Inventories retired fee-inclusive deployments without enabling them.
 //
 // The bug this class of test exists to prevent is not "wrong address" but
 // "right address, wrong calldata": v1.2 renamed the native entrypoint and added
@@ -20,7 +20,7 @@ const V12 = {
   xrplevm:  "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
 } as const;
 
-describe("B2BSplitter v1.2 migration", () => {
+describe("legacy B2BSplitter deployment quarantine", () => {
   it("ships the audited v1.2 address on every migrated chain", () => {
     for (const [chain, address] of Object.entries(V12)) {
       const d = SPLITTER_DEPLOYMENTS[chain as keyof typeof V12];
@@ -37,11 +37,9 @@ describe("B2BSplitter v1.2 migration", () => {
     expect(SPLITTER_DEPLOYMENTS.unichain.enabled).toBe(false);
   });
 
-  it("quarantines deployments that are not controlled by approved multisig governance", () => {
-    expect(SPLITTER_DEPLOYMENTS.polygon.enabled).toBe(true);
-    for (const chain of ["optimism", "botchain", "xrplevm"] as const) {
-      expect(SPLITTER_DEPLOYMENTS[chain].version).toBe("1.2");
-      expect(SPLITTER_DEPLOYMENTS[chain].enabled).toBe(false);
+  it("quarantines every fee-inclusive v1.1/v1.2 deployment", () => {
+    for (const chain of Object.keys(SPLITTER_DEPLOYMENTS) as Array<keyof typeof SPLITTER_DEPLOYMENTS>) {
+      expect(SPLITTER_DEPLOYMENTS[chain].enabled, chain).toBe(false);
     }
   });
 

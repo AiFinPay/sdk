@@ -29,6 +29,7 @@ afterEach(() => {
 function target(overrides: Partial<TrustedPaymentTarget> = {}): TrustedPaymentTarget {
   return {
     ...SPLITTER_DEPLOYMENTS.polygon,
+    enabled: true,
     version: "1.3",
     runtimeCodeHash: keccak256(CODE),
     ...overrides,

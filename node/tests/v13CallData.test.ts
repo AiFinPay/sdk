@@ -100,7 +100,7 @@ describe("v1.3 calldata", () => {
 
     for (const version of ["1.1", "1.2"] as const) {
       expect(() =>
-        validateQuotedNativePayment("polygon", quote, { ...polygon, version }, MERCHANT),
+        validateQuotedNativePayment("polygon", quote, { ...polygon, enabled: true, version }, MERCHANT),
       ).toThrow(/fee_inclusive_splitter_disabled/);
     }
   });
@@ -122,7 +122,7 @@ describe("v1.3 calldata", () => {
           treasury_amount_wei: "10000000000000000",
           ip_creator_amount_wei: "100000000000000",
         },
-        { ...polygon, version: "1.3" },
+        { ...polygon, enabled: true, version: "1.3" },
         MERCHANT,
       ),
     ).toThrow(/function_signature_mismatch/);

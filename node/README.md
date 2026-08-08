@@ -2,13 +2,10 @@
 
 Non-custodial x402 payment client for autonomous AI agents on
 [AiFinPay](https://aifinpay.io) — canonical domain **aifinpay.io** (the
-legacy `aifinpay.company` host is retired). SDK settlement: since 1.3.0,
-direct fee-on-top splitter settlement (`AiFinPayAgent.call()`) is enabled on
-Polygon v1.2 (Safe-governed, native-token path), plus Solana;
-Base/Optimism/Unichain/BOT Chain/XRPL EVM remain inventoried but are blocked
-until v1.2, multisig governance and fresh registry evidence are complete;
-the backend-quoted invoice flow (`/api/b2b/pay-with-split`) remains
-Polygon + Solana. The protocol is live across 13 networks — see
+legacy `aifinpay.company` host is retired). HTTP 402 negotiation and identity
+remain available, but direct settlement is fail-closed in this release candidate.
+All inventoried v1.1/v1.2 EVM splitters are fee-inclusive, and Solana v0.6
+still requires a verified deployment before signing can be enabled. See
 [aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
 
 The Ed25519 keypair is generated locally with `tweetnacl` and never leaves

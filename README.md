@@ -7,19 +7,16 @@
 [![Site](https://img.shields.io/badge/site-aifinpay.io-black.svg)](https://aifinpay.io)
 [![MCP](https://img.shields.io/badge/MCP-compatible-purple.svg)](https://modelcontextprotocol.io)
 
-**Stripe for autonomous AI agents.** One line of code — `agent.pay(url)` —
-and your agent settles a real on-chain payment on Polygon or Solana
-mainnet, then receives the gated response. Non-custodial. Live since
-2026. Polygon facilitator compatible. Direct splitter settlement
-(Node SDK ≥ 1.7.1, `AiFinPayAgent.call()`) is currently enabled only for the
-Polygon v1.2 Safe-governed target; Base, Optimism, Unichain, BOT Chain and
-XRPL EVM are quarantined pending multisig/v1.2 registry evidence. The backend-quoted
-invoice flow remains Polygon + Solana.
+**Payment tooling for autonomous AI agents.** The SDK implements the HTTP 402
+challenge/authentication loop and non-custodial signing controls. Direct
+settlement is fail-closed in this release candidate: deployed v1.1/v1.2 EVM
+splitters are fee-inclusive, while Solana v0.6 is not yet deployed and verified.
+Network inventory and address support must not be read as live settlement support.
 
 > Canonical domain: **aifinpay.io** — the legacy `aifinpay.company` host is
 > retired; ignore any cached docs or install instructions pointing there
 > (including the old `@alpha` npm tag). Install plain `@aifinpay/agent` /
-> `@aifinpay/mcp` (latest). Protocol status + all 13 live networks:
+> `@aifinpay/mcp` (latest). Protocol and network inventory:
 > [aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
 
 ```bash

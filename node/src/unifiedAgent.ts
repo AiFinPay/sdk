@@ -76,7 +76,7 @@ import {
 
 /**
  * Chains the unified agent can settle on. "solana" uses the Anchor
- * deployed b2b_pay program; every other value is an EVM chain with a
+ * quarantined v0.6 b2b_pay_with_split candidate; every other value is an EVM chain with a
  * verified B2BSplitter deployment (see SPLITTER_DEPLOYMENTS below).
  * Additive union — "polygon" remains the EVM default.
  */
@@ -216,13 +216,18 @@ interface PayMaticChallenge {
   pay_solana?: {
     chain:                       "solana";
     program_id:                  string;
-    instruction:                 string;     // required "b2b_pay" (deployed IDL)
+    instruction:                 string;     // required "b2b_pay_with_split" (v0.6 candidate)
+    agent_pubkey:                string;
     merchant_wallet:             string;     // base58
     treasury:                    string;     // base58
+    ip_creator:                  string;     // treasury when creator fee is disabled
     merchant_amount_lamports:    string;
-    treasury_amount_lamports?:   string;
-    ip_creator_amount_lamports?: string;
-    total_lamports?:             string;
+    treasury_fee_lamports:       string;
+    ip_creator_fee_lamports:     string;
+    total_lamports:              string;
+    payment_id:                  string;     // 0x-prefixed 32-byte SHA-256
+    payment_receipt:             string;     // replay-protection PDA
+    creator_fee_enabled:         boolean;
     order_id:                    string;
     asset?:                      string;
     ttl_seconds?:                number;
@@ -332,7 +337,7 @@ export interface SplitterDeployment extends TrustedPaymentTarget {
 
 export const SPLITTER_DEPLOYMENTS: Record<SplitterChainName, SplitterDeployment> = {
   polygon: {
-    enabled:    true,
+    enabled:    false,
     version:    "1.2",
     chainId:    137,
     chain:      polygon,
@@ -1150,7 +1155,7 @@ export class AiFinPayAgent {
    *   4. Middle band → provider.preferred_chain.
    *   5. Fallback → first accepted chain.
    *
-   * Solana per-call is gated on the deployed `b2b_pay` instruction —
+   * Solana per-call is gated on the reviewed `b2b_pay_with_split` v0.6 instruction —
    * until then `solana` selection raises in `call()`.
    */
   private pickChain(provider: ProviderEntry, opts: CallOptions): ChainId {
@@ -1300,7 +1305,7 @@ export class AiFinPayAgent {
    * (generic native-token entrypoint) on any SPLITTER_DEPLOYMENTS chain —
    * polygon (default), base, optimism, unichain, botchain, xrplevm. Pass
    * `chain` in CallOptions to override (the provider must accept it).
-   * Solana settlement: deployed Anchor b2b_pay instruction.
+   * Solana settlement: quarantined Anchor v0.6 b2b_pay_with_split instruction.
    *
    * Returns `null` (instead of a `Response`) iff a budget cap was hit
    * AND budget.on_limit_exceeded is set to "skip" — the call is dropped
@@ -1363,7 +1368,7 @@ export class AiFinPayAgent {
       throw new X402Error(`bridge returned 402 with non-JSON body`);
     }
 
-    // ── Solana branch (deployed Anchor b2b_pay atomic split) ─────────────
+    // ── Solana branch (v0.6 candidate; validator remains fail-closed) ────
     if (chain === "solana") {
       if (!challenge.pay_solana) {
         throw new X402Error(
@@ -1376,6 +1381,7 @@ export class AiFinPayAgent {
       const validatedSolana = validateSolanaPaymentQuote(
         ps,
         provider.merchant_wallet,
+        this.inner.address,
       );
       // Guard: the bridge controls the challenge — verify the demanded
       // amount is in the same ballpark as the declared cost / caps before
@@ -1503,11 +1509,12 @@ export class AiFinPayAgent {
     return paidResp;
   }
 
-  // ── Solana b2b_pay — exact deployed Anchor IDL ────────────────────────
+  // ── Solana b2b_pay_with_split — exact v0.6 candidate IDL ──────────────
   //
   // Manual instruction encoding (no Anchor dep):
-  //   discriminator = sha256("global:b2b_pay")[:8]
-  //   args (Borsh)   = u64 total_lamports + string order_id
+  //   discriminator = sha256("global:b2b_pay_with_split")[:8]
+  //   args (Borsh)   = u64 merchant amount + [u8;32] payment ID
+  //                    + string order ID + bool creator flag
   //   accounts match idl/aifinpay_contract.json exactly.
   private async submitSolanaB2BPay(
     _ps: NonNullable<PayMaticChallenge["pay_solana"]>,
@@ -1517,6 +1524,7 @@ export class AiFinPayAgent {
 
     const programId = new PublicKey(SOLANA_PROGRAM_ID);
     const merchant  = new PublicKey(payment.merchant_wallet);
+    const creator   = new PublicKey(payment.ip_creator);
     const quotedTreasury = new PublicKey(payment.treasury);
 
     // Solana keypair from legacy Agent inner (tweetnacl 64-byte secret).
@@ -1527,69 +1535,66 @@ export class AiFinPayAgent {
       );
     }
 
-    // PDAs required by the deployed B2bPay account context.
+    // PDAs required by the v0.6 B2bPayWithSplit account context.
     const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], programId);
     const [vaultPda]  = PublicKey.findProgramAddressSync([Buffer.from("vault")],  programId);
-    const [passportPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("passport"), kp.publicKey.toBuffer()],
-      programId,
-    );
-    const [partnerPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("partner"), merchant.toBuffer()],
-      programId,
-    );
+    const receiptPda = new PublicKey(payment.payment_receipt);
 
     let infos;
     try {
       infos = await conn.getMultipleAccountsInfo([
-        programId, configPda, passportPda, partnerPda, vaultPda,
+        programId, configPda, vaultPda,
       ], "confirmed");
     } catch {
       throw new UntrustedPaymentTargetError("[PAY_TARGET_UNTRUSTED] solana_rpc_unavailable");
     }
-    const [programInfo, configInfo, passportInfo, partnerInfo, vaultInfo] = infos;
+    const [programInfo, configInfo, vaultInfo] = infos;
     if (!programInfo?.executable) {
       throw new UntrustedPaymentTargetError("[PAY_TARGET_UNTRUSTED] solana_program_not_executable");
     }
     for (const [label, info] of [
-      ["config", configInfo], ["passport", passportInfo],
-      ["partner", partnerInfo], ["vault", vaultInfo],
+      ["config", configInfo], ["vault", vaultInfo],
     ] as const) {
       if (!info || !info.owner.equals(programId)) {
         throw new UntrustedPaymentTargetError(`[PAY_TARGET_UNTRUSTED] solana_${label}_account_invalid`);
       }
     }
-    if (passportInfo!.data.length < 72 || vaultInfo!.data.length < 72) {
+    if (vaultInfo!.data.length < 72) {
       throw new UntrustedPaymentTargetError("[PAY_TARGET_UNTRUSTED] solana_account_data_invalid");
     }
     // Anchor discriminator (8) + owner/admin Pubkey (32) precede these keys.
-    const ipCreator = new PublicKey(passportInfo!.data.subarray(40, 72));
     const vaultTreasury = new PublicKey(vaultInfo!.data.subarray(40, 72));
     if (!vaultTreasury.equals(quotedTreasury)) {
       throw new UntrustedPaymentTargetError("[PAY_TARGET_UNTRUSTED] solana_treasury_mismatch");
     }
 
     // Instruction discriminator: Anchor convention sha256("global:<fn_name>")[:8].
-    const disc = createHash("sha256").update("global:b2b_pay").digest().subarray(0, 8);
+    const disc = createHash("sha256").update("global:b2b_pay_with_split").digest().subarray(0, 8);
 
-    // Borsh args: total payment (u64 LE) + order_id (u32 length + UTF-8).
+    // Borsh args: merchant amount + payment ID + order_id + creator flag.
     const amountBuf = Buffer.alloc(8);
-    amountBuf.writeBigUInt64LE(payment.totalLamports);
+    amountBuf.writeBigUInt64LE(payment.merchantAmountLamports);
     const orderBytes = Buffer.from(payment.order_id, "utf8");
     const orderLenBuf = Buffer.alloc(4);
     orderLenBuf.writeUInt32LE(orderBytes.length);
-    const data = Buffer.concat([disc, amountBuf, orderLenBuf, orderBytes]);
+    const data = Buffer.concat([
+      disc,
+      amountBuf,
+      payment.paymentId,
+      orderLenBuf,
+      orderBytes,
+      Buffer.from([payment.creatorFeeEnabled ? 1 : 0]),
+    ]);
 
     const ix = new TransactionInstruction({
       programId,
       keys: [
         { pubkey: configPda,             isSigner: false, isWritable: false },
-        { pubkey: passportPda,           isSigner: false, isWritable: true  },
-        { pubkey: partnerPda,            isSigner: false, isWritable: true  },
-        { pubkey: vaultPda,              isSigner: false, isWritable: true  },
+        { pubkey: vaultPda,              isSigner: false, isWritable: false },
         { pubkey: kp.publicKey,          isSigner: true,  isWritable: true  },
+        { pubkey: receiptPda,            isSigner: false, isWritable: true  },
         { pubkey: vaultTreasury,         isSigner: false, isWritable: true  },
-        { pubkey: ipCreator,             isSigner: false, isWritable: true  },
+        { pubkey: creator,               isSigner: false, isWritable: true  },
         { pubkey: merchant,              isSigner: false, isWritable: true  },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],

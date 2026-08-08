@@ -10,9 +10,9 @@ Per-call payment via `agent.call(provider=…)` does:
   1. Registry lookup at /api/providers (falls back to /providers)
   2. POST to the bridge → expect HTTP 402
   3. Build + sign + send the on-chain payment:
-       - Polygon  → validated B2BSplitter v1.2 payNative(paymentId, ...)
+       - Polygon  → validated B2BSplitter v1.3 fee-on-top payNative(paymentId, ...)
                     with msg.value = total_wei
-       - Solana   → validated b2b_pay(total_lamports, order_id)
+       - Solana   → quarantined v0.6 b2b_pay_with_split candidate
                     on program 5g9zWHF1…KFx2
   4. Retry the bridge POST with x-tx-hash + x-order-id (Polygon) or
      x-solana-tx + x-order-id (Solana)
@@ -123,8 +123,9 @@ SPLITTER_PAY_NATIVE_ABI = [{
     "inputs": [
         {"type": "bytes32", "name": "paymentId"},
         {"type": "address", "name": "merchant"},
+        {"type": "uint256", "name": "merchantAmount"},
         {"type": "address", "name": "ipCreator"},
-        {"type": "string",  "name": "memo"},
+        {"type": "string",  "name": "orderId"},
     ],
     "outputs": [],
 }]
@@ -133,7 +134,7 @@ SPLITTER_PAY_NATIVE_ABI = [{
 def payment_id_for(order_id: str) -> bytes:
     """Derive the on-chain paymentId from the quote's order id.
 
-    Deterministic on purpose: v1.2 rejects a paymentId it has already settled,
+    Deterministic on purpose: the splitter rejects a paymentId it has already settled,
     and that only prevents paying the same order twice if the id is bound to the
     order. A random id would satisfy the contract while defeating its purpose.
     A retry after a reverted transaction is still fine — a revert settles nothing.
@@ -142,7 +143,7 @@ def payment_id_for(order_id: str) -> bytes:
 
 
 # Anchor convention: discriminator = sha256("global:<fn_name>")[:8]
-B2B_PAY_DISC = hashlib.sha256(b"global:b2b_pay").digest()[:8]
+B2B_PAY_DISC = hashlib.sha256(b"global:b2b_pay_with_split").digest()[:8]
 
 
 # ── Provider / Challenge types (lightweight, dict-backed) ──────────────────
@@ -768,7 +769,7 @@ class AiFinPayAgent:
         w3 = self._web3()
         validated = validate_polygon_quote(pm, registered_merchant)
         validate_polygon_runtime(w3)
-        splitter_v12 = w3.eth.contract(
+        splitter_v13 = w3.eth.contract(
             address=validated["splitter"],
             abi=SPLITTER_PAY_NATIVE_ABI,
         )
@@ -782,8 +783,8 @@ class AiFinPayAgent:
 
         nonce = w3.eth.get_transaction_count(self.evm_address)
         gas_price = w3.eth.gas_price
-        fn = splitter_v12.functions.payNative(
-            payment_id_for(order_id), merchant, ip_creator, order_id
+        fn = splitter_v13.functions.payNative(
+            payment_id_for(order_id), merchant, validated["merchant_amount_wei"], ip_creator, order_id
         )
         tx = fn.build_transaction({
             "from":     self.evm_address,
@@ -823,7 +824,7 @@ class AiFinPayAgent:
             )
         return paid_resp
 
-    # ── Solana settlement (deployed Anchor b2b_pay) ──────────────────────
+    # ── Solana settlement (quarantined Anchor v0.6 candidate) ────────────
 
     def _settle_solana(self, full_url: str, challenge: dict, method: str,
                        body: Optional[dict], timeout: float,
@@ -836,7 +837,7 @@ class AiFinPayAgent:
                 f"set BRIDGE_MERCHANT_SOLANA. Use chain='polygon' instead."
             )
 
-        payment = validate_solana_quote(ps, registered_merchant)
+        payment = validate_solana_quote(ps, registered_merchant, self.solana_address)
         sol_usd = float(os.environ["AIFINPAY_SOL_USD"])
         lamports_est = payment["total_lamports"]
         _guard_challenge_usd(lamports_est / 1e9 * sol_usd, cost, full_url)
@@ -845,17 +846,15 @@ class AiFinPayAgent:
         merchant   = SolPubkey.from_string(payment["merchant_wallet"])
         quoted_treasury = SolPubkey.from_string(payment["treasury"])
         order_id   = payment["order_id"]
-        total_lamports = payment["total_lamports"]
+        merchant_amount_lamports = payment["merchant_amount_lamports"]
+        payment_id = payment["payment_id"]
+        creator_fee_enabled = payment["creator_fee_enabled"]
         agent_pubkey = self.sol_keypair.pubkey()
+        ip_creator = SolPubkey.from_string(payment["ip_creator"])
+        payment_receipt = SolPubkey.from_string(payment["payment_receipt"])
 
-        # PDAs and account order are exact matches for the deployed B2bPay IDL.
+        # PDAs and account order are exact matches for the v0.6 candidate IDL.
         config_pda, _ = SolPubkey.find_program_address([b"config"], program_id)
-        passport_pda, _ = SolPubkey.find_program_address(
-            [b"passport", bytes(agent_pubkey)], program_id,
-        )
-        partner_pda, _ = SolPubkey.find_program_address(
-            [b"partner", bytes(merchant)], program_id,
-        )
         vault_pda,  _ = SolPubkey.find_program_address([b"vault"],  program_id)
 
         def rpc_req(payload: dict) -> dict:
@@ -870,8 +869,7 @@ class AiFinPayAgent:
             account_resp = rpc_req({
                 "jsonrpc": "2.0", "id": 1, "method": "getMultipleAccounts",
                 "params": [[
-                    str(program_id), str(config_pda), str(passport_pda),
-                    str(partner_pda), str(vault_pda),
+                    str(program_id), str(config_pda), str(vault_pda),
                 ], {"encoding": "base64", "commitment": "confirmed"}],
             })
         except AiFinPayError as exc:
@@ -884,7 +882,7 @@ class AiFinPayAgent:
             )
         try:
             accounts = account_resp["result"]["value"]
-            program_info, config_info, passport_info, partner_info, vault_info = accounts
+            program_info, config_info, vault_info = accounts
         except (KeyError, TypeError, ValueError) as exc:
             raise UntrustedPaymentTargetError(
                 "[PAY_TARGET_UNTRUSTED] solana_account_response_invalid"
@@ -894,48 +892,46 @@ class AiFinPayAgent:
                 "[PAY_TARGET_UNTRUSTED] solana_program_not_executable"
             )
         for label, info in (
-            ("config", config_info), ("passport", passport_info),
-            ("partner", partner_info), ("vault", vault_info),
+            ("config", config_info), ("vault", vault_info),
         ):
             if not info or info.get("owner") != str(program_id):
                 raise UntrustedPaymentTargetError(
                     f"[PAY_TARGET_UNTRUSTED] solana_{label}_account_invalid"
                 )
         try:
-            passport_data = base64.b64decode(passport_info["data"][0], validate=True)
             vault_data = base64.b64decode(vault_info["data"][0], validate=True)
         except (KeyError, TypeError, ValueError) as exc:
             raise UntrustedPaymentTargetError(
                 "[PAY_TARGET_UNTRUSTED] solana_account_data_invalid"
             ) from exc
-        if len(passport_data) < 72 or len(vault_data) < 72:
+        if len(vault_data) < 72:
             raise UntrustedPaymentTargetError(
                 "[PAY_TARGET_UNTRUSTED] solana_account_data_invalid"
             )
-        ip_creator = SolPubkey.from_bytes(passport_data[40:72])
         treasury = SolPubkey.from_bytes(vault_data[40:72])
         if treasury != quoted_treasury:
             raise UntrustedPaymentTargetError(
                 "[PAY_TARGET_UNTRUSTED] solana_treasury_mismatch"
             )
 
-        # Instruction data: discriminator + Borsh(u64 + string)
+        # Instruction data: discriminator + Borsh(u64 + [u8;32] + string + bool)
         order_bytes = order_id.encode("utf-8")
         if len(order_bytes) > 64:
             raise AiFinPayError(f"order_id too long ({len(order_bytes)} bytes > 64)")
         data = (
             B2B_PAY_DISC
-            + struct.pack("<Q", total_lamports)
+            + struct.pack("<Q", merchant_amount_lamports)
+            + payment_id
             + struct.pack("<I", len(order_bytes))
             + order_bytes
+            + bytes([1 if creator_fee_enabled else 0])
         )
 
         keys = [
             AccountMeta(pubkey=config_pda,            is_signer=False, is_writable=False),
-            AccountMeta(pubkey=passport_pda,          is_signer=False, is_writable=True),
-            AccountMeta(pubkey=partner_pda,           is_signer=False, is_writable=True),
-            AccountMeta(pubkey=vault_pda,             is_signer=False, is_writable=True),
+            AccountMeta(pubkey=vault_pda,             is_signer=False, is_writable=False),
             AccountMeta(pubkey=agent_pubkey,          is_signer=True,  is_writable=True),
+            AccountMeta(pubkey=payment_receipt,       is_signer=False, is_writable=True),
             AccountMeta(pubkey=treasury,              is_signer=False, is_writable=True),
             AccountMeta(pubkey=ip_creator,            is_signer=False, is_writable=True),
             AccountMeta(pubkey=merchant,              is_signer=False, is_writable=True),

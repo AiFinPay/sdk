@@ -6,10 +6,9 @@ AI agents on [AiFinPay](https://aifinpay.io) — canonical domain
 
 Python 1.3.1 validates Polygon payment targets against the same canonical
 address/codehash/governance/fee/merchant registry as the Node SDK. Missing or
-stale registry data, RPC failures, empty code and server-selected legacy v1.1
-routes fail before transaction signing.
-settlement: Polygon (default) + Solana; the protocol is live across 13
-networks — see [aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
+stale registry data, RPC failures, empty code and server-selected legacy
+fee-inclusive routes fail before transaction signing. Polygon v1.3 and Solana
+v0.6 settlement remain disabled until verified deployments are recorded.
 
 `agent.pay(url)` works against:
 - **AiFinPay** native flow (Solana Seat PDA + Ed25519)

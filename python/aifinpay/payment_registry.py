@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 import math
 import os
+import struct
 from typing import Any
 
 import base58
 from web3 import Web3
+from solders.pubkey import Pubkey
 
 from .errors import UntrustedPaymentTargetError
 
@@ -25,13 +28,13 @@ POLYGON_TARGET = {
     "native_usd_env": "AIFINPAY_MATIC_USD",
     "valid_from": "2026-08-04T00:00:00+00:00",
     "valid_until": "2026-09-03T00:00:00+00:00",
-    "enabled": True,
+    "enabled": False,
 }
 
 SOLANA_TARGET = {
     "chain": "solana",
     "program_id": "5g9zWHF1Vv6GiGpA2ZbJQbSCDZd5hAk9AyvabRJvKFx2",
-    "instruction": "b2b_pay",
+    "instruction": "b2b_pay_with_split",
     "treasury_bps": 100,
     "ip_creator_bps": 1,
     "valid_from": "2026-08-04T00:00:00+00:00",
@@ -84,6 +87,7 @@ def require_native_usd_price(target: dict) -> float:
 def validate_solana_quote(
     ps: dict,
     registered_merchant: str,
+    expected_agent: str,
     *,
     now: datetime | None = None,
 ) -> dict:
@@ -102,31 +106,77 @@ def validate_solana_quote(
         _reject("solana_program_not_registered")
     if ps.get("instruction") != target["instruction"]:
         _reject("solana_instruction_mismatch")
+    agent = _pubkey(ps.get("agent_pubkey"), "agent")
+    if agent != _pubkey(expected_agent, "expected_agent"):
+        _reject("solana_agent_mismatch")
     merchant = _pubkey(ps.get("merchant_wallet"), "merchant")
     if merchant != _pubkey(registered_merchant, "registered_merchant"):
         _reject("solana_merchant_mismatch")
     treasury = _pubkey(ps.get("treasury"), "treasury")
+    creator = _pubkey(ps.get("ip_creator"), "ip_creator")
+    creator_enabled = ps.get("creator_fee_enabled") is True
+    if merchant in (agent, treasury):
+        _reject("solana_invalid_merchant")
+    if creator_enabled:
+        if creator in (agent, merchant, treasury):
+            _reject("solana_invalid_creator")
+    elif creator != treasury:
+        _reject("solana_invalid_creator")
     order_id = ps.get("order_id")
     if not isinstance(order_id, str) or not order_id or len(order_id.encode("utf-8")) > 64:
         _reject("solana_order_id_invalid")
 
-    total = _uint(ps.get("total_lamports"), "solana_total_lamports")
-    if total == 0:
-        _reject("solana_total_lamports_zero")
-    treasury_amount = total * target["treasury_bps"] // 10_000
-    creator_amount = total * target["ip_creator_bps"] // 10_000
-    merchant_amount = total - treasury_amount - creator_amount
+    merchant_amount = _uint(ps.get("merchant_amount_lamports"), "solana_merchant_amount_lamports")
+    if merchant_amount == 0 or merchant_amount > 0xFFFFFFFFFFFFFFFF:
+        _reject("solana_merchant_amount_lamports_invalid")
+    treasury_amount = merchant_amount * target["treasury_bps"] // 10_000
+    creator_amount = merchant_amount * target["ip_creator_bps"] // 10_000 if creator_enabled else 0
+    if treasury_amount == 0 or (creator_enabled and creator_amount == 0):
+        _reject("solana_amount_below_fee_floor")
+    total = merchant_amount + treasury_amount + creator_amount
     for key, expected in (
-        ("treasury_amount_lamports", treasury_amount),
-        ("ip_creator_amount_lamports", creator_amount),
-        ("merchant_amount_lamports", merchant_amount),
+        ("treasury_fee_lamports", treasury_amount),
+        ("ip_creator_fee_lamports", creator_amount),
+        ("total_lamports", total),
     ):
-        if key in ps and _uint(ps[key], f"solana_{key}") != expected:
+        if _uint(ps.get(key), f"solana_{key}") != expected:
             _reject(f"solana_{key}_mismatch")
+
+    payment_id = hashlib.sha256(
+        b"AiFinPay-solana-payment-v1"
+        + base58.b58decode(agent)
+        + base58.b58decode(merchant)
+        + struct.pack("<Q", merchant_amount)
+        + base58.b58decode(creator)
+        + bytes([1 if creator_enabled else 0])
+        + order_id.encode("utf-8")
+    ).digest()
+    supplied_payment_id = ps.get("payment_id")
+    if not isinstance(supplied_payment_id, str) or not supplied_payment_id.startswith("0x"):
+        _reject("solana_payment_id_invalid")
+    try:
+        supplied_payment_id_bytes = bytes.fromhex(supplied_payment_id[2:])
+    except ValueError:
+        _reject("solana_payment_id_invalid")
+    if len(supplied_payment_id_bytes) != 32 or supplied_payment_id_bytes != payment_id:
+        _reject("solana_payment_id_mismatch")
+    expected_receipt, _ = Pubkey.find_program_address(
+        [b"b2b-payment", bytes(Pubkey.from_string(agent)), payment_id],
+        Pubkey.from_string(target["program_id"]),
+    )
+    receipt = _pubkey(ps.get("payment_receipt"), "payment_receipt")
+    if receipt != str(expected_receipt):
+        _reject("solana_payment_receipt_mismatch")
     return {
         "program_id": target["program_id"],
+        "agent_pubkey": agent,
         "merchant_wallet": merchant,
         "treasury": treasury,
+        "ip_creator": creator,
+        "payment_receipt": receipt,
+        "payment_id": payment_id,
+        "merchant_amount_lamports": merchant_amount,
+        "creator_fee_enabled": creator_enabled,
         "order_id": order_id,
         "total_lamports": total,
     }
@@ -139,8 +189,8 @@ def validate_polygon_quote(pm: dict, registered_merchant: str, *, now: datetime 
     valid_until = datetime.fromisoformat(target["valid_until"])
     if not target["enabled"]:
         _reject("route_disabled")
-    if target["version"] != "1.2":
-        _reject("legacy_v1_1_disabled")
+    if target["version"] != "1.3":
+        _reject("fee_inclusive_splitter_disabled")
     if now < valid_from or now >= valid_until:
         _reject("registry_entry_expired")
 
@@ -160,29 +210,30 @@ def validate_polygon_quote(pm: dict, registered_merchant: str, *, now: datetime 
     if not isinstance(order_id, str) or not order_id or len(order_id) > 256:
         _reject("order_id_invalid")
     signature = pm.get("function_signature")
-    if signature is not None and signature != "payNative(bytes32,address,address,string)":
+    if signature is not None and signature != "payNative(bytes32,address,uint256,address,string)":
         _reject("function_signature_mismatch")
     if pm.get("ip_creator") is not None and not _address(pm["ip_creator"], target["treasury"]):
         _reject("ip_creator_not_registered")
 
-    total = _uint(pm.get("total_wei"), "total_wei")
-    if total == 0:
-        _reject("total_wei_zero")
-    treasury = total * target["treasury_bps"] // 10_000
-    creator = total * target["ip_creator_bps"] // 10_000
-    merchant = total - treasury - creator
+    merchant = _uint(pm.get("merchant_amount_wei"), "merchant_amount_wei")
+    if merchant == 0:
+        _reject("merchant_amount_wei_zero")
+    treasury = merchant * target["treasury_bps"] // 10_000
+    creator = merchant * target["ip_creator_bps"] // 10_000
+    total = merchant + treasury + creator
     for key, expected in (
         ("treasury_amount_wei", treasury),
         ("ip_creator_amount_wei", creator),
-        ("merchant_amount_wei", merchant),
+        ("total_wei", total),
     ):
-        if key in pm and _uint(pm[key], key) != expected:
+        if _uint(pm.get(key), key) != expected:
             _reject(f"{key}_mismatch")
     return {
         "splitter": Web3.to_checksum_address(target["splitter"]),
         "merchant": Web3.to_checksum_address(registered_merchant),
         "ip_creator": Web3.to_checksum_address(target["treasury"]),
         "order_id": order_id,
+        "merchant_amount_wei": merchant,
         "total_wei": total,
     }
 
