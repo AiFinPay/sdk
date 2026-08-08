@@ -233,7 +233,7 @@ interface PayMaticChallenge {
 
 // v1.3 fee-on-top entrypoint. v1.1/v1.2 remain recognized only so
 // the validator can reject them explicitly; they may not reach signing.
-const SPLITTER_PAY_NATIVE_ABI = [
+export const SPLITTER_PAY_NATIVE_ABI = [
   {
     type: "function",
     name: "payNative",
