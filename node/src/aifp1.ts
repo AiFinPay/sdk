@@ -402,7 +402,12 @@ export interface Aifp1FetchOptions {
   scope?:    Aifp1Scope;
   /** Override the resource the batch is scoped to (ignored for "merchant"). */
   resource?: string;
-  /** Billing units to prepay. Default 1000 = $0.10 at the base unit price. */
+  /**
+   * Billing units to prepay. Omit it and the client buys roughly
+   * DEFAULT_BATCH_USD worth, computed from the base unit price the gateway
+   * states in its own 402 — so the batch stays the same amount of MONEY when
+   * the tiers move.
+   */
   units?:    number;
   /** Where /v1/quote and /v1/pay live. Default https://api.aifinpay.io */
   apiBaseUrl?: string;
@@ -422,7 +427,27 @@ export interface Aifp1FetchOptions {
  *  gateway's own how_to_pay examples suggest (routes/gateway.js). If an
  *  operator has raised AIFP_MIN_BATCH_UNITS, /v1/quote answers 400 naming the
  *  real minimum, which is loud rather than silently underpaid. */
-const DEFAULT_UNITS = 1000;
+/**
+ * What a default batch costs, in USD — not how many units it is.
+ *
+ * This was a fixed 1000 units, "= $0.10 at the base unit price", and it was.
+ * Then the tiers were re-priced on 2026-08-07 and the base unit went from
+ * $0.0001 to $0.0005, so the same constant silently became a $0.50 batch:
+ * five times the money, with the comment beside it still saying ten cents.
+ * A unit count is a number about our internal accounting; an agent budgets in
+ * dollars. Fixing the constant would have fixed today and broken the next
+ * re-price, so the count is derived instead.
+ */
+const DEFAULT_BATCH_USD = 0.10;
+/** Used only when a 402 omits base_unit_price_usd — matches $0.10 at $0.0005. */
+const FALLBACK_UNITS = 200;
+
+/** Units to buy so the batch is worth about DEFAULT_BATCH_USD. */
+export function defaultUnitsFor(challenge: Pick<Aifp1Challenge, "base_unit_price_usd">): number {
+  const base = Number(challenge.base_unit_price_usd);
+  if (!Number.isFinite(base) || base <= 0) return FALLBACK_UNITS;
+  return Math.max(1, Math.ceil(DEFAULT_BATCH_USD / base));
+}
 const DEFAULT_API_BASE = "https://api.aifinpay.io";
 const DEFAULT_SETTLEMENT_CONFIRM_MS = 60_000;
 
@@ -623,7 +648,7 @@ export async function aifp1Fetch(
       merchant_id: challenge.merchant_id,
       ...(resource !== undefined ? { resource } : {}),
       scope,
-      units: opts.units ?? DEFAULT_UNITS,
+      units: opts.units ?? defaultUnitsFor(challenge),
       agent_id: deps.agentId,
     });
 

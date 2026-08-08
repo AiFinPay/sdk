@@ -24,6 +24,7 @@ import {
   scopeCovers,
   prefixHint,
   parseGatewayUrl,
+  defaultUnitsFor,
   type Aifp1CachedReceipt,
 } from "../src/aifp1.js";
 
@@ -826,5 +827,35 @@ describe("aifp1: the caps must bound what the wallet actually pays", () => {
     const res = await agent.fetchPaid(`${GATEWAY}/acme/articles/one`);
     expect(res!.status).toBe(200);
     expect(settlements.length).toBe(1);
+  });
+});
+
+describe("aifp1: a default batch is an amount of money, not a unit count", () => {
+  it("buys ~$0.10 at the current base price", () => {
+    // 1000 units was correct at $0.0001 and became $0.50 when the tiers were
+    // re-priced to $0.0005 on 2026-08-07 — five times the money, with the
+    // comment beside it still claiming ten cents. The count is derived now, so
+    // the next re-price cannot repeat it.
+    expect(defaultUnitsFor({ base_unit_price_usd: "0.0005" })).toBe(200);
+    expect(defaultUnitsFor({ base_unit_price_usd: "0.0001" })).toBe(1000);
+    expect(defaultUnitsFor({ base_unit_price_usd: "0.001" })).toBe(100);
+  });
+
+  it("the derived batch is worth about a dime whatever the base price", () => {
+    for (const base of ["0.0001", "0.0005", "0.002", "0.01"]) {
+      const usd = defaultUnitsFor({ base_unit_price_usd: base }) * Number(base);
+      expect(usd).toBeGreaterThanOrEqual(0.1);
+      expect(usd).toBeLessThan(0.2);
+    }
+  });
+
+  it("falls back rather than dividing by a missing or absurd price", () => {
+    // A 402 that omits the price, or states one we cannot use, must not produce
+    // Infinity units and a quote for the agent's whole balance.
+    for (const bad of [undefined, "", "0", "-1", "not-a-number"]) {
+      const n = defaultUnitsFor({ base_unit_price_usd: bad as string });
+      expect(Number.isFinite(n)).toBe(true);
+      expect(n).toBe(200);
+    }
   });
 });
