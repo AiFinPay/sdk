@@ -50,9 +50,9 @@ or Cursor's `~/.cursor/mcp.json`:
 }
 ```
 
-Restart the client. Your model now has seven payment tools
+Restart the client. Your model now has six payment tools
 (`payable_fetch`, `agent_address`, `agent_quote`, `agent_call`,
-`pay_with_split`, `quote_split`, `agent_claim_self`) and can
+`pay_with_split`, `quote_split`) and can
 autonomously negotiate supported x402 APIs. Standard x402 EIP-3009 signing is
 blocked until asset/payTo/domain metadata is backed by a signed target registry.
 
@@ -78,9 +78,10 @@ Coinbase x402, …), signs an Ed25519 challenge, retries the request, and
 returns the response.
 
 Same agent, drop into Claude Desktop's MCP config and the LLM gets
-seven tools (`payable_fetch`, `agent_address`, `agent_quote`,
-`agent_call`, `pay_with_split`, `quote_split`, `agent_claim_self`) for
-autonomous payment loops.
+six tools (`payable_fetch`, `agent_address`, `agent_quote`,
+`agent_call`, `pay_with_split`, `quote_split`) for
+autonomous payment loops. The retired `agent_claim_self` magic-link tool is
+deliberately absent — see `mcp/README.md`.
 
 ## Quick start
 
