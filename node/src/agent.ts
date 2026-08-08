@@ -248,8 +248,9 @@ export class Agent {
    * is rarely needed anymore. Kept for back-compat through 1.0.0.
    */
   async quoteSplit(args: {
-    chain: "solana" | "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm";
+    chain: "solana" | "polygon";
     merchantAmount: bigint | number | string;
+    includeCreator?: boolean;
   }): Promise<Record<string, unknown>> {
     const param =
       args.chain === "solana"
@@ -257,6 +258,7 @@ export class Agent {
         : "merchant_amount_wei";
     const url = new URL(`${this.baseUrl}/api/b2b/quote-split`);
     url.searchParams.set(param, String(args.merchantAmount));
+    if (args.includeCreator) url.searchParams.set("include_creator", "true");
     const r = await this.fetchImpl(url.toString(), {
       headers: { accept: "application/json", "user-agent": SDK_UA },
     });
@@ -274,7 +276,7 @@ export class Agent {
    * Get the on-chain instructions for a fee-on-top split payment.
    *
    * The merchant receives `merchantAmount` units (lamports for Solana,
-   * wei for Polygon). Treasury fee + IP-creator fee are added ON TOP.
+   * wei for Polygon). The treasury fee and optional IP-creator fee are added ON TOP.
    *
    * The SDK does **not** submit the transaction — it's non-custodial.
    * Caller uses the returned `args` + `accounts` (Solana) or
@@ -286,7 +288,7 @@ export class Agent {
    * onboarding message).
    */
   async payWithSplitInvoice(args: {
-    chain: "solana" | "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm";
+    chain: "solana" | "polygon";
     merchantWallet: string;
     merchantAmount: bigint | number | string;
     orderId: string;
