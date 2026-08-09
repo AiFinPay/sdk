@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/agent",
-  "version": "1.9.0-rc.1",
+  "version": "2.0.0",
   "description": "Unified agent payment SDK with fail-closed target validation. Settlement rails are enabled only when backed by canonical deployment data and passing E2E evidence.",
   "type": "module",
   "main": "dist/index.js",
@@ -19,7 +19,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "registry:sync": "node scripts/sync-registry.mjs",
+    "registry:check": "node scripts/sync-registry.mjs --check"
   },
   "keywords": [
     "ai-agent",

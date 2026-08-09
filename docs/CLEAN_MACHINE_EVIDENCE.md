@@ -8,8 +8,8 @@ knowledge of this repository.
 
 | | Version | Files | Packed |
 |---|---|---|---|
-| `@aifinpay/agent` | 1.9.0-rc.1 | 62 | 92.9 kB |
-| `@aifinpay/mcp` | 1.6.0-rc.1 | 39 | 20.7 kB |
+| `@aifinpay/agent` | 2.0.0 | 62 | 92.9 kB |
+| `@aifinpay/mcp` | 2.0.0 | 39 | 20.7 kB |
 
 Neither tarball contains `.env`, `.pem`, keypairs, or anything matching a
 secret pattern. A repository-wide scan for private key headers, `sk_live_`,
@@ -35,7 +35,7 @@ aifp1Receipts present: true
 
 The published surface works from a clean project, AIFP-1 included.
 
-## 🔴 Release blocker found: MCP resolves the OLD SDK
+## ✅ RESOLVED: MCP used to resolve the OLD SDK
 
 Installing the MCP tarball into the same project produced this:
 
@@ -58,14 +58,25 @@ and testing, so the tests ran against the registry copy and the override only
 affected a final rebuild. Fixed: the local SDK is now swapped in **before** the
 build and test steps.
 
-**What must happen at publish time.** MCP's range must be set to the released
-SDK version. While the SDK is an unpublished RC the manifest cannot name it —
-`npm ci` could not resolve it — so `scripts/check-mcp-sdk-pin.mjs` reports the
-blocker without failing the build, and **fails hard the moment the SDK version
-becomes stable**. A stable release therefore cannot ship the mismatch.
+**Resolved by moving to stable 2.0.0.** A prerelease could never satisfy a
+stable range, which was the whole cause. With `@aifinpay/agent` at 2.0.0 and
+MCP declaring `^2.0.0`, a clean install now resolves a single copy:
 
-This is Pasha's release step, per §5.4. It is listed under known limitations in
-the handoff.
+```
+node_modules/@aifinpay/agent   2.0.0     ← the only one
+```
+
+No nested copy. Re-verified by packing both 2.0.0 tarballs and installing them
+into a fresh empty project.
+
+`scripts/check-mcp-sdk-pin.mjs` now runs as a **hard** CI gate rather than a
+report, because the SDK version is stable. If MCP's range ever stops admitting
+the SDK in this repo, the build fails.
+
+One consequence for CI: `npm ci` in the MCP workspace cannot resolve
+`@aifinpay/agent@^2.0.0` until it is published, so CI builds the SDK and
+installs it by path. That manifest edit is CI-only and never committed; the
+pin check runs against the committed manifest first.
 
 ## Gate status
 

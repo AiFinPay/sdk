@@ -46,6 +46,13 @@ jobs:
         run: npm run build
       - name: Test (vitest)
         run: npm test
+
+      # The vendored splitter table must match the canonical registry in
+      # evm-contract, which is verified there against live chain state. A
+      # hand-edit here would change where the SDK sends money.
+      - name: Vendored registry matches the canonical one
+        run: npm run registry:check
+
       - name: Verify publishable tarball
         run: npm pack --dry-run
 
@@ -62,20 +69,25 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: mcp/package-lock.json
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+      # Checked against the COMMITTED manifest, before anything below rewrites
+      # it for local resolution.
+      - name: MCP declares a range that resolves to this SDK
+        working-directory: .
+        run: node scripts/check-mcp-sdk-pin.mjs
 
-      # Swap in this PR's SDK BEFORE building or testing. The registry copy that
-      # `npm ci` resolves is whatever the manifest range admits, and while the
-      # SDK is an unpublished RC that is the previously published build — so
-      # testing before this step would test the wrong SDK. See
-      # scripts/check-mcp-sdk-pin.mjs for how that was found.
-      - name: Use this PR's Node SDK, not the registry copy
+      # The candidate SDK version is not published yet, so `npm ci` cannot
+      # resolve it and would silently fall back to an older published build if
+      # the range allowed one. Build the SDK here and install it by path, so
+      # the tests below exercise exactly the code that will ship.
+      #
+      # The manifest edit is CI-only and never committed. At publish time the
+      # committed `^2.0.0` resolves normally, which the check above enforces.
+      - name: Build and install this repo's SDK
         run: |
           (cd ../node && npm ci --no-audit --no-fund && npm run build)
-          npm install --no-save --package-lock=false ../node
-          node -e "console.log('MCP is building against @aifinpay/agent ' + require('@aifinpay/agent/package.json').version)" \
-            || echo "(version not introspectable via exports; resolution replaced above)"
+          npm pkg set dependencies.@aifinpay/agent=file:../node
+          npm install --no-audit --no-fund
+          node -e "console.log('MCP resolved @aifinpay/agent ' + require('@aifinpay/agent/package.json').version)"
 
       - name: Build (tsc)
         run: npm run build
@@ -83,9 +95,8 @@ jobs:
       - name: Test security regressions (vitest)
         run: npm test
 
-      - name: MCP declares a range that resolves to this SDK
-        working-directory: .
-        run: node scripts/check-mcp-sdk-pin.mjs
+      - name: Restore the publishable manifest
+        run: git checkout -- package.json
           npm test
       - name: Syntax-check bin entrypoint
         run: node --check bin/aifinpay-mcp.js

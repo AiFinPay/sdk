@@ -1,0 +1,89 @@
+{
+  "$generated": [
+    "DO NOT EDIT. Generated from registry/registry.json by",
+    "scripts/generate-sdk-table.mjs. CI regenerates this and fails on any",
+    "difference, so hand-edits are rejected rather than shipped."
+  ],
+  "schemaVersion": 1,
+  "sourceUpdatedAt": "2026-08-09",
+  "networks": {
+    "polygon": {
+      "chainId": 137,
+      "version": "1.2",
+      "splitter": "0xbD1fa5453f212F096c0213788a645eC597FB4DDe",
+      "runtimeCodeHash": "0x9001fbb7ec70097909415325dc70c5b2102c4312dcd8e01e7495cfcaca2edaff",
+      "treasury": "0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e",
+      "treasuryBps": 100,
+      "ipCreatorBps": 1,
+      "validFrom": "2026-08-04T00:00:00.000Z",
+      "validUntil": "2026-09-03T00:00:00.000Z",
+      "settlementEnabled": false,
+      "verifiedAt": "2026-08-07"
+    },
+    "base": {
+      "chainId": 8453,
+      "version": "1.1",
+      "splitter": "0x8Ad9830D16b1f10333866a3f38C949CbB19f4BAD",
+      "runtimeCodeHash": "0x545b3a4ba195edc6b728df8cc64f28da528c9e7805c15f1aa61ef58c3c562197",
+      "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+      "treasuryBps": 100,
+      "ipCreatorBps": 1,
+      "validFrom": "2026-08-04T00:00:00.000Z",
+      "validUntil": "2026-09-03T00:00:00.000Z",
+      "settlementEnabled": false,
+      "verifiedAt": "2026-08-07"
+    },
+    "optimism": {
+      "chainId": 10,
+      "version": "1.2",
+      "splitter": "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74",
+      "runtimeCodeHash": "0xcdf939fd4f9a189e3dba991c5d538bd77b3d493d2ce4e356b61e5742dbde1899",
+      "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+      "treasuryBps": 100,
+      "ipCreatorBps": 1,
+      "validFrom": "2026-08-04T00:00:00.000Z",
+      "validUntil": "2026-09-03T00:00:00.000Z",
+      "settlementEnabled": false,
+      "verifiedAt": "2026-08-07"
+    },
+    "unichain": {
+      "chainId": 130,
+      "version": "1.1",
+      "splitter": "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB",
+      "runtimeCodeHash": "0x545b3a4ba195edc6b728df8cc64f28da528c9e7805c15f1aa61ef58c3c562197",
+      "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+      "treasuryBps": 100,
+      "ipCreatorBps": 1,
+      "validFrom": "2026-08-04T00:00:00.000Z",
+      "validUntil": "2026-09-03T00:00:00.000Z",
+      "settlementEnabled": false,
+      "verifiedAt": "2026-08-07"
+    },
+    "botchain": {
+      "chainId": 677,
+      "version": "1.2",
+      "splitter": "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
+      "runtimeCodeHash": "0xabd084ff64e98bb8ac7db7783d80c6a6bcc69716dfb8f64a4686bed5cf428d96",
+      "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+      "treasuryBps": 100,
+      "ipCreatorBps": 1,
+      "validFrom": "2026-08-04T00:00:00.000Z",
+      "validUntil": "2026-09-03T00:00:00.000Z",
+      "settlementEnabled": false,
+      "verifiedAt": "2026-08-07"
+    },
+    "xrplevm": {
+      "chainId": 1440000,
+      "version": "1.2",
+      "splitter": "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
+      "runtimeCodeHash": "0xeb68cf314d335f888726a527dec10d989c26e2c5d6a8df68d117cc7d4dcec239",
+      "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+      "treasuryBps": 100,
+      "ipCreatorBps": 1,
+      "validFrom": "2026-08-04T00:00:00.000Z",
+      "validUntil": "2026-09-03T00:00:00.000Z",
+      "settlementEnabled": false,
+      "verifiedAt": "2026-08-07"
+    }
+  }
+}

@@ -43,6 +43,7 @@ import {
   UntrustedPaymentTargetError,
   X402Error,
 } from "./errors.js";
+import generatedTable from "./generated/splitter-table.json" with { type: "json" };
 import { Agent, type AgentOptions } from "./agent.js";
 import {
   aifp1Fetch,
@@ -335,116 +336,149 @@ export interface SplitterDeployment extends TrustedPaymentTarget {
   nativeUsdDefault: number;
 }
 
-export const SPLITTER_DEPLOYMENTS: Record<SplitterChainName, SplitterDeployment> = {
+/**
+ * Chain facts the registry cannot verify.
+ *
+ * Everything that decides where money goes — address, contract version, runtime
+ * code hash, treasury, fee split, validity window, whether settlement is on —
+ * comes from the generated registry below, which is produced in
+ * AiFinPay/evm-contract and verified there against chain state.
+ *
+ * What stays here is what a chain cannot tell you: the viem chain object, a
+ * default public RPC, the explorer, the local USDC address (informational; the
+ * SDK has no ERC-20 settlement path), and which env var carries the native
+ * price. Getting any of these wrong degrades the experience. Getting a value
+ * from the registry wrong sends money to the wrong place, which is why the two
+ * are kept apart.
+ */
+const CHAIN_METADATA: Record<SplitterChainName, {
+  chain: Chain;
+  defaultRpc: string;
+  explorer: string;
+  nativeUsdEnv: string;
+  nativeUsdDefault: number;
+  usdc?: `0x${string}`;
+}> = {
   polygon: {
-    enabled:    false,
-    version:    "1.2",
-    chainId:    137,
-    chain:      polygon,
+    chain: polygon,
     defaultRpc: "https://polygon.drpc.org",
-    splitter:   "0xbD1fa5453f212F096c0213788a645eC597FB4DDe",
-    runtimeCodeHash: "0x9001fbb7ec70097909415325dc70c5b2102c4312dcd8e01e7495cfcaca2edaff",
-    treasury:   "0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e",
-    treasuryBps: 100,
-    ipCreatorBps: 1,
-    validFrom:  "2026-08-04T00:00:00.000Z",
-    validUntil: "2026-09-03T00:00:00.000Z",
-    usdc:       "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
-    explorer:   "https://polygonscan.com",
+    explorer: "https://polygonscan.com",
     nativeUsdEnv: "AIFINPAY_MATIC_USD", // legacy name kept for back-compat
     nativeUsdDefault: 0.073, // reference only; ~$0.073 on 2026-08-03
+    usdc: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
   },
   base: {
-    enabled:    false,
-    version:    "1.1",
-    chainId:    8453,
-    chain:      base,
+    chain: base,
     defaultRpc: "https://mainnet.base.org",
-    splitter:   "0x8Ad9830D16b1f10333866a3f38C949CbB19f4BAD",
-    runtimeCodeHash: "0x545b3a4ba195edc6b728df8cc64f28da528c9e7805c15f1aa61ef58c3c562197",
-    treasury:   "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
-    treasuryBps: 100,
-    ipCreatorBps: 1,
-    validFrom:  "2026-08-04T00:00:00.000Z",
-    validUntil: "2026-09-03T00:00:00.000Z",
-    usdc:       "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-    explorer:   "https://basescan.org",
+    explorer: "https://basescan.org",
     nativeUsdEnv: "AIFINPAY_ETH_USD",
-    nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
+    nativeUsdDefault: 1870,
+    usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
   },
   optimism: {
-    enabled:    false,
-    version:    "1.2",
-    chainId:    10,
-    chain:      optimism,
+    chain: optimism,
     defaultRpc: "https://mainnet.optimism.io",
-    splitter:   "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74",
-    runtimeCodeHash: "0xcdf939fd4f9a189e3dba991c5d538bd77b3d493d2ce4e356b61e5742dbde1899",
-    treasury:   "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
-    treasuryBps: 100,
-    ipCreatorBps: 1,
-    validFrom:  "2026-08-04T00:00:00.000Z",
-    validUntil: "2026-09-03T00:00:00.000Z",
-    usdc:       "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-    explorer:   "https://optimistic.etherscan.io",
+    explorer: "https://optimistic.etherscan.io",
     nativeUsdEnv: "AIFINPAY_ETH_USD",
-    nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
+    nativeUsdDefault: 1870,
+    usdc: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
   },
   unichain: {
-    enabled:    false,
-    version:    "1.1",
-    chainId:    130,
-    chain:      unichain,
+    chain: unichain,
     defaultRpc: "https://mainnet.unichain.org",
-    splitter:   "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB",
-    runtimeCodeHash: "0x545b3a4ba195edc6b728df8cc64f28da528c9e7805c15f1aa61ef58c3c562197",
-    treasury:   "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
-    treasuryBps: 100,
-    ipCreatorBps: 1,
-    validFrom:  "2026-08-04T00:00:00.000Z",
-    validUntil: "2026-09-03T00:00:00.000Z",
-    usdc:       "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
-    explorer:   "https://uniscan.xyz",
+    explorer: "https://uniscan.xyz",
     nativeUsdEnv: "AIFINPAY_ETH_USD",
-    nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
+    nativeUsdDefault: 1870,
+    usdc: "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
   },
   botchain: {
-    enabled:    false,
-    version:    "1.2",
-    chainId:    677,
-    chain:      botchain,
+    chain: botchain,
     defaultRpc: "https://rpc.botchain.ai",
-    splitter:   "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
-    runtimeCodeHash: "0xabd084ff64e98bb8ac7db7783d80c6a6bcc69716dfb8f64a4686bed5cf428d96",
-    treasury:   "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
-    treasuryBps: 100,
-    ipCreatorBps: 1,
-    validFrom:  "2026-08-04T00:00:00.000Z",
-    validUntil: "2026-09-03T00:00:00.000Z",
-    // no USDC on BOT Chain — native BOT only
-    explorer:   "https://scan.botchain.ai",
+    explorer: "https://scan.botchain.ai",
     nativeUsdEnv: "AIFINPAY_BOT_USD",
     nativeUsdDefault: 1, // no reliable public feed; set the env var
   },
   xrplevm: {
-    enabled:    false,
-    version:    "1.2",
-    chainId:    1440000,
-    chain:      xrplevm,
+    chain: xrplevm,
     defaultRpc: "https://rpc.xrplevm.org",
-    splitter:   "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
-    runtimeCodeHash: "0xeb68cf314d335f888726a527dec10d989c26e2c5d6a8df68d117cc7d4dcec239",
-    treasury:   "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
-    treasuryBps: 100,
-    ipCreatorBps: 1,
-    validFrom:  "2026-08-04T00:00:00.000Z",
-    validUntil: "2026-09-03T00:00:00.000Z",
-    // no verified USDC on XRPL EVM — native XRP only
-    explorer:   "https://explorer.xrplevm.org",
+    explorer: "https://explorer.xrplevm.org",
     nativeUsdEnv: "AIFINPAY_XRP_USD",
     nativeUsdDefault: 2,
   },
 };
+
+/**
+ * The canonical registry, vendored from AiFinPay/evm-contract.
+ *
+ * DO NOT EDIT src/generated/splitter-table.json. It is generated from
+ * registry/registry.json there, verified against chain state, and
+ * `npm run registry:check` fails if this copy has drifted from it.
+ */
+interface GeneratedNetwork {
+  chainId: number;
+  version: "1.1" | "1.2" | "1.3";
+  splitter: `0x${string}`;
+  runtimeCodeHash: `0x${string}`;
+  treasury: `0x${string}`;
+  treasuryBps: number;
+  ipCreatorBps: number;
+  validFrom: string;
+  validUntil: string;
+  settlementEnabled: boolean;
+  verifiedAt: string;
+}
+
+const GENERATED = generatedTable as unknown as {
+  networks: Record<string, GeneratedNetwork>;
+};
+
+function buildDeployments(): Record<SplitterChainName, SplitterDeployment> {
+  const out = {} as Record<SplitterChainName, SplitterDeployment>;
+  for (const [name, meta] of Object.entries(CHAIN_METADATA) as [
+    SplitterChainName,
+    (typeof CHAIN_METADATA)[SplitterChainName],
+  ][]) {
+    const entry = GENERATED.networks[name];
+    if (!entry) {
+      // A network the SDK knows about but the registry does not is not a
+      // network we can pay on. Better to fail loudly at import than to fall
+      // back to a hardcoded address.
+      throw new AiFinPayError(
+        `No verified registry entry for "${name}". The SDK will not pay an address ` +
+          "it cannot trace to the canonical registry.",
+      );
+    }
+    if (entry.chainId !== meta.chain.id) {
+      throw new AiFinPayError(
+        `Registry chainId ${entry.chainId} for "${name}" does not match the viem chain ` +
+          `(${meta.chain.id}). Refusing to build a payment target from mismatched chains.`,
+      );
+    }
+    out[name] = {
+      chainId: entry.chainId,
+      version: entry.version,
+      splitter: entry.splitter,
+      runtimeCodeHash: entry.runtimeCodeHash,
+      treasury: entry.treasury,
+      treasuryBps: entry.treasuryBps,
+      ipCreatorBps: entry.ipCreatorBps,
+      validFrom: entry.validFrom,
+      validUntil: entry.validUntil,
+      enabled: entry.settlementEnabled,
+      chain: meta.chain,
+      defaultRpc: meta.defaultRpc,
+      explorer: meta.explorer,
+      nativeUsdEnv: meta.nativeUsdEnv,
+      nativeUsdDefault: meta.nativeUsdDefault,
+      ...(meta.usdc ? { usdc: meta.usdc } : {}),
+    };
+  }
+  return out;
+}
+
+export const SPLITTER_DEPLOYMENTS: Record<SplitterChainName, SplitterDeployment> =
+  buildDeployments();
+
 
 // ── EVM chain object lookup — viem chains keyed by our EvmChainName ─────
 
