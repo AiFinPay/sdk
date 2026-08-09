@@ -87,7 +87,9 @@ jobs:
           (cd ../node && npm ci --no-audit --no-fund && npm run build)
           npm pkg set dependencies.@aifinpay/agent=file:../node
           npm install --no-audit --no-fund
-          node -e "console.log('MCP resolved @aifinpay/agent ' + require('@aifinpay/agent/package.json').version)"
+          # npm ls, not require('@aifinpay/agent/package.json') — the package's
+          # exports map does not expose package.json, so requiring it throws.
+          npm ls @aifinpay/agent
 
       - name: Build (tsc)
         run: npm run build
