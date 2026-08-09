@@ -64,15 +64,28 @@ jobs:
           cache-dependency-path: mcp/package-lock.json
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
-      - name: Build (tsc)
-        run: npm run build
-      - name: Test security regressions (vitest)
-        run: npm test
-      - name: Build against this PR's Node SDK
+
+      # Swap in this PR's SDK BEFORE building or testing. The registry copy that
+      # `npm ci` resolves is whatever the manifest range admits, and while the
+      # SDK is an unpublished RC that is the previously published build — so
+      # testing before this step would test the wrong SDK. See
+      # scripts/check-mcp-sdk-pin.mjs for how that was found.
+      - name: Use this PR's Node SDK, not the registry copy
         run: |
           (cd ../node && npm ci --no-audit --no-fund && npm run build)
           npm install --no-save --package-lock=false ../node
-          npm run build
+          node -e "console.log('MCP is building against @aifinpay/agent ' + require('@aifinpay/agent/package.json').version)" \
+            || echo "(version not introspectable via exports; resolution replaced above)"
+
+      - name: Build (tsc)
+        run: npm run build
+
+      - name: Test security regressions (vitest)
+        run: npm test
+
+      - name: MCP declares a range that resolves to this SDK
+        working-directory: .
+        run: node scripts/check-mcp-sdk-pin.mjs
           npm test
       - name: Syntax-check bin entrypoint
         run: node --check bin/aifinpay-mcp.js
