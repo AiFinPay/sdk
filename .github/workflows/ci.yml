@@ -97,9 +97,11 @@ jobs:
       - name: Test security regressions (vitest)
         run: npm test
 
+      # npm install rewrote both files to point at the local path. Put them
+      # back so the tarball built below is the publishable one.
       - name: Restore the publishable manifest
-        run: git checkout -- package.json
-          npm test
+        run: git checkout -- package.json package-lock.json
+
       - name: Syntax-check bin entrypoint
         run: node --check bin/aifinpay-mcp.js
       - name: Verify publishable tarball
