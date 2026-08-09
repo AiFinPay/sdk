@@ -1,7 +1,7 @@
 # MCP install — one config block per client
 
-`@aifinpay/mcp` is an MCP server that gives an LLM five payment tools.
-The install is the same everywhere: register `npx @aifinpay/mcp` as an
+`@aifinpay/mcp` is an MCP server that gives an LLM seven payment tools.
+The install is the same everywhere: register `npx -y @aifinpay/mcp` as an
 MCP server in your client's config. The client downloads the package on
 first run via `npx`.
 
@@ -20,15 +20,15 @@ Edit `claude_desktop_config.json`:
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["@aifinpay/mcp"]
+      "args": ["-y", "@aifinpay/mcp"]
     }
   }
 }
 ```
 
-Restart Claude Desktop. The five tools (`payable_fetch`, `agent_address`,
-`agent_quote`, `pay_with_split`, `quote_split`) show up in the hammer
-menu.
+Restart Claude Desktop. The seven tools (`agent_call`, `agent_claim_self`,
+`payable_fetch`, `agent_address`, `agent_quote`, `pay_with_split`,
+`quote_split`) show up in the hammer menu.
 
 ## Cursor
 
@@ -39,7 +39,7 @@ Edit `~/.cursor/mcp.json` (create it if missing):
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["@aifinpay/mcp"]
+      "args": ["-y", "@aifinpay/mcp"]
     }
   }
 }
@@ -56,7 +56,7 @@ Edit `~/.codeium/windsurf/mcp_config.json`:
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["@aifinpay/mcp"]
+      "args": ["-y", "@aifinpay/mcp"]
     }
   }
 }
@@ -74,7 +74,7 @@ In `~/.continue/config.json`, add to `experimental.mcpServers`:
     "mcpServers": {
       "aifinpay": {
         "command": "npx",
-        "args": ["@aifinpay/mcp"]
+        "args": ["-y", "@aifinpay/mcp"]
       }
     }
   }
@@ -90,7 +90,7 @@ Open the Cline MCP Servers panel → Configure MCP Servers → paste:
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["@aifinpay/mcp"]
+      "args": ["-y", "@aifinpay/mcp"]
     }
   }
 }
@@ -102,7 +102,7 @@ Settings → Plugins → Custom MCP → add server with:
 
 - name: `aifinpay`
 - command: `npx`
-- args: `@aifinpay/mcp`
+- args: `-y @aifinpay/mcp`
 
 ## Configuration (optional)
 
@@ -111,7 +111,7 @@ The MCP server reads two environment variables:
 | Var | Default | Effect |
 |---|---|---|
 | `AIFINPAY_AGENT_SECRET` | random (per-process) | base58-encoded Ed25519 secret to reuse across sessions. Persist this if you want the same agent identity / funded address across restarts. |
-| `AIFINPAY_MAX_USD` | `0.10` | hard cap per `payable_fetch` call — refuses to settle anything more expensive. |
+| `AIFINPAY_MAX_USD` | unset | Hard cap per `agent_call` or `payable_fetch`. Set this explicitly before paid use. |
 
 Example with persistent identity and a higher cap:
 
@@ -120,7 +120,7 @@ Example with persistent identity and a higher cap:
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["@aifinpay/mcp"],
+      "args": ["-y", "@aifinpay/mcp"],
       "env": {
         "AIFINPAY_AGENT_SECRET": "<base58 secret from Agent.new()>",
         "AIFINPAY_MAX_USD": "0.50"
@@ -148,10 +148,12 @@ the assistant message. The tx hash is in the tool result.
 
 | Tool | Purpose |
 |---|---|
+| `agent_call(provider, ...)` | Call a provider from the AiFinPay directory with automatic payment. |
+| `agent_claim_self(magic_link_url)` | Link the agent to an AiFinPay dashboard account. |
 | `payable_fetch(url, ...)` | Fetch any URL; auto-pay on 402. |
 | `agent_address()` | Show the agent's EVM/Solana address (for funding). |
 | `agent_quote(url)` | Preview the cost before paying. |
-| `pay_with_split(merchant, amount, order_id, chain)` | Direct B2B split-payment instruction (merchant 98.99% / treasury 1% / IP-creator 0.01%). |
+| `pay_with_split(merchant, amount, order_id, chain)` | Prepare a direct on-chain split payment. Confirm the quoted total before paying. |
 | `quote_split(chain, merchant_amount)` | Pure-view fee breakdown. |
 
 ## Troubleshooting
@@ -165,7 +167,8 @@ exact base58 string produced by `Agent.new().secret_b58` (Python) or
 random identity on each start.
 
 **Tool refuses to settle (`max_usd_exceeded`).** Raise
-`AIFINPAY_MAX_USD`. Defaults are deliberately conservative.
+`AIFINPAY_MAX_USD`. It is unset by default, so set it explicitly before
+allowing paid calls.
 
 **Agent address shows `0x...` zeros.** Means the SDK couldn't derive a
 key. Check `node -v` is `≥ 18`.
