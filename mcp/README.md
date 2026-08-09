@@ -1,109 +1,98 @@
 # @aifinpay/mcp
 
-MCP server exposing AiFinPay's autonomous x402 payment loop as
-agent-callable tools. Drop it into Claude Desktop, MCP Inspector, or any
-MCP-aware agent runtime — your agent can now buy services autonomously.
+MCP server exposing AiFinPay payment and quote primitives to MCP-aware agent runtimes.
 
-Canonical domain: **aifinpay.io** (the legacy `aifinpay.company` host is
-retired — ignore any docs pointing there). SDK settlement runs on
-**Polygon (default) and Solana**; the underlying Node SDK (≥ 1.3.0) also
-supports direct splitter settlement on Base, Optimism, Unichain, BOT Chain
-and XRPL EVM (native-token path), while the MCP `pay_with_split` /
-`quote_split` tools stay Polygon + Solana (backend invoice flow). The
-protocol itself is live across 13 networks — see
-[aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
+Canonical domain: **aifinpay.io**.
+
+> **Security release gate:** this remediation branch is not a production release. Fund-moving tools fail closed when the operator cap, trusted price, canonical deployment, merchant target, contract runtime, or current fee-on-top contract version cannot be verified. The existing fee-inclusive v1.1/v1.2 splitter routes are intentionally blocked. Solana settlement remains disabled until the audited v0.6 program is deployed and verified. Do not infer production support from a documented chain or historical transaction alone.
 
 ## Tools
 
 | Tool | What it does |
 |---|---|
-| `payable_fetch(url, opts?)` | Fetch any URL. On 402, auto-detect facilitator, sign, retry. |
-| `agent_address()` | Return the agent's funding addresses on **both** chains — Polygon `0x…` (default settlement: io.net, Exa, Venice bridges) and Solana base58 (Seat PDA / leaderboard). One seed, two chains — fund either. |
-| `agent_quote(url)` | Inspect a 402 challenge without paying. Shows the merchant's quoted amount + facilitator flavor. |
-| `agent_call(provider, …)` | Call a live provider from the AiFinPay directory (io.net, Exa, Venice, …) with automatic payment. |
-| `pay_with_split(chain, merchant, amount, …)` | Direct fee-on-top payment to any merchant wallet — merchant receives 100% of the amount, AiFinPay adds 1% on top. |
-| `quote_split(chain, amount)` | Preview the exact on-chain amounts of a `pay_with_split` before paying. |
-| `agent_claim_self(magic_link_url)` | Link this agent to your dashboard account via a one-shot magic link from `aifinpay.io/login` — spend history shows up in the dashboard. |
+| `agent_address()` | Returns the locally derived agent wallet identities. No funds move. |
+| `agent_quote(url)` | Inspects a 402 challenge without paying. No funds move. |
+| `quote_split(chain, amount)` | Previews a split quote without signing a transaction. No funds move. |
+| `payable_fetch(url, opts?)` | Fetches a URL and, only when every trust/value gate passes, handles a supported 402 flow. |
+| `agent_call(provider, …)` | Registry-resolved provider call. Any payment is blocked unless the operator ceiling and canonical target checks pass. |
+| `pay_with_split(chain, merchant, amount, …)` | Fee-on-top settlement tool. Legacy fee-inclusive splitters are rejected; unsupported/not-yet-deployed current contracts fail closed. |
 
-## Install
+The retired `agent_claim_self` magic-link tool is deliberately absent. Autonomous tools must not receive a user's dashboard login bearer credential. Account attachment uses the dashboard's address-specific ownership challenge instead.
 
-```bash
-# Globally — usable as `npx @aifinpay/mcp` from any client config
-# (installs the latest stable — the old @alpha tag is retired, don't use it)
-npm install -g @aifinpay/mcp
+## Required payment policy
+
+Every fund-moving MCP process must set a positive finite operator ceiling:
+
+```text
+AIFINPAY_MAX_USD=<positive finite USD amount>
 ```
 
-## Use with Claude Desktop
+Tool/model input can only **tighten** this ceiling; it cannot increase it. If the operator ceiling is missing or invalid, fund-moving tools refuse to proceed.
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+Native-token payments also require a trusted positive value basis. Unknown token price is a blocking state, not permission to continue.
 
-```json
-{
-  "mcpServers": {
-    "aifinpay": {
-      "command": "npx",
-      "args": ["@aifinpay/mcp"],
-      "env": {
-        "AIFINPAY_AGENT_SECRET": "<base58 secret — see below>",
-        "AIFINPAY_MAX_USD": "0.50"
-      }
-    }
-  }
-}
-```
+## Agent identity
 
-Restart Claude Desktop. Now Claude can call `payable_fetch`, `agent_address`,
-and `agent_quote` like any other tool.
+`AIFINPAY_AGENT_SECRET` may provide a persistent locally controlled agent identity. If it is absent, the MCP server creates an **ephemeral, non-recoverable** identity for testing and logs only its public addresses. It does **not** print the private key.
 
-## First run — generating an agent
-
-If `AIFINPAY_AGENT_SECRET` is not set, the server generates an ephemeral
-keypair and **prints it to stderr** at startup:
-
-```
-[warn] no AIFINPAY_AGENT_SECRET set — generated EPHEMERAL agent.
-  address: 9xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-  secret:  4xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-  >> Save this secret to AIFINPAY_AGENT_SECRET to keep the agent across restarts.
-```
-
-Save the secret to `AIFINPAY_AGENT_SECRET` in your client config so the
-agent identity (and any funded Seat) persists across restarts.
+Do not fund an ephemeral identity. For a persistent wallet, create/import the identity through an audited local workflow and inject the secret through the MCP host's secret/environment mechanism.
 
 ## Environment variables
 
-| Var | Default | Purpose |
+| Variable | Default | Purpose |
 |---|---|---|
-| `AIFINPAY_AGENT_SECRET` | — | Base58 secret. If absent → ephemeral agent printed to stderr. |
-| `AIFINPAY_BASE_URL` | `https://aifinpay.io` | Backend URL for nonce + funding probes. |
-| `AIFINPAY_TIMEOUT_MS` | `30000` | Request timeout. |
-| `AIFINPAY_MAX_USD` | — | Hard cap per single payment. Strongly recommended. |
+| `AIFINPAY_AGENT_SECRET` | — | Persistent local agent secret. Treat as a wallet credential. |
+| `AIFINPAY_BASE_URL` | `https://aifinpay.io` | Trusted AiFinPay origin used for native authorization/registry requests. |
+| `AIFINPAY_TIMEOUT_MS` | `30000` | Network timeout. |
+| `AIFINPAY_MAX_USD` | — | **Mandatory for fund-moving tools.** Operator's per-payment ceiling. |
+| chain price variables | — | Operator/trusted price inputs where a live trusted price is required. Unknown value fails closed. |
 
-## Programmatic use
+## Request-bound AiFinPay authorization
 
-```ts
-import { createServer, loadConfigFromEnv } from "@aifinpay/mcp";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+Native AiFinPay authorization uses `aifinpay-ed25519-v2`. The signed message binds:
 
-const { server } = await createServer({
-  ...loadConfigFromEnv(),
-  agentSecretB58: "your-secret-here",
-  maxAmountUsd: 0.10,
-});
-await server.connect(new StdioServerTransport());
-```
+- nonce;
+- agent identity;
+- HTTP method;
+- exact resource path/query;
+- expiration;
+- minimum value terms;
+- AiFinPay agreement hash.
 
-## How `payable_fetch` works
+The retired generic `AiFinPay-x402:{nonce}:{agent}` signing format is rejected.
 
-1. Sends the request unauthenticated.
-2. On `402`, the underlying [`@aifinpay/agent`](../node) SDK detects the
-   facilitator flavor (AiFinPay native, Coinbase x402, …).
-3. Signs a payment payload and retries.
-4. Returns `{ status, ok, headers, body }` to the agent.
+## Settlement trust boundary
 
-The flow is identical to calling `agent.pay(url)` directly — this
-package just wraps it as an MCP tool surface so LLM agents can call it
-without writing payment code.
+Before signing a direct EVM splitter payment the SDK verifies, at minimum:
+
+1. chain/network;
+2. canonical splitter address;
+3. approved contract version;
+4. runtime bytecode hash;
+5. treasury/governance and BPS values;
+6. registered merchant wallet;
+7. explicit merchant amount;
+8. fee-on-top components and exact total debit;
+9. operator USD ceiling and trusted native-token price.
+
+A server-provided target cannot widen these operator-owned constraints.
+
+## Production support policy
+
+A chain/asset is listed as production-supported only after all of the following are true for the exact release artifact:
+
+- canonical deployment registry entry exists;
+- runtime/code hash is verified;
+- the SDK/MCP path matches that deployment and fee model;
+- clean-package tests pass;
+- reproducible per-network E2E passes;
+- the final security audit has no unresolved Critical/High fund-loss path.
+
+Until then the path remains disabled or explicitly experimental. Historical payment evidence is retained as historical evidence only; it is not proof that the current audited release supports the same route.
+
+## Development
+
+Use the repository lockfiles and the exact remediation branch/commit under review. Do not replace an audited package with an unpinned `npx` download while a wallet secret is present in the process environment.
 
 ## License
 

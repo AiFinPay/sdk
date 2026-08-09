@@ -116,28 +116,25 @@ class Agent:
         r.raise_for_status()
         return r.json()
 
-    # ── x402 auth (AiFinPay native — kept for backwards compat) ────────────
+    # ── x402 auth ─────────────────────────────────────────────────────
 
-    def _fetch_nonce(self) -> Dict[str, Any]:
-        r = self._session.get(f"{self.base_url}/nonce", timeout=self.timeout)
-        r.raise_for_status()
-        return r.json()
+    def _fetch_nonce(self) -> None:
+        """Deprecated: generic nonces cannot authorize protected resources."""
+        raise RuntimeError(
+            "Legacy /nonce flow retired: use request-bound aifinpay-ed25519-v2 auth"
+        )
 
-    def _sign_nonce(self, nonce: str) -> str:
-        msg = f"AiFinPay-x402:{nonce}:{self.address}".encode()
-        digest = hashlib.sha256(msg).digest()
-        sig = self._sk.sign(digest).signature
-        return base58.b58encode(sig).decode()
+    def _sign_nonce(self, _nonce: str) -> None:
+        """Deprecated: unbound generic nonce signatures are retired."""
+        raise RuntimeError(
+            "Legacy nonce signing retired: use the bound 402 facilitator flow"
+        )
 
-    def auth_headers(self) -> Dict[str, str]:
-        """Build a fresh AiFinPay-native x402 header set (one-time, 60s TTL)."""
-        nonce_info = self._fetch_nonce()
-        nonce = nonce_info["nonce"]
-        return {
-            "x-agent-pubkey": self.address,
-            "x-nonce": nonce,
-            "x-signature": self._sign_nonce(nonce),
-        }
+    def auth_headers(self) -> None:
+        """Deprecated: use the request-bound facilitator flow."""
+        raise RuntimeError(
+            "Legacy auth_headers() retired: use the bound 402 facilitator flow"
+        )
 
     # ── Funding / Seat ────────────────────────────────────────────────────
 

@@ -1,9 +1,5 @@
 name: CI
 
-# Release gate for the AiFinPay SDK monorepo.
-# Every job here was verified to pass locally (Node 20.20.2, Python 3.13)
-# before being committed. Requires no secrets.
-
 on:
   push:
   pull_request:
@@ -22,13 +18,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Need history back to the merge base to compare versions.
           fetch-depth: 0
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-
       - name: Check
         env:
           BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.event.pull_request.base.ref) || 'origin/main' }}
@@ -42,64 +35,77 @@ jobs:
         working-directory: node
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: node/package-lock.json
-
-      # `npm ci` (not `npm install`) so the lockfile is authoritative and a bad
-      # upstream release cannot silently redden CI with no change on our side.
-      # The lockfile was stale — missing @solana/web3.js and its whole subtree —
-      # and has been regenerated; keep it in sync or this step fails loudly,
-      # which is the point.
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
-
       - name: Build (tsc)
         run: npm run build
-
       - name: Test (vitest)
         run: npm test
 
-      # Catches a broken `files`/exports config before it reaches npm.
+      # The vendored splitter table must match the canonical registry in
+      # evm-contract, which is verified there against live chain state. A
+      # hand-edit here would change where the SDK sends money.
+      - name: Vendored registry matches the canonical one
+        run: npm run registry:check
+
       - name: Verify publishable tarball
         run: npm pack --dry-run
 
   mcp-server:
-    name: mcp — @aifinpay/mcp (build)
+    name: mcp — @aifinpay/mcp (build + test)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: mcp
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: mcp/package-lock.json
+      # Checked against the COMMITTED manifest, before anything below rewrites
+      # it for local resolution.
+      - name: MCP declares a range that resolves to this SDK
+        working-directory: .
+        run: node scripts/check-mcp-sdk-pin.mjs
 
-      # Lockfile regenerated alongside node/ — `npm ci` keeps it authoritative.
-      # Note: mcp depends on the *published* @aifinpay/agent from npm, not on
-      # the sibling node/ directory, so this job validates the MCP server
-      # against the released SDK.
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+      # The candidate SDK version is not published yet, so `npm ci` cannot
+      # resolve it and would silently fall back to an older published build if
+      # the range allowed one. Build the SDK here and install it by path, so
+      # the tests below exercise exactly the code that will ship.
+      #
+      # The manifest edit is CI-only and never committed. At publish time the
+      # committed `^2.0.0` resolves normally, which the check above enforces.
+      - name: Build and install this repo's SDK
+        run: |
+          (cd ../node && npm ci --no-audit --no-fund && npm run build)
+          npm pkg set dependencies.@aifinpay/agent=file:../node
+          npm install --no-audit --no-fund
+          # npm ls, not require('@aifinpay/agent/package.json') — the package's
+          # exports map does not expose package.json, so requiring it throws.
+          npm ls @aifinpay/agent
 
       - name: Build (tsc)
         run: npm run build
 
+      - name: Test security regressions (vitest)
+        run: npm test
+
+      # npm install rewrote both files to point at the local path. Put them
+      # back so the tarball built below is the publishable one.
+      - name: Restore the publishable manifest
+        run: git checkout -- package.json package-lock.json
+
       - name: Syntax-check bin entrypoint
         run: node --check bin/aifinpay-mcp.js
-
       - name: Verify publishable tarball
         run: npm pack --dry-run
-
-      # No `npm test` step: mcp/ has zero test files, so `vitest run` exits 1
-      # ("No test files found"). Adding tests is tracked separately.
 
   python-sdk:
     name: python — aifinpay-agent (install + pytest)
@@ -109,16 +115,13 @@ jobs:
         working-directory: python
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
           cache: pip
           cache-dependency-path: python/pyproject.toml
-
       - name: Install package + test deps
         run: python -m pip install -e . pytest
-
       - name: Test (pytest)
         run: python -m pytest tests -q
 
@@ -127,13 +130,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      # Cheap parse-only gate. Examples are not built or installed in CI;
-      # this only guarantees the shipped reference bridges are valid JS.
       - name: node --check reference bridges
         run: |
           files=$(find examples mcp-http -maxdepth 2 \( -name 'server.js' -o -name 'store.js' \) -not -path '*/node_modules/*' | sort)

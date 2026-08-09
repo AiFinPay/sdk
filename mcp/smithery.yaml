@@ -1,32 +1,26 @@
 name: aifinpay
 displayName: AiFinPay
-description: Stripe for AI agents. Pay for any HTTP API in stablecoins or native tokens on Polygon and Solana mainnet with one MCP call. Non-custodial, on-chain settlement.
+description: Non-custodial AiFinPay payment and quote tools for AI agents. Fund-moving paths fail closed unless operator spend limits, trusted pricing, and canonical audited deployment targets are verified.
 version: 1.0.0
 license: MIT
 homepage: https://aifinpay.io
 repository: https://github.com/AiFinPay/sdk
 documentation: https://aifinpay.io/docs
-author: CoinSecurities (SECCO)
+author: AiFinPay
 contact: hello@aifinpay.io
 
 icon: https://aifinpay.io/favicon.png
 
 categories:
   - payments
-  - web3
   - agent-tools
 
 tags:
   - payments
   - ai-agents
   - x402
-  - polygon
-  - solana
-  - stablecoins
-  - usdc
-  - usdt
-  - stripe-for-ai
   - non-custodial
+  - payment-infrastructure
 
 startCommand:
   type: stdio
@@ -42,42 +36,35 @@ configSchema:
   properties:
     AIFINPAY_AGENT_SECRET:
       type: string
-      title: Agent secret (base58)
-      description: Persistent Ed25519 secret for the agent identity. Both the Solana and the EVM address derive deterministically from it. Leave blank to generate a fresh keypair each session (testing only). Signing happens locally inside the MCP process; never transmitted to AiFinPay servers.
+      title: Agent secret
+      description: Local wallet credential. Omit only for an unfunded ephemeral testing identity. Signing remains local to the MCP process.
     AIFINPAY_MAX_USD:
       type: string
       title: Max USD per call
-      description: Hard cap per paid call (applies to both payable_fetch and agent_call). Refuses to settle anything above this.
-      default: "0.10"
+      description: Mandatory positive finite operator ceiling for fund-moving tools. Tool/model arguments can tighten but never widen it.
     AIFINPAY_BASE_URL:
       type: string
-      title: API base URL
-      description: Override the AiFinPay backend endpoint (nonce, manifest, registry).
+      title: Trusted AiFinPay origin
+      description: Trusted AiFinPay backend/registry origin.
       default: https://aifinpay.io
-  required: []
+  required:
+    - AIFINPAY_MAX_USD
 
 tools:
   - name: agent_call
-    description: Registry-resolved paid call to a named provider (exa, io-net, venice, ...). Resolves bridge URL + price from the public registry, settles on-chain, retries with proof, returns the upstream response with the tx hash.
-  - name: agent_claim_self
-    description: Attach this agent to a user's AiFinPay account using a magic-link URL — the agent signs a claim challenge with its own key. Shows up on the user's watchlist + dashboard.
+    description: Registry-resolved provider call. Any payment is refused unless operator spend limits and canonical target verification pass.
   - name: payable_fetch
-    description: One-shot paid HTTP fetch. Hits a 402-gated endpoint, negotiates the quote, signs and broadcasts payment on-chain, retries with proof, and returns the response body. The agent's fetch for the paid web.
+    description: Fetch a URL and handle a supported 402 only after request-bound authorization, value checks and payment-target validation pass.
   - name: agent_address
-    description: Return the agent's on-chain identities (Polygon 0x and Solana base58) derived from the configured secret. Used for funding the agent before its first paid call.
+    description: Return locally derived wallet identities. No funds move.
   - name: agent_quote
-    description: Get a price quote for any 402-gated endpoint without paying. Returns facilitator flavor and merchant terms.
+    description: Inspect a 402 challenge without paying.
   - name: pay_with_split
-    description: Get on-chain instructions for a payment through the AiFinPay splitter contract for B2B partner endpoints. Partner receives their share and the protocol fee is taken on top, atomically in a single transaction.
+    description: Fee-on-top settlement tool. Legacy fee-inclusive splitters and not-yet-audited deployments are rejected.
   - name: quote_split
-    description: Get a quote for a B2B endpoint using the atomic fee-on-top splitter. Shows partner share, protocol fee, chain, and expiry.
+    description: Preview fee-on-top payment components without signing.
 
-live_evidence:
-  - chain: polygon
-    use_case: Exa paid search via UnifiedAgent SDK
-    tx: "0xeb13c5eddf645b3e5b5e5db82d8b19d301a4c0c8593f6e7dce9cd4c3359c8700"
-    explorer: https://polygonscan.com/tx/0xeb13c5eddf645b3e5b5e5db82d8b19d301a4c0c8593f6e7dce9cd4c3359c8700
-  - chain: polygon
-    use_case: io.net Llama-3.3-70B inference via SDK, $0.025
-    tx: "0x7c6ca0ffcf75b1ca3ade4800fb896c4bb08bc5f1a91916dc2cf4918f16129f0a"
-    explorer: https://polygonscan.com/tx/0x7c6ca0ffcf75b1ca3ade4800fb896c4bb08bc5f1a91916dc2cf4918f16129f0a
+productionSupportPolicy: >-
+  A chain or asset is production-supported only when the exact published artifact
+  is mapped to the canonical deployment registry, runtime-verified, covered by
+  reproducible E2E tests, and approved by the final security audit.

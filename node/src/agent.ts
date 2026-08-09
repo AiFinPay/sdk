@@ -146,28 +146,24 @@ export class Agent {
     >;
   }
 
-  // ── x402 auth (AiFinPay-native helpers, kept for backwards compat) ────
+  // ── x402 auth ────────────────────────────────────────────────────────
 
-  async fetchNonce(): Promise<{ nonce: string; expires_at: string }> {
-    return this.json("GET", "/nonce") as Promise<{
-      nonce: string;
-      expires_at: string;
-    }>;
+  /**
+   * @deprecated Generic nonces are intentionally not signable. Use `fetch()` /
+   * `request()` so the facilitator can sign the server's request-bound v2
+   * challenge (method + resource + expiry + value terms).
+   */
+  async fetchNonce(): Promise<never> {
+    throw new Error(
+      "Legacy /nonce flow retired: use the request-bound aifinpay-ed25519-v2 facilitator",
+    );
   }
 
-  /** Build a fresh AiFinPay-native x402 header set. */
-  async authHeaders(): Promise<Record<string, string>> {
-    const { nonce } = await this.fetchNonce();
-    const msg = new TextEncoder().encode(
-      `AiFinPay-x402:${nonce}:${this.address}`,
+  /** @deprecated Unbound generic nonce signatures are retired. */
+  async authHeaders(): Promise<never> {
+    throw new Error(
+      "Legacy authHeaders() retired: use fetch()/request() with a bound 402 challenge",
     );
-    const digest = await sha256(msg);
-    const sig = nacl.sign.detached(digest, this.secretKey);
-    return {
-      "x-agent-pubkey": this.address,
-      "x-nonce": nonce,
-      "x-signature": bs58.encode(sig),
-    };
   }
 
   // ── Seat / funding ────────────────────────────────────────────────────
@@ -252,8 +248,9 @@ export class Agent {
    * is rarely needed anymore. Kept for back-compat through 1.0.0.
    */
   async quoteSplit(args: {
-    chain: "solana" | "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm";
+    chain: "solana" | "polygon";
     merchantAmount: bigint | number | string;
+    includeCreator?: boolean;
   }): Promise<Record<string, unknown>> {
     const param =
       args.chain === "solana"
@@ -261,6 +258,7 @@ export class Agent {
         : "merchant_amount_wei";
     const url = new URL(`${this.baseUrl}/api/b2b/quote-split`);
     url.searchParams.set(param, String(args.merchantAmount));
+    if (args.includeCreator) url.searchParams.set("include_creator", "true");
     const r = await this.fetchImpl(url.toString(), {
       headers: { accept: "application/json", "user-agent": SDK_UA },
     });
@@ -278,7 +276,7 @@ export class Agent {
    * Get the on-chain instructions for a fee-on-top split payment.
    *
    * The merchant receives `merchantAmount` units (lamports for Solana,
-   * wei for Polygon). Treasury fee + IP-creator fee are added ON TOP.
+   * wei for Polygon). The treasury fee and optional IP-creator fee are added ON TOP.
    *
    * The SDK does **not** submit the transaction — it's non-custodial.
    * Caller uses the returned `args` + `accounts` (Solana) or
@@ -290,7 +288,7 @@ export class Agent {
    * onboarding message).
    */
   async payWithSplitInvoice(args: {
-    chain: "solana" | "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm";
+    chain: "solana" | "polygon";
     merchantWallet: string;
     merchantAmount: bigint | number | string;
     orderId: string;

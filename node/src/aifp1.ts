@@ -505,11 +505,19 @@ export interface Aifp1Deps {
   /**
    * Settle `totalWei` to `merchantWallet` with `orderId`, returning a hash
    * whose transaction was included AND succeeded.
+   *
+   * The component amounts are passed through as the gateway quoted them, not
+   * recomputed here: the v1.3 splitter is fee-on-top and the settling side
+   * checks each component against its own registry. Sending only the total
+   * would leave nothing to check that against.
    */
   settle(p: {
-    merchantWallet: `0x${string}`;
-    totalWei:       bigint;
-    orderId:        string;
+    merchantWallet:      `0x${string}`;
+    totalWei:            bigint;
+    orderId:             string;
+    merchantAmountWei?:  bigint;
+    treasuryAmountWei?:  bigint;
+    ipCreatorAmountWei?: bigint;
   }): Promise<`0x${string}`>;
   /** Per-call cap. false ⇒ the caller asked to skip rather than throw. */
   checkPerCall(usd: number): boolean;
@@ -723,6 +731,11 @@ export async function aifp1Fetch(
         // The binding the server verifies on-chain: the Payment event's orderId
         // must equal the quote id, or /v1/pay answers order_id_mismatch.
         orderId:        quote.quote_id,
+        // Forwarded verbatim so the settling side can check the split against
+        // its registry rather than trusting the total.
+        merchantAmountWei:  BigInt(native.merchant_wei),
+        treasuryAmountWei:  BigInt(native.treasury_wei),
+        ipCreatorAmountWei: BigInt(native.creator_wei),
       });
 
       // Money has moved. The reservation becomes settled spend here and not one

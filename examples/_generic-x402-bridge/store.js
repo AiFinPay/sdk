@@ -47,36 +47,13 @@ function gcMem() {
   }
 }
 
-/**
- * Record an issued order.
- *
- * `requestHash` binds the order to the request that was quoted. Without it the
- * paid retry could carry any body: hasOrder() only asked whether the id
- * existed, so a quote for a cheap call was reusable for an expensive one.
- */
-export async function putOrder(orderId, query, requestHash) {
-  const record = { issuedAt: Date.now(), query, requestHash };
+export async function putOrder(orderId, query) {
   if (useRedis) {
-    await redis.set(ORDER_PFX + orderId, JSON.stringify(record), "EX", ORDER_TTL_S);
+    await redis.set(ORDER_PFX + orderId, JSON.stringify({ issuedAt: Date.now(), query }), "EX", ORDER_TTL_S);
   } else {
-    memOrders.set(orderId, record);
+    if (memOrders.size > 10_000) gcMem();
+    memOrders.set(orderId, { issuedAt: Date.now(), query });
   }
-}
-
-/** The stored order, or null — returned whole so callers can compare it. */
-export async function getOrder(orderId) {
-  if (useRedis) {
-    const raw = await redis.get(ORDER_PFX + orderId);
-    if (!raw) return null;
-    try { return JSON.parse(raw); } catch { return null; }
-  }
-  const e = memOrders.get(orderId);
-  if (!e) return null;
-  if (Date.now() - e.issuedAt > ORDER_TTL_S * 1000) {
-    memOrders.delete(orderId);
-    return null;
-  }
-  return e;
 }
 
 export async function hasOrder(orderId) {
