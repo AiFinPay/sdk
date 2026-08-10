@@ -57,6 +57,12 @@ const POLYGON_RPC      = process.env.POLYGON_RPC || "https://polygon.drpc.org";
 const SPLITTER_ADDRESS = process.env.SPLITTER_ADDRESS_POLYGON
                       || "0xE34Fc0E6694821c600Fa0955C0F74720ea6d8440";
 const BRIDGE_MERCHANT_WALLET = process.env.BRIDGE_MERCHANT_WALLET || "";
+// NOTE: a fixed wei price is a trap in a volatile asset. This default, 0.015
+// POL, was chosen when POL traded at $0.70 and was worth $0.0105; at $0.077 it
+// collects $0.00116 — the same number, nine times less money, with nothing
+// failing to signal it. The Exa bridge now prices in USD and converts at quote
+// time (see examples/exa-x402-bridge/server.js). Copy that before using this
+// template for anything that has to cover a cost.
 const PRICE_WEI        = process.env.PRICE_WEI || "15000000000000000"; // ~$0.0105
 const ORDER_TTL_MS     = 10 * 60_000;
 

@@ -98,8 +98,46 @@ jobs:
       - name: Verify publishable tarball
         run: npm pack --dry-run
 
-      # No `npm test` step: mcp/ has zero test files, so `vitest run` exits 1
-      # ("No test files found"). Adding tests is tracked separately.
+      # mcp/ had no test files when this job was written, and the note saying so
+      # outlived the fact. tests/ now holds 43 of them, all covering SSRF on the
+      # claim-self and fetch paths, and none had ever run here.
+      - name: Test (vitest)
+        run: npm test
+
+  # The job above installs @aifinpay/agent from the registry, which is the right
+  # thing for validating a release — but it means a breaking change in node/ is
+  # invisible until after it is published, and on a release commit it fails for
+  # a third reason: the version mcp/ now asks for does not exist on npm yet.
+  # That is what turned run 31308715367 red.
+  #
+  # This job answers the other question: does the MCP server still build against
+  # the agent code in THIS commit? Packed and installed as a tarball rather than
+  # linked, so it exercises the same file list npm publish would ship.
+  mcp-against-source:
+    name: mcp — built against the agent in this commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build and pack the agent from source
+        working-directory: node
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          npm pack --pack-destination /tmp
+
+      - name: Build the MCP server against it
+        working-directory: mcp
+        run: |
+          npm ci --no-audit --no-fund
+          # Overwrite the registry copy with the one just built. --no-save so
+          # the lockfile stays authoritative for the release job.
+          npm install --no-save --no-audit --no-fund /tmp/aifinpay-agent-*.tgz
+          npm run build
+          npm test
 
   python-sdk:
     name: python — aifinpay-agent (install + pytest)

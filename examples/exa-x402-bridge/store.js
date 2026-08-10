@@ -72,8 +72,13 @@ function gcMem() {
  * the id existed, so a quote taken for a cheap call was reusable for an
  * expensive one and the provider paid the difference.
  */
-export async function putOrder(orderId, query, requestHash) {
-  const record = { issuedAt: Date.now(), query, requestHash };
+export async function putOrder(orderId, query, requestHash, totalWei) {
+  // totalWei is the price we QUOTED for this order, stored so verification can
+  // compare against the promise rather than against a freshly computed number.
+  // The price is derived from a live POL rate now, so recomputing at verify
+  // time would reject an honest payment whenever the rate moved between the
+  // challenge and the transaction — which is most of the time.
+  const record = { issuedAt: Date.now(), query, requestHash, totalWei: totalWei ? String(totalWei) : undefined };
   if (useRedis) {
     await redis.set(ORDER_PFX + orderId, JSON.stringify(record), "EX", ORDER_TTL_S);
   } else {

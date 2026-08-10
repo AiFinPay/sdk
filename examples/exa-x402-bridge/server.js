@@ -61,7 +61,62 @@ const POLYGON_RPC            = process.env.POLYGON_RPC            || "https://po
 const SPLITTER_ADDRESS       = process.env.SPLITTER_ADDRESS_POLYGON
                             || "0xbD1fa5453f212F096c0213788a645eC597FB4DDe";
 const BRIDGE_MERCHANT_WALLET = process.env.BRIDGE_MERCHANT_WALLET || "";
-const PRICE_WEI              = process.env.PRICE_WEI              || "15000000000000000";
+// The price is denominated in USD and converted to POL at quote time.
+//
+// It used to be a fixed wei amount, 0.015 POL, chosen when POL traded at $0.70
+// — which made it $0.0105, the number still printed on the pricing page and
+// served from services.json. POL is now near $0.077, so that same 0.015 POL
+// collects about $0.00116 while Exa's wholesale cost is $0.005. Every call
+// through this bridge has been losing roughly $0.0038, quietly, since the rate
+// fell. Nothing failed; the numbers just stopped meaning what they said.
+//
+// So: USD is the stored price, POL is computed per quote. A fixed wei amount in
+// a volatile asset is a promise about a price that nobody re-checks.
+const PRICE_USD = Number(process.env.PRICE_USD || "0.0105");
+
+// Kept only so an operator can pin an exact amount for a test. Unset in
+// production; setting it reintroduces exactly the drift described above.
+const PRICE_WEI_OVERRIDE = process.env.PRICE_WEI || "";
+
+// Where the rate comes from. Same feed the backend quotes AIFP-1 with, so the
+// bridge and the protocol cannot disagree about what POL is worth.
+const PRICE_FEED_URL = process.env.PRICE_FEED_URL || "https://aifinpay.io/api/price/native";
+
+// A rate this old is refused rather than used. The failure mode we are avoiding
+// is the one that created this bug: an unavailable feed silently falling back to
+// a number from months ago. Better to answer 503 for a minute than to quote a
+// price that is wrong by a factor of nine.
+const RATE_MAX_AGE_MS = 15 * 60_000;
+const RATE_REFRESH_MS = 60_000;
+
+let _rate = { usd: 0, at: 0 };
+
+async function polUsd() {
+  const now = Date.now();
+  if (_rate.usd > 0 && now - _rate.at < RATE_REFRESH_MS) return _rate.usd;
+  try {
+    const r = await fetch(PRICE_FEED_URL, { signal: AbortSignal.timeout(5_000) });
+    if (r.ok) {
+      const j = await r.json();
+      const v = Number(j?.usd?.POL ?? j?.usd?.MATIC);
+      if (Number.isFinite(v) && v > 0) {
+        _rate = { usd: v, at: now };
+        return v;
+      }
+    }
+  } catch { /* fall through to the staleness check */ }
+  if (_rate.usd > 0 && now - _rate.at < RATE_MAX_AGE_MS) return _rate.usd;
+  return 0;
+}
+
+/** Wei to charge for one call, at the current rate. 0 means we cannot price it. */
+async function quoteWei() {
+  if (PRICE_WEI_OVERRIDE) return BigInt(PRICE_WEI_OVERRIDE);
+  const usd = await polUsd();
+  if (!usd) return 0n;
+  // Round up: never quote less than the USD price is worth.
+  return BigInt(Math.ceil((PRICE_USD / usd) * 1e18));
+}
 const ORDER_TTL_MS           = 10 * 60_000;
 
 // ── Stablecoin pricing (v5.3 B2BSplitter.payStable path) ────────────────
@@ -196,8 +251,16 @@ async function challenge402(res, query, req) {
   const orderId = issueOrderId();
   // Binding the order to the request is what stops a quote taken for a cheap
   // call from being redeemed for an expensive one.
-  await putOrder(orderId, query, req ? requestHashOf(req) : undefined);
-  const totalWei = BigInt(PRICE_WEI);
+  const totalWei = await quoteWei();
+  if (totalWei === 0n) {
+    // No usable rate. Refusing beats inventing a price — see PRICE_USD above.
+    res.status(503).json({
+      error: "pricing_unavailable",
+      detail: "the POL rate could not be read; this bridge prices in USD and will not quote without one",
+    });
+    return;
+  }
+  await putOrder(orderId, query, req ? requestHashOf(req) : undefined, totalWei);
   const treasuryAmt = (totalWei * 100n) / 10000n;
   const ipAmt       = (totalWei * 1n)   / 10000n;
   const merchantAmt = totalWei - treasuryAmt - ipAmt;
@@ -396,8 +459,16 @@ async function verifyTx(txHash, expectedOrderId) {
   if (getAddress(merchant) !== getAddress(BRIDGE_MERCHANT_WALLET)) {
     return { ok: false, reason: `merchant mismatch: paid to ${merchant}, expected ${BRIDGE_MERCHANT_WALLET}` };
   }
-  if (totalAmount < BigInt(PRICE_WEI)) {
-    return { ok: false, reason: `underpaid: totalAmount=${totalAmount} wei < required ${PRICE_WEI} wei` };
+  // Against the price QUOTED for this order, not a fresh one. The rate moves
+  // between the 402 and the transaction; charging the agent one number and
+  // checking it against another would reject honest payments.
+  const quotedOrder = expectedOrderId ? await getOrder(expectedOrderId) : null;
+  const quoted = quotedOrder?.totalWei ? BigInt(quotedOrder.totalWei) : await quoteWei();
+  if (quoted === 0n) {
+    return { ok: false, reason: "cannot verify: no quoted amount on the order and no usable rate" };
+  }
+  if (totalAmount < quoted) {
+    return { ok: false, reason: `underpaid: totalAmount=${totalAmount} wei < quoted ${quoted} wei` };
   }
   return {
     ok: true,
@@ -426,20 +497,26 @@ const challengeLimiter = rateLimit({
   message: { error: "rate_limit_exceeded", detail: "Max 60 challenge requests per IP per minute." },
 });
 
-app.get("/", (_req, res) => res.json({
+app.get("/", async (_req, res) => res.json({
   service: SERVICE_NAME,
   description: "AiFinPay-gated proxy in front of api.exa.ai/search",
   upstream: EXA_API_URL,
-  pricing: { total_wei: PRICE_WEI, split: "98.99% merchant / 1.00% treasury / 0.01% creator" },
+  pricing: {
+    price_usd: PRICE_USD,
+    total_wei: (await quoteWei()).toString(),
+    pol_usd: await polUsd(),
+    note: "total_wei is derived from price_usd at the current POL rate and moves with it",
+    split: "98.99% merchant / 1.00% treasury / 0.01% creator",
+  },
 }));
 
-app.get("/.well-known/x402.json", (_req, res) => res.json({
+app.get("/.well-known/x402.json", async (_req, res) => res.json({
   protocol: "AiFinPay v5.3",
   facilitator: "aifinpay-pay-native",
   chain: "polygon",
   splitter: SPLITTER_ADDRESS,
   merchant_wallet: BRIDGE_MERCHANT_WALLET,
-  total_wei: PRICE_WEI,
+  total_wei: (await quoteWei()).toString(),
   paid_endpoints: ["/search"],
 }));
 
@@ -659,6 +736,6 @@ app.listen(PORT, () => {
   console.log(`  Upstream:    ${EXA_API_URL}`);
   console.log(`  Splitter:    ${SPLITTER_ADDRESS} (Polygon, B2BSplitter)`);
   console.log(`  Merchant:    ${BRIDGE_MERCHANT_WALLET}`);
-  console.log(`  Total:       ${PRICE_WEI} wei (~${(Number(PRICE_WEI) / 1e18).toFixed(6)} MATIC) per call, split 98.99/1/0.01`);
+  console.log(`  Price:       $${PRICE_USD} per call, converted to POL at the live rate, split 98.99/1/0.01`);
   console.log(`  Try:         curl -X POST http://localhost:${PORT}/search -H 'content-type: application/json' -d '{"query":"hello"}'`);
 });
