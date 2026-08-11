@@ -4,6 +4,28 @@ All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
 `1.0.0` onward the public API is stable and changes follow semver.
 
+## @aifinpay/agent 1.8.2
+
+### Fixed
+
+- **An agent hitting a real x402 endpoint now gets a comprehensible error.**
+  `standard-x402.ts` targets x402Version 1; the live standard is version 2 and
+  sends payment data base64-encoded in a `payment-required` response header
+  rather than in the body. Our detector returned false for it — correct — but
+  `CoinbaseX402Facilitator` then claimed the response, because it looks for a
+  `PAYMENT-REQUIRED` header and HTTP header names are case-insensitive. The
+  agent failed deep inside a facilitator that had nothing to do with the
+  endpoint it was talking to.
+
+  `detectFacilitator` now recognises v2 before choosing a facilitator and
+  refuses with a message naming the version. Interoperability is unchanged —
+  still none — but the failure is legible instead of misleading.
+
+- The file header claimed this facilitator made agents "interoperable with the
+  wider x402 economy (Coinbase, Dexter, 69k+ agents)". It shipped in 1.8.1 and
+  could not complete a single payment to any of them. It now describes what the
+  implementation actually targets and how it differs from the live standard.
+
 ## @aifinpay/agent 1.4.0 · aifinpay-agent 1.2.0 — 2026-08-01
 
 ### Changed
