@@ -34,6 +34,28 @@ export async function detectFacilitator(
     return new cls();
   }
 
+
+  // Checked BEFORE the loop, and that ordering is the whole point.
+  //
+  // The Coinbase facilitator detects a `PAYMENT-REQUIRED` header, and the v2
+  // standard uses `payment-required` — the same header, since HTTP header
+  // names are case-insensitive. So Coinbase claims a real v2 response, wins
+  // the loop, and then fails somewhere deep in buildAuth with an error about
+  // its own internals. Anyone debugging that goes looking at Coinbase, which
+  // has nothing to do with it.
+  //
+  // Verified against https://x402.org/protected on 2026-08-10: without this,
+  // detectFacilitator returns coinbase-x402 for an endpoint that is not
+  // Coinbase's flavour at all.
+  if (StandardX402Facilitator.isUnsupportedV2(resp)) {
+    throw new UnsupportedFacilitatorError(
+      "this endpoint speaks x402 version 2 (payment data in the " +
+        "`payment-required` header), which this SDK does not implement yet — " +
+        "its standard-x402 facilitator targets version 1, where the payment " +
+        "data is in the response body. The agent cannot pay this endpoint. " +
+        "Tracking: Obsidian/proposals/2026-08-10-x402-interop-scoping.md",
+    );
+  }
   for (const cls of REGISTERED) {
     if (await cls.detect(resp)) return new cls();
   }

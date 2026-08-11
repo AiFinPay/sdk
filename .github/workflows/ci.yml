@@ -107,6 +107,13 @@ jobs:
       - name: Verify publishable tarball
         run: npm pack --dry-run
 
+      # NOTE: main carries a separate `mcp-against-source` job that packs the
+      # agent and installs the tarball. It is deliberately NOT merged here — the
+      # step above already builds mcp against the agent in this commit, and a
+      # registry install of @aifinpay/agent would fail on this branch because
+      # ^2.0.0 is not published. Re-adding it reddens CI without testing
+      # anything this job does not already cover. (main's comment there records
+      # run 31308715367, which failed for exactly that reason.)
   python-sdk:
     name: python — aifinpay-agent (install + pytest)
     runs-on: ubuntu-latest

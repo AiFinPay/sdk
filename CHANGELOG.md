@@ -4,6 +4,76 @@ All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
 `1.0.0` onward the public API is stable and changes follow semver.
 
+## 2.0.0 — @aifinpay/agent · @aifinpay/mcp · aifinpay-agent
+
+Reconciliation of `security/audit-2026-08-06-remediation` with `main`. A major
+bump on all three packages because behaviour was **removed**, not added.
+
+### Removed — breaking
+
+- **`agent_claim_self` is gone from the MCP server.** The magic-link claim flow
+  handed out bearer credentials over a path that could be pointed anywhere; the
+  tool, its registration and its tests were retired together, so nothing is left
+  half-removed.
+- **Legacy splitter signing (v1.1 and v1.2) can no longer reach a wallet.**
+  Their native entrypoint treats the transferred total as fee-INCLUSIVE, which
+  underpays the merchant relative to the fee-on-top rule the product now quotes.
+  Only a v1.3 target may be signed for. `detectSplitterVersion` and the dynamic
+  `payMatic` fallback were removed with it.
+- **The legacy generic nonce-signing helpers are gone.** AiFinPay authorization
+  is now bound to the challenge context it was issued for, so a signature taken
+  for one request cannot be replayed against another.
+
+### Security
+
+- Every signing-critical field — network, splitter address, runtime codehash,
+  version, treasury, governance, fee policy, merchant, validity window — is
+  resolved against an operator-owned registry before any calldata exists. RPC
+  failure, empty code, a stale entry or any mismatch fails closed.
+- Standard x402 EIP-3009 signing stays disabled until a signed registry binds
+  asset/codehash/decimals, `payTo`, the EIP-712 domain and validity. Detection
+  and a traceable error remain; no account signing method is reached.
+- Payments with an unknown value fail closed rather than proceeding on a guess.
+
+### Note on what is enabled
+
+**No network in the shipped registry is v1.3, and `settlementEnabled` is false
+on all of them.** The EVM native settlement path is therefore closed in this
+release by construction, not by accident. Enabling one is a separate, explicit
+decision per network.
+
+### Kept from 1.8.2
+
+- The x402 v2 guard and the corrected `standard-x402.ts` header shipped in
+  1.8.2 are preserved. `node/tests/x402-v2-is-named.test.ts` still passes, which
+  is what proves it — the file's header now carries both explanations: why
+  `detect()` fails on live endpoints, and why `buildAuth` refuses to sign.
+- `bs58` and `tweetnacl` stay declared as direct dependencies of `@aifinpay/mcp`.
+  On `main` they were imported at runtime but never declared, resolving only by
+  transitive hoisting from `@aifinpay/agent`.
+
+## @aifinpay/agent 1.8.2
+
+### Fixed
+
+- **An agent hitting a real x402 endpoint now gets a comprehensible error.**
+  `standard-x402.ts` targets x402Version 1; the live standard is version 2 and
+  sends payment data base64-encoded in a `payment-required` response header
+  rather than in the body. Our detector returned false for it — correct — but
+  `CoinbaseX402Facilitator` then claimed the response, because it looks for a
+  `PAYMENT-REQUIRED` header and HTTP header names are case-insensitive. The
+  agent failed deep inside a facilitator that had nothing to do with the
+  endpoint it was talking to.
+
+  `detectFacilitator` now recognises v2 before choosing a facilitator and
+  refuses with a message naming the version. Interoperability is unchanged —
+  still none — but the failure is legible instead of misleading.
+
+- The file header claimed this facilitator made agents "interoperable with the
+  wider x402 economy (Coinbase, Dexter, 69k+ agents)". It shipped in 1.8.1 and
+  could not complete a single payment to any of them. It now describes what the
+  implementation actually targets and how it differs from the live standard.
+
 ## @aifinpay/agent 1.7.1 — 2026-08-04
 
 ### Security
