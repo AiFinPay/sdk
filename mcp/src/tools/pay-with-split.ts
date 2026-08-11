@@ -3,13 +3,8 @@ import type { ToolContext } from "../server.js";
 // NOTE on the chain enum below: pay_with_split and quote_split are
 // BACKEND-INVOICE-DRIVEN — they call the operator API
 // (POST /api/b2b/pay-with-split, GET /api/b2b/quote-split), which supports
-// solana + 6 on-chain-verified EVM chains (polygon, base, optimism,
-// unichain, botchain, xrplevm). Keep this enum in lockstep with the
-// backend's ../evm-chains.js registry — a chain listed here without
-// backend support would just be rejected server-side. Stables: USDC on
-// base/optimism/unichain, USDC+USDT on polygon; botchain/xrplevm are
-// native-token only. Direct (non-invoice) splitter settlement lives in
-// the SDK's AiFinPayAgent.call() (@aifinpay/agent >= 1.3.0).
+// solana + polygon only. Other networks remain address/balance inventory,
+// not settlement rails, until a verified fee-on-top deployment is recorded.
 
 export function payWithSplitTool() {
   return {
@@ -17,7 +12,7 @@ export function payWithSplitTool() {
     description:
       "Get on-chain instructions for a fee-on-top atomic 3-way payment. " +
       "The merchant receives the FULL quoted price; AiFinPay protocol fee " +
-      "(1%) and creator/referral fee (0.01%) are added ON TOP. The agent " +
+      "(1%) and optional creator/referral fee (0.01%) are added ON TOP. The agent " +
       "executes the returned instructions with their chain SDK of choice. " +
       "Returns 503 with onboarding message if the splitter is not yet " +
       "deployed on the requested chain.",
@@ -26,7 +21,7 @@ export function payWithSplitTool() {
       properties: {
         chain: {
           type: "string",
-          enum: ["solana", "polygon", "base", "optimism", "unichain", "botchain", "xrplevm"],
+          enum: ["solana", "polygon"],
           description: "Chain to settle on.",
         },
         merchant_wallet: {
@@ -47,8 +42,8 @@ export function payWithSplitTool() {
         fee_recipient: {
           type: "string",
           description:
-            "Optional — receives the IP-creator fee. Omit to route the " +
-            "creator slot to AiFinPay treasury.",
+            "Optional — enables and receives the 0.01% IP-creator fee. " +
+            "When omitted no creator fee is charged.",
         },
       },
       required: ["chain", "merchant_wallet", "merchant_amount", "order_id"],
@@ -63,9 +58,9 @@ export async function runPayWithSplit(
   ctx: ToolContext,
   args: Record<string, unknown>,
 ) {
-  const chain = args.chain as "solana" | "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm" | undefined;
-  if (!chain || !["solana", "polygon", "base", "optimism", "unichain", "botchain", "xrplevm"].includes(chain)) {
-    return errorResult("chain must be 'solana', 'polygon', 'base', 'optimism', 'unichain', 'botchain' or 'xrplevm'");
+  const chain = args.chain as "solana" | "polygon" | undefined;
+  if (!chain || !["solana", "polygon"].includes(chain)) {
+    return errorResult("chain must be 'solana' or 'polygon'");
   }
   const merchantWallet = String(args.merchant_wallet ?? "");
   const merchantAmount = String(args.merchant_amount ?? "");
@@ -82,10 +77,7 @@ export async function runPayWithSplit(
 
   try {
     const invoice = await ctx.agent.inner.payWithSplitInvoice({
-      // published @aifinpay/agent (<=1.3.0) still types this "solana"|"polygon";
-      // the value is forwarded verbatim to the backend, which accepts all 7.
-      // Drop the cast once agent >=1.3.1 (widened types) is published.
-      chain: chain as "solana" | "polygon",
+      chain,
       merchantWallet,
       merchantAmount,
       orderId,
@@ -112,11 +104,15 @@ export function quoteSplitTool() {
     inputSchema: {
       type: "object",
       properties: {
-        chain: { type: "string", enum: ["solana", "polygon", "base", "optimism", "unichain", "botchain", "xrplevm"] },
+        chain: { type: "string", enum: ["solana", "polygon"] },
         merchant_amount: {
           type: "string",
           description:
             "Merchant's quoted price (lamports for Solana, wei for Polygon).",
+        },
+        include_creator: {
+          type: "boolean",
+          description: "Include the optional 0.01% creator fee in the quote.",
         },
       },
       required: ["chain", "merchant_amount"],
@@ -130,16 +126,20 @@ export async function runQuoteSplit(
   ctx: ToolContext,
   args: Record<string, unknown>,
 ) {
-  const chain = args.chain as "solana" | "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm" | undefined;
-  if (!chain || !["solana", "polygon", "base", "optimism", "unichain", "botchain", "xrplevm"].includes(chain)) {
-    return errorResult("chain must be 'solana', 'polygon', 'base', 'optimism', 'unichain', 'botchain' or 'xrplevm'");
+  const chain = args.chain as "solana" | "polygon" | undefined;
+  if (!chain || !["solana", "polygon"].includes(chain)) {
+    return errorResult("chain must be 'solana' or 'polygon'");
   }
   const merchantAmount = String(args.merchant_amount ?? "");
   if (!merchantAmount) return errorResult("merchant_amount required");
 
   try {
-    // Same published-type lag as above — cast until agent >=1.3.1 ships.
-    const quote = await ctx.agent.inner.quoteSplit({ chain: chain as "solana" | "polygon", merchantAmount });
+    const quoteArgs = {
+      chain,
+      merchantAmount,
+      includeCreator: args.include_creator === true,
+    };
+    const quote = await ctx.agent.inner.quoteSplit(quoteArgs);
     return {
       content: [{ type: "text", text: JSON.stringify(quote, null, 2) }],
       structuredContent: quote,

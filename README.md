@@ -7,18 +7,16 @@
 [![Site](https://img.shields.io/badge/site-aifinpay.io-black.svg)](https://aifinpay.io)
 [![MCP](https://img.shields.io/badge/MCP-compatible-purple.svg)](https://modelcontextprotocol.io)
 
-**Stripe for autonomous AI agents.** One line of code — `agent.pay(url)` —
-and your agent settles a real on-chain payment on Polygon or Solana
-mainnet, then receives the gated response. Non-custodial. Live since
-2026. Polygon facilitator compatible. Direct splitter settlement
-(Node SDK ≥ 1.3.0, `AiFinPayAgent.call()`) also works on Base, Optimism,
-Unichain, BOT Chain and XRPL EVM (native-token path); the backend-quoted
-invoice flow remains Polygon + Solana.
+**Payment tooling for autonomous AI agents.** The SDK implements the HTTP 402
+challenge/authentication loop and non-custodial signing controls. Direct
+settlement is fail-closed in this release candidate: deployed v1.1/v1.2 EVM
+splitters are fee-inclusive, while Solana v0.6 is not yet deployed and verified.
+Network inventory and address support must not be read as live settlement support.
 
 > Canonical domain: **aifinpay.io** — the legacy `aifinpay.company` host is
 > retired; ignore any cached docs or install instructions pointing there
 > (including the old `@alpha` npm tag). Install plain `@aifinpay/agent` /
-> `@aifinpay/mcp` (latest). Protocol status + all 13 live networks:
+> `@aifinpay/mcp` (latest). Protocol and network inventory:
 > [aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
 
 ```bash
@@ -49,10 +47,11 @@ or Cursor's `~/.cursor/mcp.json`:
 }
 ```
 
-Restart the client. Your model now has seven payment tools
+Restart the client. Your model now has six payment tools
 (`payable_fetch`, `agent_address`, `agent_quote`, `agent_call`,
-`pay_with_split`, `quote_split`, `agent_claim_self`) and can
-autonomously settle any x402-gated API.
+`pay_with_split`, `quote_split`) and can
+autonomously negotiate supported x402 APIs. Standard x402 EIP-3009 signing is
+blocked until asset/payTo/domain metadata is backed by a signed target registry.
 
 Full client matrix (Claude Desktop, Cursor, Windsurf, Continue, LobeChat,
 Cline) lives in [`MCP_CONFIG.md`](./MCP_CONFIG.md).
@@ -76,9 +75,10 @@ Coinbase x402, …), signs an Ed25519 challenge, retries the request, and
 returns the response.
 
 Same agent, drop into Claude Desktop's MCP config and the LLM gets
-seven tools (`payable_fetch`, `agent_address`, `agent_quote`,
-`agent_call`, `pay_with_split`, `quote_split`, `agent_claim_self`) for
-autonomous payment loops.
+six tools (`payable_fetch`, `agent_address`, `agent_quote`,
+`agent_call`, `pay_with_split`, `quote_split`) for
+autonomous payment loops. The retired `agent_claim_self` magic-link tool is
+deliberately absent — see `mcp/README.md`.
 
 ## Quick start
 

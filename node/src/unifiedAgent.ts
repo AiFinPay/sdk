@@ -21,7 +21,6 @@ import {
   toHex,
   type PublicClient,
   type WalletClient,
-  toFunctionSelector,
   formatEther,
 } from "viem";
 import {
@@ -41,10 +40,11 @@ import {
 } from "@solana/web3.js";
 import {
   AiFinPayError,
+  UntrustedPaymentTargetError,
   X402Error,
 } from "./errors.js";
+import generatedTable from "./generated/splitter-table.json" with { type: "json" };
 import { Agent, type AgentOptions } from "./agent.js";
-import { type SpendLedger, MemorySpendLedger, FileSpendLedger } from "./spendLedger.js";
 import {
   aifp1Fetch,
   Aifp1ReceiptCache,
@@ -62,12 +62,22 @@ import {
   type BridgeQuoteOptions,
   type EvmChainName,
 } from "./crossChain.js";
+import {
+  validateQuotedNativePayment,
+  validateRuntimePaymentTarget,
+  type QuotedNativePayment,
+  type TrustedPaymentTarget,
+} from "./paymentRegistry.js";
+import {
+  SOLANA_PROGRAM_ID,
+  validateSolanaPaymentQuote,
+} from "./solanaPayment.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
 /**
  * Chains the unified agent can settle on. "solana" uses the Anchor
- * b2b_pay_with_split program; every other value is an EVM chain with a
+ * quarantined v0.6 b2b_pay_with_split candidate; every other value is an EVM chain with a
  * verified B2BSplitter deployment (see SPLITTER_DEPLOYMENTS below).
  * Additive union — "polygon" remains the EVM default.
  */
@@ -168,14 +178,6 @@ export interface AiFinPayAgentOptions extends AgentOptions {
   budgetCaps?:   BudgetCaps;
   telemetry?:    boolean;    // default true
   polygonRpc?:   string;     // default: https://polygon.drpc.org
-  /**
-   * Where the daily cap is remembered.
-   *
-   * Omit it and the SDK picks: a file under ~/.aifinpay (or AIFINPAY_STATE_DIR)
-   * once a daily cap is set, memory otherwise. Pass your own when the agent
-   * runs on more than one host — a lock file cannot answer for a fleet.
-   */
-  spendLedger?:  SpendLedger;
   solanaRpc?:    string;     // default: env AIFINPAY_SOLANA_RPC or mainnet-beta
   /** RPC overrides for non-Polygon EVM chains — both bridge-flow chains
    *  and splitter-settlement chains (base, optimism, unichain, botchain,
@@ -198,7 +200,7 @@ interface PayMaticChallenge {
     splitter:              string;
     /** Which B2BSplitter the address above is. Absent on older bridges, which
      *  is treated as "1.1" — the shape the entrypoint had before 2026-07-31. */
-    splitter_version?:     "1.1" | "1.2";
+    splitter_version?:     "1.1" | "1.2" | "1.3";
     merchant_wallet:       string;
     total_wei:             string;
     merchant_amount_wei?:  string;
@@ -215,13 +217,18 @@ interface PayMaticChallenge {
   pay_solana?: {
     chain:                       "solana";
     program_id:                  string;
-    instruction:                 string;     // expected "b2b_pay_with_split"
+    instruction:                 string;     // required "b2b_pay_with_split" (v0.6 candidate)
+    agent_pubkey:                string;
     merchant_wallet:             string;     // base58
     treasury:                    string;     // base58
+    ip_creator:                  string;     // treasury when creator fee is disabled
     merchant_amount_lamports:    string;
-    treasury_amount_lamports?:   string;
-    ip_creator_amount_lamports?: string;
-    total_lamports?:             string;
+    treasury_fee_lamports:       string;
+    ip_creator_fee_lamports:     string;
+    total_lamports:              string;
+    payment_id:                  string;     // 0x-prefixed 32-byte SHA-256
+    payment_receipt:             string;     // replay-protection PDA
+    creator_fee_enabled:         boolean;
     order_id:                    string;
     asset?:                      string;
     ttl_seconds?:                number;
@@ -230,32 +237,9 @@ interface PayMaticChallenge {
   instructions?: string[];
 }
 
-// ── B2BSplitter contract ABI ─────────────────────────────────────────────
-// `payMatic` is the splitter's generic NATIVE-token payment entrypoint —
-// the name is a Polygon-era legacy. On Base/Optimism/Unichain it settles
-// ETH, on BOT Chain BOT, on XRPL EVM XRP. There is no ERC-20/USDC path in
-// the deployed splitter payment flow yet — native-token only.
-
-const SPLITTER_PAY_MATIC_ABI = [
-  {
-    type: "function",
-    name: "payMatic",
-    stateMutability: "payable",
-    inputs: [
-      { type: "address", name: "merchant" },
-      { type: "address", name: "ipCreator" },
-      { type: "string",  name: "orderId" },
-    ],
-    outputs: [],
-  },
-] as const;
-
-// v1.2 entrypoint. The signature was read off the deployed contract rather than
-// from a spec: selector 0x8f0122bb, confirmed against the mainnet proof payment
-// 0xbffcdbd2…72d3. The redeploy note describes it as "payNative taking a
-// bytes32 paymentId", which is true but incomplete — it takes four arguments,
-// and calling it with one produces a revert that looks like a contract fault.
-const SPLITTER_PAY_NATIVE_ABI = [
+// v1.3 fee-on-top entrypoint. v1.1/v1.2 remain recognized only so
+// the validator can reject them explicitly; they may not reach signing.
+export const SPLITTER_PAY_NATIVE_ABI = [
   {
     type: "function",
     name: "payNative",
@@ -263,6 +247,7 @@ const SPLITTER_PAY_NATIVE_ABI = [
     inputs: [
       { type: "bytes32", name: "paymentId" },
       { type: "address", name: "merchant" },
+      { type: "uint256", name: "merchantAmount" },
       { type: "address", name: "ipCreator" },
       { type: "string",  name: "memo" },
     ],
@@ -321,8 +306,7 @@ export type SplitterChainName =
   | "botchain"
   | "xrplevm";
 
-export interface SplitterDeployment {
-  chainId:    number;
+export interface SplitterDeployment extends TrustedPaymentTarget {
   /** viem chain object used for tx signing on this chain. */
   chain:      Chain;
   /** Public RPC used when no evmRpcUrls override is supplied. */
@@ -332,9 +316,7 @@ export interface SplitterDeployment {
    * and renamed the native entrypoint, so the ABI differs per chain — Base and
    * Unichain were not part of the 2026-07-31 rollout and still run v1.1.
    */
-  version: "1.1" | "1.2";
   /** B2BSplitter contract address (native-token entrypoint). */
-  splitter:   `0x${string}`;
   /**
    * Circle-native USDC on this chain, when one exists. Informational for
    * now: the splitter payment path is native-token only (payMatic) — no
@@ -354,74 +336,149 @@ export interface SplitterDeployment {
   nativeUsdDefault: number;
 }
 
-export const SPLITTER_DEPLOYMENTS: Record<SplitterChainName, SplitterDeployment> = {
+/**
+ * Chain facts the registry cannot verify.
+ *
+ * Everything that decides where money goes — address, contract version, runtime
+ * code hash, treasury, fee split, validity window, whether settlement is on —
+ * comes from the generated registry below, which is produced in
+ * AiFinPay/evm-contract and verified there against chain state.
+ *
+ * What stays here is what a chain cannot tell you: the viem chain object, a
+ * default public RPC, the explorer, the local USDC address (informational; the
+ * SDK has no ERC-20 settlement path), and which env var carries the native
+ * price. Getting any of these wrong degrades the experience. Getting a value
+ * from the registry wrong sends money to the wrong place, which is why the two
+ * are kept apart.
+ */
+const CHAIN_METADATA: Record<SplitterChainName, {
+  chain: Chain;
+  defaultRpc: string;
+  explorer: string;
+  nativeUsdEnv: string;
+  nativeUsdDefault: number;
+  usdc?: `0x${string}`;
+}> = {
   polygon: {
-    version:    "1.2",
-    chainId:    137,
-    chain:      polygon,
+    chain: polygon,
     defaultRpc: "https://polygon.drpc.org",
-    splitter:   "0xbD1fa5453f212F096c0213788a645eC597FB4DDe",
-    usdc:       "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
-    explorer:   "https://polygonscan.com",
+    explorer: "https://polygonscan.com",
     nativeUsdEnv: "AIFINPAY_MATIC_USD", // legacy name kept for back-compat
     nativeUsdDefault: 0.073, // reference only; ~$0.073 on 2026-08-03
+    usdc: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
   },
   base: {
-    version:    "1.1",
-    chainId:    8453,
-    chain:      base,
+    chain: base,
     defaultRpc: "https://mainnet.base.org",
-    splitter:   "0x8Ad9830D16b1f10333866a3f38C949CbB19f4BAD",
-    usdc:       "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-    explorer:   "https://basescan.org",
+    explorer: "https://basescan.org",
     nativeUsdEnv: "AIFINPAY_ETH_USD",
-    nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
+    nativeUsdDefault: 1870,
+    usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
   },
   optimism: {
-    version:    "1.2",
-    chainId:    10,
-    chain:      optimism,
+    chain: optimism,
     defaultRpc: "https://mainnet.optimism.io",
-    splitter:   "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74",
-    usdc:       "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-    explorer:   "https://optimistic.etherscan.io",
+    explorer: "https://optimistic.etherscan.io",
     nativeUsdEnv: "AIFINPAY_ETH_USD",
-    nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
+    nativeUsdDefault: 1870,
+    usdc: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
   },
   unichain: {
-    version:    "1.1",
-    chainId:    130,
-    chain:      unichain,
+    chain: unichain,
     defaultRpc: "https://mainnet.unichain.org",
-    splitter:   "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB",
-    usdc:       "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
-    explorer:   "https://uniscan.xyz",
+    explorer: "https://uniscan.xyz",
     nativeUsdEnv: "AIFINPAY_ETH_USD",
-    nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
+    nativeUsdDefault: 1870,
+    usdc: "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
   },
   botchain: {
-    version:    "1.2",
-    chainId:    677,
-    chain:      botchain,
+    chain: botchain,
     defaultRpc: "https://rpc.botchain.ai",
-    splitter:   "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
-    // no USDC on BOT Chain — native BOT only
-    explorer:   "https://scan.botchain.ai",
+    explorer: "https://scan.botchain.ai",
     nativeUsdEnv: "AIFINPAY_BOT_USD",
     nativeUsdDefault: 1, // no reliable public feed; set the env var
   },
   xrplevm: {
-    version:    "1.2",
-    chainId:    1440000,
-    chain:      xrplevm,
+    chain: xrplevm,
     defaultRpc: "https://rpc.xrplevm.org",
-    splitter:   "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
-    // no verified USDC on XRPL EVM — native XRP only
-    explorer:   "https://explorer.xrplevm.org",
+    explorer: "https://explorer.xrplevm.org",
     nativeUsdEnv: "AIFINPAY_XRP_USD",
     nativeUsdDefault: 2,
   },
 };
+
+/**
+ * The canonical registry, vendored from AiFinPay/evm-contract.
+ *
+ * DO NOT EDIT src/generated/splitter-table.json. It is generated from
+ * registry/registry.json there, verified against chain state, and
+ * `npm run registry:check` fails if this copy has drifted from it.
+ */
+interface GeneratedNetwork {
+  chainId: number;
+  version: "1.1" | "1.2" | "1.3";
+  splitter: `0x${string}`;
+  runtimeCodeHash: `0x${string}`;
+  treasury: `0x${string}`;
+  treasuryBps: number;
+  ipCreatorBps: number;
+  validFrom: string;
+  validUntil: string;
+  settlementEnabled: boolean;
+  verifiedAt: string;
+}
+
+const GENERATED = generatedTable as unknown as {
+  networks: Record<string, GeneratedNetwork>;
+};
+
+function buildDeployments(): Record<SplitterChainName, SplitterDeployment> {
+  const out = {} as Record<SplitterChainName, SplitterDeployment>;
+  for (const [name, meta] of Object.entries(CHAIN_METADATA) as [
+    SplitterChainName,
+    (typeof CHAIN_METADATA)[SplitterChainName],
+  ][]) {
+    const entry = GENERATED.networks[name];
+    if (!entry) {
+      // A network the SDK knows about but the registry does not is not a
+      // network we can pay on. Better to fail loudly at import than to fall
+      // back to a hardcoded address.
+      throw new AiFinPayError(
+        `No verified registry entry for "${name}". The SDK will not pay an address ` +
+          "it cannot trace to the canonical registry.",
+      );
+    }
+    if (entry.chainId !== meta.chain.id) {
+      throw new AiFinPayError(
+        `Registry chainId ${entry.chainId} for "${name}" does not match the viem chain ` +
+          `(${meta.chain.id}). Refusing to build a payment target from mismatched chains.`,
+      );
+    }
+    out[name] = {
+      chainId: entry.chainId,
+      version: entry.version,
+      splitter: entry.splitter,
+      runtimeCodeHash: entry.runtimeCodeHash,
+      treasury: entry.treasury,
+      treasuryBps: entry.treasuryBps,
+      ipCreatorBps: entry.ipCreatorBps,
+      validFrom: entry.validFrom,
+      validUntil: entry.validUntil,
+      enabled: entry.settlementEnabled,
+      chain: meta.chain,
+      defaultRpc: meta.defaultRpc,
+      explorer: meta.explorer,
+      nativeUsdEnv: meta.nativeUsdEnv,
+      nativeUsdDefault: meta.nativeUsdDefault,
+      ...(meta.usdc ? { usdc: meta.usdc } : {}),
+    };
+  }
+  return out;
+}
+
+export const SPLITTER_DEPLOYMENTS: Record<SplitterChainName, SplitterDeployment> =
+  buildDeployments();
+
 
 // ── EVM chain object lookup — viem chains keyed by our EvmChainName ─────
 
@@ -462,18 +519,6 @@ const ERC20_BALANCE_OF_ABI = [
     stateMutability: "view",
     inputs: [{ type: "address", name: "owner" }],
     outputs: [{ type: "uint256" }],
-  },
-] as const;
-
-// B2BSplitter.treasury() view — used to route the ipCreator royalty slot
-// when the bridge challenge doesn't name a recipient.
-const SPLITTER_TREASURY_ABI = [
-  {
-    type: "function",
-    name: "treasury",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ type: "address" }],
   },
 ] as const;
 
@@ -579,9 +624,7 @@ export class AiFinPayAgent {
   readonly solanaRpc:    string;
   private  cachedRegistry?: ProviderEntry[];
   private  budgetCaps:     BudgetCaps;
-  private  spend24h        = new SpendTracker();  // reporting only; the cap uses the ledger
-  private  _ledger?:       SpendLedger;
-  private  ledgerOverride?: SpendLedger;
+  private  spend24h        = new SpendTracker();
   private  telemetry:      boolean;
   private  _polygonPublic?: PublicClient;
   private  _polygonWallet?: WalletClient;
@@ -603,13 +646,6 @@ export class AiFinPayAgent {
       ? [opts.registryUrl]
       : DEFAULT_REGISTRY_PATHS.map((path) => `${inner.baseUrl}${path}`);
     this.budgetCaps  = opts.budgetCaps ?? {};
-    // `spendLedger` was declared, documented ("pass your own when the agent
-    // runs on more than one host") and read by the `ledger` getter, but never
-    // assigned from the options — so the option was a no-op and every agent
-    // with a daily cap wrote to ~/.aifinpay regardless. A fleet that supplied
-    // a shared ledger silently got a per-host one instead, which is exactly
-    // the failure the option exists to prevent.
-    if (opts.spendLedger) this.ledgerOverride = opts.spendLedger;
     this.telemetry   = opts.telemetry !== false;
     this.polygonRpc  = opts.polygonRpc ?? "https://polygon.drpc.org";
     this.solanaRpc   = opts.solanaRpc
@@ -946,64 +982,6 @@ export class AiFinPayAgent {
    * without submitting an on-chain tx. Throws BudgetCapExceededError
    * in the default "throw" mode.
    */
-  /**
-   * The ledger that enforces the daily cap.
-   *
-   * Chosen late, because setBudget() is usually called after construction and
-   * the choice depends on whether a daily cap exists at all. Durability is
-   * engaged only when one does: a library that writes to a user's disk because
-   * it was imported would be rude, and one that promises a daily limit and
-   * forgets it on restart is worse.
-   */
-  private get ledger(): SpendLedger {
-    if (this.ledgerOverride) return this.ledgerOverride;
-    if (!this._ledger) {
-      this._ledger = this.budgetCaps.daily_usd !== undefined
-        ? FileSpendLedger.forAgent(this.evmAddress)
-        : new MemorySpendLedger();
-    }
-    return this._ledger;
-  }
-
-  /**
-   * Claim room in the daily cap before paying.
-   *
-   * Returns a reservation id, or "skip"/throws per on_limit_exceeded. The cap
-   * comparison happens inside the ledger, atomically: a caller that read the
-   * total and then reserved would have rebuilt the race this replaces, where
-   * two concurrent calls both read the same total, both passed, and both paid.
-   */
-  private async reserveDaily(costUsd: number): Promise<string | null | "skip"> {
-    const cap = this.budgetCaps.daily_usd;
-    if (cap === undefined) return null;              // no daily cap to enforce
-    const id = await this.ledger.reserve(costUsd, cap, 24 * 3600 * 1000);
-    if (id) return id;
-    const err = new BudgetCapExceededError(
-      "daily",
-      `this call would take daily spend past the $${cap} cap`,
-    );
-    if ((this.budgetCaps.on_limit_exceeded ?? "throw") === "skip") return "skip";
-    throw err;
-  }
-
-  /**
-   * The per-call cap, which needs no ledger.
-   *
-   * It is a property of one call and cannot be raced: nothing about a
-   * concurrent call changes whether THIS one is too expensive. Only the daily
-   * cap accumulates, and only it goes through reserve/commit.
-   */
-  private checkPerCall(costUsd: number): boolean {
-    const cap = this.budgetCaps.per_call_usd;
-    if (cap === undefined || costUsd <= cap) return true;
-    const err = new BudgetCapExceededError(
-      "per_call",
-      `cost $${costUsd} exceeds per-call cap $${cap}`,
-    );
-    if ((this.budgetCaps.on_limit_exceeded ?? "throw") === "skip") return false;
-    throw err;
-  }
-
   private checkBudget(costUsd: number): boolean {
     const mode = this.budgetCaps.on_limit_exceeded ?? "throw";
 
@@ -1163,18 +1141,36 @@ export class AiFinPayAgent {
   }
 
   private guardChallengeAmount(estUsd: number, declaredCost: number, providerName: string): boolean {
-    if (!Number.isFinite(estUsd) || estUsd <= 0) return true; // can't estimate — don't block
+    if (!Number.isFinite(estUsd) || estUsd <= 0) {
+      throw new UntrustedPaymentTargetError(
+        `[PAY_VALUE_UNTRUSTED] cannot establish a positive USD value for ${providerName}; ` +
+          `autonomous payment is blocked until a trusted live price or explicit positive price is available`,
+      );
+    }
     const limits: number[] = [];
-    if (declaredCost > 0) limits.push(Math.max(declaredCost * 2, declaredCost + 0.05));
-    if (this.budgetCaps.per_call_usd !== undefined) limits.push(this.budgetCaps.per_call_usd);
-    if (!limits.length) return true; // no cap declared anywhere — caller opted out
+    if (Number.isFinite(declaredCost) && declaredCost > 0) {
+      limits.push(Math.max(declaredCost * 2, declaredCost + 0.05));
+    }
+    const operatorCap = this.budgetCaps.per_call_usd;
+    if (operatorCap !== undefined) {
+      if (!Number.isFinite(operatorCap) || operatorCap <= 0) {
+        throw new UntrustedPaymentTargetError(
+          `[PAY_VALUE_UNTRUSTED] configured per-call cap must be positive and finite`,
+        );
+      }
+      limits.push(operatorCap);
+    }
+    if (!limits.length) {
+      throw new UntrustedPaymentTargetError(
+        `[PAY_VALUE_UNTRUSTED] no positive declared cost or operator per-call ceiling for ${providerName}`,
+      );
+    }
     const limit = Math.min(...limits);
     if (estUsd <= limit) return true;
     const err = new BudgetCapExceededError(
       "per_call",
       `bridge ${providerName} challenge demands ≈$${estUsd.toFixed(4)} on-chain, ` +
-        `above the allowed $${limit.toFixed(4)} (declared cost/per-call cap). ` +
-        `Set AIFINPAY_MATIC_USD / AIFINPAY_SOL_USD for a tighter estimate.`,
+        `above the allowed $${limit.toFixed(4)} (declared cost/per-call cap).`,
     );
     if ((this.budgetCaps.on_limit_exceeded ?? "throw") === "skip") return false;
     throw err;
@@ -1193,7 +1189,7 @@ export class AiFinPayAgent {
    *   4. Middle band → provider.preferred_chain.
    *   5. Fallback → first accepted chain.
    *
-   * Solana per-call is gated on the deploy of `b2b_pay_with_split` —
+   * Solana per-call is gated on the reviewed `b2b_pay_with_split` v0.6 instruction —
    * until then `solana` selection raises in `call()`.
    */
   private pickChain(provider: ProviderEntry, opts: CallOptions): ChainId {
@@ -1343,7 +1339,7 @@ export class AiFinPayAgent {
    * (generic native-token entrypoint) on any SPLITTER_DEPLOYMENTS chain —
    * polygon (default), base, optimism, unichain, botchain, xrplevm. Pass
    * `chain` in CallOptions to override (the provider must accept it).
-   * Solana settlement: b2b_pay_with_split (live since 2026-05-18).
+   * Solana settlement: quarantined Anchor v0.6 b2b_pay_with_split instruction.
    *
    * Returns `null` (instead of a `Response`) iff a budget cap was hit
    * AND budget.on_limit_exceeded is set to "skip" — the call is dropped
@@ -1357,397 +1353,213 @@ export class AiFinPayAgent {
     const rawCost  = opts.cost ?? provider.price_usd;
     const cost     = typeof rawCost === "number" && Number.isFinite(rawCost) ? rawCost : 0;
 
-    // The per-call cap still refuses outright; the daily one is reserved, so
-    // that two calls in flight cannot both be told there is room.
-    if (!this.checkPerCall(cost)) return null;
-    const reservation = await this.reserveDaily(cost);
-    if (reservation === "skip") return null;
-    let settled = false;
+    const withinBudget = this.checkBudget(cost);
+    if (!withinBudget) return null;
 
+    if (provider.mode === "session") {
+      throw new AiFinPayError(
+        `Provider ${provider.name} requires session mode — use openSession() (phase-3 feature)`,
+      );
+    }
+
+    const url = opts.bridgeUrl ?? provider.bridge_url;
+    if (!url) {
+      throw new AiFinPayError(`Provider ${provider.name} has no bridge_url`);
+    }
+
+    const path = (() => {
+      if (provider.service_type === "search")    return "/search";
+      if (provider.service_type === "inference") return "/chat/completions";
+      if (provider.service_type === "compute")   return "/run";
+      if (provider.service_type === "analytics") return "/query";
+      return "/";
+    })();
+
+    const buildInit = (extraHeaders: Record<string, string> = {}): RequestInit => ({
+      method:  opts.method ?? "POST",
+      headers: { "content-type": "application/json", ...extraHeaders },
+      body:    opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      // CallOptions.timeoutMs was previously declared but never applied.
+      signal:  opts.signal
+        ?? (opts.timeoutMs ? AbortSignal.timeout(opts.timeoutMs) : undefined),
+    });
+
+    // 1. Initial unauthenticated POST → expect 402 challenge from the bridge.
+    const fullUrl = url.replace(/\/$/, "") + path;
+    const initialResp = await this.inner.fetchImpl(fullUrl, buildInit());
+
+    if (initialResp.status !== 402) {
+      // Bridge didn't ask for payment — pass response through unchanged.
+      // Nothing was paid, so the call does NOT count against budget caps.
+      if (this.telemetry) this.reportTelemetry({ kind: "call", provider: provider.name, chain, cost, free: true });
+      return initialResp;
+    }
+
+    let challenge: PayMaticChallenge;
     try {
+      challenge = (await initialResp.json()) as PayMaticChallenge;
+    } catch (e) {
+      throw new X402Error(`bridge returned 402 with non-JSON body`);
+    }
 
-      if (provider.mode === "session") {
-        throw new AiFinPayError(
-          `Provider ${provider.name} requires session mode — use openSession() (phase-3 feature)`,
-        );
-      }
-
-      const url = opts.bridgeUrl ?? provider.bridge_url;
-      if (!url) {
-        throw new AiFinPayError(`Provider ${provider.name} has no bridge_url`);
-      }
-
-      const path = (() => {
-        if (provider.service_type === "search")    return "/search";
-        if (provider.service_type === "inference") return "/chat/completions";
-        if (provider.service_type === "compute")   return "/run";
-        if (provider.service_type === "analytics") return "/query";
-        return "/";
-      })();
-
-      const buildInit = (extraHeaders: Record<string, string> = {}): RequestInit => ({
-        method:  opts.method ?? "POST",
-        headers: { "content-type": "application/json", ...extraHeaders },
-        body:    opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-        // CallOptions.timeoutMs was previously declared but never applied.
-        signal:  opts.signal
-          ?? (opts.timeoutMs ? AbortSignal.timeout(opts.timeoutMs) : undefined),
-      });
-
-      // 1. Initial unauthenticated POST → expect 402 challenge from the bridge.
-      const fullUrl = url.replace(/\/$/, "") + path;
-      const initialResp = await this.inner.fetchImpl(fullUrl, buildInit());
-
-      if (initialResp.status !== 402) {
-        // Bridge didn't ask for payment — pass response through unchanged.
-        // Nothing was paid, so the call does NOT count against budget caps.
-        if (this.telemetry) this.reportTelemetry({ kind: "call", provider: provider.name, chain, cost, free: true });
-        return initialResp;
-      }
-
-      let challenge: PayMaticChallenge;
-      try {
-        challenge = (await initialResp.json()) as PayMaticChallenge;
-      } catch (e) {
-        throw new X402Error(`bridge returned 402 with non-JSON body`);
-      }
-
-      // ── Solana branch (b2b_pay_with_split atomic split, live 2026-05-18) ──
-      if (chain === "solana") {
-        if (!challenge.pay_solana) {
-          throw new X402Error(
-            `Bridge ${provider.name} returned 402 without a pay_solana block. ` +
-              `Either pick chain: "polygon" or ask the operator to set ` +
-              `BRIDGE_MERCHANT_SOLANA on the bridge service.`,
-          );
-        }
-        const ps = challenge.pay_solana;
-        // Guard: the bridge controls the challenge — verify the demanded
-        // amount is in the same ballpark as the declared cost / caps before
-        // signing anything. Stops a misquoting bridge from draining the agent.
-        {
-          const lamports = Number(ps.total_lamports ?? ps.merchant_amount_lamports);
-          const solUsd   = parseFloat(process.env.AIFINPAY_SOL_USD ?? "200");
-          const estUsd   = (Number.isFinite(lamports) ? lamports / 1e9 : 0) * solUsd;
-          const guarded  = this.guardChallengeAmount(estUsd, cost, provider.name);
-          if (!guarded) return null;
-        }
-        const solTxSig = await this.submitSolanaB2BPayWithSplit(ps);
-        const paidResp = await this.inner.fetchImpl(fullUrl, buildInit({
-          "x-solana-tx": solTxSig,
-          "x-order-id":  ps.order_id,
-        }));
-        if (!paidResp.ok) {
-          const detail = await paidResp.text().catch(() => "<unreadable>");
-          throw new AiFinPayError(
-            `Bridge retry failed ${paidResp.status} after Solana payment ${solTxSig}: ${detail.slice(0, 300)}`,
-          );
-        }
-      // Money moved here, and only here. The reservation becomes a
-      // settled amount; the finally below then has nothing to release.
-      this.spend24h.add(cost);
-      if (typeof reservation === "string") {
-        await this.ledger.commit(reservation, cost);
-      }
-      settled = true;
-        if (this.telemetry) this.reportTelemetry({ kind: "call", provider: provider.name, chain, cost, tx: solTxSig });
-        // @internal — attach settlement metadata for consumers (MCP, telemetry
-        // dashboards) that need to surface the tx hash without an extra RPC
-        // call. Response headers are read-only after construction so we use
-        // an instance property + cast on the read side.
-        (paidResp as unknown as { aifinpayTx?: string; aifinpayChain?: ChainId }).aifinpayTx = solTxSig;
-        (paidResp as unknown as { aifinpayTx?: string; aifinpayChain?: ChainId }).aifinpayChain = "solana";
-        return paidResp;
-      }
-
-      // ── EVM branch (B2BSplitter.payMatic — generic native-token atomic split) ──
-      // Settles on any chain in SPLITTER_DEPLOYMENTS (polygon default; base,
-      // optimism, unichain, botchain, xrplevm). Native token only — the
-      // deployed splitter payment path has no ERC-20/USDC entrypoint.
-      if (!challenge.pay_matic) {
+    // ── Solana branch (v0.6 candidate; validator remains fail-closed) ────
+    if (chain === "solana") {
+      if (!challenge.pay_solana) {
         throw new X402Error(
-          `bridge ${provider.name} returned 402 but no pay_matic block — only legacy AiFinPay/Coinbase facilitators not yet wired into AiFinPayAgent.call()`,
+          `Bridge ${provider.name} returned 402 without a pay_solana block. ` +
+            `Either pick chain: "polygon" or ask the operator to set ` +
+            `BRIDGE_MERCHANT_SOLANA on the bridge service.`,
         );
       }
-      const pm = challenge.pay_matic;
-      const deployment = SPLITTER_DEPLOYMENTS[chain];
-      if (!deployment) {
-        throw new AiFinPayError(
-          `No B2BSplitter deployment registered for chain "${chain}" — supported: ${Object.keys(SPLITTER_DEPLOYMENTS).join(", ")}`,
-        );
-      }
-      // Refuse to pay a quote denominated for another chain's native token:
-      // total_wei quoted for POL on Polygon would be a massive overpay if
-      // blindly re-sent as ETH on Base. Legacy bridges always emit "polygon".
-      if (pm.chain && pm.chain !== chain) {
-        throw new X402Error(
-          `bridge ${provider.name} quoted pay_matic for chain "${pm.chain}" but the call was routed to "${chain}" — refusing cross-denomination payment`,
-        );
-      }
-
-      // Guard: same ballpark check as the Solana branch — never sign for an
-      // amount wildly above the declared cost / per-call cap. Native-token
-      // USD price per chain via SPLITTER_DEPLOYMENTS.nativeUsdEnv.
+      const ps = challenge.pay_solana;
+      const validatedSolana = validateSolanaPaymentQuote(
+        ps,
+        provider.merchant_wallet,
+        this.inner.address,
+      );
+      // Guard: the bridge controls the challenge — verify the demanded
+      // amount is in the same ballpark as the declared cost / caps before
+      // signing anything. Stops a misquoting bridge from draining the agent.
       {
-        const wei = Number(pm.total_wei);
-        const { usd: nativeUsd } = await this.nativeUsdFor(deployment);
-        // NaN when no price is known — guardChallengeAmount then declines to
-        // block rather than blocking on a guess. See nativeUsdFor().
-        const estUsd  = (Number.isFinite(wei) ? wei / 1e18 : 0) * nativeUsd;
-        const guarded = this.guardChallengeAmount(estUsd, cost, provider.name);
+        const lamports = Number(validatedSolana.totalLamports);
+        const solUsd   = parseFloat(process.env.AIFINPAY_SOL_USD ?? "");
+        const estUsd   = (Number.isFinite(lamports) ? lamports / 1e9 : 0) * solUsd;
+        const guarded  = this.guardChallengeAmount(estUsd, cost, provider.name);
         if (!guarded) return null;
       }
-
-      // 2. Submit the B2BSplitter payment on the selected chain's mainnet and
-      // wait for it to land. Prefer the challenge's splitter address (current
-      // bridge behaviour); fall back to the registry address for bridges that
-      // omit it.
-      const splitterAddress = (pm.splitter as `0x${string}` | undefined)
-        ?? deployment.splitter;
-      const txHash = await this.settleSplitterNative({
-        chain,
-        splitter:         splitterAddress,
-        splitterVersion:  pm.splitter_version as "1.1" | "1.2" | undefined,
-        merchantWallet:   pm.merchant_wallet as `0x${string}`,
-        totalWei:         BigInt(pm.total_wei),
-        orderId:          pm.order_id,
-        ipCreator:        pm.ip_creator as `0x${string}` | undefined,
-      });
-
-      // 3. Retry the bridge with payment proof.
+      const solTxSig = await this.submitSolanaB2BPay(ps, validatedSolana);
       const paidResp = await this.inner.fetchImpl(fullUrl, buildInit({
-        "x-tx-hash":  txHash,
-        "x-order-id": pm.order_id,
+        "x-solana-tx": solTxSig,
+        "x-order-id":  ps.order_id,
       }));
       if (!paidResp.ok) {
         const detail = await paidResp.text().catch(() => "<unreadable>");
         throw new AiFinPayError(
-          `Bridge retry failed ${paidResp.status} after on-chain payment ${txHash}: ${detail.slice(0, 300)}`,
+          `Bridge retry failed ${paidResp.status} after Solana payment ${solTxSig}: ${detail.slice(0, 300)}`,
         );
       }
-
-    // Money moved here, and only here. The reservation becomes a
-    // settled amount; the finally below then has nothing to release.
-    this.spend24h.add(cost);
-    if (typeof reservation === "string") {
-      await this.ledger.commit(reservation, cost);
-    }
-    settled = true;
-      if (this.telemetry) this.reportTelemetry({ kind: "call", provider: provider.name, chain, cost, tx: txHash });
-      // @internal — see Solana branch above for rationale on property-attach.
-      (paidResp as unknown as { aifinpayTx?: string; aifinpayChain?: ChainId }).aifinpayTx = txHash;
-      (paidResp as unknown as { aifinpayTx?: string; aifinpayChain?: ChainId }).aifinpayChain = chain;
+      this.spend24h.add(cost);
+      if (this.telemetry) this.reportTelemetry({ kind: "call", provider: provider.name, chain, cost, tx: solTxSig });
+      // @internal — attach settlement metadata for consumers (MCP, telemetry
+      // dashboards) that need to surface the tx hash without an extra RPC
+      // call. Response headers are read-only after construction so we use
+      // an instance property + cast on the read side.
+      (paidResp as unknown as { aifinpayTx?: string; aifinpayChain?: ChainId }).aifinpayTx = solTxSig;
+      (paidResp as unknown as { aifinpayTx?: string; aifinpayChain?: ChainId }).aifinpayChain = "solana";
       return paidResp;
-    } finally {
-      // Every path that did not move money gives the budget back now rather
-      // than waiting for the reservation to expire — an early return, a
-      // refused challenge, a revert, a thrown error. Missing one of them
-      // would leak the cap and eventually stop the agent paying at all,
-      // which is why this is a finally and not a branch.
-      if (typeof reservation === "string" && !settled) {
-        await this.ledger.release(reservation);
-      }
     }
-  }
 
-  // ── EVM B2BSplitter native settlement — one quote in, one tx hash out ────
-  //
-  // Extracted from call() when a second caller needed the same settlement.
-  // The version handling below is the reason it is one method and not two
-  // copies: it was already wrong once, and a duplicate would only be fixed
-  // in whichever copy the next revert happened to come from.
-  //
-  // Returns only after the transaction is included AND succeeded — a hash for
-  // a reverted transaction would otherwise be handed to a merchant as proof of
-  // a payment that never moved.
-  private async settleSplitterNative(p: {
-    chain:            SplitterChainName;
-    /** Splitter address the SERVER handed us, not one looked up from a table
-     *  — see the version note below for why that distinction matters. */
-    splitter:         `0x${string}`;
-    /** Only when the server states one; undefined means "ask the contract". */
-    splitterVersion?: "1.1" | "1.2";
-    merchantWallet:   `0x${string}`;
-    totalWei:         bigint;
-    orderId:          string;
-    /** Royalty recipient; omitted → the splitter's own treasury. */
-    ipCreator?:       `0x${string}`;
-  }): Promise<`0x${string}`> {
-    // call() has already checked this for the bridge flow; repeated here
-    // because settlement is now reachable without going through call().
-    const deployment = SPLITTER_DEPLOYMENTS[p.chain];
+    // ── EVM branch (B2BSplitter.payMatic — generic native-token atomic split) ──
+    // Settles on any chain in SPLITTER_DEPLOYMENTS (polygon default; base,
+    // optimism, unichain, botchain, xrplevm). Native token only — the
+    // deployed splitter payment path has no ERC-20/USDC entrypoint.
+    if (!challenge.pay_matic) {
+      throw new X402Error(
+        `bridge ${provider.name} returned 402 but no pay_matic block — only legacy AiFinPay/Coinbase facilitators not yet wired into AiFinPayAgent.call()`,
+      );
+    }
+    const pm = challenge.pay_matic;
+    const deployment = SPLITTER_DEPLOYMENTS[chain];
     if (!deployment) {
       throw new AiFinPayError(
-        `No B2BSplitter deployment registered for chain "${p.chain}" — supported: ${Object.keys(SPLITTER_DEPLOYMENTS).join(", ")}`,
+        `No B2BSplitter deployment registered for chain "${chain}" — supported: ${Object.keys(SPLITTER_DEPLOYMENTS).join(", ")}`,
+      );
+    }
+    // Refuse to pay a quote denominated for another chain's native token:
+    // total_wei quoted for POL on Polygon would be a massive overpay if
+    // blindly re-sent as ETH on Base. Legacy bridges always emit "polygon".
+    if (pm.chain && pm.chain !== chain) {
+      throw new X402Error(
+        `bridge ${provider.name} quoted pay_matic for chain "${pm.chain}" but the call was routed to "${chain}" — refusing cross-denomination payment`,
       );
     }
 
-    // ipCreator routing: prefer the caller's explicit ip_creator; else route
-    // the royalty slot to the splitter's treasury (mirrors the Solana branch).
-    // Passing address(0) would skip the transfer and permanently strand the
-    // 1bp inside B2BSplitter — the contract has no sweep function.
-    const ipCreator = p.ipCreator
-      ?? await this.splitterTreasury(p.splitter, p.chain)
-      ?? "0x0000000000000000000000000000000000000000";
-    const { publicClient, walletClient } = this.splitterClients(p.chain);
-    // The entrypoint follows the deployed contract, not the SDK release: v1.2
-    // (Polygon, Optimism, BOT Chain, XRPL EVM as of 2026-07-31) takes a bytes32
-    // paymentId and rejects one it has already settled, while Base and Unichain
-    // still run v1.1. Sending v1.2 calldata to a v1.1 contract reverts with no
-    // useful reason, so this must be decided per chain.
-    // An explicit `splitterVersion` wins — a server that states it knows what
-    // it deployed. What it must NOT fall back to is this registry's
-    // chain -> version entry, because the ADDRESS came from the server and
-    // the version would come from a table: two sources that can disagree.
-    //
-    // In production they did. The Exa bridge still hands out the pre-v1.2
-    // splitter 0xE34Fc0E6… and sends no version; the table says "polygon is
-    // 1.2"; the SDK called payNative on a contract that only has payMatic, and
-    // the payment reverted with nothing in the reason to explain it.
-    //
-    // So when the server is silent, ask the contract at the address we were
-    // actually handed. The registry is used only if the chain cannot be read.
-    const splitterVersion = p.splitterVersion
-      ?? await this.detectSplitterVersion(p.splitter, p.chain, deployment.version);
-    await this.assertCanAffordNative(publicClient, deployment, p.totalWei);
+    // The bridge is untrusted input. Resolve every signing-critical field
+    // against the canonical target registry before deriving calldata.
+    const validatedPayment = validateQuotedNativePayment(
+      chain,
+      pm,
+      deployment,
+      provider.merchant_wallet,
+    );
+    const { publicClient, walletClient } = this.splitterClients(chain);
+    await validateRuntimePaymentTarget(publicClient, deployment);
 
-    const txHash = splitterVersion === "1.2"
-      ? await walletClient.writeContract({
-          address:      p.splitter,
-          abi:          SPLITTER_PAY_NATIVE_ABI,
-          functionName: "payNative",
-          args: [
-            paymentIdFor(p.orderId),
-            p.merchantWallet,
-            ipCreator,
-            p.orderId,
-          ],
-          value: p.totalWei,
-          chain: deployment.chain,
-          account: this.evmAccount,
-        })
-      : await walletClient.writeContract({
-          address:      p.splitter,
-          abi:          SPLITTER_PAY_MATIC_ABI,
-          functionName: "payMatic",
-          args: [
-            p.merchantWallet,
-            ipCreator,
-            p.orderId,
-          ],
-          value: p.totalWei,
-          chain: deployment.chain,
-          account: this.evmAccount,
-        });
+    // Guard: same ballpark check as the Solana branch — never sign for an
+    // amount wildly above the declared cost / per-call cap. Native-token
+    // USD price per chain via SPLITTER_DEPLOYMENTS.nativeUsdEnv.
+    {
+      const wei = Number(validatedPayment.totalWei);
+      const { usd: nativeUsd } = await this.nativeUsdFor(deployment);
+      // NaN when no price is known — guardChallengeAmount fails closed.
+      // See nativeUsdFor().
+      const estUsd  = (Number.isFinite(wei) ? wei / 1e18 : 0) * nativeUsd;
+      const guarded = this.guardChallengeAmount(estUsd, cost, provider.name);
+      if (!guarded) return null;
+    }
 
-    // Wait for receipt (inclusion is enough on these fast-block chains).
+    // 2. Only a canonical v1.3 fee-on-top quote can reach signing.
+    // v1.1/v1.2 and dynamic server-selected ABIs are intentionally unavailable.
+    await this.assertCanAffordNative(publicClient, deployment, validatedPayment.totalWei);
+    const txHash = await walletClient.writeContract({
+      address:      validatedPayment.splitter,
+      abi:          SPLITTER_PAY_NATIVE_ABI,
+      functionName: "payNative",
+      args: [
+        paymentIdFor(validatedPayment.orderId),
+        validatedPayment.merchant,
+        validatedPayment.merchantAmountWei,
+        validatedPayment.ipCreator,
+        validatedPayment.orderId,
+      ],
+      value: validatedPayment.totalWei,
+      chain: deployment.chain,
+      account: this.evmAccount,
+    });
+
+    // 3. Wait for receipt (inclusion is enough on these fast-block chains).
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
     if (receipt.status !== "success") {
       throw new AiFinPayError(`${deployment.chain.name} tx reverted: ${txHash}`);
     }
-    return txHash;
+
+    // 4. Retry the bridge with payment proof.
+    const paidResp = await this.inner.fetchImpl(fullUrl, buildInit({
+      "x-tx-hash":  txHash,
+      "x-order-id": pm.order_id,
+    }));
+    if (!paidResp.ok) {
+      const detail = await paidResp.text().catch(() => "<unreadable>");
+      throw new AiFinPayError(
+        `Bridge retry failed ${paidResp.status} after on-chain payment ${txHash}: ${detail.slice(0, 300)}`,
+      );
+    }
+
+    this.spend24h.add(cost);
+    if (this.telemetry) this.reportTelemetry({ kind: "call", provider: provider.name, chain, cost, tx: txHash });
+    // @internal — see Solana branch above for rationale on property-attach.
+    (paidResp as unknown as { aifinpayTx?: string; aifinpayChain?: ChainId }).aifinpayTx = txHash;
+    (paidResp as unknown as { aifinpayTx?: string; aifinpayChain?: ChainId }).aifinpayChain = chain;
+    return paidResp;
   }
 
-  // ── AIFP-1 merchant paywall (gateway.aifinpay.io) ───────────────────────
-  //
-  // The protocol lives in aifp1.ts; this is the wiring. Two things only the
-  // agent can supply: the on-chain settlement above, and the budget caps —
-  // aifp1Fetch owns neither, exactly as call() owns them for the bridge flow.
-
-  private readonly _aifp1Cache = new Aifp1ReceiptCache();
-
-  /**
-   * The prepaid batches this agent is holding.
-   *
-   * Exposed because a batch is money the agent has already spent and has not
-   * finished using: an operator deciding whether to shut an agent down, or a
-   * test asserting that a receipt was reused, both need to see it. The entries
-   * contain bearer JWTs — treat them like keys, and do not log them.
-   */
-  get aifp1Receipts(): Aifp1ReceiptCache { return this._aifp1Cache; }
-
-  /**
-   * Fetch a paywalled URL, paying the AIFP-1 gateway if it asks.
-   *
-   *   const res = await agent.fetchPaid("https://gateway.aifinpay.io/acme/articles/2026/x");
-   *
-   * A URL that is not paywalled — or that answers a 402 belonging to some
-   * other protocol — comes back untouched and costs nothing. A paywalled one
-   * is quoted, settled on-chain, exchanged for a receipt and retried, and the
-   * receipt is kept: subsequent calls it covers cost a header rather than a
-   * transaction. See aifp1.ts for why that reuse is the entire design.
-   *
-   * Returns `null` on the same terms as call(): a budget cap was hit and
-   * `budgetCaps.on_limit_exceeded` is "skip".
-   */
-  async fetchPaid(
-    url:  string,
-    init: RequestInit = {},
-    opts: Aifp1FetchOptions & { splitter?: `0x${string}` } = {},
-  ): Promise<Response | null> {
-    const deployment = SPLITTER_DEPLOYMENTS.polygon;
-    const deps: Aifp1Deps = {
-      fetchImpl: this.inner.fetchImpl,
-      cache:     this._aifp1Cache,
-      // A 0x address, because AIFP agent policies are address-keyed
-      // (backend/aifp/agent-policy.js normalizeAddress) — a Solana pubkey here
-      // would silently opt the agent out of its owner's own limits.
-      agentId:   opts.agentId ?? this.evmAddress,
-      settle: (p) => this.settleSplitterNative({
-        // Polygon-only, and not by preference: /v1/pay verifies the settlement
-        // by reading the Splitter's Payment event, and that verifier implements
-        // Polygon alone (backend/aifp/verify-settlement.js — Solana returns
-        // notImplemented, anything else unsupported_chain). Settling elsewhere
-        // would move real money for a receipt that can never be issued.
-        chain:          "polygon",
-        // The address is not carried in the quote, so it comes from this SDK's
-        // own verified registry. The backend checks the tx against its
-        // configured SPLITTER_ADDRESS_POLYGON; if an operator has pointed that
-        // somewhere else, /v1/pay answers no_splitter_payment_event, which is
-        // loud. Override here if you are running against such a deployment.
-        splitter:       opts.splitter ?? deployment.splitter,
-        // Left undetected on purpose — settleSplitterNative asks the contract,
-        // which is the only source that cannot disagree with itself.
-        merchantWallet: p.merchantWallet,
-        totalWei:       p.totalWei,
-        orderId:        p.orderId,
-      }),
-      checkPerCall: (usd) => this.checkPerCall(usd),
-      reserveDaily: (usd) => this.reserveDaily(usd),
-      commit:  (id, usd) => this.ledger.commit(id, usd),
-      release: (id)      => this.ledger.release(id),
-      onPaid: ({ merchantId, amountUsd, txRef }) => {
-        this.spend24h.add(amountUsd);
-        if (this.telemetry) {
-          this.reportTelemetry({
-            kind: "aifp1", merchant: merchantId, chain: "polygon",
-            cost: amountUsd, tx: txRef,
-          });
-        }
-      },
-    };
-    return aifp1Fetch(deps, url, init, opts);
-  }
-
-  // ── Solana b2b_pay_with_split — build, sign, send via @solana/web3.js ───
+  // ── Solana b2b_pay_with_split — exact v0.6 candidate IDL ──────────────
   //
   // Manual instruction encoding (no Anchor dep):
   //   discriminator = sha256("global:b2b_pay_with_split")[:8]
-  //   args (Borsh)   = u64 merchant_amount_lamports + string order_id
-  //   accounts       = [config_pda, vault_pda, agent (signer), treasury,
-  //                     ip_creator, merchant_wallet, system_program]
-  // PDAs derived from program_id with seeds ["config"] and ["vault"].
-  private async submitSolanaB2BPayWithSplit(ps: NonNullable<PayMaticChallenge["pay_solana"]>): Promise<string> {
+  //   args (Borsh)   = u64 merchant amount + [u8;32] payment ID
+  //                    + string order ID + bool creator flag
+  //   accounts match idl/aifinpay_contract.json exactly.
+  private async submitSolanaB2BPay(
+    _ps: NonNullable<PayMaticChallenge["pay_solana"]>,
+    payment: ReturnType<typeof validateSolanaPaymentQuote>,
+  ): Promise<string> {
     const conn = new Connection(this.solanaRpc, "confirmed");
 
-    const programId = new PublicKey(ps.program_id);
-    const merchant  = new PublicKey(ps.merchant_wallet);
-    const treasury  = new PublicKey(ps.treasury);
-    // ip_creator slot: not surfaced by current bridge 402s; route through
-    // treasury so the on-chain 1bp still settles atomically (treasury earns
-    // both 100bp + 1bp). When bridges add per-merchant ip_creator support,
-    // accept it from `ps` and pass through.
-    const ipCreator = treasury;
+    const programId = new PublicKey(SOLANA_PROGRAM_ID);
+    const merchant  = new PublicKey(payment.merchant_wallet);
+    const creator   = new PublicKey(payment.ip_creator);
+    const quotedTreasury = new PublicKey(payment.treasury);
 
     // Solana keypair from legacy Agent inner (tweetnacl 64-byte secret).
     const kp = Keypair.fromSecretKey(this.inner.secretKey);
@@ -1757,24 +1569,56 @@ export class AiFinPayAgent {
       );
     }
 
-    // PDAs
+    // PDAs required by the v0.6 B2bPayWithSplit account context.
     const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], programId);
     const [vaultPda]  = PublicKey.findProgramAddressSync([Buffer.from("vault")],  programId);
+    const receiptPda = new PublicKey(payment.payment_receipt);
+
+    let infos;
+    try {
+      infos = await conn.getMultipleAccountsInfo([
+        programId, configPda, vaultPda,
+      ], "confirmed");
+    } catch {
+      throw new UntrustedPaymentTargetError("[PAY_TARGET_UNTRUSTED] solana_rpc_unavailable");
+    }
+    const [programInfo, configInfo, vaultInfo] = infos;
+    if (!programInfo?.executable) {
+      throw new UntrustedPaymentTargetError("[PAY_TARGET_UNTRUSTED] solana_program_not_executable");
+    }
+    for (const [label, info] of [
+      ["config", configInfo], ["vault", vaultInfo],
+    ] as const) {
+      if (!info || !info.owner.equals(programId)) {
+        throw new UntrustedPaymentTargetError(`[PAY_TARGET_UNTRUSTED] solana_${label}_account_invalid`);
+      }
+    }
+    if (vaultInfo!.data.length < 72) {
+      throw new UntrustedPaymentTargetError("[PAY_TARGET_UNTRUSTED] solana_account_data_invalid");
+    }
+    // Anchor discriminator (8) + owner/admin Pubkey (32) precede these keys.
+    const vaultTreasury = new PublicKey(vaultInfo!.data.subarray(40, 72));
+    if (!vaultTreasury.equals(quotedTreasury)) {
+      throw new UntrustedPaymentTargetError("[PAY_TARGET_UNTRUSTED] solana_treasury_mismatch");
+    }
 
     // Instruction discriminator: Anchor convention sha256("global:<fn_name>")[:8].
     const disc = createHash("sha256").update("global:b2b_pay_with_split").digest().subarray(0, 8);
 
-    // Borsh args: merchant_amount_lamports (u64 LE) + order_id (string = u32 len + utf8)
-    const merchantAmount = BigInt(ps.merchant_amount_lamports);
+    // Borsh args: merchant amount + payment ID + order_id + creator flag.
     const amountBuf = Buffer.alloc(8);
-    amountBuf.writeBigUInt64LE(merchantAmount);
-    const orderBytes = Buffer.from(ps.order_id, "utf8");
-    if (orderBytes.length > 64) {
-      throw new AiFinPayError(`order_id too long (${orderBytes.length} bytes > 64 limit)`);
-    }
+    amountBuf.writeBigUInt64LE(payment.merchantAmountLamports);
+    const orderBytes = Buffer.from(payment.order_id, "utf8");
     const orderLenBuf = Buffer.alloc(4);
     orderLenBuf.writeUInt32LE(orderBytes.length);
-    const data = Buffer.concat([disc, amountBuf, orderLenBuf, orderBytes]);
+    const data = Buffer.concat([
+      disc,
+      amountBuf,
+      payment.paymentId,
+      orderLenBuf,
+      orderBytes,
+      Buffer.from([payment.creatorFeeEnabled ? 1 : 0]),
+    ]);
 
     const ix = new TransactionInstruction({
       programId,
@@ -1782,8 +1626,9 @@ export class AiFinPayAgent {
         { pubkey: configPda,             isSigner: false, isWritable: false },
         { pubkey: vaultPda,              isSigner: false, isWritable: false },
         { pubkey: kp.publicKey,          isSigner: true,  isWritable: true  },
-        { pubkey: treasury,              isSigner: false, isWritable: true  },
-        { pubkey: ipCreator,             isSigner: false, isWritable: true  },
+        { pubkey: receiptPda,            isSigner: false, isWritable: true  },
+        { pubkey: vaultTreasury,         isSigner: false, isWritable: true  },
+        { pubkey: creator,               isSigner: false, isWritable: true  },
         { pubkey: merchant,              isSigner: false, isWritable: true  },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
@@ -1917,77 +1762,6 @@ export class AiFinPayAgent {
     }
   }
 
-  // Cache: "chain:splitter address" → treasury address (constant per deployment).
-  private splitterTreasuryCache = new Map<string, `0x${string}`>();
-
-  /** Read + cache B2BSplitter.treasury() on the given chain (default
-   *  polygon for back-compat). Returns null on RPC failure. */
-  /**
-   * Which Splitter generation is actually deployed at this address.
-   *
-   * The version used to come from a chain -> version table while the ADDRESS
-   * came from the bridge's 402 challenge. Two different sources, and they can
-   * disagree — in production they did. The Exa bridge still hands out the
-   * pre-v1.2 splitter 0xE34Fc0E6… and sends no version, the table says
-   * "polygon is 1.2", and the SDK called payNative on a contract that only has
-   * payMatic. The payment reverted with nothing in the reason to explain it.
-   *
-   * A table keyed by chain cannot be right when the address is variable input,
-   * so this asks the contract instead. payNative's 4-byte selector appears in a
-   * v1.2 dispatcher and is absent from v1.1 — the same check used to verify all
-   * six registry chains against mainnet.
-   *
-   * One eth_getCode, cached per (chain, address). Falls back to the registry
-   * only when the code cannot be read: guessing beats refusing to pay, and for
-   * the addresses we deployed the guess is right.
-   */
-  private splitterVersionCache = new Map<string, "1.1" | "1.2">();
-
-  private async detectSplitterVersion(
-    splitter: `0x${string}`,
-    chainName: SplitterChainName,
-    fallback: "1.1" | "1.2",
-  ): Promise<"1.1" | "1.2"> {
-    const key = `${chainName}:${splitter.toLowerCase()}`;
-    const cached = this.splitterVersionCache.get(key);
-    if (cached) return cached;
-    try {
-      const { publicClient } = this.splitterClients(chainName);
-      const code = await publicClient.getBytecode({ address: splitter });
-      if (!code || code === "0x") return fallback;
-      const sel = toFunctionSelector(
-        "function payNative(bytes32,address,address,string)",
-      ).slice(2);
-      const version: "1.1" | "1.2" = code.includes(sel) ? "1.2" : "1.1";
-      this.splitterVersionCache.set(key, version);
-      return version;
-    } catch {
-      return fallback;
-    }
-  }
-
-  private async splitterTreasury(
-    splitter: `0x${string}`,
-    chainName: SplitterChainName = "polygon",
-  ): Promise<`0x${string}` | null> {
-    const cacheKey = `${chainName}:${splitter.toLowerCase()}`;
-    const cached = this.splitterTreasuryCache.get(cacheKey);
-    if (cached) return cached;
-    try {
-      const { publicClient } = this.splitterClients(chainName);
-      const treasury = await publicClient.readContract({
-        address:      splitter,
-        abi:          SPLITTER_TREASURY_ABI,
-        functionName: "treasury",
-      }) as `0x${string}`;
-      if (!treasury || treasury === "0x0000000000000000000000000000000000000000") return null;
-      this.splitterTreasuryCache.set(cacheKey, treasury);
-      return treasury;
-    } catch {
-      return null;
-    }
-  }
-
   /**
    * Read the native Polygon USDC (Circle-issued, 6 decimals) balance for the
    * agent's EVM address via the existing viem publicClient. Returns 0
@@ -2025,6 +1799,151 @@ export class AiFinPayAgent {
   }
 
   // ── Telemetry (opt-out) ─────────────────────────────────────────────────
+
+  // ── AIFP-1 merchant paywall (gateway.aifinpay.io) ───────────────────────
+  //
+  // The protocol lives in aifp1.ts; this is the wiring. Two things only the
+  // agent can supply: the on-chain settlement, and the budget caps — aifp1Fetch
+  // owns neither, exactly as call() owns them for the bridge flow.
+
+  private readonly _aifp1Cache = new Aifp1ReceiptCache();
+
+  /**
+   * The prepaid batches this agent is holding.
+   *
+   * Exposed because a batch is money the agent has already spent and has not
+   * finished using: an operator deciding whether to shut an agent down, or a
+   * test asserting that a receipt was reused, both need to see it. The entries
+   * contain bearer JWTs — treat them like keys, and do not log them.
+   */
+  get aifp1Receipts(): Aifp1ReceiptCache { return this._aifp1Cache; }
+
+  /**
+   * Settle a native-token splitter payment, v1.3 fee-on-top only.
+   *
+   * Shared by call() and the AIFP-1 flow so both reach the chain through the
+   * same gate. Everything signing-critical — splitter address, contract
+   * version, merchant, and each fee component — is resolved against the
+   * trusted registry by validateQuotedNativePayment and the deployed runtime
+   * is checked by validateRuntimePaymentTarget before any calldata is built.
+   *
+   * There is deliberately no version detection and no v1.1/v1.2 branch. The
+   * deployed fee-INCLUSIVE splitters pay the merchant less than the quoted
+   * merchant amount, so settling against them under a fee-on-top quote
+   * short-pays the merchant silently. A quote that does not describe a
+   * registered v1.3 route is refused rather than downgraded.
+   */
+  private async settleSplitterNative(p: {
+    chain:    SplitterChainName;
+    quote:    QuotedNativePayment;
+    merchant: string;
+  }): Promise<`0x${string}`> {
+    const deployment = SPLITTER_DEPLOYMENTS[p.chain];
+    if (!deployment) {
+      throw new AiFinPayError(
+        `No B2BSplitter deployment registered for chain "${p.chain}" — supported: ${Object.keys(SPLITTER_DEPLOYMENTS).join(", ")}`,
+      );
+    }
+    const validated = validateQuotedNativePayment(p.chain, p.quote, deployment, p.merchant);
+    const { publicClient, walletClient } = this.splitterClients(p.chain);
+    await validateRuntimePaymentTarget(publicClient, deployment);
+    await this.assertCanAffordNative(publicClient, deployment, validated.totalWei);
+
+    const txHash = await walletClient.writeContract({
+      address:      validated.splitter,
+      abi:          SPLITTER_PAY_NATIVE_ABI,
+      functionName: "payNative",
+      args: [
+        paymentIdFor(validated.orderId),
+        validated.merchant,
+        validated.merchantAmountWei,
+        validated.ipCreator,
+        validated.orderId,
+      ],
+      value: validated.totalWei,
+      chain: deployment.chain,
+      account: this.evmAccount,
+    });
+
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    if (receipt.status !== "success") {
+      throw new AiFinPayError(`${deployment.chain.name} tx reverted: ${txHash}`);
+    }
+    return txHash;
+  }
+
+  /**
+   * Fetch a paywalled URL, paying the AIFP-1 gateway if it asks.
+   *
+   *   const res = await agent.fetchPaid("https://gateway.aifinpay.io/acme/articles/2026/x");
+   *
+   * A URL that is not paywalled — or that answers a 402 belonging to some
+   * other protocol — comes back untouched and costs nothing. A paywalled one
+   * is quoted, settled on-chain, exchanged for a receipt and retried, and the
+   * receipt is kept: subsequent calls it covers cost a header rather than a
+   * transaction. See aifp1.ts for why that reuse is the entire design.
+   *
+   * Returns `null` on the same terms as call(): a budget cap was hit and
+   * `budgetCaps.on_limit_exceeded` is "skip".
+   */
+  async fetchPaid(
+    url:  string,
+    init: RequestInit = {},
+    opts: Aifp1FetchOptions & { splitter?: `0x${string}` } = {},
+  ): Promise<Response | null> {
+    const deps: Aifp1Deps = {
+      fetchImpl: this.inner.fetchImpl,
+      cache:     this._aifp1Cache,
+      // A 0x address, because AIFP agent policies are address-keyed
+      // (backend/aifp/agent-policy.js normalizeAddress) — a Solana pubkey here
+      // would silently opt the agent out of its owner's own limits.
+      agentId:   opts.agentId ?? this.evmAddress,
+      settle: (p) => this.settleSplitterNative({
+        // Polygon-only, and not by preference: /v1/pay verifies the settlement
+        // by reading the Splitter's Payment event, and that verifier implements
+        // Polygon alone (backend/aifp/verify-settlement.js — Solana returns
+        // notImplemented, anything else unsupported_chain). Settling elsewhere
+        // would move real money for a receipt that can never be issued.
+        chain: "polygon",
+        merchant: p.merchantWallet,
+        // The gateway states the amounts; the registry states the route. The
+        // splitter address and version are NOT taken from the gateway — it
+        // does not send them — so they come from this SDK's verified registry,
+        // and validateQuotedNativePayment still has to agree that every
+        // component matches that registry's fee-on-top model. A gateway still
+        // quoting the old fee-inclusive split fails there rather than here.
+        quote: {
+          chain:                 "polygon",
+          splitter:              opts.splitter ?? SPLITTER_DEPLOYMENTS.polygon.splitter,
+          splitter_version:      SPLITTER_DEPLOYMENTS.polygon.version,
+          merchant_wallet:       p.merchantWallet,
+          order_id:              p.orderId,
+          total_wei:             p.totalWei.toString(),
+          merchant_amount_wei:   p.merchantAmountWei?.toString(),
+          treasury_amount_wei:   p.treasuryAmountWei?.toString(),
+          ip_creator_amount_wei: p.ipCreatorAmountWei?.toString(),
+        },
+      }),
+      // The remediation branch replaced the file-backed reservation ledger
+      // with in-memory caps, so there is no reservation to resolve: checkBudget
+      // covers both per-call and daily, and onPaid records the spend once the
+      // money has actually moved.
+      checkPerCall: (usd) => this.checkBudget(usd),
+      reserveDaily: (usd) => Promise.resolve(this.checkBudget(usd) ? null : "skip"),
+      commit:  () => Promise.resolve(),
+      release: () => Promise.resolve(),
+      onPaid: ({ merchantId, amountUsd, txRef }) => {
+        this.spend24h.add(amountUsd);
+        if (this.telemetry) {
+          this.reportTelemetry({
+            kind: "aifp1", merchant: merchantId, chain: "polygon",
+            cost: amountUsd, tx: txRef,
+          });
+        }
+      },
+    };
+    return aifp1Fetch(deps, url, init, opts);
+  }
 
   private reportTelemetry(payload: Record<string, unknown>): void {
     // Fire-and-forget. No body content, only metadata.

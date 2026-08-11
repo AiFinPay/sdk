@@ -1,4 +1,4 @@
-// Guards the v1.2 migration (audit C-01).
+// Inventories retired fee-inclusive deployments without enabling them.
 //
 // The bug this class of test exists to prevent is not "wrong address" but
 // "right address, wrong calldata": v1.2 renamed the native entrypoint and added
@@ -20,7 +20,7 @@ const V12 = {
   xrplevm:  "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
 } as const;
 
-describe("B2BSplitter v1.2 migration", () => {
+describe("legacy B2BSplitter deployment quarantine", () => {
   it("ships the audited v1.2 address on every migrated chain", () => {
     for (const [chain, address] of Object.entries(V12)) {
       const d = SPLITTER_DEPLOYMENTS[chain as keyof typeof V12];
@@ -33,6 +33,14 @@ describe("B2BSplitter v1.2 migration", () => {
     // Marking these 1.2 would send v1.2 calldata to a v1.1 contract.
     expect(SPLITTER_DEPLOYMENTS.base.version).toBe("1.1");
     expect(SPLITTER_DEPLOYMENTS.unichain.version).toBe("1.1");
+    expect(SPLITTER_DEPLOYMENTS.base.enabled).toBe(false);
+    expect(SPLITTER_DEPLOYMENTS.unichain.enabled).toBe(false);
+  });
+
+  it("quarantines every fee-inclusive v1.1/v1.2 deployment", () => {
+    for (const chain of Object.keys(SPLITTER_DEPLOYMENTS) as Array<keyof typeof SPLITTER_DEPLOYMENTS>) {
+      expect(SPLITTER_DEPLOYMENTS[chain].enabled, chain).toBe(false);
+    }
   });
 
   it("never leaves the superseded Polygon splitter anywhere in the registry", () => {
@@ -52,9 +60,13 @@ describe("B2BSplitter v1.2 migration", () => {
     expect(paymentIdFor("ord_abc")).toMatch(/^0x[0-9a-f]{64}$/);
   });
 
-  it("every registry entry declares a version", () => {
+  it("every registry entry binds codehash, governance, fees and validity", () => {
     for (const [chain, d] of Object.entries(SPLITTER_DEPLOYMENTS)) {
       expect(["1.1", "1.2"], `${chain}`).toContain(d.version);
+      expect(d.runtimeCodeHash, `${chain} codehash`).toMatch(/^0x[0-9a-f]{64}$/);
+      expect(d.treasuryBps, `${chain} treasury bps`).toBe(100);
+      expect(d.ipCreatorBps, `${chain} creator bps`).toBe(1);
+      expect(Date.parse(d.validFrom), `${chain} validFrom`).toBeLessThan(Date.parse(d.validUntil));
     }
   });
 });

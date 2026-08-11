@@ -8,7 +8,6 @@
 // every bridge in front of the same payment rail agrees on what "consumed"
 // means — this bridge is where one transaction was seen buying two calls.
 export {
-  getOrder,
   putOrder,
   hasOrder,
   consumeOrder,

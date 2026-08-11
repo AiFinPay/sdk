@@ -4,6 +4,54 @@ All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
 `1.0.0` onward the public API is stable and changes follow semver.
 
+## 2.0.0 — @aifinpay/agent · @aifinpay/mcp · aifinpay-agent
+
+Reconciliation of `security/audit-2026-08-06-remediation` with `main`. A major
+bump on all three packages because behaviour was **removed**, not added.
+
+### Removed — breaking
+
+- **`agent_claim_self` is gone from the MCP server.** The magic-link claim flow
+  handed out bearer credentials over a path that could be pointed anywhere; the
+  tool, its registration and its tests were retired together, so nothing is left
+  half-removed.
+- **Legacy splitter signing (v1.1 and v1.2) can no longer reach a wallet.**
+  Their native entrypoint treats the transferred total as fee-INCLUSIVE, which
+  underpays the merchant relative to the fee-on-top rule the product now quotes.
+  Only a v1.3 target may be signed for. `detectSplitterVersion` and the dynamic
+  `payMatic` fallback were removed with it.
+- **The legacy generic nonce-signing helpers are gone.** AiFinPay authorization
+  is now bound to the challenge context it was issued for, so a signature taken
+  for one request cannot be replayed against another.
+
+### Security
+
+- Every signing-critical field — network, splitter address, runtime codehash,
+  version, treasury, governance, fee policy, merchant, validity window — is
+  resolved against an operator-owned registry before any calldata exists. RPC
+  failure, empty code, a stale entry or any mismatch fails closed.
+- Standard x402 EIP-3009 signing stays disabled until a signed registry binds
+  asset/codehash/decimals, `payTo`, the EIP-712 domain and validity. Detection
+  and a traceable error remain; no account signing method is reached.
+- Payments with an unknown value fail closed rather than proceeding on a guess.
+
+### Note on what is enabled
+
+**No network in the shipped registry is v1.3, and `settlementEnabled` is false
+on all of them.** The EVM native settlement path is therefore closed in this
+release by construction, not by accident. Enabling one is a separate, explicit
+decision per network.
+
+### Kept from 1.8.2
+
+- The x402 v2 guard and the corrected `standard-x402.ts` header shipped in
+  1.8.2 are preserved. `node/tests/x402-v2-is-named.test.ts` still passes, which
+  is what proves it — the file's header now carries both explanations: why
+  `detect()` fails on live endpoints, and why `buildAuth` refuses to sign.
+- `bs58` and `tweetnacl` stay declared as direct dependencies of `@aifinpay/mcp`.
+  On `main` they were imported at runtime but never declared, resolving only by
+  transitive hoisting from `@aifinpay/agent`.
+
 ## @aifinpay/agent 1.8.2
 
 ### Fixed
@@ -25,6 +73,60 @@ Versioning follows [Semantic Versioning](https://semver.org/). From
   wider x402 economy (Coinbase, Dexter, 69k+ agents)". It shipped in 1.8.1 and
   could not complete a single payment to any of them. It now describes what the
   implementation actually targets and how it differs from the live standard.
+
+## @aifinpay/agent 1.7.1 — 2026-08-04
+
+### Security
+- **AIFINP-62:** untrusted 402 responses can no longer choose a splitter,
+  ABI/version, merchant, royalty recipient, fee breakdown, asset domain, or
+  fallback route that reaches wallet signing.
+- The EVM route is bound to chain ID, exact address, runtime codehash,
+  version, treasury/governance, fee policy, merchant and a validity window.
+  RPC failures, empty code, stale entries and mismatches fail closed.
+- Legacy v1.1 signing and the dynamic `payMatic` fallback were removed.
+  Deployments controlled by the single-EOA treasury remain in inventory but
+  are disabled; only the Polygon v1.2 Safe-governed target is enabled.
+- Standard x402 EIP-3009 signing is disabled until a signed registry binds
+  asset/codehash/decimals, `payTo`, EIP-712 domain and validity. Detection and
+  a traceable error remain available; no account signing method is called.
+- Corrected Solana settlement to the deployed Anchor `b2b_pay` instruction.
+  The SDK previously encoded a nonexistent `b2b_pay_with_split` discriminator,
+  supplied 7 instead of 9 accounts, and passed the merchant net amount rather
+  than the total. Both SDKs now bind the exact program/instruction, derive and
+  validate Config/Passport/Partner/Vault PDAs, read creator/treasury on-chain,
+  and construct the IDL account order before signing.
+- Quarantined Solana signing after the contract audit confirmed that deployed
+  v0.5.3 has no replay receipt. The route remains disabled until v0.6.0 is
+  deployed and its ProgramData hash/upgrade authority are added to the trusted
+  registry; metadata validation remains available for migration tests only.
+
+### Tests
+- Added 33 adversarial target/metadata tests covering wrong target, chain,
+  version, merchant, royalty, fee components, expiry, disabled legacy routes,
+  RPC timeout, wrong RPC chain, EOA/empty code, codehash mismatch and failed
+  contract introspection before signing, plus Solana program/instruction,
+  account layout, total amount and fee decomposition.
+
+## @aifinpay/mcp 1.4.1 — 2026-08-04
+
+### Fixed
+- Declared `tweetnacl` and `bs58` as direct dependencies because
+  `agent-claim-self.ts` imports them directly. MCP builds no longer depend on
+  accidental transitive hoisting from `@aifinpay/agent`.
+- CI now rebuilds MCP against the Node SDK from the same commit, ensuring the
+  target-validation changes actually reach MCP payment tools before publish.
+
+## aifinpay-agent 1.3.1 — 2026-08-04
+
+### Security
+- Mirrored the Node fail-closed Polygon registry checks in Python: exact
+  splitter/version/merchant/fee terms plus live chain/codehash/governance read.
+- Removed the Python v1.1 `payMatic` fallback and treasury-on-RPC-failure path.
+- Corrected Solana construction to the exact deployed `b2b_pay` IDL and added
+  quote/PDA/treasury validation before transaction construction.
+- Disabled Solana wallet signing pending the verified replay-safe v0.6 upgrade.
+- Added 30 positive/adversarial tests; no transaction is constructed until the
+  quote and runtime target both validate.
 
 ## @aifinpay/agent 1.4.0 · aifinpay-agent 1.2.0 — 2026-08-01
 

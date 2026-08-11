@@ -15,8 +15,7 @@
 // pass while the SDK talks to nobody.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { AiFinPayAgent, BudgetCapExceededError } from "../src/unifiedAgent.js";
-import { MemorySpendLedger } from "../src/spendLedger.js";
+import { AiFinPayAgent, BudgetCapExceededError, SPLITTER_DEPLOYMENTS } from "../src/unifiedAgent.js";
 import {
   Aifp1ReceiptCache,
   Aifp1QuoteError,
@@ -272,10 +271,27 @@ function mockServer(): MockServer {
 
 // ── Agent wired to the mock, with the chain stubbed out ───────────────────
 
+/**
+ * What the agent hands its settlement method.
+ *
+ * Settlement is now v1.3 fee-on-top through the verified registry, so the
+ * quote travels as a whole and the bindings live inside it: the splitter and
+ * version come from the registry, the amounts and order id from the gateway.
+ */
 interface Settlement {
-  merchantWallet: string;
-  totalWei: bigint;
-  orderId: string;
+  chain: string;
+  merchant: string;
+  quote: {
+    chain?: string;
+    splitter?: string;
+    splitter_version?: string;
+    merchant_wallet?: string;
+    order_id?: string;
+    total_wei?: string;
+    merchant_amount_wei?: string;
+    treasury_amount_wei?: string;
+    ip_creator_amount_wei?: string;
+  };
 }
 
 async function agentFor(server: MockServer, opts: Record<string, unknown> = {}) {
@@ -290,7 +306,7 @@ async function agentFor(server: MockServer, opts: Record<string, unknown> = {}) 
   // the right amount against the right order id" is the whole safety property.
   (agent as unknown as { settleSplitterNative: (p: Settlement) => Promise<string> })
     .settleSplitterNative = async (p: Settlement) => {
-      settlements.push({ merchantWallet: p.merchantWallet, totalWei: p.totalWei, orderId: p.orderId });
+      settlements.push({ chain: p.chain, merchant: p.merchant, quote: p.quote });
       return "0x" + "ab".repeat(32);
     };
   return { agent, settlements };
@@ -358,9 +374,20 @@ describe("aifp1: paying a paywall", () => {
     expect(settlements).toHaveLength(1);
     // The binding /v1/pay verifies on-chain: orderId === quote_id, and the
     // funds go to the wallet the quote named.
-    expect(settlements[0]!.orderId).toMatch(/^qt_[0-9]{16}$/);
-    expect(settlements[0]!.merchantWallet).toBe(MERCHANT_WALLET);
-    expect(settlements[0]!.totalWei).toBe(1379310344827586206n);
+    expect(settlements[0]!.quote.order_id).toMatch(/^qt_[0-9]{16}$/);
+    expect(settlements[0]!.merchant).toBe(MERCHANT_WALLET);
+    expect(settlements[0]!.quote.merchant_wallet).toBe(MERCHANT_WALLET);
+    expect(settlements[0]!.quote.total_wei).toBe("1379310344827586206");
+    // The split the gateway quoted is forwarded for the registry to check,
+    // rather than the settling side re-deriving it from the total.
+    expect(settlements[0]!.quote.merchant_amount_wei).toBeDefined();
+    expect(settlements[0]!.quote.treasury_amount_wei).toBeDefined();
+    expect(settlements[0]!.quote.ip_creator_amount_wei).toBeDefined();
+    // Route identity is ours, not the gateway's: the splitter and its version
+    // come from the verified registry, so the gateway cannot name either.
+    expect(settlements[0]!.quote.splitter).toBe(SPLITTER_DEPLOYMENTS.polygon.splitter);
+    expect(settlements[0]!.quote.splitter_version).toBe(SPLITTER_DEPLOYMENTS.polygon.version);
+    expect(settlements[0]!.chain).toBe("polygon");
 
     // Three gateway hits: refused, then the paid retry. First carried no
     // receipt (we had none), the retry did.
@@ -446,7 +473,7 @@ describe("aifp1: receipt reuse", () => {
     expect(server.quotes).toBe(2);
     expect(server.pays).toBe(2);
     expect(settlements).toHaveLength(2);
-    expect(settlements[0]!.orderId).not.toBe(settlements[1]!.orderId);
+    expect(settlements[0]!.quote.order_id).not.toBe(settlements[1]!.quote.order_id);
   });
 });
 
@@ -611,14 +638,17 @@ describe("aifp1: budget caps and refusals", () => {
     expect(settlements).toHaveLength(0);
   });
 
-  it("gives the daily reservation back when the settlement fails", async () => {
-    // A tight cap: 0.15 covers one 0.10 batch, not two. If a failed
-    // settlement kept its reservation, the retry below would be refused —
-    // which is how a leaked reservation stops an agent paying at all.
+  it("does not charge the daily cap for a settlement that failed", async () => {
+    // A tight cap: 0.15 covers one 0.10 batch, not two. A failed settlement
+    // that still counted against the cap would refuse the retry below — which
+    // is how a mis-booked charge stops an agent paying at all.
+    //
+    // The reservation ledger this used to exercise was replaced by in-memory
+    // caps, where spend is recorded in onPaid only once money has moved. The
+    // property under test is unchanged; the mechanism enforcing it is not.
     const server = mockServer();
     const { agent } = await agentFor(server, {
       budgetCaps: { daily_usd: 0.15 },
-      spendLedger: new MemorySpendLedger(),
     });
 
     let failNext = true;
@@ -635,6 +665,26 @@ describe("aifp1: budget caps and refusals", () => {
     const res = await agent.fetchPaid(`${GATEWAY}/acme/articles/2026/a`);
     expect(res!.status).toBe(200);
     expect(agent.getSpend24h()).toBeCloseTo(0.1, 6);
+  });
+
+  it("refuses to settle while the registered splitter is still fee-inclusive", async () => {
+    // Not a stub: the real settlement path runs. Polygon's registered splitter
+    // is v1.2, which pays the merchant out of the total instead of taking the
+    // fee on top, so a fee-on-top quote settled there would silently short-pay
+    // the merchant. validateQuotedNativePayment refuses the route.
+    //
+    // This is expected to stay red as a *refusal* until B2BSplitter v1.3 is
+    // deployed and the registry entry is updated. When that happens this test
+    // documents what had to change; it must not be relaxed before then.
+    expect(SPLITTER_DEPLOYMENTS.polygon.version).not.toBe("1.3");
+    const server = mockServer();
+    const agent = await AiFinPayAgent.fromSeed("22".repeat(32), {
+      telemetry: false,
+      fetchImpl: server.fetch as unknown as typeof fetch,
+    });
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/articles/2026/a`))
+      .rejects.toThrow(/fee_inclusive_splitter_disabled|untrusted|payment target/i);
+    expect(agent.getSpend24h()).toBe(0);
   });
 
   it("names the merchant when a quote comes back for the wrong one", async () => {

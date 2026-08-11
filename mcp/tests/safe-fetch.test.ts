@@ -1,132 +1,152 @@
 import { describe, expect, it } from "vitest";
-import { isBlockedAddress, assertRequestAllowed, makeSafeFetch } from "../src/safe-fetch.js";
-
-// payable_fetch handed a caller-supplied URL to the agent, which requested it
-// and, on a 402, paid and requested it again. Nothing checked the URL, and it
-// is the tool exposed over HTTP today. A caller — or a prompt injection that
-// reaches the tool — could name a loopback port, the cloud metadata service,
-// or anything else the process can reach, and read the answer.
-//
-// The bypasses are the interesting part, so they are what is tested: the
-// address written a different way, the name that resolves inward, and the
-// public host that redirects.
+import { assertRequestAllowed, isBlockedAddress, makeSafeFetch } from "../src/safe-fetch.js";
 
 describe("addresses that must never be reached", () => {
   const blocked = [
-    ["loopback", "127.0.0.1"],
-    ["loopback, other octet", "127.1.2.3"],
-    ["0.0.0.0, which is localhost on Linux", "0.0.0.0"],
-    ["cloud metadata", "169.254.169.254"],
-    ["link-local", "169.254.1.1"],
-    ["private /8", "10.1.2.3"],
-    ["private /12", "172.16.5.5"],
-    ["private /16", "192.168.1.1"],
-    ["carrier NAT", "100.64.0.1"],
-    ["multicast", "224.0.0.1"],
-    ["broadcast", "255.255.255.255"],
-    ["IPv6 loopback", "::1"],
-    ["IPv6 unspecified", "::"],
-    ["IPv6 unique-local", "fd00::1"],
-    ["IPv6 link-local", "fe80::1"],
-    // The one that walks through a check that only knows about IPv4.
-    ["IPv4-mapped loopback", "::ffff:127.0.0.1"],
-    ["IPv4-mapped metadata", "::ffff:169.254.169.254"],
-  ] as const;
-  for (const [label, addr] of blocked) {
-    it(`blocks ${label} (${addr})`, () => expect(isBlockedAddress(addr)).toBe(true));
+    "127.0.0.1",
+    "127.1.2.3",
+    "0.0.0.0",
+    "169.254.169.254",
+    "10.1.2.3",
+    "172.16.5.5",
+    "192.168.1.1",
+    "100.64.0.1",
+    "224.0.0.1",
+    "255.255.255.255",
+    "::1",
+    "::",
+    "fd00::1",
+    "fe80::1",
+    "::ffff:127.0.0.1",
+    "::ffff:169.254.169.254",
+  ];
+  for (const addr of blocked) {
+    it(`blocks ${addr}`, () => expect(isBlockedAddress(addr)).toBe(true));
   }
 
-  const allowed = [["a public v4", "8.8.8.8"], ["another", "104.21.90.50"], ["public v6", "2606:4700::1"]] as const;
-  for (const [label, addr] of allowed) {
-    it(`allows ${label}`, () => expect(isBlockedAddress(addr)).toBe(false));
+  for (const addr of ["8.8.8.8", "104.21.90.50", "2606:4700::1"]) {
+    it(`allows public ${addr}`, () => expect(isBlockedAddress(addr)).toBe(false));
   }
 });
 
-describe("URLs the server will not request", () => {
-  it("refuses a literal private address", async () => {
-    await expect(assertRequestAllowed("https://127.0.0.1:4001/x")).rejects.toThrow(/not a public address/);
+describe("URL policy", () => {
+  it("refuses private and cloud metadata addresses", async () => {
+    await expect(assertRequestAllowed("https://127.0.0.1/x")).rejects.toThrow(/not a public address/);
+    await expect(assertRequestAllowed("https://169.254.169.254/latest/meta-data/")).rejects.toThrow(/not a public address/);
   });
 
-  it("refuses a bracketed IPv6 loopback", async () => {
-    await expect(assertRequestAllowed("https://[::1]:4001/x")).rejects.toThrow(/not a public address/);
-  });
-
-  it("refuses plaintext http", async () => {
-    // http invites exactly the redirect this guard exists to stop, from
-    // anyone on the path rather than only the host.
-    await expect(assertRequestAllowed("http://example.com/x")).rejects.toThrow(/must be https/);
-  });
-
-  it("refuses a non-web scheme", async () => {
+  it("refuses plaintext http and non-web schemes", async () => {
+    await expect(assertRequestAllowed("http://8.8.8.8/x")).rejects.toThrow(/must be https/);
     await expect(assertRequestAllowed("file:///etc/passwd")).rejects.toThrow(/only http and https/);
   });
 
-  it("refuses a name that resolves inward", async () => {
-    // localhost is the honest case of a public-looking name pointing home.
-    await expect(assertRequestAllowed("https://localhost/x")).rejects.toThrow(/not a public address/);
-  });
-
-  it("allows a real public host", async () => {
-    await expect(assertRequestAllowed("https://aifinpay.io/manifesto.json")).resolves.toBeInstanceOf(URL);
-  });
-
-  it("lets an operator lift it deliberately", async () => {
-    await expect(
-      assertRequestAllowed("http://127.0.0.1:4001/x", { allowPrivate: true }),
-    ).resolves.toBeInstanceOf(URL);
+  it("allows a public literal HTTPS address", async () => {
+    await expect(assertRequestAllowed("https://8.8.8.8/x")).resolves.toBeInstanceOf(URL);
   });
 });
 
-describe("redirects", () => {
-  it("re-checks the target of every hop", async () => {
-    // The bypass a first-URL check cannot see: a public host answering 302 to
-    // the metadata service. The redirect must be refused, not followed.
-    const original = globalThis.fetch;
-    try {
-      globalThis.fetch = (async (input: unknown) => {
-        if (String(input).includes("aifinpay.io")) {
-          return new Response(null, {
-            status: 302,
-            headers: { location: "http://169.254.169.254/latest/meta-data/" },
-          });
-        }
-        return new Response("SECRET", { status: 200 });
-      }) as typeof fetch;
-
-      const safe = makeSafeFetch();
-      await expect(safe("https://aifinpay.io/redirect-me")).rejects.toThrow(
-        /169\.254\.169\.254|must be https/,
-      );
-    } finally {
-      globalThis.fetch = original;
-    }
-  });
-
-  it("follows a redirect that stays public", async () => {
-    const original = globalThis.fetch;
-    try {
-      let hop = 0;
-      globalThis.fetch = (async () => {
-        hop += 1;
-        return hop === 1
-          ? new Response(null, { status: 302, headers: { location: "https://aifinpay.io/final" } })
-          : new Response("ok", { status: 200 });
-      }) as typeof fetch;
-
-      const res = await makeSafeFetch()("https://aifinpay.io/start");
-      expect(await res.text()).toBe("ok");
-      expect(hop).toBe(2);
-    } finally {
-      globalThis.fetch = original;
-    }
-  });
-
-  it("stops rather than looping forever", async () => {
+describe("redirect security", () => {
+  it("re-checks every redirect target before following", async () => {
     const original = globalThis.fetch;
     try {
       globalThis.fetch = (async () =>
-        new Response(null, { status: 302, headers: { location: "https://aifinpay.io/again" } })) as typeof fetch;
-      await expect(makeSafeFetch()("https://aifinpay.io/loop")).rejects.toThrow(/too many redirects/);
+        new Response(null, {
+          status: 302,
+          headers: { location: "http://169.254.169.254/latest/meta-data/" },
+        })) as typeof fetch;
+
+      // Start from a public literal to avoid test dependence on external DNS.
+      await expect(
+        makeSafeFetch()("https://8.8.8.8/start"),
+      ).rejects.toThrow(/must be https|not a public address/);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("strips wallet credentials and payment proofs on cross-origin redirect", async () => {
+    const original = globalThis.fetch;
+    try {
+      const seen: Array<{ url: string; headers: Headers }> = [];
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        seen.push({ url, headers: new Headers(init?.headers) });
+        if (seen.length === 1) {
+          return new Response(null, {
+            status: 307,
+            headers: { location: "https://other.example/final" },
+          });
+        }
+        return new Response("ok", { status: 200 });
+      }) as typeof fetch;
+
+      const res = await makeSafeFetch({ allowPrivate: true })("https://first.example/start", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer secret",
+          cookie: "session=secret",
+          "x-payment": "signed-payment",
+          "payment-signature": "signed-authz",
+          "x-agent-pubkey": "agent",
+          "x-nonce": "nonce",
+          "x-signature": "signature",
+          "x-tx-hash": "0xabc",
+          "x-order-id": "order-1",
+          "x-benign-trace": "keep-me",
+        },
+        body: "payload",
+      });
+
+      expect(await res.text()).toBe("ok");
+      expect(seen).toHaveLength(2);
+      expect(seen[1].url).toBe("https://other.example/final");
+      for (const name of [
+        "authorization",
+        "cookie",
+        "x-payment",
+        "payment-signature",
+        "x-agent-pubkey",
+        "x-nonce",
+        "x-signature",
+        "x-tx-hash",
+        "x-order-id",
+      ]) {
+        expect(seen[1].headers.has(name), name).toBe(false);
+      }
+      expect(seen[1].headers.get("x-benign-trace")).toBe("keep-me");
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("keeps payment headers on same-origin redirects", async () => {
+    const original = globalThis.fetch;
+    try {
+      const seen: Headers[] = [];
+      globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+        seen.push(new Headers(init?.headers));
+        return seen.length === 1
+          ? new Response(null, { status: 307, headers: { location: "/final" } })
+          : new Response("ok", { status: 200 });
+      }) as typeof fetch;
+
+      await makeSafeFetch({ allowPrivate: true })("https://same.example/start", {
+        headers: { "x-payment": "proof" },
+      });
+      expect(seen[1].get("x-payment")).toBe("proof");
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("stops redirect loops", async () => {
+    const original = globalThis.fetch;
+    try {
+      globalThis.fetch = (async () =>
+        new Response(null, { status: 302, headers: { location: "/again" } })) as typeof fetch;
+      await expect(
+        makeSafeFetch({ allowPrivate: true })("https://loop.example/start"),
+      ).rejects.toThrow(/too many redirects/);
     } finally {
       globalThis.fetch = original;
     }

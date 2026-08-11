@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   Agent,
   AiFinPayFacilitator,
@@ -6,12 +6,13 @@ import {
   FacilitatorNotImplementedError,
   PaymentTooExpensiveError,
   UnsupportedFacilitatorError,
+  UntrustedPaymentTargetError,
   detectFacilitator,
 } from "../src/index.js";
 
 function makeResp(
   status: number,
-  init: { headers?: Record<string, string>; body?: unknown } = {},
+  init: { headers?: Record<string, string>; body?: unknown; url?: string } = {},
 ): Response {
   const headers = new Headers(init.headers);
   let body: BodyInit | null = null;
@@ -25,7 +26,38 @@ function makeResp(
       body = String(init.body);
     }
   }
-  return new Response(body, { status, headers });
+  const response = new Response(body, { status, headers });
+  if (init.url) Object.defineProperty(response, "url", { value: init.url });
+  return response;
+}
+
+function boundChallenge(url = "https://aifinpay.io/paid?item=1") {
+  const u = new URL(url);
+  const expires = new Date(Date.now() + 60_000).toISOString();
+  const agreement = "a".repeat(64);
+  return makeResp(402, {
+    url,
+    body: {
+      error: "Payment Required",
+      protocol: "AiFinPay v5.3",
+      manifesto: "/manifesto.json",
+      treasury_vault: "AnbjcK3uD…",
+      min_usd: 0.01,
+      agreement_hash: agreement,
+      "x-nonce": "trusted-nonce",
+      "x-nonce-expires": expires,
+      signing: {
+        scheme: "aifinpay-ed25519-v2",
+        hash: "sha256",
+        message_version: 2,
+        method: "GET",
+        resource: `${u.pathname}${u.search}`,
+        expires,
+        min_usd: "0.01",
+        agreement_hash: agreement,
+      },
+    },
+  });
 }
 
 describe("detection", () => {
@@ -92,6 +124,70 @@ describe("detection", () => {
   });
 });
 
+describe("AiFinPay native auth request binding", () => {
+  it("refuses a hostile 402 origin before signing", async () => {
+    const r = makeResp(402, {
+      url: "https://evil.example/paid",
+      body: { protocol: "AiFinPay v5.3", "x-nonce": "attacker-nonce" },
+    });
+    const agent = Agent.new({ baseUrl: "https://aifinpay.io" });
+    const fetchSpy = vi.spyOn(agent, "fetchImpl");
+
+    await expect(new AiFinPayFacilitator().buildAuth(r, agent, {})).rejects.toBeInstanceOf(
+      UntrustedPaymentTargetError,
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("signs only a bound v2 challenge from the trusted origin", async () => {
+    const r = boundChallenge();
+    const agent = Agent.new({
+      baseUrl: "https://aifinpay.io",
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+    });
+
+    const auth = await new AiFinPayFacilitator().buildAuth(r, agent, {});
+    expect(auth.headers?.["x-nonce"]).toBe("trusted-nonce");
+    expect(auth.headers?.["x-signature"]).toBeTruthy();
+    expect(auth.headers?.["x-aifinpay-signature-scheme"]).toBe(
+      "aifinpay-ed25519-v2",
+    );
+    expect(agent.fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("rejects a trusted-origin challenge bound to a different resource", async () => {
+    const r = boundChallenge("https://aifinpay.io/paid?item=1");
+    const body = await r.clone().json() as Record<string, any>;
+    body.signing.resource = "/admin";
+    const tampered = makeResp(402, {
+      url: r.url,
+      body,
+    });
+    const agent = Agent.new({ baseUrl: "https://aifinpay.io" });
+
+    await expect(
+      new AiFinPayFacilitator().buildAuth(tampered, agent, {}),
+    ).rejects.toBeInstanceOf(UntrustedPaymentTargetError);
+  });
+
+  it("rejects the legacy generic-nonce signing format", async () => {
+    const r = makeResp(402, {
+      url: "https://aifinpay.io/paid",
+      body: {
+        protocol: "AiFinPay v5.3",
+        "x-nonce": "legacy-nonce",
+        min_usd: 0.01,
+        agreement_hash: "a".repeat(64),
+      },
+    });
+    const agent = Agent.new({ baseUrl: "https://aifinpay.io" });
+
+    await expect(
+      new AiFinPayFacilitator().buildAuth(r, agent, {}),
+    ).rejects.toBeInstanceOf(UntrustedPaymentTargetError);
+  });
+});
+
 describe("Coinbase adapter behavior", () => {
   it("raises NotImplemented on buildAuth", async () => {
     const spec = { accepts: [{ scheme: "exact", priceUsd: 0.01 }] };
@@ -121,6 +217,32 @@ describe("Coinbase adapter behavior", () => {
     await expect(
       new CoinbaseX402Facilitator().buildAuth(r, agent, {}),
     ).rejects.toBeInstanceOf(UnsupportedFacilitatorError);
+  });
+});
+
+describe("standard x402 target validation", () => {
+  it("detects the format but refuses to sign server-selected asset/domain/payTo", async () => {
+    const r = makeResp(402, {
+      body: {
+        x402Version: 1,
+        accepts: [{
+          scheme: "exact",
+          network: "base",
+          asset: "0x1111111111111111111111111111111111111111",
+          payTo: "0x2222222222222222222222222222222222222222",
+          maxAmountRequired: "1000000",
+          extra: { name: "Attacker Token", version: "999" },
+        }],
+      },
+    });
+    const facilitator = await detectFacilitator(r);
+    expect(facilitator.name).toBe("x402");
+    const agent = Agent.new();
+    const account = vi.spyOn(agent, "evmAccount");
+    await expect(facilitator.buildAuth(r, agent, {})).rejects.toBeInstanceOf(
+      UntrustedPaymentTargetError,
+    );
+    expect(account).not.toHaveBeenCalled();
   });
 });
 
