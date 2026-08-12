@@ -106,7 +106,20 @@ except ImportError as e:  # pragma: no cover
 # while guessing wrong with /providers yields 200-with-HTML that looks like a
 # success. Content is validated below for the same reason.
 DEFAULT_REGISTRY_PATHS = ("/api/providers", "/providers")
-DEFAULT_REGISTRY_URL = "https://api.aifinpay.io" + DEFAULT_REGISTRY_PATHS[0]
+
+# The host and the path are NOT independent — see the table above. This line
+# used to read `"https://api.aifinpay.io" + DEFAULT_REGISTRY_PATHS[0]`, which is
+# exactly the one combination the table three lines up marks as **404**. Every
+# Python agent spent its first discovery request on a guaranteed miss and was
+# rescued only by the fallback, so the bug cost a round-trip and left a 404 in
+# every user's debug log while looking like it worked. Verified live 2026-08-12:
+# aifinpay.io/api/providers -> 200, api.aifinpay.io/api/providers -> 404.
+#
+# Paired with aifinpay.io, which is also what the Node SDK defaults to
+# (node/src/agent.ts DEFAULT_BASE_URL) — the two SDKs disagreeing on the default
+# host is how this went unnoticed. Keep them the same.
+DEFAULT_REGISTRY_HOST = "https://aifinpay.io"
+DEFAULT_REGISTRY_URL = DEFAULT_REGISTRY_HOST + DEFAULT_REGISTRY_PATHS[0]
 DEFAULT_POLYGON_RPC  = "https://polygon.drpc.org"
 DEFAULT_SOLANA_RPC   = "https://api.mainnet-beta.solana.com"
 
