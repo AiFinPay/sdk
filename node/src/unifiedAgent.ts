@@ -186,12 +186,9 @@ export interface AiFinPayAgentOptions extends AgentOptions {
 
 // ── 402 challenge body shape returned by AiFinPay paid-proxy bridges ─────
 
-interface PayMaticChallenge {
-  error:    string;
-  protocol: string;
-  service:  string;
-  facilitator?: string;
-  pay_matic?: {
+/** The native-token payment block of a bridge 402. One shape, two key names —
+ *  see EvmBridgeChallenge below for why both exist. */
+interface PayNativeBlock {
     /** EVM chain the quote is denominated for. Legacy bridges emit
      *  "polygon"; newer bridges may emit any SplitterChainName. */
     chain:                 string;
@@ -211,7 +208,22 @@ interface PayMaticChallenge {
     order_id:              string;
     function_signature?:   string;
     ttl_seconds?:          number;
-  };
+    /** v1.2 bridges precompute keccak(order_id); the SDK derives it anyway. */
+    payment_id?:           string;
+}
+
+interface PayMaticChallenge {
+  error:    string;
+  protocol: string;
+  service:  string;
+  facilitator?: string;
+  /** The production bridges renamed this block to `pay_native` on 2026-08-04
+   *  when payMatic became payNative on-chain — and every SDK branch kept
+   *  reading only `pay_matic`, so agent.call() failed against every live
+   *  bridge with an error blaming facilitator wiring (AIFINP-118). Both names
+   *  are accepted; `pay_native` wins when a bridge sends both. */
+  pay_native?: PayNativeBlock;
+  pay_matic?:  PayNativeBlock;
   pay_solana?: {
     chain:                       "solana";
     program_id:                  string;
@@ -228,6 +240,24 @@ interface PayMaticChallenge {
   };
   retry?: unknown;
   instructions?: string[];
+}
+
+/**
+ * The native-token payment block of a bridge 402, whichever key it arrived
+ * under.
+ *
+ * Both names, newest first. The production bridges renamed the block
+ * `pay_matic` → `pay_native` on 2026-08-04 when the on-chain entrypoint became
+ * `payNative` — and no SDK branch followed, so `agent.call()` failed against
+ * every live bridge with an error blaming facilitator wiring (AIFINP-118).
+ * Exported so the captured-fixture test drives this exact function; the
+ * original bug survived because the tests built their 402s in the SDK's own
+ * vocabulary and never met a real one.
+ */
+export function nativePayBlock(
+  challenge: PayMaticChallenge,
+): PayNativeBlock | undefined {
+  return challenge.pay_native ?? challenge.pay_matic;
 }
 
 // ── B2BSplitter contract ABI ─────────────────────────────────────────────
@@ -1464,12 +1494,12 @@ export class AiFinPayAgent {
       // Settles on any chain in SPLITTER_DEPLOYMENTS (polygon default; base,
       // optimism, unichain, botchain, xrplevm). Native token only — the
       // deployed splitter payment path has no ERC-20/USDC entrypoint.
-      if (!challenge.pay_matic) {
+      const pm = nativePayBlock(challenge);
+      if (!pm) {
         throw new X402Error(
-          `bridge ${provider.name} returned 402 but no pay_matic block — only legacy AiFinPay/Coinbase facilitators not yet wired into AiFinPayAgent.call()`,
+          `bridge ${provider.name} returned 402 with neither a pay_native nor a pay_matic block — it is speaking a protocol this SDK does not implement (fields: ${Object.keys(challenge).join(", ")})`,
         );
       }
-      const pm = challenge.pay_matic;
       const deployment = SPLITTER_DEPLOYMENTS[chain];
       if (!deployment) {
         throw new AiFinPayError(
@@ -1481,7 +1511,7 @@ export class AiFinPayAgent {
       // blindly re-sent as ETH on Base. Legacy bridges always emit "polygon".
       if (pm.chain && pm.chain !== chain) {
         throw new X402Error(
-          `bridge ${provider.name} quoted pay_matic for chain "${pm.chain}" but the call was routed to "${chain}" — refusing cross-denomination payment`,
+          `bridge ${provider.name} quoted a native payment for chain "${pm.chain}" but the call was routed to "${chain}" — refusing cross-denomination payment`,
         );
       }
 
