@@ -1,7 +1,7 @@
 {
   "name": "@aifinpay/mcp",
   "version": "1.5.1",
-  "description": "Pay-per-call MCP server for autonomous AI agents — installs in Claude Desktop / Cursor / Continue with one config block; on-chain settlement on Polygon and Solana via x402.",
+  "description": "Pay-per-call MCP server for autonomous AI agents \u2014 installs in Claude Desktop / Cursor / Continue with one config block; on-chain settlement on Polygon and Solana via x402.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -81,7 +81,9 @@
   "bugs": "https://github.com/AiFinPay/sdk/issues",
   "dependencies": {
     "@aifinpay/agent": "^1.8.1",
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "bs58": "^6.0.0",
+    "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
