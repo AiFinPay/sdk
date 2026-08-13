@@ -4,6 +4,20 @@ All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
 `1.0.0` onward the public API is stable and changes follow semver.
 
+## @aifinpay/agent 1.8.4 · aifinpay-agent 1.4.1
+
+### Fixed
+
+- **`agent.call({provider})` works against live bridges again.** The production
+  bridges renamed their 402 payment block `pay_matic` → `pay_native` on
+  2026-08-04 (when the on-chain entrypoint became `payNative`) and no SDK
+  release followed, so the call failed against every bridge with an error
+  blaming facilitator wiring. Both names are now accepted, newest first, in
+  `nativePayBlock` / `native_pay_block`; `pay_matic` stays supported for
+  bridges not yet redeployed. Guarded by a fixture captured verbatim from a
+  production 402 — the bug survived as long as it did because the old tests
+  authored their own fixtures in the SDK's vocabulary. (AIFINP-118)
+
 ## @aifinpay/agent 1.8.3
 
 ### Added
