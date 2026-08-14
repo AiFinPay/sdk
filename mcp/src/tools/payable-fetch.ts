@@ -10,9 +10,10 @@ export function payableFetchTool() {
       "without being able to settle it. " +
       "Natural-language triggers: 'fetch <paid URL>', 'pay for <url>', " +
       "'try this URL — it might be paid', 'pay the 402 and get the response'. " +
-      "The agent automatically detects the x402 facilitator flavor (AiFinPay " +
-      "or Coinbase x402), signs a payment from the agent's wallet, retries, " +
-      "and returns the response status, headers, and body. For known " +
+      "The agent automatically detects the protocol — the AIFP-1 gateway " +
+      "(gateway.aifinpay.io) or an x402 facilitator (AiFinPay or Coinbase " +
+      "x402) — pays from the agent's wallet, retries, and returns the response " +
+      "status, headers, and body. For known " +
       "AiFinPay-registered providers (exa, io-net, venice, ...), prefer " +
       "`agent_call` instead — it's higher-level and resolves the bridge URL " +
       "from the registry.",
@@ -73,20 +74,53 @@ export async function runPayableFetch(
       ? args.max_amount_usd
       : ctx.config.maxAmountUsd;
 
+  const forcedFacilitator =
+    typeof args.facilitator === "string" ? (args.facilitator as string) : undefined;
+
   try {
-    // Legacy URL-keyed path lives on the wrapped Solana-side Agent. For
-    // registry-resolved Polygon-native calls prefer the `agent_call` tool.
-    const resp = await ctx.agent.inner.pay(url, {
-      method,
-      body,
-      headers,
-      options: {
-        maxAmountUsd,
-        facilitator: typeof args.facilitator === "string"
-          ? (args.facilitator as string)
-          : undefined,
-      },
-    });
+    // Two payment protocols answer a 402 here, and this tool used to speak only
+    // one of them.
+    //
+    //   AIFP-1 gateway (gateway.aifinpay.io/{slug}/…): quote → settle on-chain →
+    //     receipt → retry. Lives on the unified agent as fetchPaid().
+    //   x402 facilitators (AiFinPay / Coinbase): the X-PAYMENT header flow, on
+    //     the wrapped Solana-side agent as inner.pay().
+    //
+    // Before this, payable_fetch called inner.pay() only, so an MCP agent
+    // pointed at a gateway URL got stuck on the 402 it could not read — the
+    // single most common paid surface we run (AIFINP-118 neighbour).
+    //
+    // Routing, safe by construction: fetchPaid() is documented to return a
+    // non-AIFP-1 402 UNTOUCHED and cost nothing, so trying it first can pay an
+    // AIFP-1 URL but can never mis-pay an x402 one. Anything it hands back still
+    // 402 falls through to the x402 path. A caller who forces a facilitator has
+    // stated x402 intent, so skip AIFP-1 entirely for them.
+    let resp: Response | null = null;
+
+    if (!forcedFacilitator) {
+      resp = await ctx.agent.fetchPaid(url, { method, body, headers });
+      if (resp === null) {
+        // Budget cap hit with on_limit_exceeded="skip" — do NOT then try to pay
+        // the same call via x402; that would defeat the cap the caller set.
+        return errorResult(
+          "payment skipped: the per-call or daily budget cap was reached " +
+            "(on_limit_exceeded is set to skip).",
+        );
+      }
+      if (resp.status === 402) {
+        // Not an AIFP-1 gateway 402 — fetchPaid passed it through. Try x402.
+        resp = null;
+      }
+    }
+
+    if (resp === null) {
+      resp = await ctx.agent.inner.pay(url, {
+        method,
+        body,
+        headers,
+        options: { maxAmountUsd, facilitator: forcedFacilitator },
+      });
+    }
 
     const respHeaders: Record<string, string> = {};
     resp.headers.forEach((v, k) => (respHeaders[k] = v));
