@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aifinpay-agent"
-version = "1.4.1"
+version = "1.4.2"
 description = "Unified agent-economy SDK for autonomous AI agents — chain-opaque AiFinPayAgent surface (call/balance/verify) over Polygon and Solana execution environments. Non-custodial, x402-native."
 readme = "README.md"
 requires-python = ">=3.9"
