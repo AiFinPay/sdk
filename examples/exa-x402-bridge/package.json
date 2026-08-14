@@ -21,5 +21,10 @@
   "engines": {
     "node": ">=18"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "overrides": {
+    "ws": "^8.21.0",
+    "qs": "^6.15.2",
+    "body-parser": "^2.3.0"
+  }
 }
