@@ -4,6 +4,21 @@ All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
 `1.0.0` onward the public API is stable and changes follow semver.
 
+## @aifinpay/agent 1.8.3
+
+### Added
+
+- **`@aifinpay/agent/wallet` — derive a wallet without the transaction stack.**
+  `deriveWallet(seedHex)` and `newWallet()` return the Solana, EVM and Casper
+  addresses (and the raw keys) using only tweetnacl + bs58 + @noble, and the
+  subpath's module graph is free of viem and @solana/web3.js — asserted by a
+  test that fails if either ever enters it. Byte-for-byte identical to
+  `AiFinPayAgent`, verified against the full class. For agents that only need a
+  wallet, this is the light door: importing it into a bundle drops the ~157 MB
+  transaction stack a full `AiFinPayAgent` import pulls, which in a constrained
+  sandbox is the difference between installing and failing (AIFINP-117).
+  Unlike `AiFinPayAgent.new()`, `newWallet()` returns a recoverable seed.
+
 ## @aifinpay/agent 1.8.2
 
 ### Fixed

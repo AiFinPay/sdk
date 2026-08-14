@@ -128,3 +128,9 @@ export {
   MemorySpendLedger,
   FileSpendLedger,
 } from "./spendLedger.js";
+
+// Light wallet derivation — addresses without the transaction stack.
+// Also available as the subpath @aifinpay/agent/wallet, whose module graph is
+// free of viem/@solana/web3.js (AIFINP-117).
+export { deriveWallet, newWallet } from "./wallet.js";
+export type { DerivedWallet } from "./wallet.js";
