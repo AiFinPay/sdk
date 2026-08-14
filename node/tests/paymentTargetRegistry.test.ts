@@ -159,6 +159,78 @@ describe("canonical payment target registry", () => {
     await expect(validateRuntimePaymentTarget(reader(readerPatch), target())).rejects.toThrow(reason);
   });
 
+  it("accepts a 0/0 zero-fee v1.3 quote and carries it through to signing amounts", async () => {
+    const t = target({ treasuryBps: 0, ipCreatorBps: 0 });
+    const zeroFeeQuote = quote({
+      total_wei: "100000",
+      treasury_amount_wei: "0",
+      ip_creator_amount_wei: "0",
+    });
+    const validated = validateQuotedNativePayment("polygon", zeroFeeQuote, t, MERCHANT, NOW);
+    expect(validated).toMatchObject({
+      merchantAmountWei: 100000n,
+      treasuryAmountWei: 0n,
+      ipCreatorAmountWei: 0n,
+      totalWei: 100000n,
+      version: "1.3",
+    });
+    const zeroFeeReader = reader({
+      readContract: vi.fn().mockImplementation(async ({ functionName }) => {
+        if (functionName === "treasury" || functionName === "owner") return t.treasury;
+        if (functionName === "treasuryBps" || functionName === "ipCreatorBps") return 0n;
+        throw new Error("unexpected read");
+      }),
+    });
+    await expect(validateRuntimePaymentTarget(zeroFeeReader, t)).resolves.toBeUndefined();
+  });
+
+  it.each([
+    [
+      "treasury leg rounds to zero under non-zero treasuryBps",
+      { treasuryBps: 100, ipCreatorBps: 0 },
+      { merchant_amount_wei: "99", total_wei: "99", treasury_amount_wei: "0", ip_creator_amount_wei: "0" },
+    ],
+    [
+      "creator leg rounds to zero under non-zero ipCreatorBps",
+      { treasuryBps: 100, ipCreatorBps: 1 },
+      { merchant_amount_wei: "9999", total_wei: "10098", treasury_amount_wei: "99", ip_creator_amount_wei: "0" },
+    ],
+  ])("fails closed when the %s", (_name, targetPatch, quotePatch) => {
+    expect(() =>
+      validateQuotedNativePayment("polygon", quote(quotePatch), target(targetPatch), MERCHANT, NOW),
+    ).toThrow("merchant_amount_below_fee_floor");
+  });
+
+  it("rejects a quote that smuggles fee-bearing amounts onto a 0/0 registry target", () => {
+    const t = target({ treasuryBps: 0, ipCreatorBps: 0 });
+    expect(() =>
+      validateQuotedNativePayment(
+        "polygon",
+        quote({
+          total_wei: "101010",
+          treasury_amount_wei: "1000",
+          ip_creator_amount_wei: "10",
+        }),
+        t,
+        MERCHANT,
+        NOW,
+      ),
+    ).toThrow("total_wei_mismatch");
+    expect(() =>
+      validateQuotedNativePayment(
+        "polygon",
+        quote({
+          total_wei: "100000",
+          treasury_amount_wei: "1000",
+          ip_creator_amount_wei: "0",
+        }),
+        t,
+        MERCHANT,
+        NOW,
+      ),
+    ).toThrow("treasury_amount_wei_mismatch");
+  });
+
   it("removes legacy payMatic and fee-inclusive v1.2 signing routes", async () => {
     const source = await import("node:fs").then((fs) =>
       fs.readFileSync(new URL("../src/unifiedAgent.ts", import.meta.url), "utf8"),

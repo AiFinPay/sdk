@@ -128,7 +128,15 @@ export function validateQuotedNativePayment(
     (merchantAmountWei * BigInt(target.treasuryBps)) / 10_000n;
   const ipCreatorAmountWei =
     (merchantAmountWei * BigInt(target.ipCreatorBps)) / 10_000n;
-  if (treasuryAmountWei === 0n) reject("merchant_amount_below_fee_floor");
+  // A fee leg that rounds to zero is only a defect when the registry says the
+  // leg exists. Under a 0-bps profile (AIFP-2 agent-x402) a zero fee is the
+  // correct outcome, not a floor violation.
+  if (target.treasuryBps > 0 && treasuryAmountWei === 0n) {
+    reject("merchant_amount_below_fee_floor");
+  }
+  if (target.ipCreatorBps > 0 && ipCreatorAmountWei === 0n) {
+    reject("merchant_amount_below_fee_floor");
+  }
   const totalWei = merchantAmountWei + treasuryAmountWei + ipCreatorAmountWei;
 
   const suppliedTotal = uint(quote.total_wei, "total_wei");
