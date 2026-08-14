@@ -67,6 +67,32 @@ jobs:
       - name: Verify publishable tarball
         run: npm pack --dry-run
 
+  wallet:
+    name: wallet — @aifinpay/wallet (build + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wallet
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: wallet/package-lock.json
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build (tsc)
+        run: npm run build
+      # The byte-identity test imports @aifinpay/agent (a devDependency). It is
+      # the check that keeps this package's derivation from drifting away from
+      # the full SDK — an agent funded from a drifted address would be
+      # unspendable.
+      - name: Test (vitest)
+        run: npm test
+      - name: Verify publishable tarball
+        run: npm pack --dry-run
+
   mcp-server:
     name: mcp — @aifinpay/mcp (build)
     runs-on: ubuntu-latest

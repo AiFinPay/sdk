@@ -1,0 +1,57 @@
+{
+  "name": "@aifinpay/wallet",
+  "version": "0.1.0",
+  "description": "Derive an AiFinPay agent wallet (Solana + EVM + Casper) with four tiny crypto deps — no viem, no @solana/web3.js, ~4.5 MB. The light way to give an agent a wallet where the full SDK will not install.",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "aifinpay-wallet": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "aifinpay",
+    "wallet",
+    "solana",
+    "evm",
+    "casper",
+    "ai-agent",
+    "seed",
+    "derive",
+    "keypair"
+  ],
+  "homepage": "https://github.com/AiFinPay/AIFP-2sdk/tree/main/wallet#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AiFinPay/AIFP-2sdk.git",
+    "directory": "wallet"
+  },
+  "bugs": "https://github.com/AiFinPay/AIFP-2sdk/issues",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.9.0",
+    "@noble/hashes": "^1.5.0",
+    "bs58": "^6.0.0",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "@aifinpay/agent": "^1.8.4",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.5"
+  }
+}
