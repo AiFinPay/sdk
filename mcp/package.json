@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/mcp",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "Pay-per-call MCP server for autonomous AI agents \u2014 installs in Claude Desktop / Cursor / Continue with one config block; on-chain settlement on Polygon and Solana via x402.",
   "type": "module",
   "main": "dist/index.js",
