@@ -1,7 +1,7 @@
 {
   "name": "@aifinpay/agent",
-  "version": "1.8.2",
-  "description": "Unified agent-economy SDK for autonomous AI agents — chain-opaque AiFinPayAgent surface (call/openSession/balance/verify) over Solana and EVM execution environments (Polygon default; Base, Optimism, Unichain, BOT Chain, XRPL EVM splitter settlement).",
+  "version": "1.8.3",
+  "description": "Unified agent-economy SDK for autonomous AI agents \u2014 chain-opaque AiFinPayAgent surface (call/openSession/balance/verify) over Solana and EVM execution environments (Polygon default; Base, Optimism, Unichain, BOT Chain, XRPL EVM splitter settlement).",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./wallet": {
+      "types": "./dist/wallet.d.ts",
+      "default": "./dist/wallet.js"
     }
   },
   "files": [
@@ -76,11 +80,12 @@
   },
   "bugs": "https://github.com/AiFinPay/sdk/issues",
   "dependencies": {
+    "@noble/curves": "^1.9.0",
+    "@noble/hashes": "^1.5.0",
     "@solana/web3.js": "^1.95.0",
     "bs58": "^6.0.0",
     "tweetnacl": "^1.0.0",
-    "viem": "^2.21.0",
-    "@noble/hashes": "^1.5.0"
+    "viem": "^2.21.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
