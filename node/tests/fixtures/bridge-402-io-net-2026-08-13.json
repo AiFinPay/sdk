@@ -1,0 +1,81 @@
+{
+    "error": "Payment Required",
+    "protocol": "AiFinPay v5.3",
+    "service": "io-net-x402-bridge",
+    "x402Version": 1,
+    "accepts": [
+        {
+            "scheme": "exact",
+            "network": "polygon",
+            "token": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+            "maxAmountRequired": "100000",
+            "resource": "https://bridge.aifinpay.io/io-net/chat/completions",
+            "description": "io.net Llama-3.3-70B inference (1 call)",
+            "mimeType": "application/json",
+            "payTo": "0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e",
+            "maxTimeoutSeconds": 600,
+            "extra": {
+                "name": "USD Coin",
+                "version": "2",
+                "facilitator": "https://x402.polygon.technology"
+            }
+        },
+        {
+            "scheme": "exact",
+            "network": "polygon",
+            "token": "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
+            "maxAmountRequired": "100000",
+            "resource": "https://bridge.aifinpay.io/io-net/chat/completions",
+            "description": "io.net Llama-3.3-70B inference (1 call)",
+            "mimeType": "application/json",
+            "payTo": "0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e",
+            "maxTimeoutSeconds": 600,
+            "extra": {
+                "name": "Tether USD",
+                "version": "1",
+                "facilitator": "https://x402.polygon.technology"
+            }
+        }
+    ],
+    "error_code": "Payment Required",
+    "facilitator": "aifinpay-pay-native",
+    "pay_native": {
+        "chain": "polygon",
+        "splitter": "0xbD1fa5453f212F096c0213788a645eC597FB4DDe",
+        "merchant_wallet": "0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e",
+        "total_wei": "250000000000000000",
+        "merchant_amount_wei": "247475000000000000",
+        "treasury_amount_wei": "2500000000000000",
+        "ip_creator_amount_wei": "25000000000000",
+        "order_id": "io-net-e4e5cc48-629c-4405",
+        "payment_id": "0x13cf922db7ef72f08023ea478848be324f3832fb10ade335ef0ed42ef7264c8f",
+        "function_signature": "payNative(bytes32,address,address,string)",
+        "ttl_seconds": 600
+    },
+    "retry": {
+        "legacy_pay_matic": {
+            "method": "POST",
+            "headers": [
+                "x-tx-hash",
+                "x-order-id"
+            ],
+            "same_body": true
+        },
+        "standard_x402": {
+            "method": "POST",
+            "headers": [
+                "x-payment"
+            ],
+            "same_body": true
+        }
+    },
+    "instructions": [
+        "Choose one:",
+        "  A) Standard x402 USDC (Polygon CLI / agent-cli compatible):",
+        "     - Sign ERC-3009 transferWithAuthorization for USDC/USDT to 0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e",
+        "     - Resend with x-payment: base64(<JSON payload>)",
+        "  B) Legacy aifinpay-pay-matic (atomic POL split):",
+        "     - Call B2BSplitter.payNative(keccak256(\"io-net-e4e5cc48-629c-4405\"), 0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e, address(0), \"io-net-e4e5cc48-629c-4405\") with msg.value=250000000000000000 wei",
+        "     - Resend with x-tx-hash + x-order-id headers"
+    ]
+}

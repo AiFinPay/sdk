@@ -156,6 +156,19 @@ def payment_id_for(order_id: str) -> bytes:
 B2B_PAY_WITH_SPLIT_DISC = hashlib.sha256(b"global:b2b_pay_with_split").digest()[:8]
 
 
+def native_pay_block(challenge: dict) -> Optional[dict]:
+    """The native-token payment block of a bridge 402, whichever key it used.
+
+    Both names, newest first. The production bridges renamed the block
+    ``pay_matic`` -> ``pay_native`` on 2026-08-04 when the on-chain entrypoint
+    became ``payNative`` — and no SDK branch followed, so ``agent.call()``
+    failed against every live bridge (AIFINP-118). Module-level so the
+    captured-fixture test exercises this exact function; the original bug
+    survived because the tests built their 402s in the SDK's own vocabulary.
+    """
+    return challenge.get("pay_native") or challenge.get("pay_matic")
+
+
 # ── Provider / Challenge types (lightweight, dict-backed) ──────────────────
 
 @dataclass
@@ -783,12 +796,17 @@ class AiFinPayAgent:
     def _settle_polygon(self, full_url: str, challenge: dict, method: str,
                         body: Optional[dict], timeout: float,
                         cost: Optional[float] = None) -> requests.Response:
-        pm = challenge.get("pay_matic")
+        # Both names, newest first. The production bridges renamed the block
+        # pay_matic -> pay_native on 2026-08-04 when the on-chain entrypoint
+        # became payNative, and no SDK branch followed — so reading only the
+        # old name made this method fail against every live bridge with a
+        # message blaming facilitator wiring (AIFINP-118).
+        pm = native_pay_block(challenge)
         if not pm:
             raise X402Error(
-                "bridge returned 402 but no pay_matic block — "
-                "use chain='solana' if the bridge supports it, or use the "
-                "legacy generic facilitator client for non-AiFinPay 402s."
+                "bridge returned 402 with neither a pay_native nor a pay_matic "
+                "block — it is speaking a protocol this SDK does not implement "
+                f"(fields: {', '.join(sorted(challenge.keys()))})"
             )
 
         w3 = self._web3()
