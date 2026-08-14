@@ -32,13 +32,13 @@
     "derive",
     "keypair"
   ],
-  "homepage": "https://github.com/AiFinPay/AIFP-2sdk/tree/main/wallet#readme",
+  "homepage": "https://github.com/AiFinPay/sdk/tree/main/wallet#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/AiFinPay/AIFP-2sdk.git",
+    "url": "git+https://github.com/AiFinPay/sdk.git",
     "directory": "wallet"
   },
-  "bugs": "https://github.com/AiFinPay/AIFP-2sdk/issues",
+  "bugs": "https://github.com/AiFinPay/sdk/issues",
   "engines": {
     "node": ">=18"
   },
