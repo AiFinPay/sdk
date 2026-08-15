@@ -45,6 +45,7 @@ import {
 } from "./errors.js";
 import generatedTable from "./generated/splitter-table.json" with { type: "json" };
 import { Agent, type AgentOptions } from "./agent.js";
+import { type SpendLedger, MemorySpendLedger, FileSpendLedger } from "./spendLedger.js";
 import {
   aifp1Fetch,
   Aifp1ReceiptCache,
@@ -179,6 +180,8 @@ export interface AiFinPayAgentOptions extends AgentOptions {
   budgetCaps?:   BudgetCaps;
   telemetry?:    boolean;    // default true
   polygonRpc?:   string;     // default: https://polygon.drpc.org
+  /** Durable daily-spend ledger. Defaults to a file when daily_usd is configured. */
+  spendLedger?:  SpendLedger;
   solanaRpc?:    string;     // default: env AIFINPAY_SOLANA_RPC or mainnet-beta
   /** RPC overrides for non-Polygon EVM chains — both bridge-flow chains
    *  and splitter-settlement chains (base, optimism, unichain, botchain,
@@ -216,6 +219,8 @@ export interface PayMaticChallenge {
     ip_creator?:           string;
     order_id:              string;
     function_signature?:   string;
+    /** Absolute Unix seconds bound into the v1.3 contract call. */
+    valid_until?:          string;
     ttl_seconds?:          number;
   };
   pay_solana?: {
@@ -258,8 +263,8 @@ export function nativePaymentBlock(
   return challenge.pay_native ?? challenge.pay_matic;
 }
 
-// v1.3 fee-on-top entrypoint. v1.1/v1.2 remain recognized only so
-// the validator can reject them explicitly; they may not reach signing.
+// v1.3 gross-inclusive entrypoint. v1.1/v1.2 are legacy and may not
+// reach signing for current AIFP-1/AIFP-2 routes.
 export const SPLITTER_PAY_NATIVE_ABI = [
   {
     type: "function",
@@ -268,9 +273,10 @@ export const SPLITTER_PAY_NATIVE_ABI = [
     inputs: [
       { type: "bytes32", name: "paymentId" },
       { type: "address", name: "merchant" },
-      { type: "uint256", name: "merchantAmount" },
+      { type: "uint256", name: "grossAmount" },
       { type: "address", name: "ipCreator" },
-      { type: "string",  name: "memo" },
+      { type: "uint256", name: "validUntil" },
+      { type: "string",  name: "orderId" },
     ],
     outputs: [],
   },
@@ -645,7 +651,9 @@ export class AiFinPayAgent {
   readonly solanaRpc:    string;
   private  cachedRegistry?: ProviderEntry[];
   private  budgetCaps:     BudgetCaps;
-  private  spend24h        = new SpendTracker();
+  private  spend24h        = new SpendTracker(); // reporting; enforcement uses SpendLedger
+  private  _ledger?:       SpendLedger;
+  private  ledgerOverride?: SpendLedger;
   private  telemetry:      boolean;
   private  _polygonPublic?: PublicClient;
   private  _polygonWallet?: WalletClient;
@@ -667,6 +675,7 @@ export class AiFinPayAgent {
       ? [opts.registryUrl]
       : DEFAULT_REGISTRY_PATHS.map((path) => `${inner.baseUrl}${path}`);
     this.budgetCaps  = opts.budgetCaps ?? {};
+    if (opts.spendLedger) this.ledgerOverride = opts.spendLedger;
     this.telemetry   = opts.telemetry !== false;
     this.polygonRpc  = opts.polygonRpc ?? "https://polygon.drpc.org";
     this.solanaRpc   = opts.solanaRpc
@@ -997,33 +1006,32 @@ export class AiFinPayAgent {
     this.budgetCaps = caps;
   }
 
-  /**
-   * Internal pre-call check. Returns `false` only when on_limit_exceeded
-   * is "skip" and a cap is hit — `call()` should then resolve to null
-   * without submitting an on-chain tx. Throws BudgetCapExceededError
-   * in the default "throw" mode.
-   */
-  private checkBudget(costUsd: number): boolean {
-    const mode = this.budgetCaps.on_limit_exceeded ?? "throw";
+  private get ledger(): SpendLedger {
+    if (this.ledgerOverride) return this.ledgerOverride;
+    if (!this._ledger) {
+      this._ledger = this.budgetCaps.daily_usd !== undefined
+        ? FileSpendLedger.forAgent(this.evmAddress)
+        : new MemorySpendLedger();
+    }
+    return this._ledger;
+  }
 
-    if (this.budgetCaps.per_call_usd !== undefined && costUsd > this.budgetCaps.per_call_usd) {
-      const err = new BudgetCapExceededError(
-        "per_call",
-        `cost $${costUsd} exceeds per-call cap $${this.budgetCaps.per_call_usd}`,
-      );
-      if (mode === "skip") return false;
-      throw err;
-    }
-    const after = this.spend24h.total24h() + costUsd;
-    if (this.budgetCaps.daily_usd !== undefined && after > this.budgetCaps.daily_usd) {
-      const err = new BudgetCapExceededError(
-        "daily",
-        `daily spend ${after.toFixed(4)} would exceed cap $${this.budgetCaps.daily_usd}`,
-      );
-      if (mode === "skip") return false;
-      throw err;
-    }
-    return true;
+  private checkPerCall(costUsd: number): boolean {
+    const cap = this.budgetCaps.per_call_usd;
+    if (cap === undefined || costUsd <= cap) return true;
+    const err = new BudgetCapExceededError("per_call", `cost ${costUsd} exceeds per-call cap ${cap}`);
+    if ((this.budgetCaps.on_limit_exceeded ?? "throw") === "skip") return false;
+    throw err;
+  }
+
+  private async reserveDaily(costUsd: number): Promise<string | null | "skip"> {
+    const cap = this.budgetCaps.daily_usd;
+    if (cap === undefined) return null;
+    const id = await this.ledger.reserve(costUsd, cap, 24 * 3600 * 1000);
+    if (id) return id;
+    const err = new BudgetCapExceededError("daily", `this call would take daily spend past the ${cap} cap`);
+    if ((this.budgetCaps.on_limit_exceeded ?? "throw") === "skip") return "skip";
+    throw err;
   }
 
   /**
@@ -1374,9 +1382,6 @@ export class AiFinPayAgent {
     const rawCost  = opts.cost ?? provider.price_usd;
     const cost     = typeof rawCost === "number" && Number.isFinite(rawCost) ? rawCost : 0;
 
-    const withinBudget = this.checkBudget(cost);
-    if (!withinBudget) return null;
-
     if (provider.mode === "session") {
       throw new AiFinPayError(
         `Provider ${provider.name} requires session mode — use openSession() (phase-3 feature)`,
@@ -1448,7 +1453,17 @@ export class AiFinPayAgent {
         const guarded  = this.guardChallengeAmount(estUsd, cost, provider.name);
         if (!guarded) return null;
       }
-      const solTxSig = await this.submitSolanaB2BPay(ps, validatedSolana);
+      if (!this.checkPerCall(cost)) return null;
+      const reservation = await this.reserveDaily(cost);
+      if (reservation === "skip") return null;
+      let solTxSig: string;
+      try {
+        solTxSig = await this.submitSolanaB2BPay(ps, validatedSolana);
+      } catch (e) {
+        if (typeof reservation === "string") await this.ledger.release(reservation);
+        throw e;
+      }
+      if (typeof reservation === "string") await this.ledger.commit(reservation, cost);
       const paidResp = await this.inner.fetchImpl(fullUrl, buildInit({
         "x-solana-tx": solTxSig,
         "x-order-id":  ps.order_id,
@@ -1523,28 +1538,41 @@ export class AiFinPayAgent {
       if (!guarded) return null;
     }
 
-    // 2. Only a canonical v1.3 fee-on-top quote can reach signing.
+    // 2. Only a canonical v1.3 gross-inclusive quote can reach signing.
     // v1.1/v1.2 and dynamic server-selected ABIs are intentionally unavailable.
+    if (!this.checkPerCall(cost)) return null;
+    const reservation = await this.reserveDaily(cost);
+    if (reservation === "skip") return null;
     await this.assertCanAffordNative(publicClient, deployment, validatedPayment.totalWei);
-    const txHash = await walletClient.writeContract({
-      address:      validatedPayment.splitter,
-      abi:          SPLITTER_PAY_NATIVE_ABI,
-      functionName: "payNative",
-      args: [
-        paymentIdFor(validatedPayment.orderId),
-        validatedPayment.merchant,
-        validatedPayment.merchantAmountWei,
-        validatedPayment.ipCreator,
-        validatedPayment.orderId,
-      ],
-      value: validatedPayment.totalWei,
-      chain: deployment.chain,
-      account: this.evmAccount,
-    });
+    let txHash: `0x${string}`;
+    try {
+      txHash = await walletClient.writeContract({
+        address:      validatedPayment.splitter,
+        abi:          SPLITTER_PAY_NATIVE_ABI,
+        functionName: "payNative",
+        args: [
+          paymentIdFor(validatedPayment.orderId),
+          validatedPayment.merchant,
+          validatedPayment.grossAmountWei,
+          validatedPayment.ipCreator,
+          validatedPayment.validUntil,
+          validatedPayment.orderId,
+        ],
+        value: validatedPayment.totalWei,
+        chain: deployment.chain,
+        account: this.evmAccount,
+      });
+      // Once broadcast, keep the reservation charged unless we can prove a revert.
+      if (typeof reservation === "string") await this.ledger.commit(reservation, cost);
+    } catch (e) {
+      if (typeof reservation === "string") await this.ledger.release(reservation);
+      throw e;
+    }
 
     // 3. Wait for receipt (inclusion is enough on these fast-block chains).
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
     if (receipt.status !== "success") {
+      if (typeof reservation === "string") await this.ledger.release(reservation);
       throw new AiFinPayError(`${deployment.chain.name} tx reverted: ${txHash}`);
     }
 
@@ -1844,7 +1872,7 @@ export class AiFinPayAgent {
   get aifp1Receipts(): Aifp1ReceiptCache { return this._aifp1Cache; }
 
   /**
-   * Settle a native-token splitter payment, v1.3 fee-on-top only.
+   * Settle a native-token splitter payment, v1.3 gross-inclusive only.
    *
    * Shared by call() and the AIFP-1 flow so both reach the chain through the
    * same gate. Everything signing-critical — splitter address, contract
@@ -1882,8 +1910,9 @@ export class AiFinPayAgent {
       args: [
         paymentIdFor(validated.orderId),
         validated.merchant,
-        validated.merchantAmountWei,
+        validated.grossAmountWei,
         validated.ipCreator,
+        validated.validUntil,
         validated.orderId,
       ],
       value: validated.totalWei,
@@ -1951,16 +1980,13 @@ export class AiFinPayAgent {
           merchant_amount_wei:   p.merchantAmountWei?.toString(),
           treasury_amount_wei:   p.treasuryAmountWei?.toString(),
           ip_creator_amount_wei: p.ipCreatorAmountWei?.toString(),
+          valid_until:           p.validUntil.toString(),
         },
       }),
-      // The remediation branch replaced the file-backed reservation ledger
-      // with in-memory caps, so there is no reservation to resolve: checkBudget
-      // covers both per-call and daily, and onPaid records the spend once the
-      // money has actually moved.
-      checkPerCall: (usd) => this.checkBudget(usd),
-      reserveDaily: (usd) => Promise.resolve(this.checkBudget(usd) ? null : "skip"),
-      commit:  () => Promise.resolve(),
-      release: () => Promise.resolve(),
+      checkPerCall: (usd) => this.checkPerCall(usd),
+      reserveDaily: (usd) => this.reserveDaily(usd),
+      commit: async (id, usd) => { await this.ledger.commit(id, usd); },
+      release: async (id) => { await this.ledger.release(id); },
       onPaid: ({ merchantId, amountUsd, txRef }) => {
         this.spend24h.add(amountUsd);
         if (this.telemetry) {

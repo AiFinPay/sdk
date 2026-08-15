@@ -101,20 +101,26 @@ export interface Aifp1Quote {
   accepted_assets: string[];
   accepted_chains: string[];
   pay_to:          Record<string, string>;
-  /** Present only when the backend had a live POL rate at quote time. */
+  /** Native Polygon v1.3 gross settlement, when enabled by backend readiness. */
   native_settlement?: {
     asset:        string;       // "POL"
     decimals:     number;
     rate_usd:     string;
-    total_wei:    string;
+    total_wei:    string;       // gross payer amount
     merchant_wei: string;
     treasury_wei: string;
     creator_wei:  string;
+    valid_until?: string;       // Unix seconds; must equal quote expires_at
   };
   settlement: {
     batch_units: string;
     total_units: string;
-    fee_on_top:  { provider: string; treasury: string; creator: string };
+    gross_units?: string;
+    payer_total_units?: string;
+    merchant_units?: string;
+    protocol_fee_units?: string;
+    creator_units?: string;
+    fee_on_top?: false | { provider: string; treasury: string; creator: string };
   };
   nonce:      string;
   expires_at: string;
@@ -506,15 +512,15 @@ export interface Aifp1Deps {
    * Settle `totalWei` to `merchantWallet` with `orderId`, returning a hash
    * whose transaction was included AND succeeded.
    *
-   * The component amounts are passed through as the gateway quoted them, not
-   * recomputed here: the v1.3 splitter is fee-on-top and the settling side
-   * checks each component against its own registry. Sending only the total
-   * would leave nothing to check that against.
+   * The component amounts are passed through as quote evidence. The v1.3
+   * splitter receives one gross payer amount and splits fees from gross. The
+   * settling side validates all supplied components against its own registry.
    */
   settle(p: {
     merchantWallet:      `0x${string}`;
     totalWei:            bigint;
     orderId:             string;
+    validUntil:          bigint;
     merchantAmountWei?:  bigint;
     treasuryAmountWei?:  bigint;
     ipCreatorAmountWei?: bigint;
@@ -667,6 +673,10 @@ export async function aifp1Fetch(
         `quote ${quote.quote_id} is for merchant ${quote.merchant_id} but ${site} refused as ${challenge.merchant_id} — refusing to pay`,
       );
     }
+    const quoteExpiryMs = Date.parse(quote.expires_at);
+    if (!Number.isFinite(quoteExpiryMs) || quoteExpiryMs <= Date.now()) {
+      throw new Aifp1QuoteError(`quote ${quote.quote_id} is expired or has invalid expires_at`);
+    }
 
     // 3. Budget. The quote states the batch total in USD, so both caps are
     // checked against the real figure, before anything is signed.
@@ -731,6 +741,7 @@ export async function aifp1Fetch(
         // The binding the server verifies on-chain: the Payment event's orderId
         // must equal the quote id, or /v1/pay answers order_id_mismatch.
         orderId:        quote.quote_id,
+        validUntil:     BigInt(Math.floor(quoteExpiryMs / 1000)),
         // Forwarded verbatim so the settling side can check the split against
         // its registry rather than trusting the total.
         merchantAmountWei:  BigInt(native.merchant_wei),
