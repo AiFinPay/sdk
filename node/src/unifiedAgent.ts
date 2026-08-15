@@ -66,6 +66,7 @@ import {
   validateQuotedNativePayment,
   validateRuntimePaymentTarget,
   type QuotedNativePayment,
+  type RouteClass,
   type TrustedPaymentTarget,
 } from "./paymentRegistry.js";
 import {
@@ -1476,11 +1477,15 @@ export class AiFinPayAgent {
 
     // The bridge is untrusted input. Resolve every signing-critical field
     // against the canonical target registry before deriving calldata.
+    // call() IS the AIFP-2 agent x402 route: the route class comes from this
+    // code path, never from the challenge, and the registry target must carry
+    // the approved 0/0 profile or the payment is refused.
     const validatedPayment = validateQuotedNativePayment(
       chain,
       pm,
       deployment,
       provider.merchant_wallet,
+      "agent-x402",
     );
     const { publicClient, walletClient } = this.splitterClients(chain);
     await validateRuntimePaymentTarget(publicClient, deployment);
@@ -1834,9 +1839,10 @@ export class AiFinPayAgent {
    * registered v1.3 route is refused rather than downgraded.
    */
   private async settleSplitterNative(p: {
-    chain:    SplitterChainName;
-    quote:    QuotedNativePayment;
-    merchant: string;
+    chain:      SplitterChainName;
+    quote:      QuotedNativePayment;
+    merchant:   string;
+    routeClass: RouteClass;
   }): Promise<`0x${string}`> {
     const deployment = SPLITTER_DEPLOYMENTS[p.chain];
     if (!deployment) {
@@ -1844,7 +1850,7 @@ export class AiFinPayAgent {
         `No B2BSplitter deployment registered for chain "${p.chain}" — supported: ${Object.keys(SPLITTER_DEPLOYMENTS).join(", ")}`,
       );
     }
-    const validated = validateQuotedNativePayment(p.chain, p.quote, deployment, p.merchant);
+    const validated = validateQuotedNativePayment(p.chain, p.quote, deployment, p.merchant, p.routeClass);
     const { publicClient, walletClient } = this.splitterClients(p.chain);
     await validateRuntimePaymentTarget(publicClient, deployment);
     await this.assertCanAffordNative(publicClient, deployment, validated.totalWei);
@@ -1905,6 +1911,9 @@ export class AiFinPayAgent {
         // notImplemented, anything else unsupported_chain). Settling elsewhere
         // would move real money for a receipt that can never be issued.
         chain: "polygon",
+        // fetchPaid IS the AIFP-1 merchant monetization route; only a target
+        // carrying the approved 100/0 profile may settle it.
+        routeClass: "merchant-aifp1",
         merchant: p.merchantWallet,
         // The gateway states the amounts; the registry states the route. The
         // splitter address and version are NOT taken from the gateway — it

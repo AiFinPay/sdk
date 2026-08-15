@@ -100,7 +100,13 @@ describe("v1.3 calldata", () => {
 
     for (const version of ["1.1", "1.2"] as const) {
       expect(() =>
-        validateQuotedNativePayment("polygon", quote, { ...polygon, enabled: true, version }, MERCHANT),
+        validateQuotedNativePayment(
+          "polygon",
+          quote,
+          { ...polygon, enabled: true, version },
+          MERCHANT,
+          "merchant-aifp1",
+        ),
       ).toThrow(/fee_inclusive_splitter_disabled/);
     }
   });
@@ -124,6 +130,7 @@ describe("v1.3 calldata", () => {
         },
         { ...polygon, enabled: true, version: "1.3" },
         MERCHANT,
+        "merchant-aifp1",
       ),
     ).toThrow(/function_signature_mismatch/);
   });

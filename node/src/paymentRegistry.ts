@@ -16,6 +16,27 @@ export interface TrustedPaymentTarget {
   nativeUsdEnv?: string;
 }
 
+/**
+ * The product route a payment belongs to. Declared by the SDK entry point
+ * that initiated the payment — call() is the AIFP-2 agent x402 route,
+ * fetchPaid() is the AIFP-1 merchant monetization route. It is NEVER taken
+ * from the server's 402 challenge: a challenge must not be able to steer a
+ * payment onto a different contract family or fee profile.
+ */
+export type RouteClass = "agent-x402" | "merchant-aifp1";
+
+/**
+ * The approved fee profile per route (product decision locked 14 Aug 2026):
+ * AIFP-2 agent x402 settles at 0/0, AIFP-1 merchant monetization at 100/0.
+ * A payment may only settle against a registry target whose fee profile is
+ * exactly the one approved for its route; anything else — including the
+ * retired 100/1 profile — fails closed with route_fee_profile_mismatch.
+ */
+export const ROUTE_FEE_PROFILES: Record<RouteClass, { treasuryBps: number; ipCreatorBps: number }> = {
+  "agent-x402": { treasuryBps: 0, ipCreatorBps: 0 },
+  "merchant-aifp1": { treasuryBps: 100, ipCreatorBps: 0 },
+};
+
 export interface QuotedNativePayment {
   chain?: string;
   splitter?: string;
@@ -92,6 +113,7 @@ export function validateQuotedNativePayment(
   quote: QuotedNativePayment,
   target: TrustedPaymentTarget,
   registeredMerchant: string,
+  routeClass: RouteClass,
   nowMs = Date.now(),
 ): ValidatedNativePayment {
   if (!target.enabled) reject("route_disabled");
@@ -137,6 +159,19 @@ export function validateQuotedNativePayment(
   if (target.ipCreatorBps > 0 && ipCreatorAmountWei === 0n) {
     reject("merchant_amount_below_fee_floor");
   }
+
+  // Cross-route gate: the target's fee profile must be exactly the one
+  // approved for the declared route. AIFP-2 fails closed on any fee-bearing
+  // target; AIFP-1 fails closed on 0/0 and on retired profiles like 100/1.
+  const approvedProfile = ROUTE_FEE_PROFILES[routeClass];
+  if (!approvedProfile) reject("route_class_unknown");
+  if (
+    target.treasuryBps !== approvedProfile.treasuryBps ||
+    target.ipCreatorBps !== approvedProfile.ipCreatorBps
+  ) {
+    reject(`route_fee_profile_mismatch:${routeClass}`);
+  }
+
   const totalWei = merchantAmountWei + treasuryAmountWei + ipCreatorAmountWei;
 
   const suppliedTotal = uint(quote.total_wei, "total_wei");

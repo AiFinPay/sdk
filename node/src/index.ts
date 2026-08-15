@@ -22,11 +22,13 @@
 // ── Unified surface (Phase 1+) ───────────────────────────────────────────
 export { AiFinPayAgent, SPLITTER_DEPLOYMENTS, paymentIdFor } from "./unifiedAgent.js";
 export {
+  ROUTE_FEE_PROFILES,
   validateQuotedNativePayment,
   validateRuntimePaymentTarget,
 } from "./paymentRegistry.js";
 export type {
   QuotedNativePayment,
+  RouteClass,
   TrustedPaymentTarget,
   ValidatedNativePayment,
 } from "./paymentRegistry.js";

@@ -32,21 +32,26 @@ function target(overrides: Partial<TrustedPaymentTarget> = {}): TrustedPaymentTa
     enabled: true,
     version: "1.3",
     runtimeCodeHash: keccak256(CODE),
+    // The approved AIFP-1 profile is 100/0 — the deployed 100/1 the polygon
+    // entry describes is the retired economics and is covered by its own
+    // cross-route rejection test below.
+    treasuryBps: 100,
+    ipCreatorBps: 0,
     ...overrides,
   };
 }
 
 function quote(overrides: Partial<QuotedNativePayment> = {}): QuotedNativePayment {
-  // Merchant gets exactly 100000. 1% treasury + 1bp creator are added on top.
+  // Merchant gets exactly 100000. 1% treasury is added on top; no creator leg.
   return {
     chain: "polygon",
     splitter: SPLITTER_DEPLOYMENTS.polygon.splitter,
     splitter_version: "1.3",
     merchant_wallet: MERCHANT,
-    total_wei: "101010",
+    total_wei: "101000",
     merchant_amount_wei: "100000",
     treasury_amount_wei: "1000",
-    ip_creator_amount_wei: "10",
+    ip_creator_amount_wei: "0",
     ip_creator: SPLITTER_DEPLOYMENTS.polygon.treasury,
     order_id: "order-1",
     function_signature: "payNative(bytes32,address,uint256,address,string)",
@@ -72,7 +77,7 @@ function reader(overrides: Partial<TargetReader> = {}): TargetReader {
 describe("canonical payment target registry", () => {
   it("accepts a canonical v1.3 fee-on-top quote and runtime before signing", async () => {
     const t = target();
-    const validated = validateQuotedNativePayment("polygon", quote(), t, MERCHANT, NOW);
+    const validated = validateQuotedNativePayment("polygon", quote(), t, MERCHANT, "merchant-aifp1", NOW);
     await expect(validateRuntimePaymentTarget(reader(), t)).resolves.toBeUndefined();
     expect(validated).toMatchObject({
       splitter: SPLITTER_DEPLOYMENTS.polygon.splitter,
@@ -80,8 +85,8 @@ describe("canonical payment target registry", () => {
       ipCreator: SPLITTER_DEPLOYMENTS.polygon.treasury,
       merchantAmountWei: 100000n,
       treasuryAmountWei: 1000n,
-      ipCreatorAmountWei: 10n,
-      totalWei: 101010n,
+      ipCreatorAmountWei: 0n,
+      totalWei: 101000n,
       version: "1.3",
     });
   });
@@ -93,6 +98,7 @@ describe("canonical payment target registry", () => {
         quote({ splitter_version: "1.2" }),
         target({ version: "1.2" }),
         MERCHANT,
+        "merchant-aifp1",
         NOW,
       ),
     ).toThrow("fee_inclusive_splitter_disabled");
@@ -102,7 +108,7 @@ describe("canonical payment target registry", () => {
     delete process.env[PRICE_ENV];
     expect(() => requireNativeUsdPrice(target())).toThrow("native_price_unavailable");
     expect(() =>
-      validateQuotedNativePayment("polygon", quote(), target(), MERCHANT, NOW),
+      validateQuotedNativePayment("polygon", quote(), target(), MERCHANT, "merchant-aifp1", NOW),
     ).toThrow("native_price_unavailable");
   });
 
@@ -110,9 +116,9 @@ describe("canonical payment target registry", () => {
     "fails closed for invalid operator native/USD price %s",
     (value) => {
       process.env[PRICE_ENV] = value;
-      expect(() => validateQuotedNativePayment("polygon", quote(), target(), MERCHANT, NOW)).toThrow(
-        "native_price_unavailable",
-      );
+      expect(() =>
+        validateQuotedNativePayment("polygon", quote(), target(), MERCHANT, "merchant-aifp1", NOW),
+      ).toThrow("native_price_unavailable");
     },
   );
 
@@ -123,6 +129,7 @@ describe("canonical payment target registry", () => {
         quote(),
         target({ nativeUsdEnv: undefined }),
         MERCHANT,
+        "merchant-aifp1",
         NOW,
       ),
     ).toThrow("native_price_policy_missing");
@@ -144,7 +151,14 @@ describe("canonical payment target registry", () => {
     ["legacy v1.1", { splitter_version: "1.1" }, { version: "1.1" }, "fee_inclusive_splitter_disabled"],
   ])("rejects %s", (_name, quotePatch, targetPatch, reason, now = NOW) => {
     expect(() =>
-      validateQuotedNativePayment("polygon", quote(quotePatch), target(targetPatch), MERCHANT, now),
+      validateQuotedNativePayment(
+        "polygon",
+        quote(quotePatch),
+        target(targetPatch),
+        MERCHANT,
+        "merchant-aifp1",
+        now,
+      ),
     ).toThrow(reason);
   });
 
@@ -166,7 +180,7 @@ describe("canonical payment target registry", () => {
       treasury_amount_wei: "0",
       ip_creator_amount_wei: "0",
     });
-    const validated = validateQuotedNativePayment("polygon", zeroFeeQuote, t, MERCHANT, NOW);
+    const validated = validateQuotedNativePayment("polygon", zeroFeeQuote, t, MERCHANT, "agent-x402", NOW);
     expect(validated).toMatchObject({
       merchantAmountWei: 100000n,
       treasuryAmountWei: 0n,
@@ -197,7 +211,14 @@ describe("canonical payment target registry", () => {
     ],
   ])("fails closed when the %s", (_name, targetPatch, quotePatch) => {
     expect(() =>
-      validateQuotedNativePayment("polygon", quote(quotePatch), target(targetPatch), MERCHANT, NOW),
+      validateQuotedNativePayment(
+        "polygon",
+        quote(quotePatch),
+        target(targetPatch),
+        MERCHANT,
+        "merchant-aifp1",
+        NOW,
+      ),
     ).toThrow("merchant_amount_below_fee_floor");
   });
 
@@ -213,6 +234,7 @@ describe("canonical payment target registry", () => {
         }),
         t,
         MERCHANT,
+        "agent-x402",
         NOW,
       ),
     ).toThrow("total_wei_mismatch");
@@ -226,9 +248,63 @@ describe("canonical payment target registry", () => {
         }),
         t,
         MERCHANT,
+        "agent-x402",
         NOW,
       ),
     ).toThrow("treasury_amount_wei_mismatch");
+  });
+
+  // ── Cross-route policy (AIFINP-119 P0-3) ─────────────────────────────────
+  // The route class comes from the SDK entry point, never from the server
+  // challenge, and each route may only settle against its approved profile:
+  // agent-x402 = 0/0, merchant-aifp1 = 100/0.
+
+  it("AIFP-2 fails closed against a fee-bearing target even with matching amounts", () => {
+    // The quote is internally consistent for 100/0 — only the route is wrong.
+    expect(() =>
+      validateQuotedNativePayment("polygon", quote(), target(), MERCHANT, "agent-x402", NOW),
+    ).toThrow("route_fee_profile_mismatch:agent-x402");
+  });
+
+  it("AIFP-1 fails closed against a 0/0 target even with matching amounts", () => {
+    const t = target({ treasuryBps: 0, ipCreatorBps: 0 });
+    expect(() =>
+      validateQuotedNativePayment(
+        "polygon",
+        quote({ total_wei: "100000", treasury_amount_wei: "0", ip_creator_amount_wei: "0" }),
+        t,
+        MERCHANT,
+        "merchant-aifp1",
+        NOW,
+      ),
+    ).toThrow("route_fee_profile_mismatch:merchant-aifp1");
+  });
+
+  it("AIFP-1 fails closed against the retired 100/1 profile", () => {
+    const t = target({ treasuryBps: 100, ipCreatorBps: 1 });
+    expect(() =>
+      validateQuotedNativePayment(
+        "polygon",
+        quote({ total_wei: "101010", treasury_amount_wei: "1000", ip_creator_amount_wei: "10" }),
+        t,
+        MERCHANT,
+        "merchant-aifp1",
+        NOW,
+      ),
+    ).toThrow("route_fee_profile_mismatch:merchant-aifp1");
+  });
+
+  it("rejects an unknown route class before signing", () => {
+    expect(() =>
+      validateQuotedNativePayment(
+        "polygon",
+        quote(),
+        target(),
+        MERCHANT,
+        "server-chosen" as never,
+        NOW,
+      ),
+    ).toThrow("route_class_unknown");
   });
 
   it("removes legacy payMatic and fee-inclusive v1.2 signing routes", async () => {
