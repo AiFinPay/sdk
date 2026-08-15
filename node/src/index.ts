@@ -20,7 +20,8 @@
  */
 
 // ── Unified surface (Phase 1+) ───────────────────────────────────────────
-export { AiFinPayAgent, SPLITTER_DEPLOYMENTS, paymentIdFor } from "./unifiedAgent.js";
+export { AiFinPayAgent, SPLITTER_DEPLOYMENTS, nativePaymentBlock, paymentIdFor } from "./unifiedAgent.js";
+export type { PayMaticChallenge } from "./unifiedAgent.js";
 export {
   ROUTE_FEE_PROFILES,
   validateQuotedNativePayment,

@@ -1,0 +1,31 @@
+{
+    "error": "Payment Required",
+    "protocol": "AiFinPay v5.3",
+    "service": "exa-x402-bridge",
+    "x402Version": 1,
+    "accepts": [],
+    "error_code": "Payment Required",
+    "facilitator": "aifinpay-pay-native",
+    "pay_native": {
+        "chain": "polygon",
+        "splitter": "0xbD1fa5453f212F096c0213788a645eC597FB4DDe",
+        "merchant_wallet": "0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e",
+        "total_wei": "138988418417358400",
+        "merchant_amount_wei": "137584635391343081",
+        "treasury_amount_wei": "1389884184173584",
+        "ip_creator_amount_wei": "13898841841735",
+        "order_id": "exa-5ab39f84-6bae-46dc",
+        "function_signature": "payNative(bytes32,address,address,string)",
+        "ttl_seconds": 600
+    },
+    "retry": {
+        "legacy_pay_matic": {
+            "method": "POST",
+            "headers": [
+                "x-tx-hash",
+                "x-order-id"
+            ],
+            "same_body": true
+        }
+    }
+}

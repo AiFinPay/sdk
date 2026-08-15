@@ -189,11 +189,14 @@ export interface AiFinPayAgentOptions extends AgentOptions {
 
 // ── 402 challenge body shape returned by AiFinPay paid-proxy bridges ─────
 
-interface PayMaticChallenge {
+export interface PayMaticChallenge {
   error:    string;
   protocol: string;
   service:  string;
   facilitator?: string;
+  /** The current bridge key (AIFINP-118): live bridges emit pay_native.
+   *  Same shape as the legacy pay_matic block below. */
+  pay_native?: PayMaticChallenge["pay_matic"];
   pay_matic?: {
     /** EVM chain the quote is denominated for. Legacy bridges emit
      *  "polygon"; newer bridges may emit any SplitterChainName. */
@@ -236,6 +239,23 @@ interface PayMaticChallenge {
   };
   retry?: unknown;
   instructions?: string[];
+}
+
+/**
+ * The native-token payment block of a 402 challenge (AIFINP-118).
+ *
+ * Live bridges emit `pay_native` (captured fixture:
+ * tests/fixtures/bridge-402-exa-2026-08-15.json); older bridges emitted
+ * `pay_matic`. Both carry the same shape and both are untrusted input —
+ * everything signing-critical is still resolved against the canonical
+ * registry by validateQuotedNativePayment, so a legacy fee-inclusive quote
+ * under either key is refused there, not downgraded. When both keys are
+ * present the current one wins.
+ */
+export function nativePaymentBlock(
+  challenge: PayMaticChallenge,
+): PayMaticChallenge["pay_matic"] | undefined {
+  return challenge.pay_native ?? challenge.pay_matic;
 }
 
 // v1.3 fee-on-top entrypoint. v1.1/v1.2 remain recognized only so
@@ -1454,12 +1474,12 @@ export class AiFinPayAgent {
     // Settles on any chain in SPLITTER_DEPLOYMENTS (polygon default; base,
     // optimism, unichain, botchain, xrplevm). Native token only — the
     // deployed splitter payment path has no ERC-20/USDC entrypoint.
-    if (!challenge.pay_matic) {
+    const pm = nativePaymentBlock(challenge);
+    if (!pm) {
       throw new X402Error(
-        `bridge ${provider.name} returned 402 but no pay_matic block — only legacy AiFinPay/Coinbase facilitators not yet wired into AiFinPayAgent.call()`,
+        `bridge ${provider.name} returned 402 with neither a pay_native nor a legacy pay_matic block — only legacy AiFinPay/Coinbase facilitators not yet wired into AiFinPayAgent.call()`,
       );
     }
-    const pm = challenge.pay_matic;
     const deployment = SPLITTER_DEPLOYMENTS[chain];
     if (!deployment) {
       throw new AiFinPayError(
