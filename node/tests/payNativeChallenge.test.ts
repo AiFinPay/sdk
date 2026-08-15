@@ -42,13 +42,11 @@ describe("402 challenge payment-block selection (AIFINP-118)", () => {
     expect(nativePaymentBlock(both)!.order_id).toMatch(/^exa-/);
   });
 
-  it("refuses the live bridge quote at validation rather than settling it", () => {
-    // The captured quote is the legacy fee-INCLUSIVE v1.2 shape: treasury is
-    // 1% of the TOTAL, the function signature is the 4-arg legacy payNative,
-    // and no splitter_version is stated. Reading the right key must lead to
-    // an honest fail-closed refusal — never to a settlement against the
-    // deployed fee-inclusive splitter. The route reopens only when bridges
-    // quote a registered v1.3 target.
+  it("refuses the captured legacy bridge quote at validation rather than settling it", () => {
+    // The captured quote predates the canonical v1.3 gross+validUntil ABI and
+    // targets a legacy splitter. Reading the right key must lead to an honest
+    // fail-closed refusal, never to settlement. The route can reopen only when
+    // the bridge quotes a registered v1.3 target using the current profile.
     const block = nativePaymentBlock(FIXTURE)!;
     expect(() =>
       validateQuotedNativePayment(
@@ -59,6 +57,6 @@ describe("402 challenge payment-block selection (AIFINP-118)", () => {
         "agent-x402",
         Date.parse("2026-08-15T00:00:00.000Z"),
       ),
-    ).toThrow("fee_inclusive_splitter_disabled");
+    ).toThrow("legacy_splitter_disabled");
   });
 });
