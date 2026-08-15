@@ -11,8 +11,10 @@ import {
 import { SPLITTER_DEPLOYMENTS } from "../src/unifiedAgent.js";
 
 const MERCHANT = "0x1111111111111111111111111111111111111111";
+const ZERO = "0x0000000000000000000000000000000000000000";
 const CODE = "0x6000" as const;
-const NOW = Date.parse("2026-08-05T00:00:00.000Z");
+const NOW = Date.parse("2026-08-15T12:00:00.000Z");
+const VALID_UNTIL = BigInt(Math.floor(NOW / 1000) + 600);
 const PRICE_ENV = "AIFINPAY_MATIC_USD";
 let originalPrice: string | undefined;
 
@@ -32,29 +34,28 @@ function target(overrides: Partial<TrustedPaymentTarget> = {}): TrustedPaymentTa
     enabled: true,
     version: "1.3",
     runtimeCodeHash: keccak256(CODE),
-    // The approved AIFP-1 profile is 100/0 — the deployed 100/1 the polygon
-    // entry describes is the retired economics and is covered by its own
-    // cross-route rejection test below.
     treasuryBps: 100,
     ipCreatorBps: 0,
+    validFrom: "2026-08-15T00:00:00.000Z",
+    validUntil: "2026-08-16T00:00:00.000Z",
     ...overrides,
   };
 }
 
 function quote(overrides: Partial<QuotedNativePayment> = {}): QuotedNativePayment {
-  // Merchant gets exactly 100000. 1% treasury is added on top; no creator leg.
   return {
     chain: "polygon",
     splitter: SPLITTER_DEPLOYMENTS.polygon.splitter,
     splitter_version: "1.3",
     merchant_wallet: MERCHANT,
-    total_wei: "101000",
-    merchant_amount_wei: "100000",
+    total_wei: "100000",
+    merchant_amount_wei: "99000",
     treasury_amount_wei: "1000",
     ip_creator_amount_wei: "0",
-    ip_creator: SPLITTER_DEPLOYMENTS.polygon.treasury,
+    ip_creator: ZERO,
     order_id: "order-1",
-    function_signature: "payNative(bytes32,address,uint256,address,string)",
+    function_signature: "payNative(bytes32,address,uint256,address,uint256,string)",
+    valid_until: VALID_UNTIL.toString(),
     ...overrides,
   };
 }
@@ -75,33 +76,46 @@ function reader(overrides: Partial<TargetReader> = {}): TargetReader {
 }
 
 describe("canonical payment target registry", () => {
-  it("accepts a canonical v1.3 fee-on-top quote and runtime before signing", async () => {
+  it("accepts a canonical gross-inclusive AIFP-1 v1.3 quote and runtime", async () => {
     const t = target();
-    const validated = validateQuotedNativePayment("polygon", quote(), t, MERCHANT, "merchant-aifp1", NOW);
+    const validated = validateQuotedNativePayment(
+      "polygon",
+      quote(),
+      t,
+      MERCHANT,
+      "merchant-aifp1",
+      NOW,
+    );
     await expect(validateRuntimePaymentTarget(reader(), t)).resolves.toBeUndefined();
     expect(validated).toMatchObject({
       splitter: SPLITTER_DEPLOYMENTS.polygon.splitter,
       merchant: MERCHANT,
-      ipCreator: SPLITTER_DEPLOYMENTS.polygon.treasury,
-      merchantAmountWei: 100000n,
+      ipCreator: ZERO,
+      grossAmountWei: 100000n,
+      merchantAmountWei: 99000n,
       treasuryAmountWei: 1000n,
       ipCreatorAmountWei: 0n,
-      totalWei: 101000n,
+      totalWei: 100000n,
+      validUntil: VALID_UNTIL,
       version: "1.3",
     });
+    expect(validated.merchantAmountWei + validated.treasuryAmountWei + validated.ipCreatorAmountWei)
+      .toBe(validated.grossAmountWei);
   });
 
-  it("blocks the currently deployed fee-inclusive v1.2 route", () => {
-    expect(() =>
-      validateQuotedNativePayment(
-        "polygon",
-        quote({ splitter_version: "1.2" }),
-        target({ version: "1.2" }),
-        MERCHANT,
-        "merchant-aifp1",
-        NOW,
-      ),
-    ).toThrow("fee_inclusive_splitter_disabled");
+  it("blocks legacy v1.1/v1.2 routes", () => {
+    for (const version of ["1.1", "1.2"] as const) {
+      expect(() =>
+        validateQuotedNativePayment(
+          "polygon",
+          quote({ splitter_version: version }),
+          target({ version }),
+          MERCHANT,
+          "merchant-aifp1",
+          NOW,
+        ),
+      ).toThrow("legacy_splitter_disabled");
+    }
   });
 
   it("fails closed when the native/USD price is unavailable", () => {
@@ -141,14 +155,14 @@ describe("canonical payment target registry", () => {
     ["unknown version", { splitter_version: "9.9" }, {}, "version_mismatch"],
     ["missing version", { splitter_version: undefined }, {}, "version_mismatch"],
     ["wrong merchant", { merchant_wallet: "0x3333333333333333333333333333333333333333" }, {}, "merchant_mismatch"],
-    ["unregistered royalty", { ip_creator: "0x3333333333333333333333333333333333333333" }, {}, "ip_creator_not_registered"],
+    ["non-zero creator", { ip_creator: "0x3333333333333333333333333333333333333333" }, {}, "ip_creator_not_zero"],
     ["wrong treasury component", { treasury_amount_wei: "999" }, {}, "treasury_amount_wei_mismatch"],
     ["wrong creator component", { ip_creator_amount_wei: "9" }, {}, "ip_creator_amount_wei_mismatch"],
-    ["wrong total", { total_wei: "100000" }, {}, "total_wei_mismatch"],
-    ["missing merchant amount", { merchant_amount_wei: undefined }, {}, "merchant_amount_wei_invalid"],
-    ["expired entry", {}, {}, "registry_entry_expired", Date.parse("2026-09-03T00:00:00.000Z")],
+    ["wrong merchant component", { merchant_amount_wei: "98000" }, {}, "merchant_amount_wei_mismatch"],
+    ["expired quote", { valid_until: String(Math.floor(NOW / 1000) - 1) }, {}, "quote_expired"],
+    ["quote beyond registry window", { valid_until: String(Math.floor(Date.parse("2026-08-17T00:00:00Z") / 1000)) }, {}, "quote_beyond_registry_window"],
+    ["expired registry entry", {}, {}, "registry_entry_expired", Date.parse("2026-08-17T00:00:00.000Z")],
     ["disabled route", {}, { enabled: false }, "route_disabled"],
-    ["legacy v1.1", { splitter_version: "1.1" }, { version: "1.1" }, "fee_inclusive_splitter_disabled"],
   ])("rejects %s", (_name, quotePatch, targetPatch, reason, now = NOW) => {
     expect(() =>
       validateQuotedNativePayment(
@@ -162,6 +176,23 @@ describe("canonical payment target registry", () => {
     ).toThrow(reason);
   });
 
+  it("allows omitted component hints because they are recomputed from gross", () => {
+    const validated = validateQuotedNativePayment(
+      "polygon",
+      quote({
+        merchant_amount_wei: undefined,
+        treasury_amount_wei: undefined,
+        ip_creator_amount_wei: undefined,
+      }),
+      target(),
+      MERCHANT,
+      "merchant-aifp1",
+      NOW,
+    );
+    expect(validated.merchantAmountWei).toBe(99000n);
+    expect(validated.treasuryAmountWei).toBe(1000n);
+  });
+
   it.each([
     ["RPC timeout", { getChainId: vi.fn().mockRejectedValue(new Error("timeout")) }, "rpc_unavailable"],
     ["wrong RPC chain", { getChainId: vi.fn().mockResolvedValue(1) }, "rpc_chain_mismatch"],
@@ -173,21 +204,31 @@ describe("canonical payment target registry", () => {
     await expect(validateRuntimePaymentTarget(reader(readerPatch), target())).rejects.toThrow(reason);
   });
 
-  it("accepts a 0/0 zero-fee v1.3 quote and carries it through to signing amounts", async () => {
+  it("accepts a 0/0 AIFP-2 v1.3 quote with gross==merchant", async () => {
     const t = target({ treasuryBps: 0, ipCreatorBps: 0 });
     const zeroFeeQuote = quote({
       total_wei: "100000",
+      merchant_amount_wei: "100000",
       treasury_amount_wei: "0",
       ip_creator_amount_wei: "0",
     });
-    const validated = validateQuotedNativePayment("polygon", zeroFeeQuote, t, MERCHANT, "agent-x402", NOW);
+    const validated = validateQuotedNativePayment(
+      "polygon",
+      zeroFeeQuote,
+      t,
+      MERCHANT,
+      "agent-x402",
+      NOW,
+    );
     expect(validated).toMatchObject({
+      grossAmountWei: 100000n,
       merchantAmountWei: 100000n,
       treasuryAmountWei: 0n,
       ipCreatorAmountWei: 0n,
       totalWei: 100000n,
       version: "1.3",
     });
+
     const zeroFeeReader = reader({
       readContract: vi.fn().mockImplementation(async ({ functionName }) => {
         if (functionName === "treasury" || functionName === "owner") return t.treasury;
@@ -198,81 +239,57 @@ describe("canonical payment target registry", () => {
     await expect(validateRuntimePaymentTarget(zeroFeeReader, t)).resolves.toBeUndefined();
   });
 
-  it.each([
-    [
-      "treasury leg rounds to zero under non-zero treasuryBps",
-      { treasuryBps: 100, ipCreatorBps: 0 },
-      { merchant_amount_wei: "99", total_wei: "99", treasury_amount_wei: "0", ip_creator_amount_wei: "0" },
-    ],
-    [
-      "creator leg rounds to zero under non-zero ipCreatorBps",
-      { treasuryBps: 100, ipCreatorBps: 1 },
-      { merchant_amount_wei: "9999", total_wei: "10098", treasury_amount_wei: "99", ip_creator_amount_wei: "0" },
-    ],
-  ])("fails closed when the %s", (_name, targetPatch, quotePatch) => {
-    expect(() =>
-      validateQuotedNativePayment(
-        "polygon",
-        quote(quotePatch),
-        target(targetPatch),
-        MERCHANT,
-        "merchant-aifp1",
-        NOW,
-      ),
-    ).toThrow("merchant_amount_below_fee_floor");
-  });
-
-  it("rejects a quote that smuggles fee-bearing amounts onto a 0/0 registry target", () => {
-    const t = target({ treasuryBps: 0, ipCreatorBps: 0 });
+  it("fails closed when the charged AIFP-1 treasury leg rounds to zero", () => {
     expect(() =>
       validateQuotedNativePayment(
         "polygon",
         quote({
-          total_wei: "101010",
-          treasury_amount_wei: "1000",
-          ip_creator_amount_wei: "10",
+          total_wei: "99",
+          merchant_amount_wei: undefined,
+          treasury_amount_wei: undefined,
+          ip_creator_amount_wei: undefined,
         }),
-        t,
+        target(),
         MERCHANT,
-        "agent-x402",
+        "merchant-aifp1",
         NOW,
       ),
-    ).toThrow("total_wei_mismatch");
+    ).toThrow("gross_amount_below_fee_floor");
+  });
+
+  it("rejects fee-bearing component claims on a 0/0 AIFP-2 target", () => {
+    const t = target({ treasuryBps: 0, ipCreatorBps: 0 });
     expect(() =>
       validateQuotedNativePayment(
         "polygon",
         quote({
           total_wei: "100000",
+          merchant_amount_wei: "99000",
           treasury_amount_wei: "1000",
-          ip_creator_amount_wei: "0",
         }),
         t,
         MERCHANT,
         "agent-x402",
         NOW,
       ),
-    ).toThrow("treasury_amount_wei_mismatch");
+    ).toThrow("merchant_amount_wei_mismatch");
   });
 
-  // ── Cross-route policy (AIFINP-119 P0-3) ─────────────────────────────────
-  // The route class comes from the SDK entry point, never from the server
-  // challenge, and each route may only settle against its approved profile:
-  // agent-x402 = 0/0, merchant-aifp1 = 100/0.
-
-  it("AIFP-2 fails closed against a fee-bearing target even with matching amounts", () => {
-    // The quote is internally consistent for 100/0 — only the route is wrong.
+  it("AIFP-2 fails closed against a fee-bearing target", () => {
     expect(() =>
       validateQuotedNativePayment("polygon", quote(), target(), MERCHANT, "agent-x402", NOW),
     ).toThrow("route_fee_profile_mismatch:agent-x402");
   });
 
-  it("AIFP-1 fails closed against a 0/0 target even with matching amounts", () => {
-    const t = target({ treasuryBps: 0, ipCreatorBps: 0 });
+  it("AIFP-1 fails closed against a 0/0 target", () => {
     expect(() =>
       validateQuotedNativePayment(
         "polygon",
-        quote({ total_wei: "100000", treasury_amount_wei: "0", ip_creator_amount_wei: "0" }),
-        t,
+        quote({
+          merchant_amount_wei: "100000",
+          treasury_amount_wei: "0",
+        }),
+        target({ treasuryBps: 0, ipCreatorBps: 0 }),
         MERCHANT,
         "merchant-aifp1",
         NOW,
@@ -281,12 +298,11 @@ describe("canonical payment target registry", () => {
   });
 
   it("AIFP-1 fails closed against the retired 100/1 profile", () => {
-    const t = target({ treasuryBps: 100, ipCreatorBps: 1 });
     expect(() =>
       validateQuotedNativePayment(
         "polygon",
-        quote({ total_wei: "101010", treasury_amount_wei: "1000", ip_creator_amount_wei: "10" }),
-        t,
+        quote(),
+        target({ treasuryBps: 100, ipCreatorBps: 1 }),
         MERCHANT,
         "merchant-aifp1",
         NOW,
@@ -307,7 +323,7 @@ describe("canonical payment target registry", () => {
     ).toThrow("route_class_unknown");
   });
 
-  it("removes legacy payMatic and fee-inclusive v1.2 signing routes", async () => {
+  it("keeps legacy payMatic/v1.2 signing routes removed", async () => {
     const source = await import("node:fs").then((fs) =>
       fs.readFileSync(new URL("../src/unifiedAgent.ts", import.meta.url), "utf8"),
     );
