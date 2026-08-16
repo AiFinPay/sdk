@@ -13,5 +13,12 @@
     "esModuleInterop": true,
     "lib": ["ES2022"]
   },
-  "include": ["src"]
+  "include": [
+    "src/index.ts",
+    "src/server.ts",
+    "src/config.ts",
+    "src/safe-fetch.ts",
+    "src/tools/agent-address.ts",
+    "src/tools/production-control.ts"
+  ]
 }
