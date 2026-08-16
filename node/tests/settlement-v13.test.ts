@@ -4,8 +4,10 @@ import {
   SETTLEMENT_EXPECTED_BPS,
   SettlementProtocolError,
   validateSettlementInvoice,
+  validateTrustedSettlementRoutePin,
   type NativeSettlementInvoice,
   type StableSettlementInvoice,
+  type TrustedSettlementRoutePin,
 } from "../src/settlement.js";
 
 const now = () => Math.floor(Date.now() / 1000);
@@ -16,6 +18,7 @@ const paymentId = `0x${"33".repeat(32)}` as `0x${string}`;
 const runtimeHash = `0x${"44".repeat(32)}` as `0x${string}`;
 
 function nativeAifp1(): NativeSettlementInvoice {
+  const validUntil = now() + 300;
   return {
     route_class: "AIFP-1",
     chain: "polygon",
@@ -28,7 +31,7 @@ function nativeAifp1(): NativeSettlementInvoice {
     asset: "POL",
     payment_id: paymentId,
     order_id: "quote-1",
-    valid_until: now() + 300,
+    valid_until: validUntil,
     merchant_wallet: merchant,
     breakdown: {
       gross_amount: "10000",
@@ -46,7 +49,7 @@ function nativeAifp1(): NativeSettlementInvoice {
         merchant,
         grossAmount: "10000",
         ipCreator: zero,
-        validUntil: now() + 300,
+        validUntil,
         orderId: "quote-1",
       },
       value: "10000",
@@ -57,6 +60,7 @@ function nativeAifp1(): NativeSettlementInvoice {
 
 function stableAifp2(): StableSettlementInvoice {
   const token = "0x3333333333333333333333333333333333333333" as const;
+  const validUntil = now() + 300;
   return {
     route_class: "AIFP-2",
     chain: "base",
@@ -69,7 +73,7 @@ function stableAifp2(): StableSettlementInvoice {
     asset: "USDC",
     payment_id: paymentId,
     order_id: "x402-1",
-    valid_until: now() + 300,
+    valid_until: validUntil,
     merchant_wallet: merchant,
     breakdown: {
       gross_amount: "1",
@@ -96,13 +100,24 @@ function stableAifp2(): StableSettlementInvoice {
           grossAmount: "1",
           merchant,
           ipCreator: zero,
-          validUntil: now() + 300,
+          validUntil,
           orderId: "x402-1",
         },
         value: "0",
       },
     },
     authorization: "wallet signature required",
+  };
+}
+
+function trustedPin(invoice: NativeSettlementInvoice | StableSettlementInvoice): TrustedSettlementRoutePin {
+  return {
+    route_class: invoice.route_class,
+    chain: invoice.chain,
+    chain_id: invoice.chain_id,
+    splitter_version: "1.3",
+    splitter: invoice.splitter,
+    runtime_code_hash: invoice.runtime_code_hash,
   };
 }
 
@@ -134,6 +149,17 @@ describe("canonical v1.3 settlement invoice", () => {
     expect(() => validateSettlementInvoice(stableAifp2())).not.toThrow();
   });
 
+  it("accepts an independently pinned route only when every route identity field matches", () => {
+    const invoice = nativeAifp1();
+    expect(() => validateTrustedSettlementRoutePin(invoice, trustedPin(invoice))).not.toThrow();
+
+    const wrongAddress = { ...trustedPin(invoice), splitter: merchant };
+    expect(() => validateTrustedSettlementRoutePin(invoice, wrongAddress)).toThrow(/trusted deployment pin/);
+
+    const wrongHash = { ...trustedPin(invoice), runtime_code_hash: `0x${"55".repeat(32)}` as `0x${string}` };
+    expect(() => validateTrustedSettlementRoutePin(invoice, wrongHash)).toThrow(/trusted deployment pin/);
+  });
+
   it("rejects fee-on-top semantics", () => {
     const invoice = nativeAifp1() as NativeSettlementInvoice & { fee_on_top: boolean };
     invoice.fee_on_top = true;
@@ -156,10 +182,12 @@ describe("canonical v1.3 settlement invoice", () => {
   it("rejects stale/too-long invoices before wallet signing", () => {
     const expired = nativeAifp1();
     expired.valid_until = now() - 1;
+    expired.transaction.args.validUntil = expired.valid_until;
     expect(() => validateSettlementInvoice(expired)).toThrow(/expired/);
 
     const tooLong = nativeAifp1();
     tooLong.valid_until = now() + 3600;
+    tooLong.transaction.args.validUntil = tooLong.valid_until;
     expect(() => validateSettlementInvoice(tooLong)).toThrow(/20-minute/);
   });
 
@@ -167,6 +195,30 @@ describe("canonical v1.3 settlement invoice", () => {
     const invoice = nativeAifp1();
     invoice.transaction.value = "9999";
     expect(() => validateSettlementInvoice(invoice)).toThrow(/value\/gross/);
+  });
+
+  it("rejects calldata merchant/payment/expiry/order bindings that differ from the invoice", () => {
+    const merchantMismatch = nativeAifp1();
+    merchantMismatch.transaction.args.merchant = splitter;
+    expect(() => validateSettlementInvoice(merchantMismatch)).toThrow(/merchant/);
+
+    const paymentMismatch = nativeAifp1();
+    paymentMismatch.transaction.args.paymentId = `0x${"66".repeat(32)}` as `0x${string}`;
+    expect(() => validateSettlementInvoice(paymentMismatch)).toThrow(/paymentId/);
+
+    const expiryMismatch = nativeAifp1();
+    expiryMismatch.transaction.args.validUntil += 1;
+    expect(() => validateSettlementInvoice(expiryMismatch)).toThrow(/validUntil/);
+
+    const orderMismatch = nativeAifp1();
+    orderMismatch.transaction.args.orderId = "different-order";
+    expect(() => validateSettlementInvoice(orderMismatch)).toThrow(/orderId/);
+  });
+
+  it("rejects any non-zero creator address in production calldata", () => {
+    const invoice = stableAifp2();
+    invoice.transaction.settle.args.ipCreator = merchant;
+    expect(() => validateSettlementInvoice(invoice)).toThrow(/creator address/);
   });
 
   it("rejects stable approval redirected away from the splitter", () => {
