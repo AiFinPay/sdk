@@ -153,7 +153,7 @@ const EXPECTED_BPS: Record<SettlementRouteClass, { treasury: number; creator: nu
 const ZERO = "0x0000000000000000000000000000000000000000" as Address;
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 const HASH_RE = /^0x[0-9a-fA-F]{64}$/;
-const lc = (v: string) => v.toLowerCase();
+const lc = (value: string) => value.toLowerCase();
 
 const PROFILE_ABI = [
   { type: "function", name: "treasuryBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
@@ -200,15 +200,21 @@ function asJsonRecord(value: unknown): Record<string, unknown> {
 
 async function responseJson(response: Response): Promise<Record<string, unknown>> {
   let json: unknown;
-  try { json = await response.json(); }
-  catch { throw new SettlementProtocolError(`settlement API ${response.status}: non-JSON response`); }
+  try {
+    json = await response.json();
+  } catch {
+    throw new SettlementProtocolError(`settlement API ${response.status}: non-JSON response`);
+  }
   const rec = asJsonRecord(json);
   if (!response.ok) {
     const detail = typeof rec.detail === "string" ? rec.detail
       : typeof rec.reason === "string" ? rec.reason
       : typeof rec.error === "string" ? rec.error
       : `HTTP ${response.status}`;
-    throw new SettlementProtocolError(detail, typeof rec.error === "string" ? rec.error : "settlement_http_error");
+    throw new SettlementProtocolError(
+      detail,
+      typeof rec.error === "string" ? rec.error : "settlement_http_error",
+    );
   }
   return rec;
 }
@@ -218,11 +224,22 @@ function expectedBreakdown(route: SettlementRouteClass, gross: bigint) {
   const treasury = gross * BigInt(bps.treasury) / 10_000n;
   const creator = gross * BigInt(bps.creator) / 10_000n;
   if (bps.treasury > 0 && treasury === 0n) {
-    throw new SettlementProtocolError("AIFP-1 gross amount is too small for the 1% protocol fee", "amount_too_small");
+    throw new SettlementProtocolError(
+      "AIFP-1 gross amount is too small for the 1% protocol fee",
+      "amount_too_small",
+    );
   }
   const merchant = gross - treasury - creator;
-  if (merchant <= 0n) throw new SettlementProtocolError("settlement leaves no merchant amount", "amount_too_small");
+  if (merchant <= 0n) {
+    throw new SettlementProtocolError("settlement leaves no merchant amount", "amount_too_small");
+  }
   return { gross, merchant, treasury, creator };
+}
+
+function isStableInvoice(invoice: SettlementInvoice): invoice is StableSettlementInvoice {
+  return invoice.transaction.kind === "evm_erc20_then_contract_call"
+    && "token" in invoice
+    && invoice.token !== undefined;
 }
 
 /** Strictly validate an invoice before any wallet signs. */
@@ -238,10 +255,11 @@ export function validateSettlementInvoice(invoice: SettlementInvoice): void {
   if (invoice.fee_on_top !== false || invoice.settlement_semantics !== "gross-inclusive") {
     throw new SettlementProtocolError("fee-on-top or non-gross settlement is not supported");
   }
-  if (!Number.isInteger(invoice.valid_until) || invoice.valid_until <= Math.floor(Date.now() / 1000)) {
+  const now = Math.floor(Date.now() / 1000);
+  if (!Number.isInteger(invoice.valid_until) || invoice.valid_until <= now) {
     throw new SettlementProtocolError("invoice is expired or has invalid valid_until", "invoice_expired");
   }
-  if (invoice.valid_until > Math.floor(Date.now() / 1000) + 20 * 60 + 5) {
+  if (invoice.valid_until > now + 20 * 60 + 5) {
     throw new SettlementProtocolError("invoice lifetime exceeds the 20-minute safety bound");
   }
 
@@ -259,34 +277,40 @@ export function validateSettlementInvoice(invoice: SettlementInvoice): void {
     throw new SettlementProtocolError("invoice breakdown does not match canonical gross split");
   }
 
-  if (invoice.transaction.kind === "evm_contract_call") {
-    if (invoice.transaction.function !== "payNative(bytes32,address,uint256,address,uint256,string)") {
-      throw new SettlementProtocolError("unexpected native v1.3 function signature");
-    }
-    if (BigInt(invoice.transaction.value) !== gross || BigInt(invoice.transaction.args.grossAmount) !== gross) {
-      throw new SettlementProtocolError("native tx value/gross amount mismatch");
-    }
-  } else {
+  if (isStableInvoice(invoice)) {
     if (!ADDRESS_RE.test(invoice.token.address) || lc(invoice.token.address) === ZERO) {
       throw new SettlementProtocolError("invalid stable token address");
     }
-    if (lc(invoice.transaction.approve.token) !== lc(invoice.token.address)
+    if (
+      lc(invoice.transaction.approve.token) !== lc(invoice.token.address)
       || lc(invoice.transaction.approve.spender) !== lc(invoice.splitter)
-      || BigInt(invoice.transaction.approve.amount) !== gross) {
+      || BigInt(invoice.transaction.approve.amount) !== gross
+    ) {
       throw new SettlementProtocolError("stable approval does not match invoice");
     }
     if (invoice.transaction.settle.function !== "payStable(bytes32,address,uint256,address,address,uint256,string)") {
       throw new SettlementProtocolError("unexpected stable v1.3 function signature");
     }
-    if (lc(invoice.transaction.settle.args.token) !== lc(invoice.token.address)
-      || BigInt(invoice.transaction.settle.args.grossAmount) !== gross) {
+    if (
+      lc(invoice.transaction.settle.args.token) !== lc(invoice.token.address)
+      || BigInt(invoice.transaction.settle.args.grossAmount) !== gross
+    ) {
       throw new SettlementProtocolError("stable settlement token/gross mismatch");
     }
+    return;
+  }
+
+  if (invoice.transaction.function !== "payNative(bytes32,address,uint256,address,uint256,string)") {
+    throw new SettlementProtocolError("unexpected native v1.3 function signature");
+  }
+  if (BigInt(invoice.transaction.value) !== gross || BigInt(invoice.transaction.args.grossAmount) !== gross) {
+    throw new SettlementProtocolError("native tx value/gross amount mismatch");
   }
 }
 
 export class SettlementClient {
   readonly baseUrl: string;
+
   constructor(baseUrl = "https://aifinpay.io") {
     this.baseUrl = baseUrl.replace(/\/$/, "");
   }
@@ -294,7 +318,9 @@ export class SettlementClient {
   async routes(routeClass?: SettlementRouteClass): Promise<SettlementRoute[]> {
     const q = routeClass ? `?route_class=${encodeURIComponent(routeClass)}` : "";
     const rec = await responseJson(await fetch(`${this.baseUrl}/v1/settlement/routes${q}`));
-    if (!Array.isArray(rec.routes)) throw new SettlementProtocolError("routes response has no routes array");
+    if (!Array.isArray(rec.routes)) {
+      throw new SettlementProtocolError("routes response has no routes array");
+    }
     return rec.routes as unknown as SettlementRoute[];
   }
 
@@ -302,10 +328,7 @@ export class SettlementClient {
     const rec = await responseJson(await fetch(`${this.baseUrl}/v1/settlement/invoice`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ...input,
-        gross_amount: String(input.gross_amount),
-      }),
+      body: JSON.stringify({ ...input, gross_amount: String(input.gross_amount) }),
     }));
     const invoice = rec as unknown as SettlementInvoice;
     validateSettlementInvoice(invoice);
@@ -313,11 +336,7 @@ export class SettlementClient {
   }
 }
 
-/**
- * Verify backend evidence against chain immediately before signing.
- * A compromised/stale backend cannot silently redirect the SDK to arbitrary
- * code or swap AIFP-1 and AIFP-2 economics.
- */
+/** Verify backend evidence against chain immediately before signing. */
 export async function verifySettlementRouteOnChain(
   invoice: SettlementInvoice,
   publicClient: PublicClient,
@@ -325,10 +344,15 @@ export async function verifySettlementRouteOnChain(
   validateSettlementInvoice(invoice);
   const actualChainId = await publicClient.getChainId();
   if (actualChainId !== invoice.chain_id) {
-    throw new SettlementProtocolError(`connected RPC chainId ${actualChainId} != invoice ${invoice.chain_id}`, "wrong_chain");
+    throw new SettlementProtocolError(
+      `connected RPC chainId ${actualChainId} != invoice ${invoice.chain_id}`,
+      "wrong_chain",
+    );
   }
   const code = await publicClient.getBytecode({ address: invoice.splitter });
-  if (!code || code === "0x") throw new SettlementProtocolError("splitter has no runtime bytecode", "route_not_deployed");
+  if (!code || code === "0x") {
+    throw new SettlementProtocolError("splitter has no runtime bytecode", "route_not_deployed");
+  }
   if (lc(keccak256(code)) !== lc(invoice.runtime_code_hash)) {
     throw new SettlementProtocolError("splitter runtime bytecode hash mismatch", "runtime_hash_mismatch");
   }
@@ -344,7 +368,9 @@ export async function verifySettlementRouteOnChain(
 
 async function waitSuccess(publicClient: PublicClient, hash: Hex): Promise<bigint> {
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
-  if (receipt.status !== "success") throw new SettlementProtocolError(`transaction ${hash} reverted`, "transaction_reverted");
+  if (receipt.status !== "success") {
+    throw new SettlementProtocolError(`transaction ${hash} reverted`, "transaction_reverted");
+  }
   return receipt.blockNumber;
 }
 
@@ -356,32 +382,21 @@ export async function executeSettlementInvoice(
 ): Promise<SettlementExecution> {
   await verifySettlementRouteOnChain(invoice, publicClient);
   const account = walletClient.account;
-  if (!account) throw new SettlementProtocolError("walletClient has no signing account", "signer_missing");
+  if (!account) {
+    throw new SettlementProtocolError("walletClient has no signing account", "signer_missing");
+  }
   const walletChainId = walletClient.chain?.id;
   if (walletChainId != null && walletChainId !== invoice.chain_id) {
-    throw new SettlementProtocolError(`wallet chainId ${walletChainId} != invoice ${invoice.chain_id}`, "wrong_chain");
+    throw new SettlementProtocolError(
+      `wallet chainId ${walletChainId} != invoice ${invoice.chain_id}`,
+      "wrong_chain",
+    );
   }
 
   const approvalTxs: Hex[] = [];
   let settlementTx: Hex;
-  if (invoice.transaction.kind === "evm_contract_call") {
-    settlementTx = await walletClient.writeContract({
-      address: invoice.splitter,
-      abi: V13_ABI,
-      functionName: "payNative",
-      args: [
-        invoice.transaction.args.paymentId,
-        invoice.transaction.args.merchant,
-        BigInt(invoice.transaction.args.grossAmount),
-        invoice.transaction.args.ipCreator,
-        BigInt(invoice.transaction.args.validUntil),
-        invoice.transaction.args.orderId,
-      ],
-      value: BigInt(invoice.transaction.value),
-      account,
-      chain: walletClient.chain,
-    });
-  } else {
+
+  if (isStableInvoice(invoice)) {
     const gross = BigInt(invoice.transaction.approve.amount);
     const allowance = await publicClient.readContract({
       address: invoice.token.address,
@@ -389,10 +404,9 @@ export async function executeSettlementInvoice(
       functionName: "allowance",
       args: [account.address, invoice.splitter],
     });
+
     if (allowance < gross) {
-      // Reset an existing non-zero allowance first for tokens that implement
-      // the historical USDT approve rule. This is conservative and harmless
-      // for standard ERC-20 implementations.
+      // Covers USDT-style approve restrictions without granting an unlimited allowance.
       if (allowance > 0n) {
         const reset = await walletClient.writeContract({
           address: invoice.token.address,
@@ -416,6 +430,7 @@ export async function executeSettlementInvoice(
       approvalTxs.push(approve);
       await waitSuccess(publicClient, approve);
     }
+
     settlementTx = await walletClient.writeContract({
       address: invoice.splitter,
       abi: V13_ABI,
@@ -432,7 +447,25 @@ export async function executeSettlementInvoice(
       account,
       chain: walletClient.chain,
     });
+  } else {
+    settlementTx = await walletClient.writeContract({
+      address: invoice.splitter,
+      abi: V13_ABI,
+      functionName: "payNative",
+      args: [
+        invoice.transaction.args.paymentId,
+        invoice.transaction.args.merchant,
+        BigInt(invoice.transaction.args.grossAmount),
+        invoice.transaction.args.ipCreator,
+        BigInt(invoice.transaction.args.validUntil),
+        invoice.transaction.args.orderId,
+      ],
+      value: BigInt(invoice.transaction.value),
+      account,
+      chain: walletClient.chain,
+    });
   }
+
   const blockNumber = await waitSuccess(publicClient, settlementTx);
   return {
     route_class: invoice.route_class,
