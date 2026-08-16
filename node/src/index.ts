@@ -7,6 +7,20 @@
  * against the production backend unless explicitly re-enabled there.
  */
 
+// ── AIFP-3 global Agent Passport ─────────────────────────────────────────
+export {
+  AgentPassportError,
+  normalizeAgentPassportIdentifier,
+  resolveAgentPassport,
+  agentPassportWallet,
+} from "./agentPassport.js";
+export type {
+  AgentPassportNetwork,
+  AgentPassportChainFamily,
+  AgentPassportWalletBinding,
+  AgentPassportIdentity,
+} from "./agentPassport.js";
+
 // ── Canonical route-specific v1.3 settlement ─────────────────────────────
 export {
   SettlementClient,
