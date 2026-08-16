@@ -2,8 +2,8 @@
  * AiFinPay agent SDK — Unified Agent Economy layer for AI agents.
  *
  * Production-RC note: new value movement must use the canonical v1.3
- * SettlementClient / executeSettlementInvoice flow exported below. Production
- * signing additionally requires an independently trusted deployment pin; a
+ * SettlementClient / executeSettlementInvoice flow. Production signing
+ * additionally requires an independently trusted deployment pin; a
  * backend-provided address/hash alone is never sufficient authority.
  */
 
@@ -45,7 +45,7 @@ export type {
   SettlementExecution,
 } from "./settlement.js";
 
-// ── Unified surface (legacy compatibility only; not a production settlement authority) ──
+// ── Unified surface (Phase 1+ / legacy callers remain source-compatible) ──
 export { AiFinPayAgent, SPLITTER_DEPLOYMENTS, paymentIdFor } from "./unifiedAgent.js";
 export type {
   AiFinPayAgentOptions,
@@ -113,7 +113,7 @@ export type {
   EvmChainName,
 } from "./crossChain.js";
 
-// ── Legacy chain-aware surface (back-compat; do not use for new settlement) ─
+// ── Legacy chain-aware public API (back-compat only) ─────────────────────
 export { Agent } from "./agent.js";
 export type { AgentOptions, Invoice, PayInit } from "./agent.js";
 export {
@@ -121,4 +121,28 @@ export {
   FacilitatorNotImplementedError,
   FundingTimeoutError,
   PaymentTooExpensiveError,
-} from "./agent.js";
+  SeatNotFoundError,
+  UnsupportedFacilitatorError,
+  X402Error,
+} from "./errors.js";
+export {
+  AiFinPayFacilitator,
+  CoinbaseX402Facilitator,
+  REGISTERED,
+  detectFacilitator,
+} from "./facilitators/index.js";
+export type {
+  AuthPayload,
+  Facilitator,
+  FacilitatorClass,
+  PayOptions,
+} from "./facilitators/index.js";
+
+export {
+  type SpendLedger,
+  MemorySpendLedger,
+  FileSpendLedger,
+} from "./spendLedger.js";
+
+export { deriveWallet, newWallet } from "./wallet.js";
+export type { DerivedWallet } from "./wallet.js";
