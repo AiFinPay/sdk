@@ -2,9 +2,9 @@
  * AiFinPay agent SDK — Unified Agent Economy layer for AI agents.
  *
  * Production-RC note: new value movement must use the canonical v1.3
- * SettlementClient / executeSettlementInvoice flow exported below. Legacy
- * B2BSplitter helpers remain only for source compatibility and fail closed
- * against the production backend unless explicitly re-enabled there.
+ * SettlementClient / executeSettlementInvoice flow exported below. Production
+ * signing additionally requires an independently trusted deployment pin; a
+ * backend-provided address/hash alone is never sufficient authority.
  */
 
 // ── AIFP-3 global Agent Passport ─────────────────────────────────────────
@@ -26,6 +26,7 @@ export {
   SettlementClient,
   SettlementProtocolError,
   validateSettlementInvoice,
+  validateTrustedSettlementRoutePin,
   verifySettlementRouteOnChain,
   executeSettlementInvoice,
   SETTLEMENT_CHAIN_IDS,
@@ -35,6 +36,8 @@ export type {
   SettlementRouteClass,
   SettlementEvmNetwork,
   SettlementRoute,
+  TrustedSettlementRoutePin,
+  TrustedSettlementRouteRegistry,
   SettlementInvoiceInput,
   SettlementInvoice,
   NativeSettlementInvoice,
@@ -42,7 +45,7 @@ export type {
   SettlementExecution,
 } from "./settlement.js";
 
-// ── Unified surface (Phase 1+) ───────────────────────────────────────────
+// ── Unified surface (legacy compatibility only; not a production settlement authority) ──
 export { AiFinPayAgent, SPLITTER_DEPLOYMENTS, paymentIdFor } from "./unifiedAgent.js";
 export type {
   AiFinPayAgentOptions,
@@ -118,28 +121,4 @@ export {
   FacilitatorNotImplementedError,
   FundingTimeoutError,
   PaymentTooExpensiveError,
-  SeatNotFoundError,
-  UnsupportedFacilitatorError,
-  X402Error,
-} from "./errors.js";
-export {
-  AiFinPayFacilitator,
-  CoinbaseX402Facilitator,
-  REGISTERED,
-  detectFacilitator,
-} from "./facilitators/index.js";
-export type {
-  AuthPayload,
-  Facilitator,
-  FacilitatorClass,
-  PayOptions,
-} from "./facilitators/index.js";
-
-export {
-  type SpendLedger,
-  MemorySpendLedger,
-  FileSpendLedger,
-} from "./spendLedger.js";
-
-export { deriveWallet, newWallet } from "./wallet.js";
-export type { DerivedWallet } from "./wallet.js";
+} from "./agent.js";
