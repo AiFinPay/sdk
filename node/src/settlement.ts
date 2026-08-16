@@ -34,6 +34,21 @@ export interface SettlementRoute {
   disabled_reason?: string;
 }
 
+/**
+ * Independent release trust anchor. This value must come from a reviewed SDK
+ * release/config artifact, not from the same backend response as the invoice.
+ */
+export interface TrustedSettlementRoutePin {
+  route_class: SettlementRouteClass;
+  chain: SettlementEvmNetwork;
+  chain_id: number;
+  splitter_version: "1.3";
+  splitter: Address;
+  runtime_code_hash: Hex;
+}
+
+export type TrustedSettlementRouteRegistry = Partial<Record<SettlementRouteClass, Partial<Record<SettlementEvmNetwork, TrustedSettlementRoutePin>>>>;
+
 export interface SettlementInvoiceInput {
   route_class: SettlementRouteClass;
   chain: SettlementEvmNetwork;
@@ -242,6 +257,27 @@ function isStableInvoice(invoice: SettlementInvoice): invoice is StableSettlemen
     && invoice.token !== undefined;
 }
 
+function assertCommonCallBinding(
+  invoice: SettlementInvoice,
+  args: { paymentId: Hex; merchant: Address; ipCreator: Address; validUntil: number; orderId: string },
+): void {
+  if (lc(args.paymentId) !== lc(invoice.payment_id)) {
+    throw new SettlementProtocolError("transaction paymentId does not match invoice", "calldata_mismatch");
+  }
+  if (lc(args.merchant) !== lc(invoice.merchant_wallet)) {
+    throw new SettlementProtocolError("transaction merchant does not match invoice", "calldata_mismatch");
+  }
+  if (lc(args.ipCreator) !== ZERO) {
+    throw new SettlementProtocolError("production creator address must be zero", "calldata_mismatch");
+  }
+  if (args.validUntil !== invoice.valid_until) {
+    throw new SettlementProtocolError("transaction validUntil does not match invoice", "calldata_mismatch");
+  }
+  if (args.orderId !== invoice.order_id) {
+    throw new SettlementProtocolError("transaction orderId does not match invoice", "calldata_mismatch");
+  }
+}
+
 /** Strictly validate an invoice before any wallet signs. */
 export function validateSettlementInvoice(invoice: SettlementInvoice): void {
   if (!(invoice.route_class in EXPECTED_BPS)) throw new SettlementProtocolError("unknown route_class");
@@ -294,9 +330,11 @@ export function validateSettlementInvoice(invoice: SettlementInvoice): void {
     if (
       lc(invoice.transaction.settle.args.token) !== lc(invoice.token.address)
       || BigInt(invoice.transaction.settle.args.grossAmount) !== gross
+      || invoice.transaction.settle.value !== "0"
     ) {
-      throw new SettlementProtocolError("stable settlement token/gross mismatch");
+      throw new SettlementProtocolError("stable settlement token/gross/value mismatch");
     }
+    assertCommonCallBinding(invoice, invoice.transaction.settle.args);
     return;
   }
 
@@ -305,6 +343,37 @@ export function validateSettlementInvoice(invoice: SettlementInvoice): void {
   }
   if (BigInt(invoice.transaction.value) !== gross || BigInt(invoice.transaction.args.grossAmount) !== gross) {
     throw new SettlementProtocolError("native tx value/gross amount mismatch");
+  }
+  assertCommonCallBinding(invoice, invoice.transaction.args);
+}
+
+/** Verify that a backend invoice matches an independently trusted release pin. */
+export function validateTrustedSettlementRoutePin(
+  invoice: SettlementInvoice,
+  pin: TrustedSettlementRoutePin,
+): void {
+  validateSettlementInvoice(invoice);
+  if (!(pin.chain in CHAIN_IDS) || pin.chain_id !== CHAIN_IDS[pin.chain]) {
+    throw new SettlementProtocolError("trusted route pin has an invalid chain binding", "trusted_pin_invalid");
+  }
+  if (pin.splitter_version !== "1.3") {
+    throw new SettlementProtocolError("trusted route pin is not v1.3", "trusted_pin_invalid");
+  }
+  if (!ADDRESS_RE.test(pin.splitter) || lc(pin.splitter) === ZERO || !HASH_RE.test(pin.runtime_code_hash)) {
+    throw new SettlementProtocolError("trusted route pin has invalid address/hash", "trusted_pin_invalid");
+  }
+  if (
+    pin.route_class !== invoice.route_class
+    || pin.chain !== invoice.chain
+    || pin.chain_id !== invoice.chain_id
+    || pin.splitter_version !== invoice.splitter_version
+    || lc(pin.splitter) !== lc(invoice.splitter)
+    || lc(pin.runtime_code_hash) !== lc(invoice.runtime_code_hash)
+  ) {
+    throw new SettlementProtocolError(
+      "backend invoice route does not match the independently trusted deployment pin",
+      "trusted_pin_mismatch",
+    );
   }
 }
 
@@ -336,33 +405,34 @@ export class SettlementClient {
   }
 }
 
-/** Verify backend evidence against chain immediately before signing. */
+/** Verify trusted deployment evidence against chain immediately before signing. */
 export async function verifySettlementRouteOnChain(
   invoice: SettlementInvoice,
   publicClient: PublicClient,
+  trustedPin: TrustedSettlementRoutePin,
 ): Promise<void> {
-  validateSettlementInvoice(invoice);
+  validateTrustedSettlementRoutePin(invoice, trustedPin);
   const actualChainId = await publicClient.getChainId();
-  if (actualChainId !== invoice.chain_id) {
+  if (actualChainId !== trustedPin.chain_id) {
     throw new SettlementProtocolError(
-      `connected RPC chainId ${actualChainId} != invoice ${invoice.chain_id}`,
+      `connected RPC chainId ${actualChainId} != trusted pin ${trustedPin.chain_id}`,
       "wrong_chain",
     );
   }
-  const code = await publicClient.getBytecode({ address: invoice.splitter });
+  const code = await publicClient.getBytecode({ address: trustedPin.splitter });
   if (!code || code === "0x") {
-    throw new SettlementProtocolError("splitter has no runtime bytecode", "route_not_deployed");
+    throw new SettlementProtocolError("trusted splitter has no runtime bytecode", "route_not_deployed");
   }
-  if (lc(keccak256(code)) !== lc(invoice.runtime_code_hash)) {
-    throw new SettlementProtocolError("splitter runtime bytecode hash mismatch", "runtime_hash_mismatch");
+  if (lc(keccak256(code)) !== lc(trustedPin.runtime_code_hash)) {
+    throw new SettlementProtocolError("trusted splitter runtime bytecode hash mismatch", "runtime_hash_mismatch");
   }
   const [treasuryBps, creatorBps] = await Promise.all([
-    publicClient.readContract({ address: invoice.splitter, abi: PROFILE_ABI, functionName: "treasuryBps" }),
-    publicClient.readContract({ address: invoice.splitter, abi: PROFILE_ABI, functionName: "ipCreatorBps" }),
+    publicClient.readContract({ address: trustedPin.splitter, abi: PROFILE_ABI, functionName: "treasuryBps" }),
+    publicClient.readContract({ address: trustedPin.splitter, abi: PROFILE_ABI, functionName: "ipCreatorBps" }),
   ]);
-  const expected = EXPECTED_BPS[invoice.route_class];
+  const expected = EXPECTED_BPS[trustedPin.route_class];
   if (Number(treasuryBps) !== expected.treasury || Number(creatorBps) !== expected.creator) {
-    throw new SettlementProtocolError("on-chain route economics do not match invoice", "profile_mismatch");
+    throw new SettlementProtocolError("on-chain route economics do not match trusted route class", "profile_mismatch");
   }
 }
 
@@ -374,21 +444,22 @@ async function waitSuccess(publicClient: PublicClient, hash: Hex): Promise<bigin
   return receipt.blockNumber;
 }
 
-/** Execute a pre-validated v1.3 invoice with the caller's wallet. */
+/** Execute a v1.3 invoice only after matching an independent trusted route pin. */
 export async function executeSettlementInvoice(
   invoice: SettlementInvoice,
   walletClient: WalletClient,
   publicClient: PublicClient,
+  trustedPin: TrustedSettlementRoutePin,
 ): Promise<SettlementExecution> {
-  await verifySettlementRouteOnChain(invoice, publicClient);
+  await verifySettlementRouteOnChain(invoice, publicClient, trustedPin);
   const account = walletClient.account;
   if (!account) {
     throw new SettlementProtocolError("walletClient has no signing account", "signer_missing");
   }
   const walletChainId = walletClient.chain?.id;
-  if (walletChainId != null && walletChainId !== invoice.chain_id) {
+  if (walletChainId != null && walletChainId !== trustedPin.chain_id) {
     throw new SettlementProtocolError(
-      `wallet chainId ${walletChainId} != invoice ${invoice.chain_id}`,
+      `wallet chainId ${walletChainId} != trusted pin ${trustedPin.chain_id}`,
       "wrong_chain",
     );
   }
@@ -402,17 +473,16 @@ export async function executeSettlementInvoice(
       address: invoice.token.address,
       abi: ERC20_ABI,
       functionName: "allowance",
-      args: [account.address, invoice.splitter],
+      args: [account.address, trustedPin.splitter],
     });
 
     if (allowance < gross) {
-      // Covers USDT-style approve restrictions without granting an unlimited allowance.
       if (allowance > 0n) {
         const reset = await walletClient.writeContract({
           address: invoice.token.address,
           abi: ERC20_ABI,
           functionName: "approve",
-          args: [invoice.splitter, 0n],
+          args: [trustedPin.splitter, 0n],
           account,
           chain: walletClient.chain,
         });
@@ -423,7 +493,7 @@ export async function executeSettlementInvoice(
         address: invoice.token.address,
         abi: ERC20_ABI,
         functionName: "approve",
-        args: [invoice.splitter, gross],
+        args: [trustedPin.splitter, gross],
         account,
         chain: walletClient.chain,
       });
@@ -432,7 +502,7 @@ export async function executeSettlementInvoice(
     }
 
     settlementTx = await walletClient.writeContract({
-      address: invoice.splitter,
+      address: trustedPin.splitter,
       abi: V13_ABI,
       functionName: "payStable",
       args: [
@@ -449,7 +519,7 @@ export async function executeSettlementInvoice(
     });
   } else {
     settlementTx = await walletClient.writeContract({
-      address: invoice.splitter,
+      address: trustedPin.splitter,
       abi: V13_ABI,
       functionName: "payNative",
       args: [
