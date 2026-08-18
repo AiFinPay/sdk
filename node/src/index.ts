@@ -1,25 +1,51 @@
 /**
  * AiFinPay agent SDK — Unified Agent Economy layer for AI agents.
  *
- * Recommended (Phase 1+): the chain-opaque AiFinPayAgent surface.
- *
- *   import { AiFinPayAgent } from "@aifinpay/agent";
- *
- *   const agent = await AiFinPayAgent.new();
- *   const res = await agent.call({ provider: "exa", body: { query: "..." } });
- *   const data = await res.json();
- *
- * Legacy (still supported, but @deprecated for new code): the chain-aware
- * Agent class with explicit Solana primitives.
- *
- *   import { Agent } from "@aifinpay/agent";
- *
- *   const agent = Agent.new();
- *   await agent.reserveSeatInvoice({ amountUsd: 1.0, asset: "USDC" });
- *   const res = await agent.pay("https://aifinpay.io/api/stats");
+ * Production-RC note: new value movement must use the canonical v1.3
+ * SettlementClient / executeSettlementInvoice flow. Production signing
+ * additionally requires an independently trusted deployment pin; a
+ * backend-provided address/hash alone is never sufficient authority.
  */
 
-// ── Unified surface (Phase 1+) ───────────────────────────────────────────
+// ── AIFP-3 global Agent Passport ─────────────────────────────────────────
+export {
+  AgentPassportError,
+  normalizeAgentPassportIdentifier,
+  resolveAgentPassport,
+  agentPassportWallet,
+} from "./agentPassport.js";
+export type {
+  AgentPassportNetwork,
+  AgentPassportChainFamily,
+  AgentPassportWalletBinding,
+  AgentPassportIdentity,
+} from "./agentPassport.js";
+
+// ── Canonical route-specific v1.3 settlement ─────────────────────────────
+export {
+  SettlementClient,
+  SettlementProtocolError,
+  validateSettlementInvoice,
+  validateTrustedSettlementRoutePin,
+  verifySettlementRouteOnChain,
+  executeSettlementInvoice,
+  SETTLEMENT_CHAIN_IDS,
+  SETTLEMENT_EXPECTED_BPS,
+} from "./settlement.js";
+export type {
+  SettlementRouteClass,
+  SettlementEvmNetwork,
+  SettlementRoute,
+  TrustedSettlementRoutePin,
+  TrustedSettlementRouteRegistry,
+  SettlementInvoiceInput,
+  SettlementInvoice,
+  NativeSettlementInvoice,
+  StableSettlementInvoice,
+  SettlementExecution,
+} from "./settlement.js";
+
+// ── Unified surface (Phase 1+ / legacy callers remain source-compatible) ──
 export { AiFinPayAgent, SPLITTER_DEPLOYMENTS, paymentIdFor } from "./unifiedAgent.js";
 export type {
   AiFinPayAgentOptions,
@@ -46,11 +72,6 @@ export {
 } from "./unifiedAgent.js";
 
 // ── AIFP-1 merchant paywall (gateway.aifinpay.io) ────────────────────────
-// The flow is normally reached as a method — `agent.fetchPaid(url)` — which
-// wires in the agent's own settlement and budget caps. The pieces below are
-// exported for callers who need to reason about a batch without making one:
-// inspect held receipts, ask whether a scope covers a path, or drive the
-// protocol from a wallet that is not an AiFinPayAgent.
 export {
   aifp1Fetch,
   Aifp1ReceiptCache,
@@ -76,10 +97,7 @@ export {
   Aifp1ReceiptRejectedError,
 } from "./aifp1.js";
 
-// ── Cross-chain orchestration (Phase 1.5a — EVM↔EVM via LiFi) ────────────
-// Standalone primitives — also exposed as methods on AiFinPayAgent.
-// Use the methods (agent.bridgeQuote / agent.bridgeExecute) unless you
-// need to orchestrate from a wallet that isn't an AiFinPayAgent instance.
+// ── Cross-chain orchestration ─────────────────────────────────────────────
 export {
   bridgeQuote,
   bridgeExecute,
@@ -95,7 +113,7 @@ export type {
   EvmChainName,
 } from "./crossChain.js";
 
-// ── Legacy chain-aware surface (kept for back-compat) ───────────────────
+// ── Legacy chain-aware public API (back-compat only) ─────────────────────
 export { Agent } from "./agent.js";
 export type { AgentOptions, Invoice, PayInit } from "./agent.js";
 export {
@@ -120,17 +138,11 @@ export type {
   PayOptions,
 } from "./facilitators/index.js";
 
-// Spend accounting for the daily cap. Exported so an agent fleet spanning more
-// than one host can supply a ledger that can answer for all of them — a lock
-// file on one machine cannot.
 export {
   type SpendLedger,
   MemorySpendLedger,
   FileSpendLedger,
 } from "./spendLedger.js";
 
-// Light wallet derivation — addresses without the transaction stack.
-// Also available as the subpath @aifinpay/agent/wallet, whose module graph is
-// free of viem/@solana/web3.js (AIFINP-117).
 export { deriveWallet, newWallet } from "./wallet.js";
 export type { DerivedWallet } from "./wallet.js";

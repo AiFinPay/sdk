@@ -6,43 +6,20 @@ import {
 import type { AuthPayload, Facilitator, PayOptions } from "./base.js";
 
 /**
- * Standard x402 — the `X-PAYMENT` header flow (x402 Foundation / Linux
- * Foundation standard, donated by Coinbase 2026-04).
+ * Standard x402 Foundation protocol adapter.
  *
- * ⚠ THIS DOES NOT YET INTEROPERATE WITH LIVE x402 SERVICES.
+ * Supported:
+ * - x402 v2 HTTP transport: base64 `PAYMENT-REQUIRED` response header and
+ *   base64 `PAYMENT-SIGNATURE` retry header.
+ * - v2 EVM `exact` scheme using EIP-3009 TransferWithAuthorization.
+ * - CAIP-2 EVM networks (`eip155:<chainId>`).
+ * - legacy v1 body/X-PAYMENT support for existing integrations.
  *
- * It targets x402Version 1, and the standard has moved to 2. Tested against
- * https://x402.org/protected on 2026-08-10: detect() returns false, so an agent
- * walks past a real x402 endpoint without recognising it. Four differences,
- * every one confirmed against that live response:
- *
- *   transport   we read the JSON body; v2 sends base64 in a `payment-required`
- *               response header and leaves the body as `{}`
- *   version     we expect x402Version 1; live is 2
- *   amount      we read `maxAmountRequired`; v2 calls it `amount`
- *   network     we map names like "base" via CHAIN_IDS; v2 uses CAIP-2,
- *               e.g. "eip155:84532"
- *
- * The header of this file previously claimed this made AiFinPay agents
- * interoperable with 69k+ agents. It shipped in @aifinpay/agent 1.8.1 and could
- * not complete one payment to any of them. Saying so here rather than deleting
- * the sentence, because the next person to read this file needs to know the
- * implementation is a draft ahead of its target, not behind it.
- *
- * detectV2 below exists so the failure is legible: an agent hitting a real
- * endpoint gets "this is x402 v2, unsupported" instead of "no facilitator
- * matched", which sends anyone debugging it in the wrong direction.
- *
- * Wire format IMPLEMENTED HERE (v1, superseded):
- *   - 402 body: { x402Version, accepts: [ { scheme:"exact", network,
- *       maxAmountRequired, payTo, asset, maxTimeoutSeconds, extra:{name,version} }, … ] }
- *   - Client signs an EIP-3009 TransferWithAuthorization (gasless) and retries with
- *       X-PAYMENT: base64(JSON({ x402Version, scheme, network, payload }))
- *
- * EVM `exact` only for now; Solana `exact` is a follow-up.
+ * Not supported here: v2 SVM/Solana exact, upto, batch-settlement or arbitrary
+ * non-EVM schemes. Those offers fail closed instead of being misdetected.
  */
 
-const CHAIN_IDS: Record<string, number> = {
+const LEGACY_CHAIN_IDS: Record<string, number> = {
   base: 8453,
   "base-sepolia": 84532,
   ethereum: 1,
@@ -66,44 +43,123 @@ const TRANSFER_WITH_AUTHORIZATION_TYPES = {
   ],
 } as const;
 
+type JsonRecord = Record<string, unknown>;
+
+interface V2PaymentRequired {
+  x402Version: 2;
+  error?: string;
+  resource?: JsonRecord;
+  accepts: JsonRecord[];
+  extensions?: JsonRecord;
+}
+
+function decodeBase64Json(value: string): unknown {
+  const text = typeof Buffer !== "undefined"
+    ? Buffer.from(value, "base64").toString("utf8")
+    : atob(value);
+  return JSON.parse(text);
+}
+
+function encodeBase64Json(value: unknown): string {
+  const json = JSON.stringify(value);
+  return typeof Buffer !== "undefined"
+    ? Buffer.from(json, "utf8").toString("base64")
+    : btoa(json);
+}
+
+function asRecord(value: unknown): JsonRecord | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as JsonRecord
+    : null;
+}
+
+function readV2Requirement(resp: Response): V2PaymentRequired | null {
+  if (resp.status !== 402) return null;
+  const header = resp.headers.get("payment-required");
+  if (!header) return null;
+  try {
+    const decoded = asRecord(decodeBase64Json(header));
+    if (!decoded || Number(decoded.x402Version) !== 2 || !Array.isArray(decoded.accepts)) {
+      return null;
+    }
+    return decoded as unknown as V2PaymentRequired;
+  } catch {
+    return null;
+  }
+}
+
+function parseCaip2Evm(network: unknown): number | null {
+  if (typeof network !== "string") return null;
+  const match = /^eip155:([1-9][0-9]*)$/.exec(network);
+  if (!match) return null;
+  const chainId = Number(match[1]);
+  if (!Number.isSafeInteger(chainId) || chainId <= 0) return null;
+  return chainId;
+}
+
+function address(value: unknown): `0x${string}` | null {
+  if (typeof value !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(value)) return null;
+  return value as `0x${string}`;
+}
+
+function positiveAtomicAmount(value: unknown): string | null {
+  if (typeof value !== "string" || !/^[0-9]+$/.test(value)) return null;
+  try {
+    if (BigInt(value) <= 0n) return null;
+  } catch {
+    return null;
+  }
+  return value;
+}
+
+function enforceUsdCap(value: string, extra: JsonRecord, opts: PayOptions): void {
+  if (opts.maxAmountUsd === undefined) return;
+  if (!Number.isFinite(opts.maxAmountUsd) || opts.maxAmountUsd < 0) {
+    throw new PaymentTooExpensiveError("maxAmountUsd must be a finite non-negative number");
+  }
+
+  // A USD cap can only be enforced without an oracle for an explicitly named
+  // USD stablecoin. x402 exact is token-generic, so unknown assets fail closed
+  // rather than assuming every token is $1 or has 6 decimals.
+  const name = String(extra.name ?? "").trim().toLowerCase();
+  const isUsdc = name === "usdc" || name === "usd coin";
+  if (!isUsdc) {
+    throw new UnsupportedFacilitatorError(
+      "maxAmountUsd cannot be safely enforced for this x402 asset without a USD price; only explicitly identified USDC is supported when a USD cap is set",
+    );
+  }
+  const decimalsRaw = extra.decimals ?? 6;
+  const decimals = Number(decimalsRaw);
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 18) {
+    throw new UnsupportedFacilitatorError("x402 USDC requirement has invalid token decimals");
+  }
+  const divisor = 10 ** decimals;
+  const approxUsd = Number(value) / divisor;
+  if (!Number.isFinite(approxUsd) || approxUsd > opts.maxAmountUsd) {
+    throw new PaymentTooExpensiveError(
+      `x402 wants ~$${Number.isFinite(approxUsd) ? approxUsd.toFixed(6) : "unbounded"}, caller cap is $${opts.maxAmountUsd.toFixed(6)}`,
+    );
+  }
+}
+
 export class StandardX402Facilitator implements Facilitator {
   static readonly name = "x402";
   readonly name = "x402";
 
-  /**
-   * True when this is a v2 response — the version we do NOT support.
-   *
-   * Separate from detect() on purpose. detect() answers "can I pay this",
-   * and the honest answer for v2 is no. This answers "is this the standard I
-   * am failing to speak", so the caller can say which.
-   */
-  static isUnsupportedV2(resp: Response): boolean {
-    if (resp.status !== 402) return false;
-    const hdr = resp.headers.get("payment-required");
-    if (!hdr) return false;
-    try {
-      const decoded = JSON.parse(
-        typeof atob === "function"
-          ? atob(hdr)
-          : Buffer.from(hdr, "base64").toString("utf8"),
-      );
-      return Number(decoded?.x402Version) >= 2;
-    } catch {
-      return false;
-    }
+  /** Retained for API compatibility; v2 is supported now. */
+  static isUnsupportedV2(_resp: Response): boolean {
+    return false;
   }
 
   static async detect(resp: Response): Promise<boolean> {
+    if (readV2Requirement(resp)) return true;
     if (resp.status !== 402) return false;
-    let body: unknown;
     try {
-      body = await resp.clone().json();
+      const body = asRecord(await resp.clone().json());
+      return !!body && "x402Version" in body && Array.isArray(body.accepts);
     } catch {
       return false;
     }
-    if (typeof body !== "object" || body === null) return false;
-    const b = body as Record<string, unknown>;
-    return "x402Version" in b && Array.isArray(b.accepts);
   }
 
   async buildAuth(
@@ -111,58 +167,58 @@ export class StandardX402Facilitator implements Facilitator {
     agent: Agent,
     opts: PayOptions,
   ): Promise<AuthPayload> {
-    const body = (await resp.clone().json()) as {
-      x402Version?: number;
-      accepts?: Array<Record<string, unknown>>;
-    };
-    const accepts = body.accepts ?? [];
+    const v2 = readV2Requirement(resp);
+    if (v2) return this.buildV2Auth(v2, agent, opts);
+    return this.buildLegacyV1Auth(resp, agent, opts);
+  }
 
-    // Pick the first `exact` requirement on an EVM chain we know how to pay.
-    const req = accepts.find(
-      (a) =>
-        a.scheme === "exact" &&
-        typeof a.network === "string" &&
-        CHAIN_IDS[a.network] !== undefined,
+  private async buildV2Auth(
+    required: V2PaymentRequired,
+    agent: Agent,
+    opts: PayOptions,
+  ): Promise<AuthPayload> {
+    const accepts = required.accepts;
+    const candidates = accepts.filter((item) =>
+      item.scheme === "exact" && parseCaip2Evm(item.network) !== null,
     );
+    const req = candidates[0];
     if (!req) {
       throw new UnsupportedFacilitatorError(
-        "standard x402 detected but no payable EVM `exact` requirement " +
+        "x402 v2 detected but no supported EVM `exact` requirement was offered " +
           `(offered: ${accepts.map((a) => `${a.scheme}/${a.network}`).join(", ") || "none"})`,
       );
     }
 
-    const network = req.network as string;
-    const asset = String(req.asset ?? "");
-    const payTo = String(req.payTo ?? "");
-    const value = String(req.maxAmountRequired ?? "0");
-    if (!asset || !payTo) {
+    const network = String(req.network);
+    const chainId = parseCaip2Evm(network);
+    const asset = address(req.asset);
+    const payTo = address(req.payTo);
+    const value = positiveAtomicAmount(req.amount);
+    if (!chainId || !asset || !payTo || !value) {
       throw new UnsupportedFacilitatorError(
-        "standard x402 requirement is missing `asset` or `payTo`",
+        "x402 v2 EVM exact requirement has invalid network, asset, payTo or amount",
       );
     }
 
-    // Best-effort USD cap (assumes 6-decimal USDC/EURC pricing).
-    if (opts.maxAmountUsd !== undefined) {
-      const approxUsd = Number(value) / 1e6;
-      if (Number.isFinite(approxUsd) && approxUsd > opts.maxAmountUsd) {
-        throw new PaymentTooExpensiveError(
-          `x402 wants ~$${approxUsd.toFixed(4)}, caller cap is $${opts.maxAmountUsd.toFixed(4)}`,
-        );
-      }
-    }
+    const extra = asRecord(req.extra) ?? {};
+    enforceUsdCap(value, extra, opts);
 
-    const account = await agent.evmAccount();
-    const extra = (req.extra ?? {}) as Record<string, unknown>;
-    const timeout = Number(req.maxTimeoutSeconds ?? 600);
+    const timeoutRaw = Number(req.maxTimeoutSeconds ?? 60);
+    if (!Number.isFinite(timeoutRaw) || timeoutRaw <= 0 || timeoutRaw > 3600) {
+      throw new UnsupportedFacilitatorError("x402 v2 maxTimeoutSeconds is invalid or exceeds the 1-hour client safety bound");
+    }
+    const timeout = Math.floor(timeoutRaw);
     const now = Math.floor(Date.now() / 1000);
-    const validBefore = String(now + (Number.isFinite(timeout) ? timeout : 600));
+    const validAfter = "0";
+    const validBefore = String(now + timeout);
     const nonce = randomNonce();
+    const account = await agent.evmAccount();
 
     const authorization = {
       from: account.address,
-      to: payTo as `0x${string}`,
+      to: payTo,
       value,
-      validAfter: "0",
+      validAfter,
       validBefore,
       nonce,
     };
@@ -171,8 +227,88 @@ export class StandardX402Facilitator implements Facilitator {
       domain: {
         name: String(extra.name ?? "USD Coin"),
         version: String(extra.version ?? "2"),
-        chainId: CHAIN_IDS[network],
-        verifyingContract: asset as `0x${string}`,
+        chainId,
+        verifyingContract: asset,
+      },
+      types: TRANSFER_WITH_AUTHORIZATION_TYPES,
+      primaryType: "TransferWithAuthorization",
+      message: {
+        from: authorization.from,
+        to: authorization.to,
+        value: BigInt(value),
+        validAfter: 0n,
+        validBefore: BigInt(validBefore),
+        nonce,
+      },
+    });
+
+    // Preserve the server's exact accepted requirement fields. The v2 verifier
+    // compares authorization parameters to the selected PaymentRequirements.
+    const accepted = { ...req };
+    const paymentPayload = {
+      x402Version: 2,
+      ...(required.resource ? { resource: required.resource } : {}),
+      accepted,
+      payload: { signature, authorization },
+      extensions: {},
+    };
+
+    return { headers: { "PAYMENT-SIGNATURE": encodeBase64Json(paymentPayload) } };
+  }
+
+  private async buildLegacyV1Auth(
+    resp: Response,
+    agent: Agent,
+    opts: PayOptions,
+  ): Promise<AuthPayload> {
+    const body = (await resp.clone().json()) as {
+      x402Version?: number;
+      accepts?: Array<JsonRecord>;
+    };
+    const accepts = body.accepts ?? [];
+    const req = accepts.find(
+      (item) => item.scheme === "exact"
+        && typeof item.network === "string"
+        && LEGACY_CHAIN_IDS[item.network] !== undefined,
+    );
+    if (!req) {
+      throw new UnsupportedFacilitatorError(
+        "legacy x402 detected but no payable EVM `exact` requirement " +
+          `(offered: ${accepts.map((a) => `${a.scheme}/${a.network}`).join(", ") || "none"})`,
+      );
+    }
+
+    const network = req.network as string;
+    const asset = address(req.asset);
+    const payTo = address(req.payTo);
+    const value = positiveAtomicAmount(req.maxAmountRequired);
+    if (!asset || !payTo || !value) {
+      throw new UnsupportedFacilitatorError("legacy x402 requirement is missing/invalid asset, payTo or maxAmountRequired");
+    }
+    const extra = asRecord(req.extra) ?? {};
+    enforceUsdCap(value, extra, opts);
+
+    const timeout = Number(req.maxTimeoutSeconds ?? 600);
+    const boundedTimeout = Number.isFinite(timeout) && timeout > 0 ? Math.min(Math.floor(timeout), 3600) : 600;
+    const now = Math.floor(Date.now() / 1000);
+    const validBefore = String(now + boundedTimeout);
+    const nonce = randomNonce();
+    const account = await agent.evmAccount();
+
+    const authorization = {
+      from: account.address,
+      to: payTo,
+      value,
+      validAfter: "0",
+      validBefore,
+      nonce,
+    };
+    const signature = await account.signTypedData({
+      domain: {
+        name: String(extra.name ?? "USD Coin"),
+        version: String(extra.version ?? "2"),
+        chainId: LEGACY_CHAIN_IDS[network],
+        verifyingContract: asset,
       },
       types: TRANSFER_WITH_AUTHORIZATION_TYPES,
       primaryType: "TransferWithAuthorization",
@@ -192,20 +328,18 @@ export class StandardX402Facilitator implements Facilitator {
       network,
       payload: { signature, authorization },
     };
-
-    const header =
-      typeof Buffer !== "undefined"
-        ? Buffer.from(JSON.stringify(paymentPayload)).toString("base64")
-        : btoa(JSON.stringify(paymentPayload));
-
-    return { headers: { "X-PAYMENT": header } };
+    return { headers: { "X-PAYMENT": encodeBase64Json(paymentPayload) } };
   }
 }
 
 function randomNonce(): `0x${string}` {
-  const b = new Uint8Array(32);
-  (globalThis.crypto ?? crypto).getRandomValues(b);
-  let s = "0x";
-  for (const x of b) s += x.toString(16).padStart(2, "0");
-  return s as `0x${string}`;
+  const random = globalThis.crypto;
+  if (!random) {
+    throw new UnsupportedFacilitatorError("secure random source unavailable; refusing to construct x402 authorization nonce");
+  }
+  const bytes = new Uint8Array(32);
+  random.getRandomValues(bytes);
+  let out = "0x";
+  for (const byte of bytes) out += byte.toString(16).padStart(2, "0");
+  return out as `0x${string}`;
 }
