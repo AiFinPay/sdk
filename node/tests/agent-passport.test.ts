@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateKeyPairSync, sign } from "node:crypto";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import {
   agentPassportWallet,
   generateAgentPassportHolderKeypair,
@@ -29,7 +29,7 @@ function passport(overrides: Partial<AgentPassportIdentity> = {}): AgentPassport
     verification_level: "self_verified",
     holder_public_key: holder.public_key_b64,
     issuer: { key_id: "issuer-test", public_key: "", signature: "" },
-    protected_payload_hash: "unused-in-local-test",
+    protected_payload_hash: "",
     integrity_state: "ok",
     version: 1,
     created_at: 1,
@@ -69,7 +69,7 @@ describe("AIFP-3 global Agent Passport vNext", () => {
     expect(signAgentPassportHolderMessage(holder.private_key_b64, "challenge").length).toBeGreaterThan(20);
   });
 
-  it("verifies issuer only against caller-pinned AiFinPay public key", () => {
+  it("verifies issuer only against caller-pinned AiFinPay public key and protected hash", () => {
     const issuer = generateKeyPairSync("ed25519");
     const pub = issuer.publicKey.export({ format: "der", type: "spki" }).toString("base64");
     const p = passport();
@@ -81,10 +81,13 @@ describe("AIFP-3 global Agent Passport vNext", () => {
       issuer_key_id: p.issuer.key_id, version: p.version, created_at: p.created_at, updated_at: p.updated_at,
       wallets: p.wallets.map((w) => ({ network: w.network, chain_family: w.chain_family, chain_ref: w.chain_ref, address: w.address, public_key: w.public_key, is_primary: w.is_primary, status: w.status, verified_at: w.verified_at })).sort((a, b) => `${a.network}:${a.address}`.localeCompare(`${b.network}:${b.address}`)),
     };
-    p.issuer.signature = sign(null, Buffer.from(canonicalize(payload)), issuer.privateKey).toString("base64");
+    const canonical = canonicalize(payload);
+    p.protected_payload_hash = createHash("sha256").update(Buffer.from(canonical)).digest("hex");
+    p.issuer.signature = sign(null, Buffer.from(canonical), issuer.privateKey).toString("base64");
     expect(verifyAgentPassportIssuerSignature(p, pub)).toBe(true);
     const other = generateKeyPairSync("ed25519").publicKey.export({ format: "der", type: "spki" }).toString("base64");
     expect(verifyAgentPassportIssuerSignature(p, other)).toBe(false);
+    expect(verifyAgentPassportIssuerSignature({ ...p, protected_payload_hash: "00".repeat(32) }, pub)).toBe(false);
     expect(verifyAgentPassportIssuerSignature({ ...p, verification_level: "enhanced_verified" }, pub)).toBe(false);
   });
 });
