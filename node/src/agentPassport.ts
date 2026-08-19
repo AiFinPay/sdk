@@ -1,4 +1,4 @@
-import { createPrivateKey, createPublicKey, generateKeyPairSync, sign, verify } from "node:crypto";
+import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sign, verify } from "node:crypto";
 
 export type AgentPassportNetwork =
   | "polygon" | "avalanche" | "arbitrum" | "bnb" | "base" | "unichain"
@@ -143,8 +143,8 @@ function validateResolvedIdentity(value: unknown): AgentPassportIdentity {
   return { ...(value as AgentPassportIdentity), wallets };
 }
 
-async function jsonRequest(url: string, init?: RequestInit): Promise<unknown> {
-  const response = await fetch(url, {
+async function jsonRequest(url: string, init?: RequestInit, fetchImpl: typeof fetch = fetch): Promise<unknown> {
+  const response = await fetchImpl(url, {
     ...init,
     headers: { accept: "application/json", ...(init?.body ? { "content-type": "application/json" } : {}), ...(init?.headers || {}) },
   });
@@ -158,12 +158,18 @@ async function jsonRequest(url: string, init?: RequestInit): Promise<unknown> {
   return body;
 }
 
-export async function resolveAgentPassport(identifier: string, baseUrl = "https://aifinpay.io"): Promise<AgentPassportIdentity> {
+/** Resolve by immutable agent_id, permanent AIFP number or @username. */
+export async function resolveAgentPassport(
+  identifier: string,
+  baseUrl = "https://aifinpay.io",
+  fetchImpl: typeof fetch = fetch,
+): Promise<AgentPassportIdentity> {
   const normalized = normalizeAgentPassportIdentifier(identifier);
-  const body = await jsonRequest(`${baseUrl.replace(/\/$/, "")}/api/agent/resolve/${encodeURIComponent(normalized)}`) as Record<string, unknown>;
+  const body = await jsonRequest(`${baseUrl.replace(/\/$/, "")}/api/agent/resolve/${encodeURIComponent(normalized)}`, undefined, fetchImpl) as Record<string, unknown>;
   return validateResolvedIdentity(body.agent);
 }
 
+/** Generate the holder key locally. The private key is never sent to AiFinPay. */
 export function generateAgentPassportHolderKeypair(): AgentPassportHolderKeypair {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   return {
@@ -196,7 +202,7 @@ export async function createAgentPassport(
 
 export async function requestAgentPassportWalletBinding(
   identifier: string,
-  input: { network: AgentPassportNetwork; address: string; chain_ref?: string; wallet_public_key?: string },
+  input: { network: AgentPassportNetwork; address: string; wallet_public_key?: string },
   baseUrl = "https://aifinpay.io",
 ): Promise<AgentPassportWalletChallenge> {
   const normalized = normalizeAgentPassportIdentifier(identifier);
@@ -214,12 +220,20 @@ export async function confirmAgentPassportWalletBinding(
   return validateResolvedIdentity(body.passport);
 }
 
+/**
+ * Verify both the issuer signature and the protected payload hash against an
+ * independently pinned AiFinPay issuer public key. Never trust only the key
+ * returned inside the same passport response.
+ */
 export function verifyAgentPassportIssuerSignature(passport: AgentPassportIdentity, trustedIssuerPublicKeyB64: string): boolean {
   if (passport.integrity_state !== "ok") return false;
   if (passport.issuer.public_key !== trustedIssuerPublicKeyB64) return false;
   try {
+    const canonical = canonicalize(protectedPayload(passport));
+    const hashOk = createHash("sha256").update(Buffer.from(canonical, "utf8")).digest("hex") === passport.protected_payload_hash;
+    if (!hashOk) return false;
     const key = createPublicKey({ key: Buffer.from(trustedIssuerPublicKeyB64, "base64"), format: "der", type: "spki" });
-    return verify(null, Buffer.from(canonicalize(protectedPayload(passport)), "utf8"), key, Buffer.from(passport.issuer.signature, "base64"));
+    return verify(null, Buffer.from(canonical, "utf8"), key, Buffer.from(passport.issuer.signature, "base64"));
   } catch { return false; }
 }
 
