@@ -1,0 +1,92 @@
+{
+  "name": "@aifinpay/gate",
+  "version": "0.1.0",
+  "description": "Merchant-side AIFP-1 paywall for your own API — 402 challenge, local receipt verification, billing-unit quota metering.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./express": {
+      "types": "./dist/express.d.ts",
+      "default": "./dist/express.js"
+    },
+    "./stores": {
+      "types": "./dist/stores/index.d.ts",
+      "default": "./dist/stores/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "aifinpay",
+    "ai-agent",
+    "ai-agents",
+    "ai-payments",
+    "agent-payments",
+    "agent-economy",
+    "x402",
+    "http-402",
+    "402-middleware",
+    "paywall",
+    "api-paywall",
+    "express-middleware",
+    "api-monetization",
+    "paid-apis",
+    "machine-payments",
+    "m2m-payments",
+    "usdc",
+    "stablecoin-payments",
+    "fintech",
+    "stripe-for-ai-agents"
+  ],
+  "author": "CoinSecurities (SECCO) <contact@aifinpay.io>",
+  "license": "MIT",
+  "homepage": "https://github.com/AiFinPay/sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AiFinPay/sdk.git",
+    "directory": "gate"
+  },
+  "bugs": "https://github.com/AiFinPay/sdk/issues",
+  "dependencies": {
+    "jose": "^6.0.0"
+  },
+  "peerDependencies": {
+    "express": "^4.18.0 || ^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "express": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "express": "^5.2.1",
+    "express4": "npm:express@^4.18.0",
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.5"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
