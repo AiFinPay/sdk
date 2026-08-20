@@ -263,7 +263,39 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     }
     const payload = v.payload;
 
-    // ── 5. Scope ──────────────────────────────────────────────────────────
+    // ── 5. Receipt TYPE — a valid signature is not a licence to spend ─────
+    // The issuer signs more than one kind of token with this key AND this
+    // audience. A quota receipt buys calls. A per-action billing receipt
+    // (`typ_aifp: "action"`, backend/aifp/receipts.js signActionReceipt) is the
+    // opposite: proof that a call was already served and already charged. Both
+    // verify here, because verification answers "did we sign this", not "what
+    // is it for".
+    //
+    // Spent unguarded, an action receipt is served free. It carries no `quota`,
+    // so `limit` falls back to 1; no `scope`, which degrades to "exact" and
+    // matches its own `resource`; and no `receipt_id`, so the meter counts it at
+    // `used:undefined` — one counter shared by every agent presenting one, keyed
+    // on a value no real receipt can ever own. It is also long-lived (30d) and
+    // handed to the agent on every single call, so an agent accumulates a
+    // drawer full of them just by paying normally.
+    //
+    // Checked as an allow-list, not a deny-list: a token kind added to the
+    // issuer later must be refused by a gate compiled today, not accepted by it.
+    if (payload.typ_aifp != null && payload.typ_aifp !== "quota") {
+      return forbid(
+        resource,
+        weight,
+        `receipt type "${payload.typ_aifp}" is not spendable — this endpoint needs a quota receipt`,
+      );
+    }
+    // Belt and braces for the same class: any future token that reaches here
+    // without the meter's key must be refused rather than metered at
+    // `used:undefined`. The meter has exactly one id and this is it.
+    if (typeof payload.receipt_id !== "string" || payload.receipt_id === "") {
+      return forbid(resource, weight, "receipt carries no receipt_id and cannot be metered");
+    }
+
+    // ── 6. Scope ──────────────────────────────────────────────────────────
     if (!scopeCovers(payload.scope, payload.resource, scopePath)) {
       return forbid(
         resource,
@@ -313,6 +345,14 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     const wantsReplayCheck =
       replayMode === "always" || (replayMode === "auto" && limit <= 1);
     if (wantsReplayCheck) {
+      // No nonce means no way to tell a first spend from a replay. Keying on
+      // `undefined` would not fail open, it would fail WEIRD: every nonce-less
+      // receipt in the process shares one counter, so the first is served and
+      // the rest are refused as "already spent" — a receipt rejected because a
+      // different agent's receipt was also malformed.
+      if (typeof payload.nonce !== "string" || payload.nonce === "") {
+        return forbid(resource, weight, "single-use receipt carries no nonce");
+      }
       let seen: number;
       try {
         seen = await store.incrBy(`${keyPrefix}nonce:${payload.nonce}`, 1, ttlMs);

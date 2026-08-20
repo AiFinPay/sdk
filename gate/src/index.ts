@@ -58,6 +58,7 @@ export {
   AifpConflictError,
   AifpValidationError,
   AifpMeterError,
+  StoreCapacityError,
 } from "./errors.js";
 
 export type {

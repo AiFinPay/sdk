@@ -35,8 +35,11 @@ export interface SignArgs {
   tier?: Tier;
   unit_quota?: number;
   quota?: number;
-  receipt_id?: string;
-  nonce?: string;
+  /** `null` OMITS the claim — that is the shape a non-quota token actually has,
+   *  and the gate must refuse it rather than meter on `undefined`. */
+  receipt_id?: string | null;
+  nonce?: string | null;
+  typ_aifp?: string;
   /** Seconds from now; negative for an already-expired receipt. */
   expiresInSec?: number;
 }
@@ -54,9 +57,15 @@ export async function signReceipt(privateKey: CryptoKey, a: SignArgs = {}): Prom
     amount: "0.10",
     currency: "USD",
     tx_ref: "0xdeadbeef",
-    receipt_id: a.receipt_id ?? "rcpt_" + Math.random().toString(16).slice(2, 18),
-    nonce: a.nonce ?? "nonce_" + Math.random().toString(16).slice(2, 10),
   };
+  // undefined → default, null → omit entirely.
+  if (a.receipt_id !== null) {
+    body.receipt_id = a.receipt_id ?? "rcpt_" + Math.random().toString(16).slice(2, 18);
+  }
+  if (a.nonce !== null) {
+    body.nonce = a.nonce ?? "nonce_" + Math.random().toString(16).slice(2, 10);
+  }
+  if (a.typ_aifp !== undefined) body.typ_aifp = a.typ_aifp;
   if (a.unit_quota !== undefined) body.unit_quota = a.unit_quota;
   if (a.quota !== undefined) body.quota = a.quota;
 
@@ -67,6 +76,39 @@ export async function signReceipt(privateKey: CryptoKey, a: SignArgs = {}): Prom
     .setAudience(a.aud ?? MERCHANT)
     .setIssuedAt(iat)
     .setExpirationTime(exp)
+    .sign(privateKey);
+}
+
+/**
+ * Mirror of backend/aifp/receipts.js `signActionReceipt` — the OTHER token the
+ * issuer signs with the same key, for the same audience.
+ *
+ * Field-for-field faithful on purpose: `arcpt_id` instead of `receipt_id`, no
+ * `nonce`, no `quota`, no `scope`. Every one of those omissions is what makes
+ * this token dangerous to a gate that checks only the signature, so a fixture
+ * that "helpfully" filled them in would test nothing.
+ */
+export async function signActionReceipt(
+  privateKey: CryptoKey,
+  a: { resource?: string; aud?: string; sub?: string } = {},
+): Promise<string> {
+  const iat = Math.floor(Date.now() / 1000);
+  return new jose.SignJWT({
+    typ_aifp: "action",
+    merchant_id: a.aud ?? MERCHANT,
+    agent: a.sub ?? "agt_test",
+    resource: a.resource ?? "/api/search",
+    cost_units: 1,
+    amount: "0.0005",
+    currency: "USD",
+    arcpt_id: "arcpt_" + Math.random().toString(16).slice(2, 18),
+  })
+    .setProtectedHeader({ alg: "EdDSA", typ: "JWT", kid: "test-key" })
+    .setIssuer(ISSUER)
+    .setSubject(a.sub ?? "agt_test")
+    .setAudience(a.aud ?? MERCHANT)
+    .setIssuedAt(iat)
+    .setExpirationTime(iat + 30 * 24 * 3600) // 30d, same as the server
     .sign(privateKey);
 }
 
