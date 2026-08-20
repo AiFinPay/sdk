@@ -1,3 +1,4 @@
+import { StoreCapacityError } from "../errors.js";
 import type { GateStore } from "./types.js";
 
 export interface MemoryStoreOptions {
@@ -65,7 +66,9 @@ export class MemoryStore implements GateStore {
       cur.v += by;
       return cur.v; // TTL untouched: it belongs to the receipt, not the traffic
     }
-    if (this.map.size >= this.maxKeys) this.evict(now);
+    if (this.map.size >= this.maxKeys && !this.makeRoom(now)) {
+      throw new StoreCapacityError(this.maxKeys);
+    }
     this.map.set(key, { v: by, expiresAt: now + ttlMs });
     return by;
     // ── to here ─────────────────────────────────────────────────────────
@@ -94,21 +97,32 @@ export class MemoryStore implements GateStore {
     return;
   }
 
-  private sweep(): void {
-    const now = Date.now();
+  private sweep(now: number = Date.now()): void {
     for (const [k, e] of this.map) if (e.expiresAt <= now) this.map.delete(k);
   }
 
-  /** Drop expired entries first; if that frees nothing, drop whichever counters
-   *  die soonest. Evicting a live counter re-opens its batch, so this is a last
-   *  resort and the cap is set high enough that it should never be reached. */
-  private evict(now: number): void {
+  /**
+   * Drop expired entries. Returns whether that freed anything.
+   *
+   * It deliberately stops there. An earlier version, having found nothing
+   * expired, deleted the 10% of counters closest to expiry — and deleting a
+   * live counter is not an eviction, it is a refund nobody asked for. The
+   * counter IS the record of how much of a prepaid batch has been spent; drop
+   * it and `incrBy` starts again from zero, so a 200-unit batch that was
+   * exhausted becomes 200 fresh units. That is RULE 2 in ./types.ts read
+   * backwards: the counter must never die before the receipt.
+   *
+   * Worse, it was reachable on purpose. Keys are derived from receipt ids, so
+   * anyone able to present distinct receipts can push the map to `maxKeys` and
+   * choose the moment their own exhausted batch gets forgotten.
+   *
+   * At capacity with everything live there is no answer this class can compute,
+   * so it stops computing one: `incrBy` throws, `onStoreError` decides, and the
+   * failure is visible in the merchant's logs instead of in their revenue.
+   */
+  private makeRoom(now: number): boolean {
     const before = this.map.size;
-    this.sweep();
-    if (this.map.size < before) return;
-    const victims = [...this.map.entries()]
-      .sort((a, b) => a[1].expiresAt - b[1].expiresAt)
-      .slice(0, Math.max(1, Math.floor(this.maxKeys * 0.1)));
-    for (const [k] of victims) this.map.delete(k);
+    this.sweep(now);
+    return this.map.size < before;
   }
 }

@@ -44,6 +44,11 @@ export interface AifpReceiptClaims {
   asset?: string;
   chain?: string;
   tx_ref?: string;
+  /** Absent on a quota receipt. The issuer signs other token kinds with the same
+   *  key and the same audience — `"action"` is a per-call billing receipt, proof
+   *  that a call was ALREADY served and charged. The gate refuses to spend
+   *  anything that carries this claim; see the type check in core.ts. */
+  typ_aifp?: string;
 }
 
 /** Registry record, field-for-field what backend/aifp/resources.js stores. */

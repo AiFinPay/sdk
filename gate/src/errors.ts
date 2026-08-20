@@ -33,3 +33,21 @@ export class AifpValidationError extends AifpGateError {
 /** The quota store rejected. Never swallowed: `onStoreError` decides whether
  *  the request is refused (default) or served, and either way it is visible. */
 export class AifpMeterError extends AifpGateError {}
+
+/**
+ * MemoryStore is full of counters that are all still live.
+ *
+ * Its own subclass because the fix is unlike any other meter error: no retry
+ * helps and no backend is down. Either the process is metering more concurrent
+ * batches than `maxKeys` allows, or — the case worth checking first — it is a
+ * single-process store under traffic that deserves `redisStore`.
+ */
+export class StoreCapacityError extends AifpMeterError {
+  constructor(public readonly maxKeys: number) {
+    super(
+      `MemoryStore is at capacity (${maxKeys} live counters). Refusing to evict a ` +
+        `live counter: that would reset a prepaid batch's spend to zero and serve it ` +
+        `again. Raise maxKeys, or move to a shared store (redisStore).`,
+    );
+  }
+}
