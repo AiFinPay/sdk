@@ -95,7 +95,7 @@ export interface AifpContext {
 }
 
 export interface GateErrorBody {
-  error: "AIFP-402" | "AIFP-403" | "AIFP-503-METER";
+  error: "AIFP-402" | "AIFP-403" | "AIFP-503-METER" | "AIFP-503-PRICING";
   detail: string;
   protocol?: "AIFP-1";
   merchant_id?: string;
@@ -121,7 +121,7 @@ export interface GateRequest {
   header(name: string): string | undefined;
 }
 
-export type GateEventKind = "402" | "serve" | "403" | "meter_error";
+export type GateEventKind = "402" | "serve" | "403" | "meter_error" | "pricing_unavailable";
 
 export interface GateEvent {
   kind: GateEventKind;

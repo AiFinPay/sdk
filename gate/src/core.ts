@@ -48,6 +48,17 @@ export interface GateOptions {
   clockToleranceSec?: number;
   /** Path-matched mode: charge whatever the merchant registered for the path. */
   registry?: ResourceRegistry;
+  /** Origin serving /v1/quote and /v1/pay, emitted in the 402. Default
+   *  https://api.aifinpay.io. This gate runs on YOUR host, so the challenge has
+   *  to name an absolute AiFinPay URL — a relative path would send the agent
+   *  looking for a quote endpoint on your own server. */
+  apiBase?: string;
+  /** What to do while the registry has NEVER loaded (control plane unreachable,
+   *  API key rotated). Default "error" answers 503 rather than guessing a price:
+   *  metering a premium route at the standard weight bills a tenth of it. Set
+   *  "mount-default" to keep serving and accept the mis-pricing. Once one fetch
+   *  has succeeded the last good snapshot is used and this no longer applies. */
+  registryUnavailable?: "error" | "mount-default";
   /** "auto" (default) gives single-use receipts (unit_quota <= 1) a one-shot
    *  nonce check. Multi-use batches are metered by the counter and need no
    *  replay check — spending them twice is just spending them. */
@@ -117,13 +128,30 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     }
   };
 
-  const challenge = (resource: string, weight: number, detail?: string): GateResult => {
+  // `effectiveTier` is passed in per request, never taken from the closure. In
+  // registry mode the weight comes from the MATCHED resource while the tier used
+  // to come from the mount, so a premium route quoted unit_price_usd $0.0005 and
+  // then metered 10 units — the agent was told one price and charged another.
+  // Whatever tier is advertised here must be the one `weight` was derived from.
+  const challenge = (
+    resource: string,
+    weight: number,
+    effectiveTier: Tier,
+    detail?: string,
+  ): GateResult => {
     emit({ kind: "402", resource, weight, detail });
     return {
       ok: false,
       status: 402,
       headers: { "Content-Type": "application/json" },
-      body: buildChallenge({ merchantId, resource, tier, weight, detail }),
+      body: buildChallenge({
+        merchantId,
+        resource,
+        tier: effectiveTier,
+        weight,
+        detail,
+        apiBase: options.apiBase,
+      }),
     };
   };
 
@@ -142,11 +170,35 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
 
     // ── 1. What is this path, and what does it cost? ──────────────────────
     let matched: AifpResource | null = null;
-    if (options.registry) matched = options.registry.match(path);
+    if (options.registry) {
+      // "Never loaded" is not "no endpoints". Until the first successful fetch
+      // we do not know what anything on this API costs, and falling through to
+      // the mount default silently meters a premium route at 1 unit — a tenth
+      // of its price — for as long as the control plane stays unreachable.
+      // Refusing to price is the honest answer; a partner who prefers
+      // availability over correct billing can opt in explicitly.
+      if (options.registry.neverLoaded && options.registryUnavailable !== "mount-default") {
+        emit({ kind: "pricing_unavailable", resource: path, weight: 0, detail: "registry never loaded" });
+        return {
+          ok: false,
+          status: 503,
+          headers: { "Content-Type": "application/json", "Retry-After": "30" },
+          body: {
+            error: "AIFP-503-PRICING",
+            detail:
+              "pricing unavailable — this gate has not been able to reach the AiFinPay control plane yet",
+          },
+        };
+      }
+      matched = options.registry.match(path);
+    }
 
     const resource = matched ? matched.route_pattern : options.resource ?? path;
+    // One source of truth for "what does this call cost": the tier the weight
+    // is derived from is the tier the 402 advertises.
+    const effectiveTier: Tier = matched ? ((matched.tier as Tier) ?? tier) : tier;
     const weight = matched
-      ? matched.unit_weight ?? weightForTier((matched.tier as string) ?? tier)
+      ? matched.unit_weight ?? weightForTier(effectiveTier)
       : mountWeight;
 
     // The scope test runs against the request PATH, not the route pattern —
@@ -186,12 +238,12 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
 
     // ── 3. No receipt → the 402 that teaches an agent how to pay ──────────
     const token = req.header("AIFP-Receipt");
-    if (!token) return challenge(resource, weight);
+    if (!token) return challenge(resource, weight, effectiveTier);
 
     // ── 4. Verify locally ─────────────────────────────────────────────────
     const v = await verify(token);
     if (!v.ok) {
-      if (v.kind === "expired") return challenge(resource, weight, DETAIL_RECEIPT_EXPIRED);
+      if (v.kind === "expired") return challenge(resource, weight, effectiveTier, DETAIL_RECEIPT_EXPIRED);
       if (v.kind === "jwks_unavailable") {
         // Fail CLOSED. Failing open would turn a partner's paid API into a free
         // one for the length of our outage, which is a worse failure than a
@@ -280,7 +332,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // Post-increment compare: whichever concurrent request receives the value
     // that crosses the limit is the one refused, exactly once. Reading first
     // and deciding second is how a batch gets overspent.
-    if (used > limit) return challenge(resource, weight, DETAIL_QUOTA_EXHAUSTED);
+    if (used > limit) return challenge(resource, weight, effectiveTier, DETAIL_QUOTA_EXHAUSTED);
 
     emit({ kind: "serve", resource, weight, agent: payload.sub, receipt_id: payload.receipt_id });
     const aifp: AifpContext = {

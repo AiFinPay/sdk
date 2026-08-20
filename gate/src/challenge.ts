@@ -24,8 +24,15 @@ export function buildChallenge(args: {
   detail?: string;
   unitPriceUsd?: string;
   minRequests?: number;
+  /** Origin that serves /v1/quote and /v1/pay. MUST be absolute: this gate
+   *  runs on the PARTNER's host, so a relative "/v1/quote" would point the
+   *  agent at the partner's own server, where nothing answers it. (The paths
+   *  are relative inside our own backend's gate, which is where they were
+   *  copied from — correct there, wrong here.) */
+  apiBase?: string;
 }): GateErrorBody {
   const { merchantId, resource, tier, weight } = args;
+  const api = (args.apiBase ?? "https://api.aifinpay.io").replace(/\/+$/, "");
   return {
     error: "AIFP-402",
     detail:
@@ -43,9 +50,9 @@ export function buildChallenge(args: {
     // reason a $0.0005 call is a viable product at all.
     no_minimum_fee: true,
     how_to_pay: [
-      `POST /v1/quote {"merchant_id":"${merchantId}","resource":"${resource}","tier":"${tier}"}`,
+      `POST ${api}/v1/quote {"merchant_id":"${merchantId}","resource":"${resource}","tier":"${tier}"}`,
       "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
-      "POST /v1/pay {quote_id, chain, asset, tx_ref} -> quota receipt",
+      `POST ${api}/v1/pay {quote_id, chain, asset, tx_ref} -> quota receipt`,
       "retry this request with header: AIFP-Receipt: <receipt JWT>",
     ],
   };
