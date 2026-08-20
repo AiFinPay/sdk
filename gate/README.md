@@ -197,9 +197,9 @@ of a redeploy when we rotate keys).
   "protocol_fee_bps": 100,
   "no_minimum_fee": true,
   "how_to_pay": [
-    "POST /v1/quote {\"merchant_id\":\"mrch_acme\",\"resource\":\"/api/search\",\"tier\":\"complex\"}",
+    "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_acme\",\"resource\":\"/api/search\",\"tier\":\"complex\"}",
     "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
-    "POST /v1/pay {quote_id, chain, asset, tx_ref} -> quota receipt",
+    "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref} -> quota receipt",
     "retry this request with header: AIFP-Receipt: <receipt JWT>"
   ]
 }
