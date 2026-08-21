@@ -61,6 +61,30 @@ describe("shouldCharge — who pays on a content site", () => {
     }
   });
 
+  it("un-disguised browser automation (Playwright/Puppeteer headless) is charged", async () => {
+    // Partner question on the 2026-08-21 onboarding call: "what if an agent
+    // just opens Playwright and visits?" Headless Chromium announces itself —
+    // this is the real default UA shape — so it is an agent by declaration.
+    // A driver that SPOOFS a human UA is out of scope by design (see the
+    // marker-list comment); this test pins only the honest default.
+    const { gate } = await contentGate();
+    for (const ua of [
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/126.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (Unknown; Linux x86_64) AppleWebKit/534.34 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/534.34",
+    ]) {
+      const r = await gate(req("/articles", { "User-Agent": ua }));
+      expect(r.ok, `${ua} must be charged`).toBe(false);
+      if (r.ok) continue;
+      expect(r.status).toBe(402);
+    }
+    // The headed twin of the same browser is a human and stays free — the
+    // marker must match "headlesschrome", never plain Chrome.
+    const headed = await gate(req("/articles", {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    }));
+    expect(headed.ok).toBe(true);
+  });
+
   it("a crawler WITH a receipt is served and metered", async () => {
     const { gate, iss } = await contentGate();
     const token = await iss.sign({ resource: "/articles", unit_quota: 3 });

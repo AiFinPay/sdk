@@ -69,6 +69,16 @@ export const AI_AGENT_UA_MARKERS: readonly string[] = [
   "cohere-ai",
   "ai2bot",
   "mistralai",
+  // Automation frameworks in their DEFAULT configuration. Headless
+  // Chromium/Chrome announces itself as "HeadlessChrome/126…" unless the
+  // driver overrides the UA — so an un-disguised Playwright/Puppeteer visit
+  // is a self-identifying machine, same as the crawlers above. One that
+  // spoofs a human UA has left "by declaration" territory; that class is an
+  // anti-bot product's job, not this list's.
+  // NOT "electron": Electron UAs are real humans inside app webviews
+  // (Slack, Notion), and exempting humans is this predicate's entire promise.
+  "headlesschrome",
+  "phantomjs",
 ];
 
 /**
