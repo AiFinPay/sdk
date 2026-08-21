@@ -147,9 +147,41 @@ export class AifpMerchant {
    * deploy for no reason. A dozen routes cost a dozen round-trips once per
    * release.
    */
-  async ensureResources(inputs: ResourceInput[]): Promise<AifpResource[]> {
+  async ensureResources(
+    inputs: ResourceInput[],
+    opts: {
+      /**
+       * What to do when the route already exists.
+       *
+       * "replace" (default): converge to EXACTLY what this call declares —
+       * absent fields reset to their defaults. Code owns the routes; a panel
+       * edit lives until the next deploy. This is deliberate: merge semantics
+       * would make one request body mean two different things depending on
+       * whether the record existed.
+       *
+       * "skip": create only what is missing, never touch what exists — the
+       * panel owns routes after birth. The skip is SILENT by design (it is
+       * the normal case on every boot), so remember which mode you deployed:
+       * "my code says premium, why is it standard?" is what this option does
+       * when forgotten.
+       */
+      onExisting?: "replace" | "skip";
+    } = {},
+  ): Promise<AifpResource[]> {
+    const onExisting = opts.onExisting ?? "replace";
+    const existing =
+      onExisting === "skip"
+        ? new Map((await this.listResources()).map((r) => [r.route_pattern, r]))
+        : null;
     const out: AifpResource[] = [];
     for (const input of inputs) {
+      if (existing) {
+        const have = existing.get(input.route_pattern);
+        if (have) {
+          out.push(have);
+          continue;
+        }
+      }
       const body = await this.request<{ resource: AifpResource }>("POST", "/resources", {
         ...input,
         upsert: true,

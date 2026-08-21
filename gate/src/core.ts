@@ -83,6 +83,29 @@ export interface GateOptions {
     agent: string | null;
     receipt_id: string | null;
   }) => boolean | Promise<boolean>;
+  /**
+   * WHO pays — the content-site switch. Omitted (the default), everyone does:
+   * every request on a gated route needs a receipt, which is right for an
+   * API. On a page with human readers it is wrong twice over — a browser
+   * cannot present a receipt and must never meet a 402 — so pass a predicate
+   * and only requests it returns true for are charged; the rest are served
+   * exempt, unmetered.
+   *
+   *   import { aifpGate, knownAiAgent } from "@aifinpay/gate";
+   *   app.use("/articles", aifpGate({ merchantId, registry, shouldCharge: knownAiAgent }));
+   *
+   * `knownAiAgent` is the shipped default for this: self-identifying AI
+   * crawlers (the population Cloudflare classifies — the ones with content
+   * budgets) plus anything already speaking the AIFP protocol. See agents.ts
+   * for what it deliberately does not claim to catch.
+   *
+   * A predicate that THROWS charges (the request proceeds as if it returned
+   * true). Of the two wrong answers a broken detector can give, a 402 to one
+   * human is visible and recoverable; a crawler served free is silent and
+   * forever. Prefer sync, pure predicates — knownAiAgent is one — and the
+   * question never arises.
+   */
+  shouldCharge?: (req: GateRequest) => boolean | Promise<boolean>;
 }
 
 const DEFAULT_ISSUER = "https://api.aifinpay.io";
@@ -234,6 +257,47 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
           mode: "open",
         },
       };
+    }
+
+    // ── 2b. WHO pays — the content-site exemption ─────────────────────────
+    // Evaluated BEFORE the missing-receipt challenge, or a human reader would
+    // meet the 402 this option exists to spare them from — and AFTER the
+    // merchant-policy paywall_enabled check above, which is a stronger, per-
+    // route statement. A predicate that throws charges: of the two wrong
+    // answers, a 402 to one human is visible; a crawler served free is silent
+    // and forever.
+    //
+    // knownAiAgent returns true for anything carrying AIFP-Receipt or
+    // AIFP-Agent-Id, so a PAYING agent is never exempted into unmetered
+    // service by a browser-looking User-Agent.
+    if (options.shouldCharge) {
+      let charge = true;
+      try {
+        charge = await options.shouldCharge(req);
+      } catch {
+        charge = true;
+      }
+      if (!charge) {
+        if (options.allow && !(await safeAllow(options.allow, { path, resource, weight, agent: agentHeader, receipt_id: null }))) {
+          return forbid(resource, weight, "blocked by merchant policy");
+        }
+        emit({ kind: "serve", resource, weight, agent: agentHeader, exempt: true });
+        return {
+          ok: true,
+          status: 200,
+          headers: { "AIFP-Paywall": "exempt" },
+          aifp: {
+            agent: agentHeader,
+            receipt_id: "",
+            resource,
+            weight: 0,
+            unit_quota: 0,
+            used: 0,
+            remaining: 0,
+            mode: "exempt",
+          },
+        };
+      }
     }
 
     // ── 3. No receipt → the 402 that teaches an agent how to pay ──────────

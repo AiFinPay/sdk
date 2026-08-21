@@ -95,8 +95,11 @@ export interface AifpContext {
   /** Units consumed AFTER this call. */
   used: number;
   remaining: number;
-  /** "open" = the merchant registered this resource with paywall_enabled false. */
-  mode: "paid" | "open";
+  /** "open" = the merchant registered this resource with paywall_enabled
+   *  false. "exempt" = this request was served free by the shouldCharge
+   *  predicate (a human reader on a content site) — the route itself is
+   *  still paid for everyone the predicate charges. */
+  mode: "paid" | "open" | "exempt";
 }
 
 export interface GateErrorBody {
@@ -112,6 +115,9 @@ export interface GateErrorBody {
   protocol_fee_bps?: 100;
   no_minimum_fee?: true;
   how_to_pay?: string[];
+  /** Escape hatch for walletless agents: the one-command SDK path to a wallet
+   *  that then resolves this very 402 automatically. */
+  no_wallet?: string;
 }
 
 export type GateResult =
@@ -135,6 +141,10 @@ export interface GateEvent {
   agent?: string | null;
   receipt_id?: string;
   detail?: string;
+  /** True on a "serve" that shouldCharge exempted (a human on a content
+   *  site). Kept as a flag rather than a kind: consumers counting serves
+   *  should count these, consumers counting REVENUE serves must filter. */
+  exempt?: boolean;
 }
 
 /** Public view of a merchant, as `GET /v1/merchants/:id` returns it. Loosely
