@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.1
+
+`knownAiAgent` now treats un-disguised browser automation as an agent by
+declaration: default headless Chromium announces itself as
+`HeadlessChrome/…` (Playwright, Puppeteer), and PhantomJS likewise — both
+now meet the 402 on `shouldCharge: knownAiAgent` content routes, same as
+the self-identifying crawlers. Headed Chrome is unaffected; the marker
+matches `headlesschrome`, never plain Chrome. Deliberately not
+`electron` — Electron UAs are humans inside app webviews. A driver that
+spoofs a human UA remains out of scope by design. Additive only: more
+agents charged, no human newly charged; APIs without `shouldCharge` are
+untouched.
+
 ## 0.2.0
 
 Content sites. Until now the gate charged every request on a mounted
