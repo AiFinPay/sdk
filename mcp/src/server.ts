@@ -6,6 +6,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import type { McpConfig } from "./config.js";
 import { agentAddressTool, runAgentAddress } from "./tools/agent-address.js";
+import { agentQuotaTool, runAgentQuota } from "./tools/agent-quota.js";
 import { makeSafeFetch } from "./safe-fetch.js";
 import {
   agentPassportResolveTool,
@@ -88,6 +89,7 @@ export async function createServer(config: McpConfig = {}) {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       agentAddressTool(),
+      agentQuotaTool(),
       agentPassportResolveTool(),
       settlementRoutesTool(),
       settlementInvoiceTool(),
@@ -100,6 +102,8 @@ export async function createServer(config: McpConfig = {}) {
     switch (name) {
       case "agent_address":
         return runAgentAddress(ctx, args ?? {});
+      case "agent_quota":
+        return runAgentQuota(ctx, args ?? {});
       case "agent_passport_resolve":
         return runAgentPassportResolve(ctx, args ?? {});
       case "settlement_routes":
