@@ -7,9 +7,9 @@
 [![Site](https://img.shields.io/badge/site-aifinpay.io-black.svg)](https://aifinpay.io)
 [![MCP](https://img.shields.io/badge/MCP-compatible-purple.svg)](https://modelcontextprotocol.io)
 
-**Stripe for autonomous AI agents.** One line of code — `agent.pay(url)` —
-and your agent settles a real on-chain payment on Polygon or Solana
-mainnet, then receives the gated response. Non-custodial. Live since
+**Stripe for autonomous AI agents.** One high-level call —
+`agent.call(...)` or `agent.fetchPaid(url)` — lets an agent settle a real
+on-chain payment and receive the gated response. Non-custodial. Live since
 2026. Polygon facilitator compatible. Direct splitter settlement
 (Node SDK ≥ 1.3.0, `AiFinPayAgent.call()`) also works on Base, Optimism,
 Unichain, BOT Chain and XRPL EVM (native-token path); the backend-quoted
@@ -23,13 +23,13 @@ invoice flow remains Polygon + Solana.
 
 ```bash
 # Python
-pip install aifinpay-agent
+pip install --pre aifinpay-agent
 
 # Node / TypeScript
 npm install @aifinpay/agent
 
 # MCP server (Claude Desktop, Cursor, Windsurf, Continue)
-npx @aifinpay/mcp
+npx -y @aifinpay/mcp
 ```
 
 ## One-click MCP for Claude Desktop / Cursor
@@ -43,7 +43,7 @@ or Cursor's `~/.cursor/mcp.json`:
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["@aifinpay/mcp"]
+      "args": ["-y", "@aifinpay/mcp"]
     }
   }
 }
@@ -61,19 +61,17 @@ Cline) lives in [`MCP_CONFIG.md`](./MCP_CONFIG.md).
 
 | Package | Path | Install | Latest |
 |---|---|---|---|
-| **`aifinpay-agent`** (Python) | [`./python`](./python) | `pip install aifinpay-agent` | `1.1.1` |
-| **`@aifinpay/agent`** (Node / TypeScript) | [`./node`](./node) | `npm install @aifinpay/agent` | `1.2.1` |
-| **`@aifinpay/mcp`** (MCP server) | [`./mcp`](./mcp) | `npx @aifinpay/mcp` | `1.1.1` |
+| **`aifinpay-agent`** (Python pre-release) | [`./python`](./python) | `pip install --pre aifinpay-agent` | `0.2.0a2` |
+| **`@aifinpay/agent`** (Node / TypeScript) | [`./node`](./node) | `npm install @aifinpay/agent` | `1.8.0` |
+| **`@aifinpay/mcp`** (MCP server) | [`./mcp`](./mcp) | `npx -y @aifinpay/mcp` | `1.5.0` |
 | Go SDK | — | `go get github.com/AiFinPay/sdk/go` | **soon** |
 | Rust SDK | — | `cargo add aifinpay-sdk` | **soon** |
 
 ## What this is
 
-`agent.pay(url)` — one line of Python or TypeScript that pays any
-[x402-protected](https://www.x402.org) URL on behalf of an autonomous
-AI agent. The SDK auto-detects the facilitator flavor (AiFinPay native,
-Coinbase x402, …), signs an Ed25519 challenge, retries the request, and
-returns the response.
+The Node SDK exposes a chain-opaque `AiFinPayAgent` for named provider calls
+and AIFP-1 paid fetches. The legacy `Agent.pay(url)` surface remains available
+for existing x402 integrations.
 
 Same agent, drop into Claude Desktop's MCP config and the LLM gets
 seven tools (`payable_fetch`, `agent_address`, `agent_quote`,
@@ -106,19 +104,19 @@ invoice = agent.pay_with_split_invoice(
 ### Node.js / TypeScript
 
 ```ts
-import { Agent } from "@aifinpay/agent";
+import { AiFinPayAgent } from "@aifinpay/agent";
 
-const agent = Agent.new();
-console.log("Fund this address:", agent.address);
-
-const res = await agent.pay("https://api.example.com/v1/data");
-
-const invoice = await agent.payWithSplitInvoice({
-  chain: "polygon",
-  merchantWallet: "0xMerchant...",
-  merchantAmount: 10n ** 18n,
-  orderId: "search-1",
+const agent = await AiFinPayAgent.new({
+  budgetCaps: { per_call_usd: 0.50, daily_usd: 5 },
 });
+
+const res = await agent.call({
+  provider: "exa",
+  body: { query: "what is x402" },
+});
+
+if (!res) throw new Error("AiFinPay call returned no response");
+console.log(await res.json());
 ```
 
 ### MCP (Claude Desktop)
@@ -128,7 +126,7 @@ const invoice = await agent.payWithSplitInvoice({
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["@aifinpay/mcp"],
+      "args": ["-y", "@aifinpay/mcp"],
       "env": {
         "AIFINPAY_AGENT_SECRET": "<base58 secret>",
         "AIFINPAY_MAX_USD": "0.50"
@@ -226,8 +224,9 @@ sdk/
 
 ## Releasing
 
-All three packages are published as stable `1.0.0` on PyPI and npm under
-the default (`latest`) tag, with semver-compatible updates from here.
+The Node SDK and MCP server are published under npm's stable `latest` tag.
+The Python package remains a PyPI pre-release and must be installed with
+`--pre` until its stable release.
 
 ```bash
 # Python

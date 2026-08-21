@@ -15,7 +15,7 @@ Zero-code integration. Drop one config block, restart Claude, done.
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["@aifinpay/mcp"]
+      "args": ["-y", "@aifinpay/mcp"]
     }
   }
 }
@@ -25,9 +25,9 @@ Zero-code integration. Drop one config block, restart Claude, done.
 
 ## Verify it loaded
 
-Click the hammer icon in the chat input. You should see five tools:
-`payable_fetch`, `agent_address`, `agent_quote`, `pay_with_split`,
-`quote_split`.
+Click the hammer icon in the chat input. You should see seven tools:
+`agent_call`, `agent_claim_self`, `payable_fetch`, `agent_address`,
+`agent_quote`, `pay_with_split`, `quote_split`.
 
 ## First conversation
 
@@ -64,7 +64,7 @@ funds. To persist:
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["@aifinpay/mcp"],
+      "args": ["-y", "@aifinpay/mcp"],
       "env": {
         "AIFINPAY_AGENT_SECRET": "<base58 secret>",
         "AIFINPAY_MAX_USD": "0.50"

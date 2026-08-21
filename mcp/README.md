@@ -28,7 +28,7 @@ protocol itself is live across 13 networks — see
 ## Install
 
 ```bash
-# Globally — usable as `npx @aifinpay/mcp` from any client config
+# Globally — usable as `npx -y @aifinpay/mcp` from any client config
 # (installs the latest stable — the old @alpha tag is retired, don't use it)
 npm install -g @aifinpay/mcp
 ```
@@ -42,7 +42,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["@aifinpay/mcp"],
+      "args": ["-y", "@aifinpay/mcp"],
       "env": {
         "AIFINPAY_AGENT_SECRET": "<base58 secret — see below>",
         "AIFINPAY_MAX_USD": "0.50"

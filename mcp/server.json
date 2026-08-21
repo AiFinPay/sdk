@@ -1,9 +1,9 @@
 {
   "$schema": "https://modelcontextprotocol.io/schemas/server.json",
   "name": "aifinpay",
-  "version": "1.0.0",
-  "description": "Stripe for AI agents. Pay for any HTTP API in stablecoins or native tokens on Polygon and Solana mainnet with one MCP call. Non-custodial, on-chain settlement.",
-  "vendor": "CoinSecurities (SECCO)",
+  "version": "1.5.0",
+  "description": "Non-custodial payment tools for AI agents: wallet addresses, quotes, paid HTTP calls, x402 settlement, receipts, and direct split payments.",
+  "vendor": "AiFinPay",
   "license": "MIT",
   "homepage": "https://aifinpay.io",
   "repository": "https://github.com/AiFinPay/sdk",
@@ -15,19 +15,19 @@
   ],
   "install": {
     "command": "npx",
-    "args": ["@aifinpay/mcp"]
+    "args": ["-y", "@aifinpay/mcp"]
   },
   "claude_desktop_config": {
     "mcpServers": {
       "aifinpay": {
         "command": "npx",
-        "args": ["@aifinpay/mcp"]
+        "args": ["-y", "@aifinpay/mcp"]
       }
     }
   },
   "env": {
     "AIFINPAY_AGENT_SECRET": "base58 Ed25519 secret (persistent agent identity; Solana + EVM addresses both derive from it)",
-    "AIFINPAY_MAX_USD": "hard cap per paid call (agent_call + payable_fetch), default 0.10",
+    "AIFINPAY_MAX_USD": "hard cap per paid call (agent_call + payable_fetch); unset by default",
     "AIFINPAY_BASE_URL": "override the AiFinPay backend endpoint, default https://aifinpay.io"
   },
   "tools": [
