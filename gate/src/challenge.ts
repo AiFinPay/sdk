@@ -55,5 +55,11 @@ export function buildChallenge(args: {
       `POST ${api}/v1/pay {quote_id, chain, asset, tx_ref} -> quota receipt`,
       "retry this request with header: AIFP-Receipt: <receipt JWT>",
     ],
+    // The 402 is the only documentation an agent is guaranteed to read, and
+    // "your own wallet" above is a dead end for an agent that has none. This
+    // line is the way out — the SDKs create a local wallet and run the whole
+    // quote→settle→receipt→retry loop from one call.
+    no_wallet:
+      "npx @aifinpay/mcp init — creates a local wallet; then agent.pay(url) handles this 402 end-to-end (npm @aifinpay/agent · pypi aifinpay-agent)",
   };
 }

@@ -20,6 +20,7 @@ describe("the 402 body", () => {
         "merchant_id",
         "min_requests",
         "no_minimum_fee",
+        "no_wallet",
         "protocol",
         "protocol_fee_bps",
         "resource",

@@ -223,3 +223,55 @@ describe("ResourceRegistry", () => {
     expect(registry.snapshot().stale).toBe(true);
   });
 });
+
+describe("ensureResources onExisting", () => {
+  // The ownership rule, executable: "replace" converges to the declaration,
+  // "skip" never touches what exists — so panel edits survive deploys.
+  const ROUTE = { route_pattern: "/api/x", type: "api" as const, tier: "standard" as const };
+
+  function fakeApi(existing: unknown[]) {
+    const calls: Array<{ method: string; path: string; body?: unknown }> = [];
+    const fetchImpl = (async (url: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(url);
+      const method = init?.method ?? "GET";
+      calls.push({ method, path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      if (method === "GET" && path.includes("/resources")) {
+        return new Response(JSON.stringify({ resources: existing }), { status: 200 });
+      }
+      return new Response(
+        JSON.stringify({ resource: { id: "res_new", ...ROUTE, paywall_enabled: true, unit_weight: null, name: null, created_at: "", durable: true } }),
+        { status: 201 },
+      );
+    }) as typeof fetch;
+    return { calls, fetchImpl };
+  }
+
+  it('"skip" leaves an existing route untouched and returns the stored record', async () => {
+    const stored = { id: "res_old", ...ROUTE, tier: "premium", paywall_enabled: true, unit_weight: null, name: "Panel says premium", created_at: "", durable: true };
+    const { calls, fetchImpl } = fakeApi([stored]);
+    const m = new AifpMerchant({ merchantId: "mrch_t", secret: "msec_t", fetch: fetchImpl });
+
+    const out = await m.ensureResources([ROUTE], { onExisting: "skip" });
+
+    expect(out[0].tier).toBe("premium"); // the panel's edit, not our declaration
+    expect(calls.filter((c) => c.method === "POST").length).toBe(0);
+  });
+
+  it('"skip" still creates what is missing', async () => {
+    const { calls, fetchImpl } = fakeApi([]);
+    const m = new AifpMerchant({ merchantId: "mrch_t", secret: "msec_t", fetch: fetchImpl });
+
+    await m.ensureResources([ROUTE], { onExisting: "skip" });
+    expect(calls.filter((c) => c.method === "POST").length).toBe(1);
+  });
+
+  it("default stays replace — no listing round-trip, upsert on every input", async () => {
+    const { calls, fetchImpl } = fakeApi([]);
+    const m = new AifpMerchant({ merchantId: "mrch_t", secret: "msec_t", fetch: fetchImpl });
+
+    await m.ensureResources([ROUTE]);
+    expect(calls.filter((c) => c.method === "GET").length).toBe(0);
+    const post = calls.find((c) => c.method === "POST");
+    expect((post?.body as { upsert?: boolean })?.upsert).toBe(true);
+  });
+});

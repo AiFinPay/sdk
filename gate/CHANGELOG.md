@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.2.0
+
+Content sites. Until now the gate charged every request on a mounted
+route — right for an API, wrong twice over on a page with human readers:
+a browser cannot present a receipt and must never meet a 402.
+
+### `shouldCharge` — who pays
+
+A per-request predicate. Requests it returns true for are charged;
+everything else is served exempt, unmetered, with `mode: "exempt"` and a
+`serve` event flagged `exempt: true` (count serves ↔ count revenue
+without ambiguity). Omitted, nothing changes: everyone pays.
+
+A predicate that throws CHARGES. Of the two wrong answers a broken
+detector can give, a 402 to one human is visible and reported; a crawler
+served free is silent and forever.
+
+### `knownAiAgent` — the shipped answer
+
+True for self-identifying AI crawlers (GPTBot, ClaudeBot, PerplexityBot,
+CCBot, Bytespider, Google-Extended, …) — the population Cloudflare's
+classifier recognises, which is exactly the population with content
+budgets — and for anything already speaking the protocol (AIFP-Receipt /
+AIFP-Agent-Id), so a paying agent with a browser User-Agent is never
+exempted out of metering. It is a curated list, not stealth detection;
+extend it with your own signals, or move the decision to your edge
+(a Cloudflare Transform Rule header) and check one header here.
+
+### `ensureResources(inputs, { onExisting: "skip" })`
+
+The other ownership model, made explicit. Default stays "replace"
+(converge to the declaration — code owns the routes). "skip" creates
+only what is missing and never touches what exists — the panel owns
+routes after birth, and its edits survive deploys.
+
+### The 402 now tells a walletless agent where a wallet comes from
+
+`no_wallet` field in the challenge body: `npx @aifinpay/mcp init` and
+the agent SDKs resolve the whole 402 automatically. "Settle from your
+own wallet" was a dead end for an agent that had none, and the 402 is
+the only documentation an agent is guaranteed to read.
+
 ## 0.1.1
 
 Two security fixes. Both were found by an independent review of 0.1.0 after it
