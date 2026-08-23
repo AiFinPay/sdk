@@ -29,7 +29,7 @@ export const TIER_WEIGHTS: { standard: 1; complex: 4; premium: 10 } = {
   premium: 10,
 };
 
-/** Per-call USD price. Strings, never floats — these are money. */
+/** Per-call AIFP-1 gross price paid by the agent. Strings, never floats — these are money. */
 export const UNIT_PRICE_USD: { standard: "0.0005"; complex: "0.002"; premium: "0.005" } = {
   standard: "0.0005",
   complex: "0.002",
@@ -39,8 +39,10 @@ export const UNIT_PRICE_USD: { standard: "0.0005"; complex: "0.002"; premium: "0
 /** One billing unit is priced at the base tier. */
 export const BASE_UNIT_PRICE_USD = "0.0005" as const;
 
-/** 1%, charged ON TOP of the agent's payment. It is never deducted from the
- *  merchant's side — a merchant quoting $0.0005 receives $0.0005. */
+/** AIFP-1 protocol fee: 1% of the gross price paid by the agent.
+ *  It is deducted from gross settlement; it is NOT added on top.
+ *  A merchant settlement is therefore 99% of the gross AIFP-1 price before
+ *  external network/settlement costs. */
 export const PROTOCOL_FEE_BPS = 100 as const;
 
 /** Stablecoin minor units (6 dp) per call — the integer form the server does
@@ -64,7 +66,7 @@ export function minRequestsForTier(tier?: string): number {
   return Math.ceil(MIN_BATCH_UNITS / unit);
 }
 
-/** Per-call price as a USD string; unknown tier falls back to the base rate. */
+/** Per-call gross AIFP-1 price as a USD string; unknown tier falls back to the base rate. */
 export function unitPriceUsd(tier?: string): string {
   return (UNIT_PRICE_USD as Record<string, string>)[tier ?? ""] ?? BASE_UNIT_PRICE_USD;
 }
