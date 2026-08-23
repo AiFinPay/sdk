@@ -39,9 +39,13 @@ export const UNIT_PRICE_USD: { standard: "0.0005"; complex: "0.002"; premium: "0
 /** One billing unit is priced at the base tier. */
 export const BASE_UNIT_PRICE_USD = "0.0005" as const;
 
-/** 1%, charged ON TOP of the agent's payment. It is never deducted from the
- *  merchant's side — a merchant quoting $0.0005 receives $0.0005. */
+/** AIFP-1 canonical gross-inclusive split: the payer pays the exact quote,
+ *  the merchant receives 99%, AiFinPay receives 1%, and creator/referral is 0%.
+ *  No fee is added on top. */
 export const PROTOCOL_FEE_BPS = 100 as const;
+export const MERCHANT_SHARE_BPS = 9_900 as const;
+export const CREATOR_FEE_BPS = 0 as const;
+export const FEE_MODE = "gross-inclusive" as const;
 
 /** Stablecoin minor units (6 dp) per call — the integer form the server does
  *  its batch math in, kept here only so min_requests can be computed locally. */
