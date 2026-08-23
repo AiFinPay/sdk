@@ -1697,6 +1697,27 @@ export class AiFinPayAgent {
   get aifp1Receipts(): Aifp1ReceiptCache { return this._aifp1Cache; }
 
   /**
+   * Legacy fetchPaid cannot safely execute a v1.3 quote yet: it has no
+   * independently pinned runtime hash/profile input. Keep it fail-closed until
+   * it is wired through SettlementClient + executeSettlementInvoice.
+   *
+   * Tests replace this method with a chain stub; production never signs here.
+   */
+  private async settleAifp1NativeV13(_p: {
+    merchantWallet: `0x${string}`;
+    grossWei: bigint;
+    merchantWei: bigint;
+    treasuryWei: bigint;
+    creatorWei: bigint;
+    validUntil: bigint;
+    orderId: string;
+  }): Promise<`0x${string}`> {
+    throw new AiFinPayError(
+      "AIFP-1 fetchPaid settlement is disabled until a trusted v1.3 deployment/runtime profile is supplied; use SettlementClient with an independent TrustedSettlementRoutePin",
+    );
+  }
+
+  /**
    * Fetch a paywalled URL, paying the AIFP-1 gateway if it asks.
    *
    *   const res = await agent.fetchPaid("https://gateway.aifinpay.io/acme/articles/2026/x");
@@ -1713,9 +1734,8 @@ export class AiFinPayAgent {
   async fetchPaid(
     url:  string,
     init: RequestInit = {},
-    opts: Aifp1FetchOptions & { splitter?: `0x${string}` } = {},
+    opts: Aifp1FetchOptions = {},
   ): Promise<Response | null> {
-    const deployment = SPLITTER_DEPLOYMENTS.polygon;
     const deps: Aifp1Deps = {
       fetchImpl: this.inner.fetchImpl,
       cache:     this._aifp1Cache,
@@ -1723,25 +1743,7 @@ export class AiFinPayAgent {
       // (backend/aifp/agent-policy.js normalizeAddress) — a Solana pubkey here
       // would silently opt the agent out of its owner's own limits.
       agentId:   opts.agentId ?? this.evmAddress,
-      settle: (p) => this.settleSplitterNative({
-        // Polygon-only, and not by preference: /v1/pay verifies the settlement
-        // by reading the Splitter's Payment event, and that verifier implements
-        // Polygon alone (backend/aifp/verify-settlement.js — Solana returns
-        // notImplemented, anything else unsupported_chain). Settling elsewhere
-        // would move real money for a receipt that can never be issued.
-        chain:          "polygon",
-        // The address is not carried in the quote, so it comes from this SDK's
-        // own verified registry. The backend checks the tx against its
-        // configured SPLITTER_ADDRESS_POLYGON; if an operator has pointed that
-        // somewhere else, /v1/pay answers no_splitter_payment_event, which is
-        // loud. Override here if you are running against such a deployment.
-        splitter:       opts.splitter ?? deployment.splitter,
-        // Left undetected on purpose — settleSplitterNative asks the contract,
-        // which is the only source that cannot disagree with itself.
-        merchantWallet: p.merchantWallet,
-        totalWei:       p.totalWei,
-        orderId:        p.orderId,
-      }),
+      settle: (p) => this.settleAifp1NativeV13(p),
       checkPerCall: (usd) => this.checkPerCall(usd),
       reserveDaily: (usd) => this.reserveDaily(usd),
       commit:  (id, usd) => this.ledger.commit(id, usd),
