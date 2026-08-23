@@ -101,20 +101,30 @@ export interface Aifp1Quote {
   accepted_assets: string[];
   accepted_chains: string[];
   pay_to:          Record<string, string>;
-  /** Present only when the backend had a live POL rate at quote time. */
+  /** Native Polygon v1.3 gross settlement, when enabled by backend readiness. */
   native_settlement?: {
-    asset:        string;       // "POL"
-    decimals:     number;
-    rate_usd:     string;
-    total_wei:    string;
-    merchant_wei: string;
-    treasury_wei: string;
-    creator_wei:  string;
+    asset:                 string;       // "POL"
+    decimals:              number;
+    rate_usd:              string;
+    rate_fixed_at?:        string;
+    total_wei:             string;       // gross payer amount
+    gross_wei?:            string;
+    payer_total_wei?:      string;
+    merchant_wei:          string;
+    treasury_wei:          string;
+    creator_wei:           string;
+    valid_until?:          string;       // Unix seconds; must equal expires_at
+    settlement_semantics?: "gross-inclusive";
   };
   settlement: {
-    batch_units: string;
-    total_units: string;
-    fee_on_top:  { provider: string; treasury: string; creator: string };
+    batch_units:           string;
+    total_units:           string;
+    gross_units:           string;
+    payer_total_units:     string;
+    merchant_units:        string;
+    protocol_fee_units:    string;
+    creator_units:         string;
+    fee_on_top:            false;
   };
   nonce:      string;
   expires_at: string;
@@ -503,12 +513,17 @@ export interface Aifp1Deps {
   /** AIFP-Agent-Id / agent_id — a 0x address, or agent policies cannot key on it. */
   agentId:   string;
   /**
-   * Settle `totalWei` to `merchantWallet` with `orderId`, returning a hash
-   * whose transaction was included AND succeeded.
+   * Settle one canonical v1.3 gross amount, returning a hash whose transaction
+   * was included AND succeeded. Implementations must independently verify the
+   * deployment/runtime profile before signing.
    */
   settle(p: {
     merchantWallet: `0x${string}`;
-    totalWei:       bigint;
+    grossWei:       bigint;
+    merchantWei:    bigint;
+    treasuryWei:    bigint;
+    creatorWei:     bigint;
+    validUntil:     bigint;
     orderId:        string;
   }): Promise<`0x${string}`>;
   /** Per-call cap. false ⇒ the caller asked to skip rather than throw. */
@@ -518,6 +533,34 @@ export interface Aifp1Deps {
   commit(reservationId: string, usd: number): Promise<void>;
   release(reservationId: string): Promise<void>;
   onPaid?(info: { merchantId: string; amountUsd: number; txRef: string; receiptId: string }): void;
+}
+
+function validateCanonicalQuoteEconomics(quote: Aifp1Quote): void {
+  try {
+    const s = quote.settlement;
+    const gross = BigInt(s.gross_units);
+    const payer = BigInt(s.payer_total_units);
+    const total = BigInt(s.total_units);
+    const merchant = BigInt(s.merchant_units);
+    const protocol = BigInt(s.protocol_fee_units);
+    const creator = BigInt(s.creator_units);
+    const expectedProtocol = gross / 100n;
+    if (
+      s.fee_on_top !== false
+      || gross <= 0n
+      || payer !== gross
+      || total !== gross
+      || creator !== 0n
+      || protocol !== expectedProtocol
+      || merchant !== gross - expectedProtocol
+    ) {
+      throw new Error("split mismatch");
+    }
+  } catch {
+    throw new Aifp1QuoteError(
+      `quote ${quote.quote_id} does not implement canonical AIFP-1 gross economics (payer 100%, merchant 99%, protocol 1%, creator 0%)`,
+    );
+  }
 }
 
 /** Is this response the AIFP-1 paywall asking for money? */
@@ -660,6 +703,12 @@ export async function aifp1Fetch(
       );
     }
 
+    validateCanonicalQuoteEconomics(quote);
+    const quoteExpiryMs = Date.parse(quote.expires_at);
+    if (!Number.isFinite(quoteExpiryMs) || quoteExpiryMs <= Date.now()) {
+      throw new Aifp1QuoteError(`quote ${quote.quote_id} is expired or has invalid expires_at`);
+    }
+
     // 3. Budget. The quote states the batch total in USD, so both caps are
     // checked against the real figure, before anything is signed.
     const amountUsd = Number(quote.amount);
@@ -708,7 +757,7 @@ export async function aifp1Fetch(
         + `unusable, and the caps were checked against $${amountUsd}`,
       );
     }
-    // 2% covers the fee-inclusive rounding the splitter does on each leg and a
+    // 2% covers native conversion rounding and a
     // rate printed to six places; anything wider is a disagreement, not drift.
     if (Math.abs(weiUsd - amountUsd) > Math.max(0.02 * amountUsd, 1e-6)) {
       throw new Aifp1QuoteError(
@@ -717,9 +766,34 @@ export async function aifp1Fetch(
       );
     }
 
+    const nativeGross = BigInt(native.gross_wei ?? native.total_wei);
+    const nativeMerchant = BigInt(native.merchant_wei);
+    const nativeTreasury = BigInt(native.treasury_wei);
+    const nativeCreator = BigInt(native.creator_wei);
+    if (
+      native.settlement_semantics !== "gross-inclusive"
+      || BigInt(native.payer_total_wei ?? native.total_wei) !== nativeGross
+      || BigInt(native.total_wei) !== nativeGross
+      || nativeCreator !== 0n
+      || nativeTreasury !== nativeGross / 100n
+      || nativeMerchant !== nativeGross - nativeTreasury
+    ) {
+      throw new Aifp1QuoteError(
+        `quote ${quote.quote_id} native settlement does not match canonical AIFP-1 gross split`,
+      );
+    }
+    const validUntil = BigInt(native.valid_until ?? Math.floor(quoteExpiryMs / 1000));
+    if (validUntil !== BigInt(Math.floor(quoteExpiryMs / 1000))) {
+      throw new Aifp1QuoteError(`quote ${quote.quote_id} valid_until does not match expires_at`);
+    }
+
     const txRef = await deps.settle({
         merchantWallet: quote.pay_to.polygon as `0x${string}`,
-        totalWei:       BigInt(native.total_wei),
+        grossWei:       nativeGross,
+        merchantWei:    nativeMerchant,
+        treasuryWei:    nativeTreasury,
+        creatorWei:     nativeCreator,
+        validUntil,
         // The binding the server verifies on-chain: the Payment event's orderId
         // must equal the quote id, or /v1/pay answers order_id_mismatch.
         orderId:        quote.quote_id,
