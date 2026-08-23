@@ -445,17 +445,17 @@ describe("aifp1: receipt reuse", () => {
     const { agent } = await agentFor(server);
 
     await agent.fetchPaid(`${GATEWAY}/acme/articles/2026/a`);
-    // 1000 units bought, a weight-7 route consumed — the number comes from the
+    // 200 units bought, a weight-7 route consumed — the number comes from the
     // header the gateway set, not from arithmetic on our side.
-    expect(agent.aifp1Receipts.list()[0]!.remaining).toBe(993);
+    expect(agent.aifp1Receipts.list()[0]!.remaining).toBe(193);
   });
 
   it("buys a new batch once the old one is spent", async () => {
     const server = mockServer();
-    // A heavy route: 1000 prepaid units cover exactly two calls.
-    server.weights["/reports/q1"] = 500;
-    server.weights["/reports/q2"] = 500;
-    server.weights["/reports/q3"] = 500;
+    // A heavy route: 200 prepaid units cover exactly two calls.
+    server.weights["/reports/q1"] = 100;
+    server.weights["/reports/q2"] = 100;
+    server.weights["/reports/q3"] = 100;
     const { agent, settlements } = await agentFor(server);
 
     await agent.fetchPaid(`${GATEWAY}/acme/reports/q1`);
@@ -573,8 +573,8 @@ describe("aifp1: idempotency key", () => {
 
   it("uses a different key for a different batch", async () => {
     const server = mockServer();
-    server.weights["/reports/q1"] = 1000;   // one call empties the batch
-    server.weights["/reports/q2"] = 1000;
+    server.weights["/reports/q1"] = 200;   // one call empties the batch
+    server.weights["/reports/q2"] = 200;
     const { agent } = await agentFor(server);
 
     await agent.fetchPaid(`${GATEWAY}/acme/reports/q1`);
