@@ -231,6 +231,16 @@ provider-defined price, while any AiFinPay AIFP-2 fee is payer-side/on-top. The
 current AIFP-2 fee is 0%; a future non-zero fee requires a versioned AIFP-2
 settlement profile and must not reduce the provider amount.
 
+> **During the migration (as of 2026-08-23).** The table above is the canonical
+> model and what the v1.3 settlement contract enforces on-chain. Polygon
+> *mainnet* still runs the previous splitter, whose immutable split is
+> 98.99/1.00/0.01, and the backend grosses the total up from the merchant
+> amount to match it — so today an AIFP-1 merchant is made whole and the agent
+> pays slightly more than the displayed price. When v1.3 is deployed to
+> mainnet, the displayed price becomes exactly what the agent pays and the
+> merchant nets 99% of it. If you are integrating now, that is the one number
+> that moves under you; nothing in this package's API changes with it.
+
 Weight is always price ÷ base price. That equality is what lets one prepaid
 batch be spent across endpoints of different tiers and still drain at each
 endpoint's real rate. Override per route with `unit_weight` when a call is

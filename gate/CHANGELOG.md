@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.2
+
+Documentation only; no API or behaviour change.
+
+The pricing section stated the superseded economics — a 1% fee "charged on top
+of the agent's payment — never deducted from you", with a worked example of a
+merchant quoting $0.0005 and receiving $0.0005. The canonical model (CEO
+decision, 2026-08-23) is the reverse for AIFP-1: the agent pays the published
+price, 1% is withheld from it and the merchant receives 99%. AIFP-2/x402 is the
+provider-preserving route — the provider receives 100% and any fee is on top;
+that fee is 0% today.
+
+The section now also states plainly what is true *during* the migration, since
+the two differ for merchants integrating right now: Polygon mainnet still runs
+the previous splitter (98.99/1.00/0.01 immutable) and the backend grosses up to
+match it, so an AIFP-1 merchant is currently made whole and the agent pays a
+little more than the displayed price. Nothing in this package's API changes
+when that flips.
+
+Also corrected a test comment that asserted the old model in prose while
+asserting the right number.
+
 ## 0.2.1
 
 `knownAiAgent` now treats un-disguised browser automation as an agent by

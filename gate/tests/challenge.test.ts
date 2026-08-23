@@ -34,7 +34,9 @@ describe("the 402 body", () => {
     expect(body.unit_weight).toBe(4);
     expect(body.unit_price_usd).toBe("0.002");
     expect(body.min_requests).toBe(50);
-    // 1% on top of the agent's payment — never deducted from the merchant.
+    // 1% of the gross the agent pays, withheld from it — the merchant
+    // receives 99%. (Unified-economics ТЗ 2026-08-23; this comment said
+    // "on top, never deducted" and described the superseded model.)
     expect(body.protocol_fee_bps).toBe(100);
     // No per-transaction floor is the reason a $0.0005 call is a product.
     expect(body.no_minimum_fee).toBe(true);
