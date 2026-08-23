@@ -7,18 +7,17 @@
 [![Site](https://img.shields.io/badge/site-aifinpay.io-black.svg)](https://aifinpay.io)
 [![MCP](https://img.shields.io/badge/MCP-compatible-purple.svg)](https://modelcontextprotocol.io)
 
-**Stripe for autonomous AI agents.** One line of code — `agent.pay(url)` —
-and your agent settles a real on-chain payment on Polygon or Solana
-mainnet, then receives the gated response. Non-custodial. Live since
-2026. Polygon facilitator compatible. Direct splitter settlement
-(Node SDK ≥ 1.3.0, `AiFinPayAgent.call()`) also works on Base, Optimism,
-Unichain, BOT Chain and XRPL EVM (native-token path); the backend-quoted
-invoice flow remains Polygon + Solana.
+**Payment tooling for autonomous AI agents.** The SDK implements AIFP-1
+gross-inclusive settlement and AIFP-2/x402 negotiation with non-custodial,
+fail-closed controls. Canonical economics: AIFP-1 charges 1% inside the quoted
+gross amount (merchant 99%, AiFinPay 1%, creator/referral 0%); AIFP-2 currently
+charges 0% at the protocol layer. A network is production-enabled only after
+its exact deployment, runtime hash, profile and paid E2E evidence are pinned.
 
 > Canonical domain: **aifinpay.io** — the legacy `aifinpay.company` host is
 > retired; ignore any cached docs or install instructions pointing there
 > (including the old `@alpha` npm tag). Install plain `@aifinpay/agent` /
-> `@aifinpay/mcp` (latest). Protocol status + all 13 live networks:
+> `@aifinpay/mcp` (latest). Protocol and network inventory:
 > [aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
 
 ```bash
@@ -93,14 +92,9 @@ print("Save this secret:", agent.secret_b58)
 # Pay any x402-protected URL
 resp = agent.pay("https://api.example.com/v1/data")
 
-# Direct fee-on-top split — merchant gets 100% of merchant_amount;
-# AiFinPay 1% on top.
-invoice = agent.pay_with_split_invoice(
-    chain="polygon",
-    merchant_wallet="0xMerchant...",
-    merchant_amount=10**18,
-    order_id="search-1",
-)
+# Canonical AIFP-1 settlement is gross-inclusive:
+# payer total = quote; merchant = 99%; AiFinPay = 1%; creator = 0%.
+# The legacy pay_with_split_invoice route is retired.
 ```
 
 ### Node.js / TypeScript
@@ -113,12 +107,8 @@ console.log("Fund this address:", agent.address);
 
 const res = await agent.pay("https://api.example.com/v1/data");
 
-const invoice = await agent.payWithSplitInvoice({
-  chain: "polygon",
-  merchantWallet: "0xMerchant...",
-  merchantAmount: 10n ** 18n,
-  orderId: "search-1",
-});
+// Request a canonical AIFP-1 quote and settle only through a verified
+// deployment/profile. Legacy payWithSplitInvoice routes are retired.
 ```
 
 ### MCP (Claude Desktop)
@@ -158,22 +148,22 @@ inside their existing API — no wallet, no chain library, no KYC. See
 [`examples/echo-x402-server`](./examples/echo-x402-server) for a working
 ~70-line reference.
 
-For full autonomy via fee-on-top atomic split (merchant gets 100% of
-their quoted price, agent pays the fee on top), agents call
-`b2bPayWithSplit()` on the `AiFinPaySplitter` Polygon contract:
-`0xE34Fc0E6694821c600Fa0955C0F74720ea6d8440` — owned by Gnosis Safe
-`0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e` (4-of-N).
+AIFP-1 settlement uses the quoted gross amount as the payer total. The
+merchant receives 99%, AiFinPay receives 1%, and creator/referral receives 0%.
+AIFP-2/x402 currently charges 0% at the protocol layer. No SDK path may claim
+production support until the exact deployment, runtime bytecode/program hash,
+governance profile and paid E2E evidence are pinned for that release.
 
-## Live contract addresses
+## Deployment registry
 
-All verified on Polygonscan.
+Addresses below are historical/current registry inputs, not by themselves proof of production readiness. Verify the release profile and runtime hash before signing.
 
 | | Polygon (mainnet) |
 |---|---|
 | `AiFinPayCore` | [`0x24Bee0df…1C7b`](https://polygonscan.com/address/0x24Bee0dfCD4d2f481E2f49A339F1C105a1611C7b) |
 | `AgentPassport` | [`0xB385Cc32…662a`](https://polygonscan.com/address/0xB385Cc32fe39CF5B5778DF0Df0e8E9978b5F662a) |
 | `MSECCOToken` | [`0x1Fe20213…1d55`](https://polygonscan.com/address/0x1Fe2021336596655Fac72bC7bC40F7FFFA501d55) |
-| **`AiFinPaySplitter`** | [`0xE34Fc0E6…8440`](https://polygonscan.com/address/0xE34Fc0E6694821c600Fa0955C0F74720ea6d8440) |
+| **Legacy `AiFinPaySplitter` (not canonical AIFP-1)** | [`0xE34Fc0E6…8440`](https://polygonscan.com/address/0xE34Fc0E6694821c600Fa0955C0F74720ea6d8440) |
 | Gnosis Safe (multisig owner) | [`0xD31d82c4…3c8e`](https://polygonscan.com/address/0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e) |
 
 Solana program (Anchor): `5g9zWHF1Vv6GiGpA2ZbJQbSCDZd5hAk9AyvabRJvKFx2`.
@@ -194,9 +184,9 @@ Drop-in adapters for popular agent frameworks live under
 | Reference partner server | [`examples/echo-x402-server`](./examples/echo-x402-server) | ~70-line Node server that accepts AiFinPay payments |
 | Live bridges | [`examples/io-net-x402-bridge`](./examples/io-net-x402-bridge), [`exa-x402-bridge`](./examples/exa-x402-bridge), [`venice-x402-bridge`](./examples/venice-x402-bridge) | Production bridges in front of io.net / Exa / Venice |
 
-## Verified mainnet payments
+## Historical mainnet evidence
 
-Two on-chain proofs that the full stack works end-to-end:
+These transactions are historical evidence only; they do not certify the current release or fee model:
 
 | Provider | Asset | What was bought | Tx |
 |---|---|---|---|
