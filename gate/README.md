@@ -215,10 +215,11 @@ req.aifp
 
 ### Pricing
 
-Three fixed settings, per call, with a **1% protocol fee charged on top of the
-agent's payment** — never deducted from you. A merchant quoting $0.0005 receives
-$0.0005. There is no fixed per-transaction floor, which is the only reason a
-sub-cent call is a viable product.
+Three fixed settings per call. AIFP-1 uses one canonical
+**gross-inclusive** settlement: the payer pays the exact quoted gross amount,
+the merchant receives 99%, AiFinPay receives 1%, and creator/referral receives
+0%. Nothing is added on top. There is no fixed per-transaction floor, which is
+what keeps sub-cent calls viable.
 
 | Tier | Price per call | Billing units per call |
 |---|---|---|
