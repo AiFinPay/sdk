@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/mcp",
-  "version": "2.0.0-rc.1",
+  "version": "2.0.0-rc.2",
   "description": "AiFinPay MCP production-RC control surface for Agent Passport resolution and runtime-verified AIFP-1/AIFP-2 settlement invoices. Signing tools remain gated until @aifinpay/agent v2 release.",
   "type": "module",
   "main": "dist/index.js",
