@@ -1,125 +1,52 @@
 import type { ToolContext } from "../server.js";
 
-// NOTE on the chain enum below: pay_with_split and quote_split are
-// BACKEND-INVOICE-DRIVEN — they call the operator API
-// (POST /api/b2b/pay-with-split, GET /api/b2b/quote-split), which supports
-// solana + 6 on-chain-verified EVM chains (polygon, base, optimism,
-// unichain, botchain, xrplevm). Keep this enum in lockstep with the
-// backend's ../evm-chains.js registry — a chain listed here without
-// backend support would just be rejected server-side. Stables: USDC on
-// base/optimism/unichain, USDC+USDT on polygon; botchain/xrplevm are
-// native-token only. Direct (non-invoice) splitter settlement lives in
-// the SDK's AiFinPayAgent.call() (@aifinpay/agent >= 1.3.0).
+const RETIRED_MESSAGE =
+  "The legacy /api/b2b split-invoice tools are retired. " +
+  "Use the canonical AIFP-1 settlement client: payer total equals the quoted gross amount, " +
+  "merchant receives 99%, AiFinPay receives 1%, creator/referral receives 0%. " +
+  "AIFP-2/x402 currently charges 0% at the protocol layer. " +
+  "Settlement remains fail-closed until the selected chain profile, runtime hash, " +
+  "merchant target, asset and paid E2E evidence are verified.";
 
 export function payWithSplitTool() {
   return {
     name: "pay_with_split",
     description:
-      "Get on-chain instructions for a fee-on-top atomic 3-way payment. " +
-      "The merchant receives the FULL quoted price; AiFinPay protocol fee " +
-      "(1%) and creator/referral fee (0.01%) are added ON TOP. The agent " +
-      "executes the returned instructions with their chain SDK of choice. " +
-      "Returns 503 with onboarding message if the splitter is not yet " +
-      "deployed on the requested chain.",
+      "Retired compatibility tool. It never creates an invoice or moves funds. " +
+      "Use the canonical AIFP-1 settlement client instead.",
     inputSchema: {
       type: "object",
       properties: {
-        chain: {
-          type: "string",
-          enum: ["solana", "polygon", "base", "optimism", "unichain", "botchain", "xrplevm"],
-          description: "Chain to settle on.",
-        },
-        merchant_wallet: {
-          type: "string",
-          description:
-            "Recipient — Solana base58 pubkey or Polygon 0x address.",
-        },
-        merchant_amount: {
-          type: "string",
-          description:
-            "Merchant's quoted price in chain units (lamports for Solana, " +
-            "wei for Polygon). Use a string to preserve precision.",
-        },
-        order_id: {
-          type: "string",
-          description: "Off-chain reference (max 64 chars).",
-        },
-        fee_recipient: {
-          type: "string",
-          description:
-            "Optional — receives the IP-creator fee. Omit to route the " +
-            "creator slot to AiFinPay treasury.",
-        },
+        chain: { type: "string", description: "Ignored compatibility field." },
+        merchant_wallet: { type: "string", description: "Ignored compatibility field." },
+        merchant_amount: { type: "string", description: "Ignored compatibility field." },
+        order_id: { type: "string", description: "Ignored compatibility field." },
       },
-      required: ["chain", "merchant_wallet", "merchant_amount", "order_id"],
     },
-    // Returns on-chain instructions/invoice; does not itself broadcast funds.
-    annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false },
+    annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
     outputSchema: { type: "object" },
   };
 }
 
 export async function runPayWithSplit(
-  ctx: ToolContext,
-  args: Record<string, unknown>,
+  _ctx: ToolContext,
+  _args: Record<string, unknown>,
 ) {
-  const chain = args.chain as "solana" | "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm" | undefined;
-  if (!chain || !["solana", "polygon", "base", "optimism", "unichain", "botchain", "xrplevm"].includes(chain)) {
-    return errorResult("chain must be 'solana', 'polygon', 'base', 'optimism', 'unichain', 'botchain' or 'xrplevm'");
-  }
-  const merchantWallet = String(args.merchant_wallet ?? "");
-  const merchantAmount = String(args.merchant_amount ?? "");
-  const orderId = String(args.order_id ?? "");
-  if (!merchantWallet || !merchantAmount || !orderId) {
-    return errorResult(
-      "merchant_wallet, merchant_amount, and order_id are all required",
-    );
-  }
-  const feeRecipient =
-    typeof args.fee_recipient === "string" && args.fee_recipient
-      ? (args.fee_recipient as string)
-      : undefined;
-
-  try {
-    const invoice = await ctx.agent.inner.payWithSplitInvoice({
-      // published @aifinpay/agent (<=1.3.0) still types this "solana"|"polygon";
-      // the value is forwarded verbatim to the backend, which accepts all 7.
-      // Drop the cast once agent >=1.3.1 (widened types) is published.
-      chain: chain as "solana" | "polygon",
-      merchantWallet,
-      merchantAmount,
-      orderId,
-      feeRecipient,
-    });
-    return {
-      content: [{ type: "text", text: JSON.stringify(invoice, null, 2) }],
-      structuredContent: invoice,
-    };
-  } catch (e) {
-    const err = e as Error;
-    return errorResult(`${err.constructor.name}: ${err.message}`);
-  }
+  return retiredResult();
 }
 
 export function quoteSplitTool() {
   return {
     name: "quote_split",
     description:
-      "Pure-view: compute the fee-on-top breakdown (merchant + treasury + " +
-      "creator + total) for a given merchant amount. No payment, no auth. " +
-      "Use this BEFORE pay_with_split to decide whether the cost is " +
-      "acceptable.",
+      "Retired compatibility tool. It does not quote the removed legacy split route. " +
+      "Use a canonical AIFP-1 quote.",
     inputSchema: {
       type: "object",
       properties: {
-        chain: { type: "string", enum: ["solana", "polygon", "base", "optimism", "unichain", "botchain", "xrplevm"] },
-        merchant_amount: {
-          type: "string",
-          description:
-            "Merchant's quoted price (lamports for Solana, wei for Polygon).",
-        },
+        chain: { type: "string", description: "Ignored compatibility field." },
+        merchant_amount: { type: "string", description: "Ignored compatibility field." },
       },
-      required: ["chain", "merchant_amount"],
     },
     annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
     outputSchema: { type: "object" },
@@ -127,32 +54,27 @@ export function quoteSplitTool() {
 }
 
 export async function runQuoteSplit(
-  ctx: ToolContext,
-  args: Record<string, unknown>,
+  _ctx: ToolContext,
+  _args: Record<string, unknown>,
 ) {
-  const chain = args.chain as "solana" | "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm" | undefined;
-  if (!chain || !["solana", "polygon", "base", "optimism", "unichain", "botchain", "xrplevm"].includes(chain)) {
-    return errorResult("chain must be 'solana', 'polygon', 'base', 'optimism', 'unichain', 'botchain' or 'xrplevm'");
-  }
-  const merchantAmount = String(args.merchant_amount ?? "");
-  if (!merchantAmount) return errorResult("merchant_amount required");
-
-  try {
-    // Same published-type lag as above — cast until agent >=1.3.1 ships.
-    const quote = await ctx.agent.inner.quoteSplit({ chain: chain as "solana" | "polygon", merchantAmount });
-    return {
-      content: [{ type: "text", text: JSON.stringify(quote, null, 2) }],
-      structuredContent: quote,
-    };
-  } catch (e) {
-    const err = e as Error;
-    return errorResult(`${err.constructor.name}: ${err.message}`);
-  }
+  return retiredResult();
 }
 
-function errorResult(...lines: string[]) {
+function retiredResult() {
   return {
     isError: true,
-    content: lines.map((line) => ({ type: "text", text: line })),
+    content: [{ type: "text", text: RETIRED_MESSAGE }],
+    structuredContent: {
+      error: "legacy_split_route_retired",
+      protocol: "AIFP-1",
+      economics: {
+        fee_mode: "gross-inclusive",
+        payer_total_bps: 10_000,
+        merchant_bps: 9_900,
+        protocol_bps: 100,
+        creator_bps: 0,
+      },
+      aifp2_protocol_fee_bps: 0,
+    },
   };
 }
