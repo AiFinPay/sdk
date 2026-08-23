@@ -1,17 +1,13 @@
 # @aifinpay/mcp
 
-MCP server exposing AiFinPay's autonomous x402 payment loop as
-agent-callable tools. Drop it into Claude Desktop, MCP Inspector, or any
-MCP-aware agent runtime — your agent can now buy services autonomously.
+MCP server exposing AiFinPay payment and quote primitives to MCP-aware
+agent runtimes. Canonical domain: **aifinpay.io**.
 
-Canonical domain: **aifinpay.io** (the legacy `aifinpay.company` host is
-retired — ignore any docs pointing there). SDK settlement runs on
-**Polygon (default) and Solana**; the underlying Node SDK (≥ 1.3.0) also
-supports direct splitter settlement on Base, Optimism, Unichain, BOT Chain
-and XRPL EVM (native-token path), while the MCP `pay_with_split` /
-`quote_split` tools stay Polygon + Solana (backend invoice flow). The
-protocol itself is live across 13 networks — see
-[aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
+AIFP-1 is gross-inclusive: payer total equals the quote, merchant receives 99%,
+AiFinPay receives 1%, creator/referral receives 0%. AIFP-2/x402 currently
+charges 0% at the protocol layer. Fund-moving paths fail closed until the exact
+deployment, runtime hash, governance profile, merchant target, asset and paid
+E2E evidence are verified.
 
 ## Tools
 
@@ -21,8 +17,8 @@ protocol itself is live across 13 networks — see
 | `agent_address()` | Return the agent's funding addresses on **both** chains — Polygon `0x…` (default settlement: io.net, Exa, Venice bridges) and Solana base58 (Seat PDA / leaderboard). One seed, two chains — fund either. |
 | `agent_quote(url)` | Inspect a 402 challenge without paying. Shows the merchant's quoted amount + facilitator flavor. |
 | `agent_call(provider, …)` | Call a live provider from the AiFinPay directory (io.net, Exa, Venice, …) with automatic payment. |
-| `pay_with_split(chain, merchant, amount, …)` | Direct fee-on-top payment to any merchant wallet — merchant receives 100% of the amount, AiFinPay adds 1% on top. |
-| `quote_split(chain, amount)` | Preview the exact on-chain amounts of a `pay_with_split` before paying. |
+| `pay_with_split(…)` | Retired compatibility tool. Returns `legacy_split_route_retired`; never creates an invoice or moves funds. |
+| `quote_split(…)` | Retired compatibility tool. Use a canonical AIFP-1 quote. |
 | `agent_claim_self(magic_link_url)` | Link this agent to your dashboard account via a one-shot magic link from `aifinpay.io/login` — spend history shows up in the dashboard. |
 
 ## Install
@@ -77,7 +73,7 @@ agent identity (and any funded Seat) persists across restarts.
 | `AIFINPAY_AGENT_SECRET` | — | Base58 secret. If absent → ephemeral agent printed to stderr. |
 | `AIFINPAY_BASE_URL` | `https://aifinpay.io` | Backend URL for nonce + funding probes. |
 | `AIFINPAY_TIMEOUT_MS` | `30000` | Request timeout. |
-| `AIFINPAY_MAX_USD` | — | Hard cap per single payment. Strongly recommended. |
+| `AIFINPAY_MAX_USD` | — | Mandatory positive finite operator ceiling for any fund-moving tool. |
 
 ## Programmatic use
 
