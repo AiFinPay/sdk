@@ -44,6 +44,9 @@ export const BASE_UNIT_PRICE_USD = "0.0005" as const;
  *  A merchant settlement is therefore 99% of the gross AIFP-1 price before
  *  external network/settlement costs. */
 export const PROTOCOL_FEE_BPS = 100 as const;
+export const MERCHANT_SHARE_BPS = 9_900 as const;
+export const CREATOR_FEE_BPS = 0 as const;
+export const FEE_MODE = "gross-inclusive" as const;
 
 /** Stablecoin minor units (6 dp) per call — the integer form the server does
  *  its batch math in, kept here only so min_requests can be computed locally. */
