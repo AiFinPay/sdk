@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/agent",
-  "version": "2.0.0-rc.1",
+  "version": "2.0.0-rc.2",
   "description": "AiFinPay SDK for global Agent Passport identity and route-verified AIFP-1/AIFP-2 settlement for autonomous AI agents.",
   "type": "module",
   "main": "dist/index.js",

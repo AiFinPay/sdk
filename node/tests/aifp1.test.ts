@@ -117,50 +117,66 @@ function mockServer(): MockServer {
       if (!["exact", "prefix", "merchant"].includes(scope)) {
         return json({ error: "AIFP-400", detail: "bad scope" }, 400);
       }
-      // The real server refuses a batch under the $0.10 floor (1000 units).
-      if (!Number.isInteger(body.units) || body.units < 1000) {
-        return json({ error: "AIFP-400", detail: "units must be an integer 1000..100000000" }, 400);
+      // The real server refuses a batch under the $0.10 floor (200 units at $0.0005).
+      if (!Number.isInteger(body.units) || body.units < 200) {
+        return json({ error: "AIFP-400", detail: "units must be an integer 200..100000000" }, 400);
       }
       const resource = scope === "merchant" ? "*" : String(body.resource ?? "");
       if (scope !== "merchant" && !resource.startsWith("/")) {
         return json({ error: "AIFP-400", detail: 'resource must start with "/"' }, 400);
       }
       const quote_id = `qt_${String(++seq).padStart(16, "0")}`;
+      const expiresAt = new Date(Date.now() + 900_000).toISOString();
+      const quotedTotalWei = s.inflateWeiBy
+        ? BigInt(Math.round(1379310344827586206 * s.inflateWeiBy))
+        : 1379310344827586206n;
+      const quotedTreasuryWei = quotedTotalWei / 100n;
+      const quotedMerchantWei = quotedTotalWei - quotedTreasuryWei;
+      const grossUnits = BigInt(body.units) * 500n;
+      const protocolUnits = grossUnits / 100n;
+      const merchantUnits = grossUnits - protocolUnits;
       return json({
         quote_id,
         merchant_id: body.merchant_id,
         resource,
         scope,
         tier: "standard",
-        unit_price: "0.0001",
+        unit_price: "0.0005",
         requests: body.units,
         units: body.units,
         unit_quota: body.units,
-        base_unit_price_usd: "0.0001",
-        amount: (body.units * 0.0001).toFixed(6).replace(/0+$/, ""),
+        base_unit_price_usd: "0.0005",
+        amount: (body.units * 0.0005).toFixed(6).replace(/0+$/, ""),
         currency: "USD",
         accepted_assets: ["USDC", "USDT", "POL"],
         accepted_chains: ["polygon"],
         pay_to: { polygon: MERCHANT_WALLET },
-        fee_bps: 101,
+        fee_bps: 100,
         no_minimum_fee: true,
         native_settlement: {
           asset: "POL", decimals: 18, rate_usd: "0.073000",
           rate_fixed_at: new Date().toISOString(),
-          total_wei: (s.inflateWeiBy
-            ? BigInt(Math.round(1379310344827586206 * s.inflateWeiBy)).toString()
-            : "1379310344827586206"),
-          merchant_wei: "1365517241379310344",
-          treasury_wei: "13793103448275862",
-          creator_wei: "137931034482758",
+          total_wei: quotedTotalWei.toString(),
+          gross_wei: quotedTotalWei.toString(),
+          payer_total_wei: quotedTotalWei.toString(),
+          merchant_wei: quotedMerchantWei.toString(),
+          treasury_wei: quotedTreasuryWei.toString(),
+          creator_wei: "0",
+          valid_until: String(Math.floor(Date.parse(expiresAt) / 1000)),
+          settlement_semantics: "gross-inclusive",
         },
         settlement: {
-          batch_units: String(body.units * 100),
-          total_units: String(body.units * 100),
-          fee_on_top: { provider: "98990", treasury: "1000", creator: "10" },
+          batch_units: grossUnits.toString(),
+          total_units: grossUnits.toString(),
+          gross_units: grossUnits.toString(),
+          payer_total_units: grossUnits.toString(),
+          merchant_units: merchantUnits.toString(),
+          protocol_fee_units: protocolUnits.toString(),
+          creator_units: "0",
+          fee_on_top: false,
         },
         nonce: "n-" + quote_id,
-        expires_at: new Date(Date.now() + 900_000).toISOString(),
+        expires_at: expiresAt,
       });
     }
 
@@ -192,10 +208,10 @@ function mockServer(): MockServer {
       return json({
         receipt_id: receiptId, receipt: jwt, status: "settled", tx_ref: body.tx_ref,
         merchant_id: quoted.merchant_id, resource: quoted.resource, scope: quoted.scope,
-        amount: quoted.amount, currency: "USD", tier: "standard", unit_price: "0.0001",
-        quota: quoted.unit_quota, unit_quota: quoted.unit_quota, base_unit_price_usd: "0.0001",
+        amount: quoted.amount, currency: "USD", tier: "standard", unit_price: "0.0005",
+        quota: quoted.unit_quota, unit_quota: quoted.unit_quota, base_unit_price_usd: "0.0005",
         asset: body.asset, chain: body.chain,
-        fee: { provider: "98990", treasury: "1000", creator: "10" },
+        fee: false,
         settled_at: new Date().toISOString(),
         expires_at: s.expiresAtOverride
           ?? new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
@@ -224,8 +240,8 @@ function mockServer(): MockServer {
       const challenge = (detail: string) => json({
         error: "AIFP-402", detail, protocol: "AIFP-1",
         merchant_id: merchantId, resource: restPath, unit_weight: weight,
-        base_unit_price_usd: "0.0001",
-        how_to_pay: [`POST ${API}/v1/quote {"merchant_id":"${merchantId}","resource":"${restPath}","units":1000}`],
+        base_unit_price_usd: "0.0005",
+        how_to_pay: [`POST ${API}/v1/quote {"merchant_id":"${merchantId}","resource":"${restPath}","units":200}`],
         scopes: { note: "a batch can cover more than this one path", examples: [] },
       }, 402);
 
@@ -274,7 +290,11 @@ function mockServer(): MockServer {
 
 interface Settlement {
   merchantWallet: string;
-  totalWei: bigint;
+  grossWei: bigint;
+  merchantWei: bigint;
+  treasuryWei: bigint;
+  creatorWei: bigint;
+  validUntil: bigint;
   orderId: string;
 }
 
@@ -288,9 +308,9 @@ async function agentFor(server: MockServer, opts: Record<string, unknown> = {}) 
   // The one thing that cannot be mocked at the HTTP layer. Stubbed rather than
   // stubbed-out: the arguments are asserted, because "paid the right merchant
   // the right amount against the right order id" is the whole safety property.
-  (agent as unknown as { settleSplitterNative: (p: Settlement) => Promise<string> })
-    .settleSplitterNative = async (p: Settlement) => {
-      settlements.push({ merchantWallet: p.merchantWallet, totalWei: p.totalWei, orderId: p.orderId });
+  (agent as unknown as { settleAifp1NativeV13: (p: Settlement) => Promise<string> })
+    .settleAifp1NativeV13 = async (p: Settlement) => {
+      settlements.push({ ...p });
       return "0x" + "ab".repeat(32);
     };
   return { agent, settlements };
@@ -360,7 +380,10 @@ describe("aifp1: paying a paywall", () => {
     // funds go to the wallet the quote named.
     expect(settlements[0]!.orderId).toMatch(/^qt_[0-9]{16}$/);
     expect(settlements[0]!.merchantWallet).toBe(MERCHANT_WALLET);
-    expect(settlements[0]!.totalWei).toBe(1379310344827586206n);
+    expect(settlements[0]!.grossWei).toBe(1379310344827586206n);
+    expect(settlements[0]!.merchantWei).toBe(1365517241379310344n);
+    expect(settlements[0]!.treasuryWei).toBe(13793103448275862n);
+    expect(settlements[0]!.creatorWei).toBe(0n);
 
     // Three gateway hits: refused, then the paid retry. First carried no
     // receipt (we had none), the retry did.
@@ -422,17 +445,17 @@ describe("aifp1: receipt reuse", () => {
     const { agent } = await agentFor(server);
 
     await agent.fetchPaid(`${GATEWAY}/acme/articles/2026/a`);
-    // 1000 units bought, a weight-7 route consumed — the number comes from the
+    // 200 units bought, a weight-7 route consumed — the number comes from the
     // header the gateway set, not from arithmetic on our side.
-    expect(agent.aifp1Receipts.list()[0]!.remaining).toBe(993);
+    expect(agent.aifp1Receipts.list()[0]!.remaining).toBe(193);
   });
 
   it("buys a new batch once the old one is spent", async () => {
     const server = mockServer();
-    // A heavy route: 1000 prepaid units cover exactly two calls.
-    server.weights["/reports/q1"] = 500;
-    server.weights["/reports/q2"] = 500;
-    server.weights["/reports/q3"] = 500;
+    // A heavy route: 200 prepaid units cover exactly two calls.
+    server.weights["/reports/q1"] = 100;
+    server.weights["/reports/q2"] = 100;
+    server.weights["/reports/q3"] = 100;
     const { agent, settlements } = await agentFor(server);
 
     await agent.fetchPaid(`${GATEWAY}/acme/reports/q1`);
@@ -550,8 +573,8 @@ describe("aifp1: idempotency key", () => {
 
   it("uses a different key for a different batch", async () => {
     const server = mockServer();
-    server.weights["/reports/q1"] = 1000;   // one call empties the batch
-    server.weights["/reports/q2"] = 1000;
+    server.weights["/reports/q1"] = 200;   // one call empties the batch
+    server.weights["/reports/q2"] = 200;
     const { agent } = await agentFor(server);
 
     await agent.fetchPaid(`${GATEWAY}/acme/reports/q1`);
@@ -622,8 +645,8 @@ describe("aifp1: budget caps and refusals", () => {
     });
 
     let failNext = true;
-    (agent as unknown as { settleSplitterNative: (p: Settlement) => Promise<string> })
-      .settleSplitterNative = async () => {
+    (agent as unknown as { settleAifp1NativeV13: (p: Settlement) => Promise<string> })
+      .settleAifp1NativeV13 = async () => {
         if (failNext) { failNext = false; throw new Error("polygon rpc unreachable"); }
         return "0x" + "cd".repeat(32);
       };
