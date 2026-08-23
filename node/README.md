@@ -1,14 +1,12 @@
 # @aifinpay/agent (Node / TypeScript)
 
-Non-custodial x402 payment client for autonomous AI agents on
-[AiFinPay](https://aifinpay.io) — canonical domain **aifinpay.io** (the
-legacy `aifinpay.company` host is retired). SDK settlement: since 1.3.0,
-direct fee-on-top splitter settlement (`AiFinPayAgent.call()`) works on
-Polygon (default), Base, Optimism, Unichain, BOT Chain and XRPL EVM
-(native-token path only — no ERC-20/USDC settlement yet), plus Solana;
-the backend-quoted invoice flow (`/api/b2b/pay-with-split`) remains
-Polygon + Solana. The protocol is live across 13 networks — see
-[aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
+Non-custodial payment client for autonomous AI agents on
+[AiFinPay](https://aifinpay.io). AIFP-1 is gross-inclusive: payer total equals
+the quote, merchant receives 99%, AiFinPay receives 1%, creator/referral
+receives 0%. AIFP-2/x402 currently charges 0% at the protocol layer. Legacy
+`/api/b2b` split-invoice methods are retired. Settlement fails closed unless
+the selected deployment, runtime hash, governance profile, merchant target,
+asset and paid E2E evidence are verified.
 
 The Ed25519 keypair is generated locally with `tweetnacl` and never leaves
 your process. The SDK only sends a one-time SHA-256 + Ed25519 signature in
