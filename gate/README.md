@@ -215,16 +215,21 @@ req.aifp
 
 ### Pricing
 
-Three fixed settings, per call, with a **1% protocol fee charged on top of the
-agent's payment** — never deducted from you. A merchant quoting $0.0005 receives
-$0.0005. There is no fixed per-transaction floor, which is the only reason a
-sub-cent call is a viable product.
+Three fixed settings, per call. The displayed/quoted AIFP-1 price is the
+**gross amount paid by the agent**. AiFinPay receives **1% of that gross amount**
+and the merchant receives **99% of gross** before external network or settlement
+costs. The 1% fee is **not added on top** of the displayed AIFP-1 price.
 
-| Tier | Price per call | Billing units per call |
-|---|---|---|
-| `standard` | $0.0005 | 1 |
-| `complex` | $0.002 | 4 |
-| `premium` | $0.005 | 10 |
+| Tier | Gross price paid by agent | Merchant 99% | AiFinPay 1% | Billing units per call |
+|---|---:|---:|---:|---:|
+| `standard` | $0.0005 | $0.000495 | $0.000005 | 1 |
+| `complex` | $0.002 | $0.00198 | $0.00002 | 4 |
+| `premium` | $0.005 | $0.00495 | $0.00005 | 10 |
+
+AIFP-2/x402 is a separate route: the provider receives 100% of its
+provider-defined price, while any AiFinPay AIFP-2 fee is payer-side/on-top. The
+current AIFP-2 fee is 0%; a future non-zero fee requires a versioned AIFP-2
+settlement profile and must not reduce the provider amount.
 
 Weight is always price ÷ base price. That equality is what lets one prepaid
 batch be spent across endpoints of different tiers and still drain at each
