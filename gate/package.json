@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/gate",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Merchant-side AIFP-1 paywall for your own API — 402 challenge, local receipt verification, billing-unit quota metering.",
   "type": "module",
   "main": "dist/index.js",
