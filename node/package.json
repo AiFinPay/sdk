@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/agent",
-  "version": "2.0.0-rc.2",
+  "version": "2.0.0-rc.3",
   "description": "AiFinPay SDK for global Agent Passport identity and route-verified AIFP-1/AIFP-2 settlement for autonomous AI agents.",
   "type": "module",
   "main": "dist/index.js",
@@ -15,23 +15,60 @@
       "default": "./dist/wallet.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
-    "aifinpay", "ai-agent", "ai-agents", "ai-payments", "ai-agent-payments",
-    "agentic-ai", "autonomous-agents", "autonomous-payments", "agent-payments",
-    "agent-payment-protocol", "agent-commerce", "agentic-commerce", "agent-economy",
-    "ai-commerce", "ai-payment-infrastructure", "ai-financial-infrastructure",
-    "payment-rails", "financial-rails", "x402", "x402-payments", "http-402",
-    "mcp", "mcp-payments", "mcp-monetization", "model-context-protocol",
-    "payments", "api-payments", "api-monetization", "paid-apis", "machine-payments",
-    "m2m-payments", "programmable-payments", "crypto-payments", "stablecoin-payments",
-    "stablecoin", "usdc", "agent-wallet", "agent-passport", "non-custodial",
-    "fintech", "polygon", "solana", "ed25519"
+    "aifinpay",
+    "ai-agent",
+    "ai-agents",
+    "ai-payments",
+    "ai-agent-payments",
+    "agentic-ai",
+    "autonomous-agents",
+    "autonomous-payments",
+    "agent-payments",
+    "agent-payment-protocol",
+    "agent-commerce",
+    "agentic-commerce",
+    "agent-economy",
+    "ai-commerce",
+    "ai-payment-infrastructure",
+    "ai-financial-infrastructure",
+    "payment-rails",
+    "financial-rails",
+    "x402",
+    "x402-payments",
+    "http-402",
+    "mcp",
+    "mcp-payments",
+    "mcp-monetization",
+    "model-context-protocol",
+    "payments",
+    "api-payments",
+    "api-monetization",
+    "paid-apis",
+    "machine-payments",
+    "m2m-payments",
+    "programmable-payments",
+    "crypto-payments",
+    "stablecoin-payments",
+    "stablecoin",
+    "usdc",
+    "agent-wallet",
+    "agent-passport",
+    "non-custodial",
+    "fintech",
+    "polygon",
+    "solana",
+    "ed25519"
   ],
   "author": "CoinSecurities (SECCO) <contact@aifinpay.io>",
   "license": "MIT",
@@ -55,6 +92,10 @@
     "typescript": "^5.4.0",
     "vitest": "^4.1.5"
   },
-  "engines": { "node": ">=18" },
-  "publishConfig": { "access": "public" }
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }
