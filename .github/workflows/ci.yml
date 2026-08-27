@@ -57,6 +57,18 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      # The route table is generated from a byte-for-byte copy of the canonical
+      # registry artifact in AiFinPay/evm-contract, where every payment-critical
+      # field was read from the chain. This regenerates it and compares, so a
+      # hand-edited payout address, fee split or settlement flag turns CI red
+      # instead of shipping. It also re-hashes the vendored artifact against its
+      # recorded provenance, so editing the copy fails the same way.
+      #
+      # Offline and deterministic on purpose: this job must not depend on a
+      # network read of another repository to know whether it is in sync.
+      - name: Registry — SPLITTER_ROUTES matches the canonical registry
+        run: npm run registry:check
+
       - name: Build (tsc)
         run: npm run build
 

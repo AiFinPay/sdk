@@ -22,6 +22,8 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "registry:sync": "node scripts/generate-splitter-routes.mjs",
+    "registry:check": "node scripts/generate-splitter-routes.mjs --check",
     "test": "vitest run",
     "prepublishOnly": "npm run build"
   },

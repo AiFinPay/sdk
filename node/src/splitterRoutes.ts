@@ -26,13 +26,26 @@
  * Resolving by chain alone would settle at the wrong fee split, silently,
  * and the amounts would still look plausible in every log.
  *
- * Generated from the canonical registry in AiFinPay/evm-contract
- * (registry/generated/splitter-table.json, schemaVersion 2). Every field below
- * was read from the chain by verify-registry.mjs — treasury, both bps values
- * and the runtime code hash — not transcribed by hand.
+ * The table itself is NOT in this file. It is generated into
+ * splitterRoutes.generated.ts from registry/splitter-table.json, a byte-for-byte
+ * copy of the canonical artifact in AiFinPay/evm-contract, where every
+ * payment-critical field — splitter, owner, treasury, both bps values, the
+ * runtime code hash — was read from the chain by verify-registry.mjs. Two
+ * repositories hand-maintaining the same payout addresses is the failure this
+ * split prevents; `npm run registry:check` fails CI if they disagree.
+ *
+ * What stays here is the part worth reading: the types, the errors, and the two
+ * resolvers. Logic belongs in a reviewed file, not in a generated one.
  */
-import { polygon, base, optimism, unichain, bsc, arbitrum, avalanche, type Chain } from "viem/chains";
-import { botchain, xrplevm } from "./chains.js";
+import type { Chain } from "viem/chains";
+
+import { SPLITTER_ROUTES } from "./splitterRoutes.generated.js";
+
+export {
+  SPLITTER_ROUTES,
+  SPLITTER_GOVERNANCE,
+  SPLITTER_REGISTRY_SOURCE,
+} from "./splitterRoutes.generated.js";
 
 /** Protocol routes. A route is a fee profile fixed at construction. */
 export type SplitterRoute = "merchant-aifp1" | "agent-x402";
@@ -58,6 +71,13 @@ export interface SplitterRouteDeployment {
   chainId: number;
   viemChain: Chain;
   splitter: `0x${string}`;
+  /**
+   * The governance Safe, read from the contract's own owner(). It controls
+   * pause/unpause, the treasury address and the stablecoin whitelist, so it is
+   * carried here rather than assumed: every other field is only as trustworthy
+   * as whoever can change it.
+   */
+  owner: `0x${string}`;
   /** Owner and treasury are the same governance Safe on every chain. */
   treasury: `0x${string}`;
   /** Immutable, baked into runtime code. 100 = 1%. */
@@ -76,297 +96,9 @@ export interface SplitterRouteDeployment {
   validUntil: string;
   defaultRpc: string;
   explorer: string;
+  /** The date the fields above were last read from the chain. */
+  verifiedAt: string;
 }
-
-export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> = {
-  "arbitrum:agent-x402": {
-    chain: "arbitrum",
-    route: "agent-x402",
-    chainId: 42161,
-    viemChain: arbitrum,
-    splitter: "0xE34Fc0E6694821c600Fa0955C0F74720ea6d8440",
-    treasury: "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
-    treasuryBps: 0,
-    ipCreatorBps: 0,
-    runtimeCodeHash: "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
-    settlementEnabled: false,
-    validFrom: "2026-08-27T00:00:00.000Z",
-    validUntil: "2026-11-25T00:00:00.000Z",
-    defaultRpc: "https://arb1.arbitrum.io/rpc",
-    explorer: "https://arbiscan.io",
-  },
-  "arbitrum:merchant-aifp1": {
-    chain: "arbitrum",
-    route: "merchant-aifp1",
-    chainId: 42161,
-    viemChain: arbitrum,
-    splitter: "0x80e2B445DFc44B3B2254aa376B31AEdDd3Ff934a",
-    treasury: "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
-    treasuryBps: 100,
-    ipCreatorBps: 0,
-    runtimeCodeHash: "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
-    settlementEnabled: false,
-    validFrom: "2026-08-27T00:00:00.000Z",
-    validUntil: "2026-11-25T00:00:00.000Z",
-    defaultRpc: "https://arb1.arbitrum.io/rpc",
-    explorer: "https://arbiscan.io",
-  },
-  "avalanche:agent-x402": {
-    chain: "avalanche",
-    route: "agent-x402",
-    chainId: 43114,
-    viemChain: avalanche,
-    splitter: "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74",
-    treasury: "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
-    treasuryBps: 0,
-    ipCreatorBps: 0,
-    runtimeCodeHash: "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
-    settlementEnabled: false,
-    validFrom: "2026-08-27T00:00:00.000Z",
-    validUntil: "2026-11-25T00:00:00.000Z",
-    defaultRpc: "https://api.avax.network/ext/bc/C/rpc",
-    explorer: "https://snowtrace.io",
-  },
-  "avalanche:merchant-aifp1": {
-    chain: "avalanche",
-    route: "merchant-aifp1",
-    chainId: 43114,
-    viemChain: avalanche,
-    splitter: "0xE34Fc0E6694821c600Fa0955C0F74720ea6d8440",
-    treasury: "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
-    treasuryBps: 100,
-    ipCreatorBps: 0,
-    runtimeCodeHash: "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
-    settlementEnabled: false,
-    validFrom: "2026-08-27T00:00:00.000Z",
-    validUntil: "2026-11-25T00:00:00.000Z",
-    defaultRpc: "https://api.avax.network/ext/bc/C/rpc",
-    explorer: "https://snowtrace.io",
-  },
-  "base:agent-x402": {
-    chain: "base",
-    route: "agent-x402",
-    chainId: 8453,
-    viemChain: base,
-    splitter: "0x1Fe2021336596655Fac72bC7bC40F7FFFA501d55",
-    treasury: "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
-    treasuryBps: 0,
-    ipCreatorBps: 0,
-    runtimeCodeHash: "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
-    settlementEnabled: false,
-    validFrom: "2026-08-27T00:00:00.000Z",
-    validUntil: "2026-11-25T00:00:00.000Z",
-    defaultRpc: "https://mainnet.base.org",
-    explorer: "https://basescan.org",
-  },
-  "base:merchant-aifp1": {
-    chain: "base",
-    route: "merchant-aifp1",
-    chainId: 8453,
-    viemChain: base,
-    splitter: "0xB385Cc32fe39CF5B5778DF0Df0e8E9978b5F662a",
-    treasury: "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
-    treasuryBps: 100,
-    ipCreatorBps: 0,
-    runtimeCodeHash: "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
-    settlementEnabled: false,
-    validFrom: "2026-08-27T00:00:00.000Z",
-    validUntil: "2026-11-25T00:00:00.000Z",
-    defaultRpc: "https://mainnet.base.org",
-    explorer: "https://basescan.org",
-  },
-  "bnb:agent-x402": {
-    chain: "bnb",
-    route: "agent-x402",
-    chainId: 56,
-    viemChain: bsc,
-    splitter: "0x7656fb8B6627311A7d87273913D31b837Bb2b5A4",
-    treasury: "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
-    treasuryBps: 0,
-    ipCreatorBps: 0,
-    runtimeCodeHash: "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
-    settlementEnabled: false,
-    validFrom: "2026-08-27T00:00:00.000Z",
-    validUntil: "2026-11-25T00:00:00.000Z",
-    defaultRpc: "https://bsc-dataseed.bnbchain.org",
-    explorer: "https://bscscan.com",
-  },
-  "bnb:merchant-aifp1": {
-    chain: "bnb",
-    route: "merchant-aifp1",
-    chainId: 56,
-    viemChain: bsc,
-    splitter: "0x79D481B835Cb050FAb7a045E619A6Fb9Cd73f510",
-    treasury: "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
-    treasuryBps: 100,
-    ipCreatorBps: 0,
-    runtimeCodeHash: "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
-    settlementEnabled: false,
-    validFrom: "2026-08-27T00:00:00.000Z",
-    validUntil: "2026-11-25T00:00:00.000Z",
-    defaultRpc: "https://bsc-dataseed.bnbchain.org",
-    explorer: "https://bscscan.com",
-  },
-  "botchain:agent-x402": {
-    chain: "botchain",
-    route: "agent-x402",
-    chainId: 677,
-    viemChain: botchain,
-    splitter: "0x7E92FbE28aAc3a3942FDf019d29172bd02c96Cf0",
-    treasury: "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
-    treasuryBps: 0,
-    ipCreatorBps: 0,
-    runtimeCodeHash: "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
-    settlementEnabled: false,
-    validFrom: "2026-08-27T00:00:00.000Z",
-    validUntil: "2026-11-25T00:00:00.000Z",
-    defaultRpc: "https://rpc.botchain.ai",
-    explorer: "https://scan.botchain.ai",
-  },
-  "botchain:merchant-aifp1": {
-    chain: "botchain",
-    route: "merchant-aifp1",
-    chainId: 677,
-    viemChain: botchain,
-    splitter: "0xe855e491D0950140704DB9Cec6B7b3F725360a56",
-    treasury: "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
-    treasuryBps: 100,
-    ipCreatorBps: 0,
-    runtimeCodeHash: "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
-    settlementEnabled: false,
-    validFrom: "2026-08-27T00:00:00.000Z",
-    validUntil: "2026-11-25T00:00:00.000Z",
-    defaultRpc: "https://rpc.botchain.ai",
-    explorer: "https://scan.botchain.ai",
-  },
-  "optimism:agent-x402": {
-    chain: "optimism",
-    route: "agent-x402",
-    chainId: 10,
-    viemChain: optimism,
-    splitter: "0x38Ef6173ce0AC540f129680C2Aa4Ef739787bdBf",
-    treasury: "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
-    treasuryBps: 0,
-    ipCreatorBps: 0,
-    runtimeCodeHash: "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
-    settlementEnabled: false,
-    validFrom: "2026-08-27T00:00:00.000Z",
-    validUntil: "2026-11-25T00:00:00.000Z",
-    defaultRpc: "https://mainnet.optimism.io",
-    explorer: "https://optimistic.etherscan.io",
-  },
-  "optimism:merchant-aifp1": {
-    chain: "optimism",
-    route: "merchant-aifp1",
-    chainId: 10,
-    viemChain: optimism,
-    splitter: "0x1Fe2021336596655Fac72bC7bC40F7FFFA501d55",
-    treasury: "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
-    treasuryBps: 100,
-    ipCreatorBps: 0,
-    runtimeCodeHash: "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
-    settlementEnabled: false,
-    validFrom: "2026-08-27T00:00:00.000Z",
-    validUntil: "2026-11-25T00:00:00.000Z",
-    defaultRpc: "https://mainnet.optimism.io",
-    explorer: "https://optimistic.etherscan.io",
-  },
-  "polygon:agent-x402": {
-    chain: "polygon",
-    route: "agent-x402",
-    chainId: 137,
-    viemChain: polygon,
-    splitter: "0x660Cd915Fc54A7EaE5CEA6854505638bd2A08531",
-    treasury: "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
-    treasuryBps: 0,
-    ipCreatorBps: 0,
-    runtimeCodeHash: "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
-    settlementEnabled: false,
-    validFrom: "2026-08-27T00:00:00.000Z",
-    validUntil: "2026-11-25T00:00:00.000Z",
-    defaultRpc: "https://polygon-bor-rpc.publicnode.com",
-    explorer: "https://polygonscan.com",
-  },
-  "polygon:merchant-aifp1": {
-    chain: "polygon",
-    route: "merchant-aifp1",
-    chainId: 137,
-    viemChain: polygon,
-    splitter: "0x27C1C07563c92C1AEa52cC9b4452dF49dC5a7942",
-    treasury: "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
-    treasuryBps: 100,
-    ipCreatorBps: 0,
-    runtimeCodeHash: "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
-    settlementEnabled: false,
-    validFrom: "2026-08-27T00:00:00.000Z",
-    validUntil: "2026-11-25T00:00:00.000Z",
-    defaultRpc: "https://polygon-bor-rpc.publicnode.com",
-    explorer: "https://polygonscan.com",
-  },
-  "unichain:agent-x402": {
-    chain: "unichain",
-    route: "agent-x402",
-    chainId: 130,
-    viemChain: unichain,
-    splitter: "0xC701F45b3Bae9CA3a58cB33fCBA6291594D17843",
-    treasury: "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
-    treasuryBps: 0,
-    ipCreatorBps: 0,
-    runtimeCodeHash: "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
-    settlementEnabled: false,
-    validFrom: "2026-08-27T00:00:00.000Z",
-    validUntil: "2026-11-25T00:00:00.000Z",
-    defaultRpc: "https://mainnet.unichain.org",
-    explorer: "https://uniscan.xyz",
-  },
-  "unichain:merchant-aifp1": {
-    chain: "unichain",
-    route: "merchant-aifp1",
-    chainId: 130,
-    viemChain: unichain,
-    splitter: "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74",
-    treasury: "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
-    treasuryBps: 100,
-    ipCreatorBps: 0,
-    runtimeCodeHash: "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
-    settlementEnabled: false,
-    validFrom: "2026-08-27T00:00:00.000Z",
-    validUntil: "2026-11-25T00:00:00.000Z",
-    defaultRpc: "https://mainnet.unichain.org",
-    explorer: "https://uniscan.xyz",
-  },
-  "xrplevm:agent-x402": {
-    chain: "xrplevm",
-    route: "agent-x402",
-    chainId: 1440000,
-    viemChain: xrplevm,
-    splitter: "0x7E92FbE28aAc3a3942FDf019d29172bd02c96Cf0",
-    treasury: "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
-    treasuryBps: 0,
-    ipCreatorBps: 0,
-    runtimeCodeHash: "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
-    settlementEnabled: false,
-    validFrom: "2026-08-27T00:00:00.000Z",
-    validUntil: "2026-11-25T00:00:00.000Z",
-    defaultRpc: "https://rpc.xrplevm.org",
-    explorer: "https://explorer.xrplevm.org",
-  },
-  "xrplevm:merchant-aifp1": {
-    chain: "xrplevm",
-    route: "merchant-aifp1",
-    chainId: 1440000,
-    viemChain: xrplevm,
-    splitter: "0xe855e491D0950140704DB9Cec6B7b3F725360a56",
-    treasury: "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
-    treasuryBps: 100,
-    ipCreatorBps: 0,
-    runtimeCodeHash: "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
-    settlementEnabled: false,
-    validFrom: "2026-08-27T00:00:00.000Z",
-    validUntil: "2026-11-25T00:00:00.000Z",
-    defaultRpc: "https://rpc.xrplevm.org",
-    explorer: "https://explorer.xrplevm.org",
-  },};
 
 export class UnknownSplitterRouteError extends Error {
   constructor(chain: string, route: string) {
@@ -424,11 +156,39 @@ export function resolveSettlingSplitterRoute(
         "successful mainnet paid end-to-end settlement with verified balance deltas",
     );
   }
+  // Every comparison below is written as "prove it is inside the window", never
+  // "prove it is outside". With `t < from` / `t >= until`, one malformed date
+  // parses to NaN, both comparisons are false, and the route settles with no
+  // time gate at all — the gate fails OPEN on exactly the input you cannot
+  // trust. Requiring the positive fact instead means NaN fails every check.
+  const from = Date.parse(entry.validFrom);
+  const until = Date.parse(entry.validUntil);
   const t = now.getTime();
-  if (t < Date.parse(entry.validFrom)) {
+
+  if (!Number.isFinite(from) || !Number.isFinite(until)) {
+    throw new SplitterRouteNotSettlingError(
+      key,
+      `its policy window is unreadable (validFrom ${entry.validFrom}, validUntil ` +
+        `${entry.validUntil}) — a window that cannot be parsed is not a window that has opened`,
+    );
+  }
+  if (!Number.isFinite(t)) {
+    throw new SplitterRouteNotSettlingError(
+      key,
+      "the current time was passed as an invalid Date, so the policy window cannot be evaluated",
+    );
+  }
+  if (from >= until) {
+    throw new SplitterRouteNotSettlingError(
+      key,
+      `its policy window is inverted (validFrom ${entry.validFrom} is not before ` +
+        `validUntil ${entry.validUntil})`,
+    );
+  }
+  if (!(t >= from)) {
     throw new SplitterRouteNotSettlingError(key, `its policy window opens ${entry.validFrom}`);
   }
-  if (t >= Date.parse(entry.validUntil)) {
+  if (!(t < until)) {
     throw new SplitterRouteNotSettlingError(
       key,
       `its policy window expired ${entry.validUntil} and has not been re-reviewed`,

@@ -48,6 +48,8 @@ export type {
 // ── Unified surface (Phase 1+ / legacy callers remain source-compatible) ──
 export {
   SPLITTER_ROUTES,
+  SPLITTER_GOVERNANCE,
+  SPLITTER_REGISTRY_SOURCE,
   resolveSplitterRoute,
   resolveSettlingSplitterRoute,
   UnknownSplitterRouteError,

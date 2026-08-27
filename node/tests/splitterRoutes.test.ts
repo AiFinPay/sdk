@@ -1,10 +1,12 @@
 // v1.3 route selection. Static-shape tests only, no network calls — every
 // value here was read from chain by verify-registry.mjs in evm-contract when
 // the registry was authored (2026-08-27).
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { getAddress } from "viem";
 import {
   SPLITTER_ROUTES,
+  SPLITTER_GOVERNANCE,
+  SPLITTER_REGISTRY_SOURCE,
   resolveSplitterRoute,
   resolveSettlingSplitterRoute,
   UnknownSplitterRouteError,
@@ -125,18 +127,134 @@ describe("resolveSplitterRoute", () => {
 describe("resolveSettlingSplitterRoute", () => {
   it("refuses a route that is not enabled for settlement", () => {
     expect(() => resolveSettlingSplitterRoute("polygon", "merchant-aifp1"))
-      .toThrow(SplitterRouteNotSettlingError);
+      .toThrow(/settlement is not enabled/);
   });
 
   it("still refuses an unknown pair", () => {
     expect(() => resolveSettlingSplitterRoute("polygon", "nope")).toThrow(UnknownSplitterRouteError);
   });
+});
 
-  it("refuses once the policy window has expired", () => {
-    const d = SPLITTER_ROUTES["polygon:merchant-aifp1"];
-    const after = new Date(Date.parse(d.validUntil) + 86_400_000);
-    // enabled or not, an expired window must never settle
-    expect(() => resolveSettlingSplitterRoute("polygon", "merchant-aifp1", after))
-      .toThrow(SplitterRouteNotSettlingError);
+/**
+ * The policy window, tested against a route that is actually enabled.
+ *
+ * Every shipped route has settlementEnabled false, so resolveSettlingSplitterRoute
+ * rejects on that before it ever looks at validFrom/validUntil. A window test
+ * written against a shipped route therefore passes without exercising the window
+ * at all — it proves the settlement flag works, twice. These install a synthetic
+ * enabled route instead, and assert on the REASON rather than just the throw, so
+ * a test cannot pass for the wrong reason again.
+ */
+describe("policy window (enabled route)", () => {
+  const KEY = "testchain:merchant-aifp1";
+  const FROM = "2026-08-27T00:00:00.000Z";
+  const UNTIL = "2026-11-25T00:00:00.000Z";
+
+  const install = (overrides: Partial<SplitterRouteDeployment> = {}) => {
+    const table = SPLITTER_ROUTES as unknown as Record<string, SplitterRouteDeployment>;
+    table[KEY] = {
+      ...SPLITTER_ROUTES["polygon:merchant-aifp1"],
+      settlementEnabled: true,
+      validFrom: FROM,
+      validUntil: UNTIL,
+      ...overrides,
+    };
+  };
+
+  afterEach(() => {
+    delete (SPLITTER_ROUTES as unknown as Record<string, SplitterRouteDeployment>)[KEY];
+  });
+
+  const resolve = (now: Date) => resolveSettlingSplitterRoute("testchain", "merchant-aifp1", now);
+
+  it("the synthetic route is genuinely enabled, so these tests exercise the window", () => {
+    install();
+    expect(SPLITTER_ROUTES[KEY as keyof typeof SPLITTER_ROUTES].settlementEnabled).toBe(true);
+    expect(() => resolve(new Date(FROM))).not.toThrow();
+  });
+
+  it("rejects before validFrom", () => {
+    install();
+    const before = new Date(Date.parse(FROM) - 1);
+    expect(() => resolve(before)).toThrow(SplitterRouteNotSettlingError);
+    expect(() => resolve(before)).toThrow(/policy window opens/);
+  });
+
+  it("allows exactly at validFrom — the window is inclusive at its start", () => {
+    install();
+    expect(resolve(new Date(FROM)).chain).toBe("polygon");
+  });
+
+  it("allows inside the window", () => {
+    install();
+    const middle = new Date((Date.parse(FROM) + Date.parse(UNTIL)) / 2);
+    expect(resolve(middle).settlementEnabled).toBe(true);
+  });
+
+  it("allows one millisecond before validUntil", () => {
+    install();
+    expect(() => resolve(new Date(Date.parse(UNTIL) - 1))).not.toThrow();
+  });
+
+  it("rejects exactly at validUntil — the window is exclusive at its end", () => {
+    install();
+    expect(() => resolve(new Date(UNTIL))).toThrow(/policy window expired/);
+  });
+
+  it("rejects after validUntil", () => {
+    install();
+    const after = new Date(Date.parse(UNTIL) + 86_400_000);
+    expect(() => resolve(after)).toThrow(/policy window expired/);
+  });
+
+  // The reason the comparisons are written as "prove it is inside the window".
+  // Date.parse("nonsense") is NaN, and NaN fails every comparison — so with
+  // `t < from` / `t >= until` both gates are false and the route settles with no
+  // time check at all. Fail-open, on precisely the input you cannot trust.
+  it.each([
+    ["validFrom", { validFrom: "not a date" }],
+    ["validUntil", { validUntil: "2026-13-45T99:99:99Z" }],
+    ["both", { validFrom: "", validUntil: "" }],
+  ])("fails closed when %s is malformed", (_label, overrides) => {
+    install(overrides as Partial<SplitterRouteDeployment>);
+    const middle = new Date((Date.parse(FROM) + Date.parse(UNTIL)) / 2);
+    expect(() => resolve(middle)).toThrow(SplitterRouteNotSettlingError);
+    expect(() => resolve(middle)).toThrow(/policy window is unreadable/);
+  });
+
+  it("fails closed when the window is inverted", () => {
+    install({ validFrom: UNTIL, validUntil: FROM });
+    expect(() => resolve(new Date(FROM))).toThrow(/policy window is inverted/);
+  });
+
+  it("fails closed when the caller passes an invalid Date as now", () => {
+    install();
+    expect(() => resolve(new Date("nonsense"))).toThrow(/invalid Date/);
+  });
+
+  it("the settlement flag still wins over a valid window", () => {
+    install({ settlementEnabled: false });
+    const middle = new Date((Date.parse(FROM) + Date.parse(UNTIL)) / 2);
+    expect(() => resolve(middle)).toThrow(/settlement is not enabled/);
+  });
+});
+
+describe("registry provenance", () => {
+  it("records the evm-contract commit the route table was generated from", () => {
+    expect(SPLITTER_REGISTRY_SOURCE.repo).toBe("AiFinPay/evm-contract");
+    expect(SPLITTER_REGISTRY_SOURCE.commit).toMatch(/^[0-9a-f]{40}$/);
+    expect(SPLITTER_REGISTRY_SOURCE.artifactSha256).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("every route is owned by the governance Safe the registry verified", () => {
+    for (const [key, d] of entries) {
+      expect(getAddress(d.owner), key).toBe(getAddress(SPLITTER_GOVERNANCE.safe));
+    }
+  });
+
+  it("governance is recorded as an exact shape, 3 of 5", () => {
+    expect(SPLITTER_GOVERNANCE.threshold).toBe(3);
+    expect(SPLITTER_GOVERNANCE.owners).toHaveLength(5);
+    expect(new Set(SPLITTER_GOVERNANCE.owners).size).toBe(5);
   });
 });
