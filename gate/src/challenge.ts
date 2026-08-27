@@ -49,6 +49,21 @@ export function buildChallenge(args: {
     // Unlike cards, there is no fixed floor per transaction, which is the only
     // reason a $0.0005 call is a viable product at all.
     no_minimum_fee: true,
+    // Where the chain and asset list lives, and why it is not here.
+    //
+    // An external QA pass on a partner integration read this 402 and reported
+    // "no chain ID, no token, no merchant address, no expiry" as a protocol
+    // defect. It is not — but the 402 never said where they were, so the
+    // reading was reasonable.
+    //
+    // They cannot be in a static challenge. accepted_chains is derived per
+    // merchant from `Object.keys(merchant.pay_to)` (backend/routes/aifp.js),
+    // accepted_assets drops POL whenever there is no live POL rate, and both
+    // change without this resource changing. A gate running on the partner's
+    // own host has none of that state. Naming the endpoint that does is the
+    // honest answer; inlining a guess would be a 402 that promises chains the
+    // quote will refuse.
+    settlement_terms_from: `POST ${api}/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry`,
     how_to_pay: [
       `POST ${api}/v1/quote {"merchant_id":"${merchantId}","resource":"${resource}","tier":"${tier}"}`,
       "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
