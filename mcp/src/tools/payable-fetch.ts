@@ -40,7 +40,7 @@ export function payableFetchTool() {
           type: "number",
           description:
             "Refuse to pay if the facilitator wants more than this. " +
-            "Defaults to AIFINPAY_MAX_USD env or no cap.",
+            "Capped by AIFINPAY_MAX_USD when the operator set one — this value can only lower it, never raise it.",
         },
         facilitator: {
           type: "string",
@@ -69,10 +69,29 @@ export async function runPayableFetch(
       ? (args.headers as Record<string, string>)
       : undefined;
 
-  const maxAmountUsd =
-    typeof args.max_amount_usd === "number"
+  // The model may NARROW the operator's cap, never widen it.
+  //
+  // This read `args.max_amount_usd ?? config.maxAmountUsd`, so a tool argument
+  // replaced the operator's limit outright: AIFINPAY_MAX_USD=0.10 and a model
+  // that asked for max_amount_usd: 1000 got 1000. The cap an operator sets is
+  // the one thing in this server they cannot express any other way, and it was
+  // the one a prompt could overwrite.
+  //
+  // Latent rather than exploited — payable_fetch is not registered on the
+  // current server — but the file is what SDK 2.0 re-registers, and a spend cap
+  // that a caller can raise is not a cap.
+  //
+  // Math.min in one direction only: unset operator cap means no policy to
+  // violate, so a model-supplied value stands on its own.
+  const requestedMax =
+    typeof args.max_amount_usd === "number" && Number.isFinite(args.max_amount_usd)
       ? args.max_amount_usd
-      : ctx.config.maxAmountUsd;
+      : undefined;
+  const operatorMax = ctx.config.maxAmountUsd;
+  const maxAmountUsd =
+    operatorMax === undefined ? requestedMax
+    : requestedMax === undefined ? operatorMax
+    : Math.min(operatorMax, requestedMax);
 
   const forcedFacilitator =
     typeof args.facilitator === "string" ? (args.facilitator as string) : undefined;
