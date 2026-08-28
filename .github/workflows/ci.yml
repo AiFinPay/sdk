@@ -69,6 +69,16 @@ jobs:
       - name: Registry — SPLITTER_ROUTES matches the canonical registry
         run: npm run registry:check
 
+      # The check above is offline and self-consistent: a writer who can change
+      # this repository can change the artifact, its recorded provenance and the
+      # generated table together, and the offline check would bless the set.
+      # This step breaks that loop by fetching the artifact from the OTHER
+      # repository at the exact commit provenance names and requiring the bytes
+      # to match. Both repositories are public, so no token is involved and
+      # there is nothing here for a compromised writer to forge.
+      - name: Registry — vendored artifact is byte-identical to evm-contract at the recorded commit
+        run: node scripts/check-registry-provenance.mjs
+
       - name: Build (tsc)
         run: npm run build
 
