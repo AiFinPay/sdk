@@ -91,6 +91,18 @@ export interface SplitterRouteDeployment {
    * settlement on that exact route with verified balance deltas.
    */
   settlementEnabled: boolean;
+  /**
+   * How many independent RPC providers agreed on every field above when the
+   * registry was verified. A route verified from one provider can never be
+   * enabled — BOT Chain and XRPL EVM have exactly one public provider each.
+   */
+  rpcQuorum: number;
+  /**
+   * Stablecoins the splitter accepts, read live via whitelistedTokens() and
+   * owner-mutable, so pinned separately from the runtime hash. null = not
+   * accepted on this chain; a chain with both null settles native only.
+   */
+  stablecoins: { USDC: `0x${string}` | null; USDT: `0x${string}` | null };
   /** Policy review window. Outside it, a route must not settle. */
   validFrom: string;
   validUntil: string;

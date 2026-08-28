@@ -123,6 +123,14 @@ function selectRoutes(artifact) {
     if (route.settlementEnabled !== false && route.settlementEnabled !== true) {
       throw new Error(`${key}: settlementEnabled must be a boolean.`);
     }
+    // The registry already refuses to enable a single-provider route; mirrored
+    // here so a hand-edited artifact cannot smuggle one past the SDK either.
+    if (route.settlementEnabled && (route.rpcQuorum ?? 0) < 2) {
+      throw new Error(`${key}: enabled for settlement but verified from ${route.rpcQuorum} provider(s).`);
+    }
+    if (!route.stablecoins || typeof route.stablecoins !== "object") {
+      throw new Error(`${key}: no stablecoins block — the allowlist is owner-mutable and must be recorded.`);
+    }
   }
 
   return selected;
@@ -151,6 +159,8 @@ function render({ artifact, source }, selected) {
     ipCreatorBps: ${r.ipCreatorBps},
     runtimeCodeHash: "${r.runtimeCodeHash}",
     settlementEnabled: ${r.settlementEnabled},
+    rpcQuorum: ${r.rpcQuorum},
+    stablecoins: ${JSON.stringify(r.stablecoins)},
     validFrom: "${r.validFrom}",
     validUntil: "${r.validUntil}",
     defaultRpc: "${t.rpc}",

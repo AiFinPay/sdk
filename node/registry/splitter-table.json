@@ -4,7 +4,7 @@
     "scripts/generate-sdk-table.mjs. CI regenerates this and fails on any",
     "difference, so hand-edits are rejected rather than shipped."
   ],
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "sourceUpdatedAt": "2026-08-28",
   "governance": {
     "safe": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
@@ -15,7 +15,17 @@
       "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
       "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
       "0x849930eB20ED0a697c71BcE565f18702D202C0F8"
-    ]
+    ],
+    "singleton": "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762",
+    "fallbackHandler": "0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99",
+    "guard": "0x0000000000000000000000000000000000000000",
+    "modules": []
+  },
+  "build": {
+    "contract": "B2BSplitterV13",
+    "solcVersion": "0.8.35",
+    "evmVersion": "cancun",
+    "contractsTreeHash": "1711d24b711c9d7c80136c5e5716691f35e45eb4"
   },
   "routes": {
     "polygon:legacy": {
@@ -30,6 +40,8 @@
       "treasury": "0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e",
       "treasuryBps": 100,
       "ipCreatorBps": 1,
+      "stablecoins": null,
+      "rpcQuorum": 2,
       "validFrom": "2026-08-04T00:00:00.000Z",
       "validUntil": "2026-09-03T00:00:00.000Z",
       "settlementEnabled": false,
@@ -47,6 +59,8 @@
       "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
       "treasuryBps": 100,
       "ipCreatorBps": 1,
+      "stablecoins": null,
+      "rpcQuorum": 2,
       "validFrom": "2026-08-04T00:00:00.000Z",
       "validUntil": "2026-09-03T00:00:00.000Z",
       "settlementEnabled": false,
@@ -64,6 +78,8 @@
       "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
       "treasuryBps": 100,
       "ipCreatorBps": 1,
+      "stablecoins": null,
+      "rpcQuorum": 2,
       "validFrom": "2026-08-04T00:00:00.000Z",
       "validUntil": "2026-09-03T00:00:00.000Z",
       "settlementEnabled": false,
@@ -81,6 +97,8 @@
       "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
       "treasuryBps": 100,
       "ipCreatorBps": 1,
+      "stablecoins": null,
+      "rpcQuorum": 2,
       "validFrom": "2026-08-04T00:00:00.000Z",
       "validUntil": "2026-09-03T00:00:00.000Z",
       "settlementEnabled": false,
@@ -98,6 +116,8 @@
       "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
       "treasuryBps": 100,
       "ipCreatorBps": 1,
+      "stablecoins": null,
+      "rpcQuorum": 1,
       "validFrom": "2026-08-04T00:00:00.000Z",
       "validUntil": "2026-09-03T00:00:00.000Z",
       "settlementEnabled": false,
@@ -115,6 +135,8 @@
       "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
       "treasuryBps": 100,
       "ipCreatorBps": 1,
+      "stablecoins": null,
+      "rpcQuorum": 1,
       "validFrom": "2026-08-04T00:00:00.000Z",
       "validUntil": "2026-09-03T00:00:00.000Z",
       "settlementEnabled": false,
@@ -132,6 +154,11 @@
       "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
       "treasuryBps": 100,
       "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+        "USDT": null
+      },
+      "rpcQuorum": 2,
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
@@ -149,6 +176,11 @@
       "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
       "treasuryBps": 0,
       "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+        "USDT": null
+      },
+      "rpcQuorum": 2,
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
@@ -166,6 +198,11 @@
       "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
       "treasuryBps": 100,
       "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+        "USDT": null
+      },
+      "rpcQuorum": 2,
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
@@ -183,6 +220,11 @@
       "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
       "treasuryBps": 0,
       "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+        "USDT": null
+      },
+      "rpcQuorum": 2,
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
@@ -200,6 +242,11 @@
       "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
       "treasuryBps": 100,
       "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": null,
+        "USDT": null
+      },
+      "rpcQuorum": 2,
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
@@ -217,6 +264,11 @@
       "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
       "treasuryBps": 0,
       "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": null,
+        "USDT": null
+      },
+      "rpcQuorum": 2,
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
@@ -234,6 +286,11 @@
       "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
       "treasuryBps": 100,
       "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
+        "USDT": null
+      },
+      "rpcQuorum": 2,
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
@@ -251,6 +308,11 @@
       "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
       "treasuryBps": 0,
       "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
+        "USDT": null
+      },
+      "rpcQuorum": 2,
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
@@ -268,6 +330,11 @@
       "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
       "treasuryBps": 100,
       "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": null,
+        "USDT": null
+      },
+      "rpcQuorum": 1,
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
@@ -285,6 +352,11 @@
       "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
       "treasuryBps": 0,
       "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": null,
+        "USDT": null
+      },
+      "rpcQuorum": 1,
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
@@ -302,6 +374,11 @@
       "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
       "treasuryBps": 100,
       "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "USDT": null
+      },
+      "rpcQuorum": 2,
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
@@ -319,6 +396,11 @@
       "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
       "treasuryBps": 0,
       "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "USDT": null
+      },
+      "rpcQuorum": 2,
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
@@ -336,6 +418,11 @@
       "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
       "treasuryBps": 100,
       "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+        "USDT": null
+      },
+      "rpcQuorum": 2,
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
@@ -353,6 +440,11 @@
       "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
       "treasuryBps": 0,
       "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+        "USDT": null
+      },
+      "rpcQuorum": 2,
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
@@ -370,6 +462,11 @@
       "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
       "treasuryBps": 100,
       "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+        "USDT": "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7"
+      },
+      "rpcQuorum": 2,
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
@@ -387,6 +484,11 @@
       "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
       "treasuryBps": 0,
       "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+        "USDT": "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7"
+      },
+      "rpcQuorum": 2,
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
@@ -404,6 +506,11 @@
       "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
       "treasuryBps": 100,
       "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": null,
+        "USDT": null
+      },
+      "rpcQuorum": 1,
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
@@ -421,6 +528,11 @@
       "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
       "treasuryBps": 0,
       "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": null,
+        "USDT": null
+      },
+      "rpcQuorum": 1,
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
