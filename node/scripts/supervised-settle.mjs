@@ -99,12 +99,33 @@ const txHash = rest[0];
 if (!/^0x[0-9a-fA-F]{64}$/.test(txHash ?? "")) die("verify needs a 0x transaction hash");
 const receipt = await client.getTransactionReceipt({ hash: txHash });
 if (receipt.status !== "success") die(`transaction ${txHash} reverted`);
-if (lc(receipt.to) !== lc(route.splitter)) die(`transaction went to ${receipt.to}, not the registry splitter ${route.splitter}`);
 const tx = await client.getTransaction({ hash: txHash });
-if (tx.input.slice(0, 10) !== SETTLEMENT_V13_SELECTORS.payNative) die(`calldata selector ${tx.input.slice(0, 10)} is not payNative (${SETTLEMENT_V13_SELECTORS.payNative})`);
 
-const paymentLog = receipt.logs.map((l) => { try { return decodeEventLog({ abi: V13_ABI, data: l.data, topics: l.topics }); } catch { return null; } }).find((e) => e?.eventName === "Payment");
-if (!paymentLog) die("no Payment event in the receipt");
+// Two ways a wallet reaches the splitter. Direct: tx.to is the splitter and
+// the calldata is payNative. Delegated: an EIP-7702 account (MetaMask "smart
+// account") sends through its delegation manager, which executes the call AS
+// the account — msg.sender stays the payer, so the Payment event still names
+// them and the balance deltas still land on them. Either is acceptable; what
+// is not negotiable is that the Payment event comes from the registry
+// splitter and names tx.from as payer. That is asserted below in both cases.
+const direct = lc(receipt.to) === lc(route.splitter);
+if (direct && tx.input.slice(0, 10) !== SETTLEMENT_V13_SELECTORS.payNative) {
+  die(`calldata selector ${tx.input.slice(0, 10)} is not payNative (${SETTLEMENT_V13_SELECTORS.payNative})`);
+}
+if (!direct) {
+  const auth = tx.authorizationList?.[0];
+  const senderCode = await client.getBytecode({ address: tx.from });
+  const delegated = senderCode?.startsWith("0xef0100") ? `0x${senderCode.slice(8, 48)}` : null;
+  if (!delegated && !auth) die(`transaction went to ${receipt.to}, not the registry splitter, and the sender is not an EIP-7702 account — refusing to guess`);
+  console.log(`ℹ delegated path: tx.to ${receipt.to} (${tx.type}); sender ${tx.from} delegates to ${delegated ?? auth?.address} — the splitter must still name the sender as payer`);
+}
+
+// The event must be emitted BY the registry splitter, not merely be present.
+const paymentLog = receipt.logs
+  .filter((l) => lc(l.address) === lc(route.splitter))
+  .map((l) => { try { return decodeEventLog({ abi: V13_ABI, data: l.data, topics: l.topics }); } catch { return null; } })
+  .find((e) => e?.eventName === "Payment");
+if (!paymentLog) die(`no Payment event emitted by the registry splitter ${route.splitter} in this receipt`);
 const ev = paymentLog.args;
 const gross = ev.totalAmount;
 const expected = split(gross);
@@ -112,7 +133,7 @@ const problems = [];
 if (ev.merchantAmount !== expected.merchant) problems.push(`event merchantAmount ${ev.merchantAmount} ≠ expected ${expected.merchant}`);
 if (ev.treasuryAmount !== expected.treasury) problems.push(`event treasuryAmount ${ev.treasuryAmount} ≠ expected ${expected.treasury}`);
 if (ev.ipCreatorAmount !== expected.creator) problems.push(`event ipCreatorAmount ${ev.ipCreatorAmount} ≠ expected ${expected.creator}`);
-if (tx.value !== gross) problems.push(`tx value ${tx.value} ≠ event totalAmount ${gross}`);
+if (direct && tx.value !== gross) problems.push(`tx value ${tx.value} ≠ event totalAmount ${gross}`);
 if (lc(ev.payer) !== lc(tx.from)) problems.push(`event payer ${ev.payer} ≠ tx.from ${tx.from}`);
 
 const before = receipt.blockNumber - 1n, at = receipt.blockNumber;
