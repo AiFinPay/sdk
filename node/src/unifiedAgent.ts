@@ -31,6 +31,13 @@ import {
 import { polygon, base, arbitrum, optimism, bsc, mainnet, unichain, type Chain } from "viem/chains";
 import { botchain, xrplevm } from "./chains.js";
 import {
+  V13_ABI,
+  trustedPinFromRegistry,
+  verifySettlementRouteOnChain,
+  type TrustedSettlementRoutePin,
+} from "./settlement.js";
+import { resolveSettlingSplitterRoute, type SplitterRouteDeployment } from "./splitterRoutes.js";
+import {
   Connection,
   Keypair,
   PublicKey,
@@ -1678,13 +1685,27 @@ export class AiFinPayAgent {
   get aifp1Receipts(): Aifp1ReceiptCache { return this._aifp1Cache; }
 
   /**
-   * Legacy fetchPaid cannot safely execute a v1.3 quote yet: it has no
-   * independently pinned runtime hash/profile input. Keep it fail-closed until
-   * it is wired through SettlementClient + executeSettlementInvoice.
+   * AIFP-1 v1.3 settlement, wired exactly as specified on 2026-08-27:
    *
-   * Tests replace this method with a chain stub; production never signs here.
+   *   protocol route → chain → resolveSettlingSplitterRoute → v1.3 tuple ABI
+   *   → signing → splitter
+   *
+   * with no fallback to SPLITTER_DEPLOYMENTS and nothing taken from a server.
+   * The contract address, its runtime hash and its owner all come from the
+   * canonical registry; the chain re-confirms each of them immediately before
+   * the wallet signs. The route must be enabled for settlement in that
+   * registry — today none is, so this throws SplitterRouteNotSettlingError —
+   * and enabling it is a registry decision made per chain-and-route after a
+   * supervised paid settlement (scripts/supervised-settle.mjs), not something
+   * this method can do.
+   *
+   * AIFP-1 quotes are denominated on Polygon (`quote.pay_to.polygon`), so the
+   * chain is fixed here rather than read from the quote: a quote cannot move a
+   * settlement to a chain the registry did not enable.
+   *
+   * Tests replace this method with a chain stub; production signs here.
    */
-  private async settleAifp1NativeV13(_p: {
+  private async settleAifp1NativeV13(p: {
     merchantWallet: `0x${string}`;
     grossWei: bigint;
     merchantWei: bigint;
@@ -1693,9 +1714,88 @@ export class AiFinPayAgent {
     validUntil: bigint;
     orderId: string;
   }): Promise<`0x${string}`> {
-    throw new AiFinPayError(
-      "AIFP-1 fetchPaid settlement is disabled until a trusted v1.3 deployment/runtime profile is supplied; use SettlementClient with an independent TrustedSettlementRoutePin",
+    const chain = "polygon" as const;
+    // Throws unless the registry has enabled polygon:merchant-aifp1.
+    const pin: TrustedSettlementRoutePin = trustedPinFromRegistry("AIFP-1", chain);
+    const route: SplitterRouteDeployment = resolveSettlingSplitterRoute(chain, "merchant-aifp1");
+
+    // The quote's split must be the registry's split. aifp1.ts has already
+    // validated the quote's own arithmetic; this checks it against the
+    // contract's immutable economics rather than against itself.
+    const expectedTreasury = (p.grossWei * BigInt(route.treasuryBps)) / 10_000n;
+    const expectedCreator = (p.grossWei * BigInt(route.ipCreatorBps)) / 10_000n;
+    const expectedMerchant = p.grossWei - expectedTreasury - expectedCreator;
+    if (p.treasuryWei !== expectedTreasury || p.creatorWei !== expectedCreator || p.merchantWei !== expectedMerchant) {
+      throw new AiFinPayError(
+        `AIFP-1 quote split ${p.merchantWei}/${p.treasuryWei}/${p.creatorWei} does not match the ` +
+          `${route.treasuryBps}/${route.ipCreatorBps} bps profile of ${chain}:${route.route}`,
+      );
+    }
+    if (route.ipCreatorBps === 0 && p.creatorWei !== 0n) {
+      throw new AiFinPayError("AIFP-1 route carries no creator leg; a non-zero creator amount is not settleable");
+    }
+
+    const { publicClient, walletClient } = this.v13Clients(route);
+    // Bytecode hash, bps and owner() read from the chain and compared to the
+    // registry pin. Fails closed on any disagreement or unreachable RPC.
+    await verifySettlementRouteOnChain(
+      {
+        route_class: "AIFP-1",
+        chain,
+        chain_id: route.chainId,
+        splitter_version: "1.3",
+        splitter: route.splitter,
+        runtime_code_hash: route.runtimeCodeHash,
+      } as unknown as Parameters<typeof verifySettlementRouteOnChain>[0],
+      publicClient,
+      pin,
     );
+
+    const balance = await publicClient.getBalance({ address: this.evmAccount.address });
+    if (balance < p.grossWei) {
+      throw new AiFinPayError(
+        `insufficient ${route.viemChain.nativeCurrency.symbol} on ${chain}: need ${p.grossWei} wei, have ${balance}`,
+      );
+    }
+
+    const txHash = await walletClient.writeContract({
+      address: route.splitter,
+      abi: V13_ABI,
+      functionName: "payNative",
+      args: [{
+        // The Payment event's paymentId and orderId are what the gateway
+        // verifies against the quote id (order_id_mismatch otherwise).
+        paymentId: paymentIdFor(p.orderId),
+        merchant: p.merchantWallet,
+        grossAmount: p.grossWei,
+        ipCreator: "0x0000000000000000000000000000000000000000",
+        validUntil: p.validUntil,
+        orderId: p.orderId,
+      }],
+      value: p.grossWei,
+      chain: route.viemChain,
+      account: this.evmAccount,
+    });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    if (receipt.status !== "success") {
+      throw new AiFinPayError(`${route.viemChain.name} v1.3 settlement reverted: ${txHash}`);
+    }
+    return txHash;
+  }
+
+  /**
+   * Clients for a v1.3 registry route. Transport comes from the route entry
+   * (or the caller's evmRpcUrls override) — never from SPLITTER_DEPLOYMENTS,
+   * so the v1.3 path has no dependency on the legacy table at all.
+   */
+  private v13Clients(route: SplitterRouteDeployment): { publicClient: PublicClient; walletClient: WalletClient } {
+    const override = (this.evmRpcUrls as Partial<Record<string, string>>)[route.chain]
+      ?? (route.chain === "polygon" ? this.polygonRpc : undefined);
+    const transport = http(override ?? route.defaultRpc);
+    return {
+      publicClient: createPublicClient({ chain: route.viemChain, transport }),
+      walletClient: createWalletClient({ chain: route.viemChain, transport, account: this.evmAccount }),
+    };
   }
 
   /**

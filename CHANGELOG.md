@@ -4,6 +4,41 @@ All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
 `1.0.0` onward the public API is stable and changes follow semver.
 
+## @aifinpay/agent 2.0.0-rc.5
+
+### Fixed
+
+- **The v1.3 settlement path could never have settled a real payment.**
+  `settlement.ts` encoded `payNative`/`payStable` with six flat parameters,
+  selector `0x8e4a8903`. The deployed `B2BSplitterV13` takes one struct and
+  carries only `0x27a3bbaf`. Proven on Polygon `merchant-aifp1` by `eth_call`:
+  the flat shape gets an empty revert before any logic runs; the tuple shape
+  reaches the contract and reverts with `IncorrectNativeValue`. No test caught
+  it because no test reached a contract. `V13_ABI` is now the tuple form,
+  `SETTLEMENT_V13_SELECTORS` pins the real selectors, and a test asserts them.
+  The canonical invoice `function` label is the tuple signature. (AIFINP-179)
+
+### Added
+
+- **The v1.3 execution path is wired**, exactly as specified on 2026-08-27:
+  protocol route → chain → `resolveSettlingSplitterRoute` → v1.3 tuple ABI →
+  signing → splitter. `trustedPinFromRegistry(routeClass, chain)` derives the
+  pin — address, runtime hash, owner — from the canonical registry with no
+  fallback to `SPLITTER_DEPLOYMENTS` and nothing taken from a server; a
+  backend invoice naming a different splitter is a hard reject.
+  `settleInvoice()` is the one-call form. `AiFinPayAgent.fetchPaid` now settles
+  AIFP-1 through it instead of throwing. `verifySettlementRouteOnChain` also
+  reads `owner()` and requires the governance Safe.
+- **Every route is still closed.** All 18 carry `settlementEnabled: false`,
+  so the path throws `SplitterRouteNotSettlingError` today; that is the gate
+  working, not a bug. It opens per chain-and-route in the registry, after a
+  supervised paid settlement.
+- `scripts/supervised-settle.mjs` — the deliberate circle-breaker (AIFINP-213).
+  `calldata` prints the exact transaction for a wallet to sign after
+  re-verifying hash, owner, bps and treasury against the chain; `verify`
+  proves a hash from chain state — Payment event, payer/merchant/treasury
+  balance deltas, splitter retaining nothing — and is the evidence that
+  enables the route. It never holds a key and never reads the SDK gate.
 ## aifinpay-agent 1.5.0 · @aifinpay/mcp 2.0.0-rc.3 — 2026-08-27
 
 **aifinpay-agent 1.5.0 changes where money goes. Read this before upgrading.**

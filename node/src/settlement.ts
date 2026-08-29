@@ -1,10 +1,17 @@
 import {
   keccak256,
+  toFunctionSelector,
   type Address,
   type Hex,
   type PublicClient,
   type WalletClient,
 } from "viem";
+import {
+  SPLITTER_GOVERNANCE,
+  resolveSettlingSplitterRoute,
+  type SplitterRoute,
+  type SplitterRouteDeployment,
+} from "./splitterRoutes.js";
 
 export type SettlementRouteClass = "AIFP-1" | "AIFP-2";
 export type SettlementEvmNetwork =
@@ -45,6 +52,13 @@ export interface TrustedSettlementRoutePin {
   splitter_version: "1.3";
   splitter: Address;
   runtime_code_hash: Hex;
+  /**
+   * The governance Safe the splitter must report as owner(). Present on every
+   * pin derived from the canonical registry; verified live before signing.
+   * The owner can move the treasury and rewrite the whitelist, so a pin
+   * without it is trusting a contract whose controller nobody checked.
+   */
+  owner?: Address;
 }
 
 export type TrustedSettlementRouteRegistry = Partial<Record<SettlementRouteClass, Partial<Record<SettlementEvmNetwork, TrustedSettlementRoutePin>>>>;
@@ -90,7 +104,7 @@ interface SettlementInvoiceBase {
 export interface NativeSettlementInvoice extends SettlementInvoiceBase {
   transaction: {
     kind: "evm_contract_call";
-    function: "payNative(bytes32,address,uint256,address,uint256,string)";
+    function: typeof V13_NATIVE_SIGNATURE;
     args: {
       paymentId: Hex;
       merchant: Address;
@@ -115,7 +129,7 @@ export interface StableSettlementInvoice extends SettlementInvoiceBase {
       amount: string;
     };
     settle: {
-      function: "payStable(bytes32,address,uint256,address,address,uint256,string)";
+      function: typeof V13_STABLE_SIGNATURE;
       args: {
         paymentId: Hex;
         token: Address;
@@ -175,30 +189,74 @@ const PROFILE_ABI = [
   { type: "function", name: "ipCreatorBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
 ] as const;
 
-const V13_ABI = [
+/**
+ * The deployed v1.3 entrypoints take ONE struct argument. The selector is
+ * derived from the tuple signature — payNative((bytes32,address,uint256,
+ * address,uint256,string)) = 0x27a3bbaf — and that is the only selector the
+ * deployed bytecode carries. The flat six-parameter spelling hashes to
+ * 0x8e4a8903, which the contract does not have: calldata in that shape gets
+ * an empty revert before any logic runs. This module encoded the flat shape
+ * until 2026-08-29, and no test caught it because no test reached a contract.
+ * SETTLEMENT_V13_SELECTORS below exists so a test can pin the real one.
+ */
+export const V13_NATIVE_SIGNATURE = "payNative((bytes32,address,uint256,address,uint256,string))" as const;
+export const V13_STABLE_SIGNATURE = "payStable((bytes32,address,uint256,address,address,uint256,string))" as const;
+
+const NATIVE_PAYMENT_COMPONENTS = [
+  { type: "bytes32", name: "paymentId" },
+  { type: "address", name: "merchant" },
+  { type: "uint256", name: "grossAmount" },
+  { type: "address", name: "ipCreator" },
+  { type: "uint256", name: "validUntil" },
+  { type: "string", name: "orderId" },
+] as const;
+
+const STABLE_PAYMENT_COMPONENTS = [
+  { type: "bytes32", name: "paymentId" },
+  { type: "address", name: "token" },
+  { type: "uint256", name: "grossAmount" },
+  { type: "address", name: "merchant" },
+  { type: "address", name: "ipCreator" },
+  { type: "uint256", name: "validUntil" },
+  { type: "string", name: "orderId" },
+] as const;
+
+export const V13_ABI = [
   {
     type: "function", name: "payNative", stateMutability: "payable",
-    inputs: [
-      { type: "bytes32", name: "paymentId" },
-      { type: "address", name: "merchant" },
-      { type: "uint256", name: "grossAmount" },
-      { type: "address", name: "ipCreator" },
-      { type: "uint256", name: "validUntil" },
-      { type: "string", name: "orderId" },
-    ], outputs: [],
+    inputs: [{ type: "tuple", name: "_payment", components: NATIVE_PAYMENT_COMPONENTS }],
+    outputs: [],
   },
   {
     type: "function", name: "payStable", stateMutability: "nonpayable",
-    inputs: [
-      { type: "bytes32", name: "paymentId" },
-      { type: "address", name: "token" },
-      { type: "uint256", name: "grossAmount" },
-      { type: "address", name: "merchant" },
-      { type: "address", name: "ipCreator" },
-      { type: "uint256", name: "validUntil" },
-      { type: "string", name: "orderId" },
-    ], outputs: [],
+    inputs: [{ type: "tuple", name: "_payment", components: STABLE_PAYMENT_COMPONENTS }],
+    outputs: [],
   },
+  {
+    type: "event", name: "Payment",
+    inputs: [
+      { type: "bytes32", name: "paymentId", indexed: true },
+      { type: "address", name: "payer", indexed: true },
+      { type: "address", name: "merchant", indexed: true },
+      { type: "address", name: "token", indexed: false },
+      { type: "uint256", name: "totalAmount", indexed: false },
+      { type: "uint256", name: "merchantAmount", indexed: false },
+      { type: "uint256", name: "treasuryAmount", indexed: false },
+      { type: "uint256", name: "ipCreatorAmount", indexed: false },
+      { type: "uint256", name: "validUntil", indexed: false },
+      { type: "string", name: "orderId", indexed: false },
+    ],
+  },
+] as const;
+
+/** The selectors the deployed v1.3 bytecode actually carries. */
+export const SETTLEMENT_V13_SELECTORS = Object.freeze({
+  payNative: toFunctionSelector(V13_NATIVE_SIGNATURE),
+  payStable: toFunctionSelector(V13_STABLE_SIGNATURE),
+});
+
+const OWNER_ABI = [
+  { type: "function", name: "owner", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
 ] as const;
 
 const ERC20_ABI = [
@@ -324,7 +382,7 @@ export function validateSettlementInvoice(invoice: SettlementInvoice): void {
     ) {
       throw new SettlementProtocolError("stable approval does not match invoice");
     }
-    if (invoice.transaction.settle.function !== "payStable(bytes32,address,uint256,address,address,uint256,string)") {
+    if (invoice.transaction.settle.function !== V13_STABLE_SIGNATURE) {
       throw new SettlementProtocolError("unexpected stable v1.3 function signature");
     }
     if (
@@ -338,7 +396,7 @@ export function validateSettlementInvoice(invoice: SettlementInvoice): void {
     return;
   }
 
-  if (invoice.transaction.function !== "payNative(bytes32,address,uint256,address,uint256,string)") {
+  if (invoice.transaction.function !== V13_NATIVE_SIGNATURE) {
     throw new SettlementProtocolError("unexpected native v1.3 function signature");
   }
   if (BigInt(invoice.transaction.value) !== gross || BigInt(invoice.transaction.args.grossAmount) !== gross) {
@@ -375,6 +433,68 @@ export function validateTrustedSettlementRoutePin(
       "trusted_pin_mismatch",
     );
   }
+}
+
+/** Protocol route class → canonical registry route. The only mapping there is. */
+export const ROUTE_FOR_CLASS: Record<SettlementRouteClass, SplitterRoute> = Object.freeze({
+  "AIFP-1": "merchant-aifp1",
+  "AIFP-2": "agent-x402",
+});
+
+/**
+ * Derive the trusted pin from the canonical registry, by protocol route and
+ * chain — never from the invoice, never from a chain-keyed table, never with
+ * a fallback. This is the resolver Dimitry specified on 2026-08-27:
+ *
+ *   protocol route → chain → resolveSettlingSplitterRoute → v1.3 tuple ABI →
+ *   signing → splitter
+ *
+ * It throws when the route is not enabled for settlement, and that is the
+ * point: enabling happens in the registry, one chain-and-route at a time,
+ * after a supervised paid settlement — not here, and not because a backend
+ * said so. The invoice's own splitter address is then checked AGAINST this
+ * pin by validateTrustedSettlementRoutePin; a mismatch is a hard reject.
+ */
+export function trustedPinFromRegistry(
+  routeClass: SettlementRouteClass,
+  chain: SettlementEvmNetwork,
+  now: Date = new Date(),
+): TrustedSettlementRoutePin {
+  const route: SplitterRouteDeployment = resolveSettlingSplitterRoute(chain, ROUTE_FOR_CLASS[routeClass], now);
+  const expected = EXPECTED_BPS[routeClass];
+  if (route.treasuryBps !== expected.treasury || route.ipCreatorBps !== expected.creator) {
+    // The registry and this module disagree about what the route class means.
+    // Neither is allowed to win silently.
+    throw new SettlementProtocolError(
+      `registry route ${chain}:${route.route} is ${route.treasuryBps}/${route.ipCreatorBps} but ` +
+        `${routeClass} is ${expected.treasury}/${expected.creator}`,
+      "profile_mismatch",
+    );
+  }
+  return {
+    route_class: routeClass,
+    chain,
+    chain_id: route.chainId,
+    splitter_version: "1.3",
+    splitter: route.splitter,
+    runtime_code_hash: route.runtimeCodeHash,
+    owner: route.owner,
+  };
+}
+
+/**
+ * Settle an invoice through the canonical registry. The pin comes from
+ * trustedPinFromRegistry, so there is nothing for a caller to get wrong and
+ * nothing for a backend to override.
+ */
+export async function settleInvoice(
+  invoice: SettlementInvoice,
+  walletClient: WalletClient,
+  publicClient: PublicClient,
+  now: Date = new Date(),
+): Promise<SettlementExecution> {
+  const pin = trustedPinFromRegistry(invoice.route_class, invoice.chain, now);
+  return executeSettlementInvoice(invoice, walletClient, publicClient, pin);
 }
 
 export class SettlementClient {
@@ -433,6 +553,17 @@ export async function verifySettlementRouteOnChain(
   const expected = EXPECTED_BPS[trustedPin.route_class];
   if (Number(treasuryBps) !== expected.treasury || Number(creatorBps) !== expected.creator) {
     throw new SettlementProtocolError("on-chain route economics do not match trusted route class", "profile_mismatch");
+  }
+  // Who controls the contract that is about to receive the money. A pin from
+  // the registry names the governance Safe; the contract must agree, or the
+  // treasury and whitelist above are only true until someone else changes them.
+  const expectedOwner = trustedPin.owner ?? SPLITTER_GOVERNANCE.safe;
+  const owner = await publicClient.readContract({ address: trustedPin.splitter, abi: OWNER_ABI, functionName: "owner" });
+  if (lc(owner) !== lc(expectedOwner)) {
+    throw new SettlementProtocolError(
+      `splitter owner is ${owner}, expected the governance Safe ${expectedOwner}`,
+      "owner_mismatch",
+    );
   }
 }
 
@@ -505,15 +636,15 @@ export async function executeSettlementInvoice(
       address: trustedPin.splitter,
       abi: V13_ABI,
       functionName: "payStable",
-      args: [
-        invoice.transaction.settle.args.paymentId,
-        invoice.transaction.settle.args.token,
-        BigInt(invoice.transaction.settle.args.grossAmount),
-        invoice.transaction.settle.args.merchant,
-        invoice.transaction.settle.args.ipCreator,
-        BigInt(invoice.transaction.settle.args.validUntil),
-        invoice.transaction.settle.args.orderId,
-      ],
+      args: [{
+        paymentId: invoice.transaction.settle.args.paymentId,
+        token: invoice.transaction.settle.args.token,
+        grossAmount: BigInt(invoice.transaction.settle.args.grossAmount),
+        merchant: invoice.transaction.settle.args.merchant,
+        ipCreator: invoice.transaction.settle.args.ipCreator,
+        validUntil: BigInt(invoice.transaction.settle.args.validUntil),
+        orderId: invoice.transaction.settle.args.orderId,
+      }],
       account,
       chain: walletClient.chain,
     });
@@ -522,14 +653,14 @@ export async function executeSettlementInvoice(
       address: trustedPin.splitter,
       abi: V13_ABI,
       functionName: "payNative",
-      args: [
-        invoice.transaction.args.paymentId,
-        invoice.transaction.args.merchant,
-        BigInt(invoice.transaction.args.grossAmount),
-        invoice.transaction.args.ipCreator,
-        BigInt(invoice.transaction.args.validUntil),
-        invoice.transaction.args.orderId,
-      ],
+      args: [{
+        paymentId: invoice.transaction.args.paymentId,
+        merchant: invoice.transaction.args.merchant,
+        grossAmount: BigInt(invoice.transaction.args.grossAmount),
+        ipCreator: invoice.transaction.args.ipCreator,
+        validUntil: BigInt(invoice.transaction.args.validUntil),
+        orderId: invoice.transaction.args.orderId,
+      }],
       value: BigInt(invoice.transaction.value),
       account,
       chain: walletClient.chain,

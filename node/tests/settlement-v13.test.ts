@@ -43,7 +43,7 @@ function nativeAifp1(): NativeSettlementInvoice {
     },
     transaction: {
       kind: "evm_contract_call",
-      function: "payNative(bytes32,address,uint256,address,uint256,string)",
+      function: "payNative((bytes32,address,uint256,address,uint256,string))",
       args: {
         paymentId,
         merchant,
@@ -93,7 +93,7 @@ function stableAifp2(): StableSettlementInvoice {
         amount: "1",
       },
       settle: {
-        function: "payStable(bytes32,address,uint256,address,address,uint256,string)",
+        function: "payStable((bytes32,address,uint256,address,address,uint256,string))",
         args: {
           paymentId,
           token,
