@@ -46,6 +46,23 @@ export type {
 } from "./settlement.js";
 
 // ── Unified surface (Phase 1+ / legacy callers remain source-compatible) ──
+export {
+  SPLITTER_ROUTES,
+  SPLITTER_GOVERNANCE,
+  SPLITTER_REGISTRY_SOURCE,
+  resolveSplitterRoute,
+  resolveSettlingSplitterRoute,
+  UnknownSplitterRouteError,
+  SplitterRouteNotSettlingError,
+} from "./splitterRoutes.js";
+export type {
+  SplitterRoute,
+  SplitterRouteChain,
+  SplitterRouteKey,
+  SplitterRouteDeployment,
+} from "./splitterRoutes.js";
+export { botchain, xrplevm } from "./chains.js";
+
 export { AiFinPayAgent, SPLITTER_DEPLOYMENTS, paymentIdFor } from "./unifiedAgent.js";
 export type {
   AiFinPayAgentOptions,

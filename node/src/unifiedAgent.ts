@@ -28,8 +28,8 @@ import {
   privateKeyToAccount,
   type PrivateKeyAccount,
 } from "viem/accounts";
-import { defineChain } from "viem";
 import { polygon, base, arbitrum, optimism, bsc, mainnet, unichain, type Chain } from "viem/chains";
+import { botchain, xrplevm } from "./chains.js";
 import {
   Connection,
   Keypair,
@@ -319,28 +319,9 @@ export function paymentIdFor(orderId: string): `0x${string}` {
 // on-chain (eth_getCode returned bytecode for every address below,
 // 2026-07-15). Do NOT add chains here without re-running that check.
 //
-// BOT Chain (677) and XRPL EVM (1440000) are not shipped with viem/chains,
-// so we defineChain() them locally.
-
-const botchain: Chain = defineChain({
-  id:   677,
-  name: "BOT Chain",
-  nativeCurrency: { name: "BOT", symbol: "BOT", decimals: 18 },
-  rpcUrls: { default: { http: ["https://rpc.botchain.ai"] } },
-  blockExplorers: {
-    default: { name: "BOT Chain Explorer", url: "https://scan.botchain.ai" },
-  },
-});
-
-const xrplevm: Chain = defineChain({
-  id:   1440000,
-  name: "XRPL EVM",
-  nativeCurrency: { name: "XRP", symbol: "XRP", decimals: 18 },
-  rpcUrls: { default: { http: ["https://rpc.xrplevm.org"] } },
-  blockExplorers: {
-    default: { name: "XRPL EVM Explorer", url: "https://explorer.xrplevm.org" },
-  },
-});
+// BOT Chain (677) and XRPL EVM (1440000) are not shipped with viem/chains.
+// They live in ./chains.js so this module and splitterRoutes.ts cannot drift
+// apart on a chain id or RPC.
 
 /** EVM chains with a live, on-chain-verified B2BSplitter deployment. */
 export type SplitterChainName =
