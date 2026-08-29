@@ -126,8 +126,15 @@ const payerDelta = payer0 - payer1;
 // Same-block noise (other txs touching these accounts) would show here as a
 // mismatch; that is a reason to look, not a reason to explain it away.
 if (payerDelta !== gross + gasPaid) problems.push(`payer balance fell by ${payerDelta}, expected gross ${gross} + gas ${gasPaid} = ${gross + gasPaid}`);
-if (merch1 - merch0 !== expected.merchant) problems.push(`merchant balance rose by ${merch1 - merch0}, expected ${expected.merchant}`);
-if (treas1 - treas0 !== expected.treasury) problems.push(`treasury balance rose by ${treas1 - treas0}, expected ${expected.treasury}`);
+if (lc(ev.merchant) === lc(treasury)) {
+  // Merchant and treasury are the same address (the governance Safe paying
+  // itself, as in the first supervised run): one balance, both legs.
+  const combined = expected.merchant + expected.treasury;
+  if (merch1 - merch0 !== combined) problems.push(`merchant=treasury balance rose by ${merch1 - merch0}, expected merchant ${expected.merchant} + treasury ${expected.treasury} = ${combined}`);
+} else {
+  if (merch1 - merch0 !== expected.merchant) problems.push(`merchant balance rose by ${merch1 - merch0}, expected ${expected.merchant}`);
+  if (treas1 - treas0 !== expected.treasury) problems.push(`treasury balance rose by ${treas1 - treas0}, expected ${expected.treasury}`);
+}
 if (splitter1 !== splitter0) problems.push(`splitter balance changed by ${splitter1 - splitter0}; it must retain nothing`);
 
 console.log(`\nPayment ${ev.paymentId} in block ${at}, tx ${txHash}`);
