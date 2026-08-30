@@ -142,11 +142,16 @@ const [payer0, payer1, merch0, merch1, treas0, treas1, splitter0, splitter1] = a
   bal(tx.from, before), bal(tx.from, at), bal(ev.merchant, before), bal(ev.merchant, at),
   bal(treasury, before), bal(treasury, at), bal(route.splitter, before), bal(route.splitter, at),
 ]);
-const gasPaid = receipt.gasUsed * receipt.effectiveGasPrice;
+// OP-stack chains (Base, Optimism, Unichain) charge an L1 data fee on top of
+// L2 gas. viem's op-stack formatters expose it as receipt.l1Fee; it is paid by
+// the sender and is not in gasUsed × effectiveGasPrice, so it belongs in the
+// payer's expected delta or every OP-stack payment reads as a mismatch.
+const l1Fee = typeof receipt.l1Fee === "bigint" ? receipt.l1Fee : 0n;
+const gasPaid = receipt.gasUsed * receipt.effectiveGasPrice + l1Fee;
 const payerDelta = payer0 - payer1;
 // Same-block noise (other txs touching these accounts) would show here as a
 // mismatch; that is a reason to look, not a reason to explain it away.
-if (payerDelta !== gross + gasPaid) problems.push(`payer balance fell by ${payerDelta}, expected gross ${gross} + gas ${gasPaid} = ${gross + gasPaid}`);
+if (payerDelta !== gross + gasPaid) problems.push(`payer balance fell by ${payerDelta}, expected gross ${gross} + gas ${gasPaid - l1Fee}${l1Fee ? ` + L1 fee ${l1Fee}` : ""} = ${gross + gasPaid}`);
 if (lc(ev.merchant) === lc(treasury)) {
   // Merchant and treasury are the same address (the governance Safe paying
   // itself, as in the first supervised run): one balance, both legs.
@@ -159,7 +164,7 @@ if (lc(ev.merchant) === lc(treasury)) {
 if (splitter1 !== splitter0) problems.push(`splitter balance changed by ${splitter1 - splitter0}; it must retain nothing`);
 
 console.log(`\nPayment ${ev.paymentId} in block ${at}, tx ${txHash}`);
-console.log(`  payer     ${ev.payer}  −${formatEther(gross)} −gas ${formatEther(gasPaid)}`);
+console.log(`  payer     ${ev.payer}  −${formatEther(gross)} −gas ${formatEther(gasPaid)}${l1Fee ? ` (incl. L1 fee ${formatEther(l1Fee)})` : ""}`);
 console.log(`  merchant  ${ev.merchant}  +${formatEther(ev.merchantAmount)}`);
 console.log(`  treasury  ${treasury}  +${formatEther(ev.treasuryAmount)}`);
 console.log(`  creator   ${formatEther(ev.ipCreatorAmount)}  (route carries ${route.ipCreatorBps} bps)`);
