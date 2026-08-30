@@ -92,6 +92,12 @@ export interface SplitterRouteDeployment {
    */
   settlementEnabled: boolean;
   /**
+   * Always false in the production table: the generator excludes any
+   * registry entry marked testnet. The field exists so the resolver can
+   * refuse one that arrives by any other path.
+   */
+  testnet: boolean;
+  /**
    * How many independent RPC providers agreed on every field above when the
    * registry was verified. A route verified from one provider can never be
    * enabled — BOT Chain and XRPL EVM have exactly one public provider each.
@@ -161,6 +167,13 @@ export function resolveSettlingSplitterRoute(
 ): SplitterRouteDeployment {
   const entry = resolveSplitterRoute(chain, route);
   const key = `${entry.chain}:${entry.route}`;
+  if (entry.testnet === true) {
+    throw new SplitterRouteNotSettlingError(
+      key,
+      "it is a testnet deployment — owned by a deployer key and verified from one provider — " +
+        "and this SDK settles real money only through governance-owned, multi-provider routes",
+    );
+  }
   if (!entry.settlementEnabled) {
     throw new SplitterRouteNotSettlingError(
       key,
