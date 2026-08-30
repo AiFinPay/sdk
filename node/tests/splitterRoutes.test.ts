@@ -232,6 +232,17 @@ describe("policy window (enabled route)", () => {
     expect(() => resolve(new Date("nonsense"))).toThrow(/invalid Date/);
   });
 
+  it("refuses a testnet route even when it is enabled and inside its window", () => {
+    install({ testnet: true, settlementEnabled: true });
+    const middle = new Date((Date.parse(FROM) + Date.parse(UNTIL)) / 2);
+    expect(() => resolve(middle)).toThrow(SplitterRouteNotSettlingError);
+    expect(() => resolve(middle)).toThrow(/testnet deployment/);
+  });
+
+  it("no shipped route is a testnet", () => {
+    for (const [key, d] of entries) expect(d.testnet, key).toBe(false);
+  });
+
   it("the settlement flag still wins over a valid window", () => {
     install({ settlementEnabled: false });
     const middle = new Date((Date.parse(FROM) + Date.parse(UNTIL)) / 2);

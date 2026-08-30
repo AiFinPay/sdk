@@ -94,9 +94,20 @@ function loadArtifact() {
  * splitter cannot silently fall back to one.
  */
 function selectRoutes(artifact) {
+  // A testnet entry (evm-contract #30: `testnet: true`, only ever on a chain
+  // in the registry's closed testnet set) is deliberately NOT representable
+  // in the production table. It is owned by a deployer key and verified from
+  // one provider — both fine for a rehearsal, neither acceptable for a route
+  // this SDK will settle real money through. Excluded here, so the resolver
+  // cannot name it at all; and refused again in resolveSettlingSplitterRoute
+  // in case an artifact ever reaches it another way.
+  const testnet = Object.entries(artifact.routes).filter(([, r]) => r.testnet === true);
   const selected = Object.entries(artifact.routes)
-    .filter(([, route]) => route.version === "1.3" && !route.superseded)
+    .filter(([, route]) => route.version === "1.3" && !route.superseded && route.testnet !== true)
     .sort(([a], [b]) => (a < b ? -1 : 1));
+  if (testnet.length) {
+    console.log(`  ${testnet.length} testnet route(s) in the artifact, excluded from the production table: ${testnet.map(([k]) => k).join(", ")}`);
+  }
 
   if (selected.length !== EXPECTED_ROUTE_COUNT) {
     throw new Error(
@@ -159,6 +170,7 @@ function render({ artifact, source }, selected) {
     ipCreatorBps: ${r.ipCreatorBps},
     runtimeCodeHash: "${r.runtimeCodeHash}",
     settlementEnabled: ${r.settlementEnabled},
+    testnet: false,
     rpcQuorum: ${r.rpcQuorum},
     stablecoins: ${JSON.stringify(r.stablecoins)},
     validFrom: "${r.validFrom}",

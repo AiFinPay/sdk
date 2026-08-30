@@ -31,6 +31,13 @@ export {
   executeSettlementInvoice,
   SETTLEMENT_CHAIN_IDS,
   SETTLEMENT_EXPECTED_BPS,
+  settleInvoice,
+  trustedPinFromRegistry,
+  ROUTE_FOR_CLASS,
+  SETTLEMENT_V13_SELECTORS,
+  V13_ABI,
+  V13_NATIVE_SIGNATURE,
+  V13_STABLE_SIGNATURE,
 } from "./settlement.js";
 export type {
   SettlementRouteClass,
