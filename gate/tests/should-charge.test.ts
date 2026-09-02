@@ -170,3 +170,28 @@ describe("shouldCharge — who pays on a content site", () => {
     if (!r.ok) expect(r.status).toBe(403);
   });
 });
+
+describe("our own clients are agents", () => {
+  // Until 2026-09-02 they were not on the list, and a page gate using
+  // knownAiAgent served them 200 — so an agent built on our own SDK never saw
+  // the 402 and never paid. Verified live against a partner's gate: with
+  // aifinpay-agent-node/0.3.0 the response was 200, with GPTBot it was 402.
+  //
+  // The AIFP-Agent-Id branch already covers the AIFP-1 client, which sets that
+  // header on every request. It does not cover node/src/agent.ts, and the
+  // Python client sets it nowhere, so the outcome depended on which of our own
+  // clients the integrator picked.
+  it("recognises the node client", () => {
+    expect(knownAiAgent(req("/movies/x", { "user-agent": "aifinpay-agent-node/0.3.0" }))).toBe(true);
+  });
+
+  it("recognises the python client", () => {
+    expect(knownAiAgent(req("/movies/x", { "user-agent": "aifinpay-agent-py/1.0.0" }))).toBe(true);
+  });
+
+  it("still lets a browser through", () => {
+    expect(
+      knownAiAgent(req("/movies/x", { "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" })),
+    ).toBe(false);
+  });
+});
