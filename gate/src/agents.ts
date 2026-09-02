@@ -69,6 +69,19 @@ export const AI_AGENT_UA_MARKERS: readonly string[] = [
   "cohere-ai",
   "ai2bot",
   "mistralai",
+
+  // Our own clients. An agent built on @aifinpay/agent or aifinpay-agent (py)
+  // is an AI agent by construction, and until 2026-09-02 this list did not say
+  // so: aifinpay-agent-node/0.3.0 and aifinpay-agent-py/1.0.0 were served 200
+  // by a page gate using knownAiAgent, so they never saw the 402 and never
+  // paid. Verified live against a partner's gate before and after.
+  //
+  // The AIFP-Agent-Id check above already covers the AIFP-1 client, which sets
+  // that header on every request including the first. It does NOT cover
+  // node/src/agent.ts, and the Python client sets it nowhere — so the outcome
+  // depended on which of our own clients an integrator picked. Naming the UA
+  // makes it depend on nothing.
+  "aifinpay-agent",
   // Automation frameworks in their DEFAULT configuration. Headless
   // Chromium/Chrome announces itself as "HeadlessChrome/126…" unless the
   // driver overrides the UA — so an un-disguised Playwright/Puppeteer visit
