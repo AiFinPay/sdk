@@ -32,6 +32,7 @@ export {
   SETTLEMENT_CHAIN_IDS,
   SETTLEMENT_EXPECTED_BPS,
 } from "./settlement.js";
+export * from "./settlementV14.js";
 export type {
   SettlementRouteClass,
   SettlementEvmNetwork,
