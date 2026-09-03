@@ -19,6 +19,8 @@ import { PROTOCOL_FEE_BPS, minRequestsForTier, unitPriceUsd } from "./pricing.js
 export function buildChallenge(args: {
   merchantId: string;
   resource: string;
+  /** Which paths a receipt for this resource opens. Defaults to "exact". */
+  scope?: "exact" | "prefix" | "merchant";
   tier: Tier;
   weight: number;
   detail?: string;
@@ -45,6 +47,15 @@ export function buildChallenge(args: {
     unit_weight: weight,
     unit_price_usd: args.unitPriceUsd ?? unitPriceUsd(tier),
     min_requests: args.minRequests ?? minRequestsForTier(tier),
+    // Which paths a receipt bought for THIS resource will open.
+    //
+    // Unlike the chain list below, a self-hosted gate DOES know this: scope is
+    // a property of the mount, not of the merchant's payout state. Its absence
+    // is what a QA pass spent a day on — an agent buying for "/genres" could
+    // not tell whether that covered "/genres/action", and found out by paying
+    // and being refused. Fixing the scope COMPARISON (0.2.3) does not help
+    // while the challenge never says which scope was sold.
+    scope: args.scope ?? "exact",
     protocol_fee_bps: PROTOCOL_FEE_BPS,
     // Unlike cards, there is no fixed floor per transaction, which is the only
     // reason a $0.0005 call is a viable product at all.
