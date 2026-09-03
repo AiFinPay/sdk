@@ -108,6 +108,9 @@ export interface GateErrorBody {
   protocol?: "AIFP-1";
   merchant_id?: string;
   resource?: string;
+  /** Which paths a receipt for this resource opens. "exact" unless the mount
+   *  says otherwise — an agent cannot tell what it is buying without this. */
+  scope?: "exact" | "prefix" | "merchant";
   tier?: Tier;
   unit_weight?: number;
   unit_price_usd?: string;
