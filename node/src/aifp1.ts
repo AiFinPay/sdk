@@ -130,6 +130,84 @@ export interface Aifp1Quote {
   expires_at: string;
 }
 
+/**
+ * A one-object, human-and-LLM-readable summary of what a quote actually buys.
+ *
+ * The raw quote answers "1.06 POL" and leaves the agent — or the person reading
+ * over its shoulder — to work out FOR WHAT. That is the gap an agent-flow audit
+ * flagged: a payment prompt that states an amount without the terms is a prompt
+ * a careful agent should refuse, and a careless one over-pays on. Every field
+ * here already exists in the quote; this just assembles them into the sentence
+ * a reasonable payer needs before signing.
+ */
+export interface QuoteSummary {
+  /** One line, safe to show a user or feed an LLM: what, how much, how many, until when. */
+  headline: string;
+  amount_usd: string;
+  /** The on-chain figure and its asset, when the quote is settled natively. */
+  pay: { amount: string; asset: string } | null;
+  /** How many requests this batch covers, and each request's weight. */
+  requests: number;
+  unit_quota: number;
+  /** WHERE the batch may be spent — the single most misread field (see the
+   *  wildcard bug): "exact" buys one path, "prefix" buys a subtree. */
+  scope: Aifp1Scope;
+  resource: string;
+  /** When the quote stops being settleable. */
+  expires_at: string;
+  /** The protocol fee, stated up front. */
+  fee_bps: number | null;
+}
+
+export function describeQuote(q: Aifp1Quote): QuoteSummary {
+  const ns = q.native_settlement;
+  const pay = ns
+    ? { amount: formatUnits(ns.total_wei, ns.decimals), asset: ns.asset }
+    : null;
+
+  // Fee as basis points, from the split the quote already carries. Stated so the
+  // agent sees the rate, not just the total — the same reason the 402 does.
+  let feeBps: number | null = null;
+  try {
+    const total = BigInt(q.settlement.gross_units);
+    const merchant = BigInt(q.settlement.merchant_units);
+    if (total > 0n) feeBps = Number(((total - merchant) * 10000n) / total);
+  } catch { /* leave null rather than guess */ }
+
+  const where =
+    q.scope === "merchant" ? `anything on ${q.merchant_id}`
+    : q.scope === "prefix" ? `any path under ${q.resource}`
+    : q.resource;
+
+  const payPart = pay ? `${pay.amount} ${pay.asset}` : `$${q.amount}`;
+  const headline =
+    `Pay ${payPart} ($${q.amount}) for ${q.requests} request${q.requests === 1 ? "" : "s"} ` +
+    `to ${where}` +
+    (feeBps != null ? ` (incl. ${(feeBps / 100).toFixed(2)}% fee)` : "") +
+    `, valid until ${q.expires_at}.`;
+
+  return {
+    headline,
+    amount_usd: q.amount,
+    pay,
+    requests: q.requests,
+    unit_quota: q.unit_quota,
+    scope: q.scope,
+    resource: q.resource,
+    expires_at: q.expires_at,
+    fee_bps: feeBps,
+  };
+}
+
+/** wei/lamports → a decimal string with the asset's own decimals, no float. */
+function formatUnits(raw: string, decimals: number): string {
+  const n = BigInt(raw);
+  const base = 10n ** BigInt(decimals);
+  const whole = n / base;
+  const frac = (n % base).toString().padStart(decimals, "0").replace(/0+$/, "");
+  return frac ? `${whole}.${frac}` : `${whole}`;
+}
+
 /** POST /v1/pay 200 body — routes/aifp.js. */
 export interface Aifp1PayResult {
   receipt_id:  string;
