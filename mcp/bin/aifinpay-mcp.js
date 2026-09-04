@@ -31,6 +31,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync, chmodSync
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { createRequire } from "node:module";
+import { scryptSync, randomBytes, createCipheriv, createDecipheriv } from "node:crypto";
 
 const HOME = process.env.AIFINPAY_HOME || join(homedir(), ".aifinpay");
 const KEYSTORE = join(HOME, "agent.json");
@@ -77,14 +78,41 @@ if (arg === "--version" || arg === "-v" || arg === "version") {
 
 // ── init ──────────────────────────────────────────────────────────────────
 
+const PASSPHRASE = process.env.AIFINPAY_WALLET_PASSPHRASE || null;
+
+// Optional at-rest encryption. Mode 600 keeps the keystore from OTHER users; it
+// does nothing against malware running as YOU — the threat the OSINT write-up of
+// a compromised dev machine described. A passphrase makes the on-disk file
+// ciphertext; the secret is only in memory while the passphrase is supplied.
+// Opt-in and env-supplied so the non-interactive `npx @aifinpay/mcp` launch path
+// is unaffected: no passphrase => plaintext, exactly as before. scrypt to
+// stretch, AES-256-GCM so tampering is detected rather than decrypting to junk.
+function encryptSecret(secretB58) {
+  const salt = randomBytes(16), iv = randomBytes(12);
+  const key = scryptSync(PASSPHRASE, salt, 32, { N: 1 << 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const ct = Buffer.concat([cipher.update(secretB58, "utf8"), cipher.final()]);
+  return { enc: "scrypt-aes-256-gcm", salt: salt.toString("base64"), iv: iv.toString("base64"),
+           tag: cipher.getAuthTag().toString("base64"), ct: ct.toString("base64"),
+           created: new Date().toISOString() };
+}
+function decryptSecret(store) {
+  if (!PASSPHRASE) throw new Error(`${KEYSTORE} is encrypted but AIFINPAY_WALLET_PASSPHRASE is not set.`);
+  const key = scryptSync(PASSPHRASE, Buffer.from(store.salt, "base64"), 32, { N: 1 << 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+  const dc = createDecipheriv("aes-256-gcm", key, Buffer.from(store.iv, "base64"));
+  dc.setAuthTag(Buffer.from(store.tag, "base64"));
+  try { return Buffer.concat([dc.update(Buffer.from(store.ct, "base64")), dc.final()]).toString("utf8"); }
+  catch { throw new Error(`could not decrypt ${KEYSTORE}: wrong AIFINPAY_WALLET_PASSPHRASE or the file was modified.`); }
+}
+
 function readKeystore() {
   if (!existsSync(KEYSTORE)) return null;
-  try {
-    const parsed = JSON.parse(readFileSync(KEYSTORE, "utf8"));
-    return typeof parsed?.secretB58 === "string" ? parsed : null;
-  } catch {
-    return null;
-  }
+  let parsed;
+  try { parsed = JSON.parse(readFileSync(KEYSTORE, "utf8")); } catch { return null; }
+  // A decrypt failure THROWS rather than returning null — null reads as "no
+  // wallet" and mints a new one, which is how a mistyped passphrase loses a key.
+  if (parsed?.enc) return { secretB58: decryptSecret(parsed), created: parsed.created, encrypted: true };
+  return typeof parsed?.secretB58 === "string" ? parsed : null;
 }
 
 if (arg === "init") {
@@ -98,10 +126,16 @@ if (arg === "init") {
     process.stdout.write(`Existing wallet found at ${KEYSTORE} — keeping it.\n\n`);
   } else {
     mkdirSync(HOME, { recursive: true, mode: 0o700 });
-    store = { secretB58: Agent.new().secretB58, created: new Date().toISOString() };
-    writeFileSync(KEYSTORE, JSON.stringify(store, null, 2) + "\n", { mode: 0o600 });
+    const secretB58 = Agent.new().secretB58;
+    store = { secretB58, created: new Date().toISOString() };
+    const onDisk = PASSPHRASE ? encryptSecret(secretB58) : store;
+    writeFileSync(KEYSTORE, JSON.stringify(onDisk, null, 2) + "\n", { mode: 0o600 });
     chmodSync(KEYSTORE, 0o600); // writeFileSync honours umask; this does not
-    process.stdout.write(`Created ${KEYSTORE} (mode 600).\n\n`);
+    process.stdout.write(
+      PASSPHRASE
+        ? `Created ${KEYSTORE} (mode 600, ENCRYPTED). Keep AIFINPAY_WALLET_PASSPHRASE — the wallet is unrecoverable without it.\n\n`
+        : `Created ${KEYSTORE} (mode 600, plaintext). For at-rest encryption, set AIFINPAY_WALLET_PASSPHRASE before init.\n\n`,
+    );
   }
 
   const agent = await AiFinPayAgent.fromSolanaSecret(store.secretB58);
