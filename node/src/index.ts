@@ -97,6 +97,7 @@ export {
   prefixHint,
   parseGatewayUrl,
   idempotencyKeyFor,
+  describeQuote,
 } from "./aifp1.js";
 export type {
   Aifp1Scope,
@@ -106,6 +107,7 @@ export type {
   Aifp1CachedReceipt,
   Aifp1FetchOptions,
   Aifp1Deps,
+  QuoteSummary,
 } from "./aifp1.js";
 export {
   Aifp1Error,
