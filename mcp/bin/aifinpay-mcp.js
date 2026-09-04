@@ -119,6 +119,7 @@ if (arg === "init") {
   const { Agent, AiFinPayAgent } = await import("@aifinpay/agent");
 
   let store = readKeystore();
+  const freshlyCreated = !store;
   if (store) {
     // Never silently overwrite. The file is the only copy of a key that may
     // already hold funds; a second `init` that regenerated it would destroy a
@@ -135,6 +136,29 @@ if (arg === "init") {
       PASSPHRASE
         ? `Created ${KEYSTORE} (mode 600, ENCRYPTED). Keep AIFINPAY_WALLET_PASSPHRASE — the wallet is unrecoverable without it.\n\n`
         : `Created ${KEYSTORE} (mode 600, plaintext). For at-rest encryption, set AIFINPAY_WALLET_PASSPHRASE before init.\n\n`,
+    );
+  }
+
+  // The one-time recovery output.
+  //
+  // Shown ONLY on creation, ONLY in the terminal, and ONLY when the keystore is
+  // plaintext. This is NOT the leak the audit (AIFINP-220 §3) forbids — that is
+  // a key written to CHAT or LOGS, where an LLM provider or a log shipper keeps
+  // it forever. This is the deliberate one-time backup prompt every wallet CLI
+  // shows, on a channel the user controls. Opposite things: the owner reading
+  // their own recovery phrase once, vs a secret leaking into a transcript.
+  //
+  // Encrypted keystores print nothing here: recovery there IS the keystore file
+  // plus the passphrase, and re-printing the plaintext secret would defeat the
+  // encryption the user just asked for.
+  if (freshlyCreated && !PASSPHRASE) {
+    process.stdout.write(
+      `\n  RECOVERY KEY (shown once, never again):\n\n` +
+      `    ${store.secretB58}\n\n` +
+      `  Save this off this machine NOW. Anyone with it controls the wallet and\n` +
+      `  its funds. Do NOT paste it into a chat, an issue, or a config file — the\n` +
+      `  keystore at ${KEYSTORE} already holds it (encrypt it with\n` +
+      `  AIFINPAY_WALLET_PASSPHRASE). This line is your OFF-machine backup.\n\n`,
     );
   }
 
