@@ -129,6 +129,45 @@ describe("aifinpay-mcp flags", () => {
     expect(run(["--version"]).trim()).toMatch(/^\d+\.\d+\.\d+/);
   });
 
+  it("with a passphrase, the secret is NOT on disk in the clear", () => {
+    const out = run(["init"], { AIFINPAY_WALLET_PASSPHRASE: "correct horse battery staple" });
+    const raw = readFileSync(join(home, "agent.json"), "utf8");
+    const parsed = JSON.parse(raw);
+    expect(parsed.enc).toBe("scrypt-aes-256-gcm");
+    expect(parsed.secretB58).toBeUndefined();
+    const addr = out.match(EVM)?.[0];
+    expect(addr).toBeTruthy();
+    expect(raw).not.toContain(addr!.slice(2));
+    expect(out).toMatch(/ENCRYPTED/);
+  });
+
+  it("the same passphrase reproduces the same wallet", () => {
+    const pass = { AIFINPAY_WALLET_PASSPHRASE: "s3cret" };
+    const first = run(["init"], pass).match(EVM)?.[0];
+    const second = run(["init"], pass).match(EVM)?.[0];
+    expect(second).toBe(first);
+  });
+
+  it("a wrong passphrase fails loudly and does NOT mint a new wallet", () => {
+    run(["init"], { AIFINPAY_WALLET_PASSPHRASE: "right" });
+    const before = readFileSync(join(home, "agent.json"), "utf8");
+    expect(() => run(["init"], { AIFINPAY_WALLET_PASSPHRASE: "wrong" })).toThrow();
+    expect(readFileSync(join(home, "agent.json"), "utf8")).toBe(before);
+  });
+
+  it("an encrypted keystore with no passphrase set refuses rather than guessing", () => {
+    run(["init"], { AIFINPAY_WALLET_PASSPHRASE: "p" });
+    expect(() => run([])).toThrow();
+  });
+
+  it("without a passphrase, behaviour is unchanged — plaintext, and it says so", () => {
+    const out = run(["init"]);
+    const parsed = JSON.parse(readFileSync(join(home, "agent.json"), "utf8"));
+    expect(typeof parsed.secretB58).toBe("string");
+    expect(parsed.enc).toBeUndefined();
+    expect(out).toMatch(/plaintext/);
+  });
+
   it("an unknown command fails instead of silently starting", () => {
     // Silently starting a server on a typo is how someone ends up funding an
     // ephemeral address.
