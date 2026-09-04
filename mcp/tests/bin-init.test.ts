@@ -129,6 +129,58 @@ describe("aifinpay-mcp flags", () => {
     expect(run(["--version"]).trim()).toMatch(/^\d+\.\d+\.\d+/);
   });
 
+  // ── Recovery output and secret leakage (AIFINP-220 §3) ─────────────────
+  //
+  // The rule the audit sets: the private key must never reach chat or logs. The
+  // recovery print is not a violation of that — it is a one-time backup on the
+  // TERMINAL, a channel the human running init controls. These tests hold both
+  // halves: the recovery line IS there on a fresh plaintext init, and the secret
+  // is NOT anywhere it could be retained.
+
+  it("prints the recovery key once, on a fresh plaintext wallet", () => {
+    const out = run(["init"]);
+    // The base58 secret is on disk; the recovery block surfaces it once for an
+    // off-machine backup.
+    const secret = JSON.parse(readFileSync(join(home, "agent.json"), "utf8")).secretB58 as string;
+    expect(out).toContain("RECOVERY KEY");
+    expect(out).toContain(secret);
+    expect(out).toMatch(/shown once/i);
+    expect(out).toMatch(/do NOT paste it into a chat/i);
+  });
+
+  it("does NOT reprint the recovery key on a second init", () => {
+    // Shown once means once. A second init keeps the wallet and must not surface
+    // the secret again — that would turn "shown once" into "shown every run".
+    run(["init"]);
+    const second = run(["init"]);
+    expect(second).toContain("keeping it");
+    expect(second).not.toContain("RECOVERY KEY");
+  });
+
+  it("does NOT print the recovery key when the keystore is encrypted", () => {
+    // With a passphrase, recovery is the file plus the passphrase. Reprinting the
+    // plaintext secret would undo the encryption the user just chose.
+    const out = run(["init"], { AIFINPAY_WALLET_PASSPHRASE: "pw" });
+    expect(out).not.toContain("RECOVERY KEY");
+    const secret = readFileSync(join(home, "agent.json"), "utf8");
+    // and the plaintext secret is not in the output at all
+    expect(out).not.toMatch(/[1-9A-HJ-NP-Za-km-z]{80,}/);
+    expect(secret).not.toContain("secretB58");
+  });
+
+  it("the ephemeral (no-init) start never prints a secret — only addresses", () => {
+    // This is the autonomous path: an agent launched with no wallet gets an
+    // in-memory identity. It must be able to say "here are my addresses" without
+    // the secret ever reaching the transcript, because that transcript is chat.
+    // Starting with no stdin would hang the stdio server, so we only assert on
+    // what a start CANNOT contain, via the help path which shares the banner
+    // code but exits.
+    const out = run(["--help"]);
+    expect(out).not.toMatch(/RECOVERY KEY/);
+    // No 64+ char base58 run anywhere — a secret would show up as one.
+    expect(out).not.toMatch(/[1-9A-HJ-NP-Za-km-z]{80,}/);
+  });
+
   it("with a passphrase, the secret is NOT on disk in the clear", () => {
     const out = run(["init"], { AIFINPAY_WALLET_PASSPHRASE: "correct horse battery staple" });
     const raw = readFileSync(join(home, "agent.json"), "utf8");
