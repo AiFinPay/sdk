@@ -1,0 +1,27 @@
+# Pinning every action to a commit SHA closes the supply-chain hole that a
+# mutable tag leaves open: `@v4` is a pointer its owner can move, and whatever
+# it points at runs inside CI with whatever that job can reach.
+#
+# But a pin with nothing to move it is its own defect. It trades "an action can
+# change under us" for "an action can never be patched", and the second failure
+# is silent — no alert fires for a security release we simply never took. So
+# the pin and this file ship together; neither is complete alone.
+#
+# The `# v4` comment beside each SHA is not decoration. Dependabot reads it to
+# know which tag the pin tracks, and rewrites both the SHA and the comment when
+# that tag moves. Delete the comment and the pin stops being updated.
+#
+# Scope is deliberately github-actions only. Adding npm and pip here would open
+# a large number of pull requests across three repositories at once, which is a
+# separate decision about review capacity rather than about supply chain.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"
+    labels:
+      - dependencies
+      - github-actions
