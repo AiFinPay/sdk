@@ -78,7 +78,7 @@ export function buildChallenge(args: {
     how_to_pay: [
       `POST ${api}/v1/quote {"merchant_id":"${merchantId}","resource":"${resource}","tier":"${tier}"}`,
       "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
-      `POST ${api}/v1/pay {quote_id, chain, asset, tx_ref} -> quota receipt`,
+      `POST ${api}/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} -> quota receipt (wallet-signature-v1)`,
       "retry this request with header: AIFP-Receipt: <receipt JWT>",
     ],
     // The 402 is the only documentation an agent is guaranteed to read, and
