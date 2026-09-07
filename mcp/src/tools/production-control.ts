@@ -1,4 +1,5 @@
 import type { ToolContext } from "../server.js";
+import { apiUrl } from "../api.js";
 
 const DEFAULT_BASE = "https://aifinpay.io";
 const ROUTES = new Set(["AIFP-1", "AIFP-2"]);
@@ -17,7 +18,7 @@ function base(ctx: ToolContext) {
   return String(ctx.config.baseUrl || DEFAULT_BASE).replace(/\/$/, "");
 }
 async function api(ctx: ToolContext, path: string, init?: RequestInit) {
-  const response = await ctx.agent.inner.fetchImpl(`${base(ctx)}${path}`, init);
+  const response = await ctx.agent.inner.fetchImpl(apiUrl(base(ctx), path), init);
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     const detail = body && typeof body === "object"

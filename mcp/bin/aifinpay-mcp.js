@@ -62,7 +62,7 @@ Run init once. It writes ${KEYSTORE} with mode 600 and the server picks
 it up automatically — you do not have to put the secret in a config file.
 
 Env (all optional):
-  AIFINPAY_AGENT_SECRET   base58 secret; overrides the keystore
+  SEED_HASH              32-byte hex seed; highest priority\n  AIFINPAY_AGENTS_FILE    default ./aifinpay/agents.json; second priority\n  AIFINPAY_AGENT_ID       select one record when the file has multiple agents\n  AIFINPAY_AGENT_SECRET   legacy base58 secret; after project wallet sources
   AIFINPAY_MAX_USD        hard cap per single payment — set this
   AIFINPAY_BASE_URL       default https://aifinpay.io
   AIFINPAY_TIMEOUT_MS     default 30000
@@ -118,6 +118,19 @@ function readKeystore() {
 if (arg === "init") {
   const { Agent, AiFinPayAgent } = await import("@aifinpay/agent");
 
+  const { loadConfigFromEnv } = await import("../dist/config.js");
+  const { loadWalletIdentity } = await import("../dist/identity.js");
+  const selected = loadWalletIdentity(loadConfigFromEnv());
+  if (selected && selected.source !== "legacy-keystore") {
+    const agent = selected.seedHash
+      ? await AiFinPayAgent.fromSeed(selected.seedHash)
+      : await AiFinPayAgent.fromSolanaSecret(selected.secretB58);
+    process.stdout.write(`Using ${selected.source}; no replacement wallet created.\n` +
+      `EVM ${agent.evmAddress}\nSolana ${agent.solanaAddress}\nCasper ${agent.casperAddress}\n` +
+      `Keep your configured seed backed up privately. Call agent_reload in an already connected MCP server.\n`);
+    process.exit(0);
+  }
+
   let store = readKeystore();
   const freshlyCreated = !store;
   if (store) {
@@ -169,7 +182,7 @@ if (arg === "init") {
       `  EVM     ${agent.evmAddress}\n` +
       `  Solana  ${agent.solanaAddress}\n` +
       `  Casper  ${agent.casperAddress}\n\n` +
-      `Add this to your MCP client config and restart it:\n\n` +
+      `Add this to your MCP client config and connect/reconnect this MCP server:\n\n` +
       JSON.stringify(
         {
           mcpServers: {
@@ -184,7 +197,7 @@ if (arg === "init") {
         2,
       ) +
       `\n\nThe secret is NOT in that block on purpose — the server reads the\n` +
-      `keystore. Config files get pasted into chats and committed to git.\n\n` +
+      `keystore. If this server is already connected, call agent_reload after init.\nA new conversation is not required by this server.\n\n` +
       `Back up ${KEYSTORE}. It is the only copy. The derivation is not\n` +
       `BIP-39, so no standard wallet can recover this from a phrase.\n\n` +
       `The addresses hold nothing yet. Send POL to the EVM address to let the\n` +
@@ -200,31 +213,8 @@ if (arg && !arg.startsWith("-")) {
 
 // ── server ────────────────────────────────────────────────────────────────
 
-// Fall back to the keystore so `init` once is genuinely enough. Env still wins:
-// a caller that sets AIFINPAY_AGENT_SECRET explicitly means it.
-if (!process.env.AIFINPAY_AGENT_SECRET) {
-  const store = readKeystore();
-  if (store) {
-    try {
-      const mode = statSync(KEYSTORE).mode & 0o777;
-      if (mode & 0o077) {
-        process.stderr.write(
-          `[warn] [aifinpay-mcp] ${KEYSTORE} is mode ${mode.toString(8)} — readable beyond your user. ` +
-            `Run: chmod 600 ${KEYSTORE}\n`,
-        );
-      }
-    } catch {
-      /* stat failure is not a reason to refuse to start */
-    }
-    process.env.AIFINPAY_AGENT_SECRET = store.secretB58;
-  } else {
-    process.stderr.write(
-      `[info] [aifinpay-mcp] no wallet configured. Run \`npx @aifinpay/mcp init\` once ` +
-        `for a persistent one; starting with a throwaway identity for now.\n`,
-    );
-  }
-}
-
+// Identity selection is shared with the programmatic server and agent_reload.
+// Do not copy a file secret into process.env: it would mask later file updates.
 const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
 const { createServer, loadConfigFromEnv } = await import("../dist/index.js");
 

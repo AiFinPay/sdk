@@ -89,3 +89,18 @@ MIT.
 ### Payment receipt authorization
 
 AIFP-1 receipts use the paying wallet signature. See [authorize and recover payment receipts](PAYMENT_RECEIPTS.md) for retries and recovery without a second transfer.
+
+### Payment history
+
+```ts
+import { getAgentHistory } from '@aifinpay/agent';
+const history = await getAgentHistory({ address: '0x…', source: 'transactions' });
+// Or { passport: 'AIFP-000000042', network: 'polygon', source: 'receipts' }
+```
+
+`transactions` covers indexed AiFinPay Polygon settlements, not arbitrary
+wallet transfers. `receipts` covers retained prepaid batches, including test
+payments. Follow `next_offset` with `limit`/`offset`. A passport requires a
+backend with the verified-wallet resolver deployed; passing both address and
+passport checks their match. Never pass a holder private key or API secret as
+an identifier. Public history does not return bearer receipt tokens.

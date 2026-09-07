@@ -1,106 +1,84 @@
 # @aifinpay/mcp
 
-MCP server exposing AiFinPay payment and quote primitives to MCP-aware
-agent runtimes. Canonical domain: **aifinpay.io**.
-
-AIFP-1 is gross-inclusive: payer total equals the quote, merchant receives 99%,
-AiFinPay receives 1%, creator/referral receives 0%. AIFP-2/x402 currently
-charges 0% at the protocol layer. Fund-moving paths fail closed until the exact
-deployment, runtime hash, governance profile, merchant target, asset and paid
-E2E evidence are verified.
+Local MCP tools for wallet discovery, payment history, quotas and non-signing
+payment preparation. Read the bundled [skill](skills/SKILL.md), also exposed
+as the MCP resource `aifinpay://skill`.
 
 ## Tools
 
-| Tool | What it does |
+| Tool | Purpose |
 |---|---|
-| `payable_fetch(url, opts?)` | Fetch any URL. On 402, auto-detect facilitator, sign, retry. |
-| `agent_address()` | Return the agent's funding addresses on **both** chains — Polygon `0x…` (default settlement: io.net, Exa, Venice bridges) and Solana base58 (Seat PDA / leaderboard). One seed, two chains — fund either. |
-| `agent_quote(url)` | Inspect a 402 challenge without paying. Shows the merchant's quoted amount + facilitator flavor. |
-| `agent_call(provider, …)` | Call a live provider from the AiFinPay directory (io.net, Exa, Venice, …) with automatic payment. |
-| `pay_with_split(…)` | Retired compatibility tool. Returns `legacy_split_route_retired`; never creates an invoice or moves funds. |
-| `quote_split(…)` | Retired compatibility tool. Use a canonical AIFP-1 quote. |
-| `agent_claim_self(magic_link_url)` | Link this agent to your dashboard account via a one-shot magic link from `aifinpay.io/login` — spend history shows up in the dashboard. |
+| agent_address | Current public wallet addresses |
+| agent_reload | Reload configured local wallet files in this connection |
+| agent_history | History by address, public passport, or both |
+| agent_quota | Remaining retained prepaid batches |
+| agent_passport_resolve | Public verified passport wallet bindings |
+| settlement_routes | Read configured settlement routes |
+| settlement_invoice | Build a non-signing invoice |
+| dev_payment_quote | Dev-only Amoy batch quote; checks contract version |
 
-## Install
+This RC does not register payment-signing tools. Its legacy SDK dependency
+supplies wallet derivation only; installing this MCP does not enable v2
+settlement. An invoice or quote is not a completed payment.
 
-```bash
-# Globally — usable as `npx @aifinpay/mcp` from any client config
-# (installs the latest stable — the old @alpha tag is retired, don't use it)
-npm install -g @aifinpay/mcp
-```
+## Local configuration
 
-## Use with Claude Desktop
+Select the wallet in this order: `SEED_HASH` → `./aifinpay/agents.json` →
+legacy `AIFINPAY_AGENT_SECRET` → `~/.aifinpay/agent.json`.
+SEED_HASH means a 32-byte hex seed, passed directly to SDK `fromSeed`.
+See the skill for the exact project-file schema and multi-agent selection.
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+Use an absolute `AIFINPAY_AGENTS_FILE` path when the host's working directory
+is not your project directory. Do not put the seed itself in a shared config.
 
 ```json
 {
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["@aifinpay/mcp"],
+      "args": ["-y", "@aifinpay/mcp@2.0.0-rc.6"],
       "env": {
-        "AIFINPAY_AGENT_SECRET": "<base58 secret — see below>",
-        "AIFINPAY_MAX_USD": "0.50"
+        "AIFINPAY_AGENTS_FILE": "/absolute/project/aifinpay/agents.json",
+        "AIFINPAY_AGENT_ID": "research-agent"
       }
     }
   }
 }
 ```
 
-Restart Claude Desktop. Now Claude can call `payable_fetch`, `agent_address`,
-and `agent_quote` like any other tool.
+The release above must be published before this npx command can install it.
+For a source checkout, run `npm ci && npm run build` in mcp/ and configure
+`node /absolute/path/to/mcp/bin/aifinpay-mcp.js` instead.
 
-## First run — generating an agent
+If using the legacy keystore, run `npx @aifinpay/mcp init` once and omit the
+project-file variables. Optional `AIFINPAY_WALLET_PASSPHRASE` encrypts that
+legacy file at creation. An already connected server can load it with
+`agent_reload`; it does not need a new conversation. A changed package or
+launch environment requires a server reconnect, subject to host support.
 
-If `AIFINPAY_AGENT_SECRET` is not set, the server generates an ephemeral
-keypair and **prints it to stderr** at startup:
+## History
 
-```
-[warn] no AIFINPAY_AGENT_SECRET set — generated EPHEMERAL agent.
-  address: 9xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-  secret:  4xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-  >> Save this secret to AIFINPAY_AGENT_SECRET to keep the agent across restarts.
-```
+`agent_history({address, source:"transactions"})` reads indexed Polygon
+settlements; `source:"receipts"` reads retained batches, including test-mode
+payments. Pass `passport` instead of, or alongside, `address` to resolve a
+public passport first. A backend without the passport resolver cannot satisfy
+passport-only queries. No secret API key is needed for public metadata.
 
-Save the secret to `AIFINPAY_AGENT_SECRET` in your client config so the
-agent identity (and any funded Seat) persists across restarts.
+Responses do not include bearer receipts. Limits are 1..100; follow
+`next_offset`. History source/coverage is explicit: it is not a full wallet
+explorer. Dev networks currently use receipt history, not the Polygon ledger.
 
-## Environment variables
+## Other environment variables
 
-| Var | Default | Purpose |
-|---|---|---|
-| `AIFINPAY_AGENT_SECRET` | — | Base58 secret. If absent → ephemeral agent printed to stderr. |
-| `AIFINPAY_BASE_URL` | `https://aifinpay.io` | Backend URL for nonce + funding probes. |
-| `AIFINPAY_TIMEOUT_MS` | `30000` | Request timeout. |
-| `AIFINPAY_MAX_USD` | — | Mandatory positive finite operator ceiling for any fund-moving tool. |
+- AIFINPAY_BASE_URL: backend origin; default https://aifinpay.io.
+- AIFINPAY_HOME: directory of the legacy agent.json keystore.
+- AIFINPAY_MODE=dev: expose dev_payment_quote; requires a separate dev base URL.
+- AIFINPAY_TIMEOUT_MS: SDK request timeout.
+- AIFINPAY_MAX_USD: legacy per-call budget; does not enable signing.
+- AIFINPAY_TRUSTED_HOSTS: exact hosts allowed to bypass the DNS pre-check.
+- AIFINPAY_ALLOW_PRIVATE_FETCH=1: explicit local-development network access.
+  Never enable this on the public hosted MCP.
 
-## Programmatic use
-
-```ts
-import { createServer, loadConfigFromEnv } from "@aifinpay/mcp";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-
-const { server } = await createServer({
-  ...loadConfigFromEnv(),
-  agentSecretB58: "your-secret-here",
-  maxAmountUsd: 0.10,
-});
-await server.connect(new StdioServerTransport());
-```
-
-## How `payable_fetch` works
-
-1. Sends the request unauthenticated.
-2. On `402`, the underlying [`@aifinpay/agent`](../node) SDK detects the
-   facilitator flavor (AiFinPay native, Coinbase x402, …).
-3. Signs a payment payload and retries.
-4. Returns `{ status, ok, headers, body }` to the agent.
-
-The flow is identical to calling `agent.pay(url)` directly — this
-package just wraps it as an MCP tool surface so LLM agents can call it
-without writing payment code.
-
-## License
-
-MIT.
+Dev quoting does not bypass wallet signatures, issuer verification or
+receipt metering. See the bundled skill for backend prerequisites and the
+remaining Amoy executor requirement.
