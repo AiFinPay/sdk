@@ -97,9 +97,13 @@ export {
   prefixHint,
   parseGatewayUrl,
   idempotencyKeyFor,
+  paymentAuthorizationMessage,
+  recoverAifp1Payment,
   describeQuote,
 } from "./aifp1.js";
 export type {
+  Aifp1PaymentRecovery,
+  Aifp1PaymentSigner,
   Aifp1Scope,
   Aifp1Challenge,
   Aifp1Quote,

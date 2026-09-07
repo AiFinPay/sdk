@@ -1737,6 +1737,8 @@ export class AiFinPayAgent {
       // (backend/aifp/agent-policy.js normalizeAddress) — a Solana pubkey here
       // would silently opt the agent out of its owner's own limits.
       agentId:   opts.agentId ?? this.evmAddress,
+      payerAddress: this.evmAddress,
+      signPaymentAuthorization: (message) => this.evmAccount.signMessage({ message }),
       settle: (p) => this.settleAifp1NativeV13(p),
       checkPerCall: (usd) => this.checkPerCall(usd),
       reserveDaily: (usd) => this.reserveDaily(usd),

@@ -84,3 +84,8 @@ on-chain, and serves the resource.
 ## License
 
 MIT.
+
+
+### Payment receipt authorization
+
+AIFP-1 receipts use the paying wallet signature. See [authorize and recover payment receipts](PAYMENT_RECEIPTS.md) for retries and recovery without a second transfer.

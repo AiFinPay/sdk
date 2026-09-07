@@ -18,6 +18,7 @@
   "files": [
     "dist",
     "README.md",
+    "PAYMENT_RECEIPTS.md",
     "LICENSE"
   ],
   "scripts": {
