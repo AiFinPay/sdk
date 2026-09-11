@@ -64,6 +64,33 @@ export type {
 } from "./splitterRoutes.js";
 export { botchain, xrplevm } from "./chains.js";
 
+// ── Environment & protocol-version resolver (AIFINP-223) ─────────────────
+export {
+  resolveDeployment,
+  isV14Available,
+  DeploymentResolverError,
+  UnsupportedDevNetworkError,
+  VersionUnavailableError,
+  NoDeploymentError,
+} from "./deploymentResolver.js";
+export type {
+  SdkEnvironment,
+  ProtocolVersion,
+  RequestedVersion,
+  ResolveDeploymentOptions,
+  ResolvedDeployment,
+} from "./deploymentResolver.js";
+export {
+  V14_DEPLOYMENTS,
+  V14_DEPLOYMENTS_SOURCE,
+  V14_DEV_NETWORKS,
+} from "./v14Deployments.generated.js";
+export type {
+  V14Deployment,
+  V14Splitter,
+  V14Safe,
+} from "./v14Deployments.generated.js";
+
 export { AiFinPayAgent, SPLITTER_DEPLOYMENTS, paymentIdFor } from "./unifiedAgent.js";
 export type {
   AiFinPayAgentOptions,
