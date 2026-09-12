@@ -59,7 +59,7 @@ export function loadConfigFromEnv(): McpConfig {
   }
   return {
     devMode: process.env.AIFINPAY_MODE === 'dev',
-    seedHash: process.env.SEED_HASH || undefined,
+    seedHash: process.env.SEED_HASH,
     agentsFile: process.env.AIFINPAY_AGENTS_FILE || undefined,
     agentId: process.env.AIFINPAY_AGENT_ID || undefined,
     walletHome: process.env.AIFINPAY_HOME || undefined,

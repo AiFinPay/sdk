@@ -44,6 +44,7 @@ import {
   X402Error,
 } from "./errors.js";
 import { Agent, type AgentOptions } from "./agent.js";
+import { loadLocalWalletIdentity } from "./localIdentity.js";
 import { type SpendLedger, MemorySpendLedger, FileSpendLedger } from "./spendLedger.js";
 import {
   aifp1Fetch,
@@ -688,8 +689,30 @@ export class AiFinPayAgent {
   // ── Constructors ─────────────────────────────────────────────────────────
 
   /**
-   * Generate a fresh agent — new Solana keypair + new EVM keypair.
-   * Use `fromSeed()` to derive both from a single backup phrase instead.
+   * Load an existing local identity without creating or replacing a wallet.
+   * Priority: SEED_HASH → ./aifinpay/agents.json → AIFINPAY_AGENT_SECRET →
+   * the MCP keystore at AIFINPAY_HOME/agent.json (default ~/.aifinpay).
+   * AIFINPAY_AGENTS_FILE/AGENT_ID select a project file/record; encrypted
+   * keystores require AIFINPAY_WALLET_PASSPHRASE. Reads process.env, not .env.
+   * Missing, invalid or ambiguous configuration throws before any network call.
+   */
+  static async fromEnvironment(opts: AiFinPayAgentOptions = {}): Promise<AiFinPayAgent> {
+    const identity = loadLocalWalletIdentity();
+    try {
+      return identity.seedHash !== undefined
+        ? await AiFinPayAgent.fromSeed(identity.seedHash, opts)
+        : await AiFinPayAgent.fromSolanaSecret(identity.secretB58, opts);
+    } catch {
+      // Decoder/library errors can include input. Never echo local key material.
+      throw new AiFinPayError(`Invalid wallet selected from ${identity.source}; refusing to generate a replacement wallet`);
+    }
+  }
+
+  /**
+   * Generate a fresh, ephemeral agent. Every call selects a new identity;
+   * existing environment variables and keystores are NOT loaded or changed.
+   * This method does not persist its keys. Use fromEnvironment() for a funded
+   * existing wallet, or privately persist the new seed/secret before funding.
    */
   static async new(opts: AiFinPayAgentOptions = {}): Promise<AiFinPayAgent> {
     // Seed-derived, NOT an independent random EVM key.

@@ -29,7 +29,7 @@
  *   AIFINPAY_TIMEOUT_MS     default 30000
  *   AIFINPAY_MAX_USD        hard cap per single payment (no default)
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, openSync, closeSync, fchmodSync, fsyncSync, linkSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { createRequire } from "node:module";
@@ -134,39 +134,59 @@ if (arg === "init") {
   }
 
   let store = readKeystore();
-  const freshlyCreated = !store;
-  if (store) {
-    // Never silently overwrite. The file is the only copy of a key that may
-    // already hold funds; a second `init` that regenerated it would destroy a
-    // wallet to save one line of output.
-    process.stdout.write(`Existing wallet found at ${KEYSTORE} — keeping it.\n\n`);
-  } else {
+  let freshlyCreated = false;
+  if (!store) {
     mkdirSync(HOME, { recursive: true, mode: 0o700 });
     const secretB58 = Agent.new().secretB58;
-    store = { secretB58, created: new Date().toISOString() };
-    const onDisk = PASSPHRASE ? encryptSecret(secretB58) : store;
-    writeFileSync(KEYSTORE, JSON.stringify(onDisk, null, 2) + "\n", { mode: 0o600 });
-    chmodSync(KEYSTORE, 0o600); // writeFileSync honours umask; this does not
+    const candidate = { secretB58, created: new Date().toISOString() };
+    const onDisk = PASSPHRASE ? encryptSecret(secretB58) : candidate;
+    const temporary = join(HOME, `.agent-init-${process.pid}-${randomBytes(12).toString("hex")}.tmp`);
+    // Publish a complete file without replacing an existing wallet. Two init
+    // processes may both see no keystore; only one exclusive link can win.
+    // A direct exclusive write would expose a partially written file to readers.
+    let fd;
+    let ownsTemporary = false;
+    try {
+      fd = openSync(temporary, "wx", 0o600);
+      ownsTemporary = true;
+      fchmodSync(fd, 0o600);
+      writeFileSync(fd, JSON.stringify(onDisk, null, 2) + "\n");
+      fsyncSync(fd);
+      closeSync(fd);
+      fd = undefined;
+      try {
+        linkSync(temporary, KEYSTORE);
+        store = candidate;
+        freshlyCreated = true;
+      } catch (error) {
+        if (error.code !== "EEXIST") throw error;
+        store = readKeystore();
+        if (!store) throw new Error(`Existing ${KEYSTORE} is unreadable; refusing to replace it.`);
+      }
+    } finally {
+      if (fd !== undefined) closeSync(fd);
+      if (ownsTemporary) unlinkSync(temporary);
+    }
+  }
+  if (freshlyCreated) {
     process.stdout.write(
       PASSPHRASE
         ? `Created ${KEYSTORE} (mode 600, ENCRYPTED). Keep AIFINPAY_WALLET_PASSPHRASE — the wallet is unrecoverable without it.\n\n`
         : `Created ${KEYSTORE} (mode 600, plaintext). For at-rest encryption, set AIFINPAY_WALLET_PASSPHRASE before init.\n\n`,
     );
+  } else {
+    process.stdout.write(`Existing wallet found at ${KEYSTORE} — keeping it.\n\n`);
   }
 
   // The one-time recovery output.
   //
-  // Shown ONLY on creation, ONLY in the terminal, and ONLY when the keystore is
-  // plaintext. This is NOT the leak the audit (AIFINP-220 §3) forbids — that is
-  // a key written to CHAT or LOGS, where an LLM provider or a log shipper keeps
-  // it forever. This is the deliberate one-time backup prompt every wallet CLI
-  // shows, on a channel the user controls. Opposite things: the owner reading
-  // their own recovery phrase once, vs a secret leaking into a transcript.
+  // Shown only to the successful creator of a plaintext wallet on a TTY.
+  // Piped output (including agent subprocess logs) contains public data only.
   //
   // Encrypted keystores print nothing here: recovery there IS the keystore file
   // plus the passphrase, and re-printing the plaintext secret would defeat the
   // encryption the user just asked for.
-  if (freshlyCreated && !PASSPHRASE) {
+  if (freshlyCreated && !PASSPHRASE && process.stdout.isTTY) {
     process.stdout.write(
       `\n  RECOVERY KEY (shown once, never again):\n\n` +
       `    ${store.secretB58}\n\n` +
@@ -190,7 +210,7 @@ if (arg === "init") {
           mcpServers: {
             aifinpay: {
               command: "npx",
-              args: ["-y", "@aifinpay/mcp"],
+              args: ["-y", `@aifinpay/mcp@${VERSION}`],
               env: { AIFINPAY_MAX_USD: "0.10" },
             },
           },
@@ -202,8 +222,8 @@ if (arg === "init") {
       `keystore. If this server is already connected, call agent_reload after init.\nA new conversation is not required by this server.\n\n` +
       `Back up ${KEYSTORE}. It is the only copy. The derivation is not\n` +
       `BIP-39, so no standard wallet can recover this from a phrase.\n\n` +
-      `The addresses hold nothing yet. Send POL to the EVM address to let the\n` +
-      `agent pay for calls.\n`,
+      `The EVM address is used for Polygon payments. Check its balance before\n` +
+      `funding it or paying for calls.\n`,
   );
   process.exit(0);
 }

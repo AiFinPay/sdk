@@ -73,6 +73,11 @@ describe("persistent wallet identity", () => {
       expect(tools).toContain("agent_passport_resolve");
       expect(tools).toContain("settlement_invoice");
       expect(tools).not.toContain("payable_fetch");
+      const resources = await client.listResources();
+      expect(resources.resources.map(resource => resource.uri)).toContain("aifinpay://skill");
+      const skill = await client.readResource({ uri: "aifinpay://skill" });
+      expect(skill.contents[0]).toMatchObject({ uri: "aifinpay://skill", mimeType: "text/markdown" });
+      expect(String((skill.contents[0] as { text?: string }).text)).toContain("does not register payable_fetch");
       f.write([{ id: "one", seed_hash: seedB }]);
       const result = await client.callTool({ name: "agent_reload", arguments: {} });
       expect(result.isError).not.toBe(true);
@@ -144,5 +149,17 @@ describe("persistent wallet identity", () => {
     const f = fixture();
     await expect(createServer({ seedHash: "", walletHome: f.home, logFn: () => {} })).rejects.toThrow(/32-byte/);
     await expect(createServer({ agentsFile: f.agentsFile, walletHome: f.home, logFn: () => {} })).rejects.toThrow(/does not exist/);
+  });
+
+  it("does not fall back to a saved wallet when SEED_HASH is explicitly empty in the environment", async () => {
+    const f = fixture();
+    const saved = await AiFinPayAgent.fromSeed(seedA);
+    const path = join(f.home, "agent.json");
+    const before = JSON.stringify({ secretB58: saved.inner.secretB58 });
+    writeFileSync(path, before, { mode: 0o600 });
+    vi.stubEnv("SEED_HASH", "");
+    expect(() => loadWalletIdentity({ ...loadConfigFromEnv(), walletHome: f.home }))
+      .toThrow(/32-byte/);
+    expect(readFileSync(path, "utf8")).toBe(before);
   });
 });
