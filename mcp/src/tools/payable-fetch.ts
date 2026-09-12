@@ -88,6 +88,13 @@ export async function runPayableFetch(
       ? args.max_amount_usd
       : undefined;
   const operatorMax = ctx.config.maxAmountUsd;
+  if (args.max_amount_usd !== undefined
+      && (typeof args.max_amount_usd !== "number" || !Number.isFinite(args.max_amount_usd) || args.max_amount_usd <= 0)) {
+    return errorResult("max_amount_usd must be a positive finite USD amount.");
+  }
+  if (operatorMax !== undefined && (!Number.isFinite(operatorMax) || operatorMax <= 0)) {
+    return errorResult("AIFINPAY_MAX_USD must be a positive finite USD amount.");
+  }
   const maxAmountUsd =
     operatorMax === undefined ? requestedMax
     : requestedMax === undefined ? operatorMax
@@ -95,6 +102,7 @@ export async function runPayableFetch(
 
   const forcedFacilitator =
     typeof args.facilitator === "string" ? (args.facilitator as string) : undefined;
+  const gatewayOrigins = ctx.config.gatewayOrigins ?? ["https://gateway.aifinpay.io"];
 
   try {
     // Two payment protocols answer a 402 here, and this tool used to speak only
@@ -116,8 +124,17 @@ export async function runPayableFetch(
     // stated x402 intent, so skip AIFP-1 entirely for them.
     let resp: Response | null = null;
 
-    if (!forcedFacilitator) {
-      resp = await ctx.agent.fetchPaid(url, { method, body, headers });
+    let isConfiguredGateway = false;
+    try { isConfiguredGateway = gatewayOrigins.includes(new URL(url).origin); }
+    catch { /* inner.pay reports malformed URLs */ }
+
+    if (!forcedFacilitator && isConfiguredGateway) {
+      resp = await ctx.agent.fetchPaid(url, { method, body, headers }, {
+        apiBaseUrl: ctx.config.baseUrl,
+        gatewayOrigins: ctx.config.gatewayOrigins,
+        resourcePathMode: ctx.config.gatewayPathMode,
+        maxAmountUsd,
+      });
       if (resp === null) {
         // Budget cap hit with on_limit_exceeded="skip" — do NOT then try to pay
         // the same call via x402; that would defeat the cap the caller set.
@@ -163,12 +180,32 @@ export async function runPayableFetch(
       ],
     };
   } catch (e) {
-    const err = e as Error;
+    const err = e as Error & { txRef?: string; quoteId?: string; recovery?: unknown };
+    if (err.name === "Aifp1PayError" && err.recovery !== null && typeof err.recovery === "object") {
+      return errorResult(
+        `${err.name}: ${err.message}`,
+        "AIFP-1 settlement already completed on-chain; do not submit a second payment. Use the public recovery context below to retry receipt issuance.",
+        JSON.stringify({
+          txRef: err.txRef,
+          quoteId: err.quoteId,
+          recovery: err.recovery,
+        }),
+        "Docs: https://aifinpay.io/docs",
+      );
+    }
+    const isAifp1Gateway = gatewayOrigins.includes((() => {
+      try { return new URL(url).origin; } catch { return ""; }
+    })());
+    const originHint = !isAifp1Gateway && /AIFP-1|AIFP-402|gateway/i.test(err.message)
+      ? "This looks like an AIFP-1 gateway, but its origin is not configured; add its exact HTTPS origin to AIFINPAY_GATEWAY_ORIGINS."
+      : undefined;
     return errorResult(
-      `${err.constructor.name}: ${err.message}`,
-      `Tip: ensure agent ${ctx.agent.solanaAddress} has a funded Seat PDA, ` +
-        `or use the unified \`agent_call\` tool (Polygon settlement). ` +
-        `Docs: https://aifinpay.io/docs`,
+      `${err.name}: ${err.message}`,
+      isAifp1Gateway
+        ? `Tip: ensure Polygon EVM address ${ctx.agent.evmAddress} is funded for AIFP-1 settlement.`
+        : `Tip: ensure agent ${ctx.agent.solanaAddress} has a funded Seat PDA, or use the unified \`agent_call\` tool (Polygon settlement).`,
+      ...(originHint ? [originHint] : []),
+      "Docs: https://aifinpay.io/docs",
     );
   }
 }

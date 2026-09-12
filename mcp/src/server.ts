@@ -136,21 +136,6 @@ export async function createServer(config: McpConfig = {}) {
         } catch (error) {
           return { isError: true, content: [{ type: "text", text: `Wallet reload failed: ${(error as Error).message}` }] };
         }
-      case "agent_reload":
-        try {
-          const replacement = await configuredAgent();
-          if (!replacement) throw new Error("No persistent wallet configured; run init or configure the project wallet first");
-          if (config.maxAmountUsd !== undefined && Number.isFinite(config.maxAmountUsd)) {
-            replacement.loaded.setBudget({ per_call_usd: config.maxAmountUsd });
-          }
-          agent = replacement.loaded;
-          return { content: [{ type: "text", text: JSON.stringify({
-            source: replacement.source, solana: agent.solanaAddress, evm: agent.evmAddress,
-            casper: agent.casperAddress, reloaded: true,
-          }) }] };
-        } catch (error) {
-          return { isError: true, content: [{ type: "text", text: `Wallet reload failed: ${(error as Error).message}` }] };
-        }
       case "agent_address":
         return runAgentAddress(ctx, args ?? {});
       case "agent_quota":

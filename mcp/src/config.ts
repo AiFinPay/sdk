@@ -34,6 +34,9 @@ export interface McpConfig {
    *  statement that you know who that is. */
   gatewayOrigins?: string[];
 
+  /** AIFP-1 resource identity: merchant slug or full direct request path. */
+  gatewayPathMode?: "gateway" | "direct";
+
   /** Hosts whose DNS pre-check is skipped, exact names only.
    *
    *  safe-fetch resolves a hostname and refuses if any answer is a private
@@ -70,8 +73,15 @@ export function loadConfigFromEnv(): McpConfig {
       ? Number(process.env.AIFINPAY_MAX_USD)
       : undefined,
     gatewayOrigins: splitOrigins(process.env.AIFINPAY_GATEWAY_ORIGINS),
+    gatewayPathMode: parseGatewayPathMode(process.env.AIFINPAY_GATEWAY_PATH_MODE),
     trustedHosts: splitList(process.env.AIFINPAY_TRUSTED_HOSTS),
   };
+}
+
+function parseGatewayPathMode(raw: string | undefined): "gateway" | "direct" {
+  if (raw === undefined || raw.trim() === "") return "gateway";
+  if (raw === "gateway" || raw === "direct") return raw;
+  throw new Error("AIFINPAY_GATEWAY_PATH_MODE must be either gateway or direct");
 }
 
 /** Comma-separated list → trimmed entries, or undefined when unset/empty.

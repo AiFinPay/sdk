@@ -1,4 +1,5 @@
 import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sign, verify } from "node:crypto";
+import { aifinpayApiUrl } from "./apiUrl.js";
 
 export type AgentPassportNetwork =
   | "polygon" | "avalanche" | "arbitrum" | "bnb" | "base" | "unichain"
@@ -165,7 +166,7 @@ export async function resolveAgentPassport(
   fetchImpl: typeof fetch = fetch,
 ): Promise<AgentPassportIdentity> {
   const normalized = normalizeAgentPassportIdentifier(identifier);
-  const body = await jsonRequest(`${baseUrl.replace(/\/$/, "")}/api/agent/resolve/${encodeURIComponent(normalized)}`, undefined, fetchImpl) as Record<string, unknown>;
+  const body = await jsonRequest(aifinpayApiUrl(baseUrl, `/api/agent/resolve/${encodeURIComponent(normalized)}`), undefined, fetchImpl) as Record<string, unknown>;
   return validateResolvedIdentity(body.agent);
 }
 

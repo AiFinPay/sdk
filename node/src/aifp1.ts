@@ -318,7 +318,11 @@ export const DEFAULT_GATEWAY_ORIGINS = ["https://gateway.aifinpay.io"] as const;
 export function parseGatewayUrl(
   url: string,
   allowedOrigins: readonly string[] = DEFAULT_GATEWAY_ORIGINS,
+  resourcePathMode: "gateway" | "direct" = "gateway",
 ): { site: string; slug: string; restPath: string } {
+  if (resourcePathMode !== "gateway" && resourcePathMode !== "direct") {
+    throw new Aifp1Error("resourcePathMode must be 'gateway' or 'direct'");
+  }
   const u = new URL(url);
   if (!allowedOrigins.length) {
     throw new Aifp1Error(
@@ -332,6 +336,9 @@ export function parseGatewayUrl(
       + "Refusing to settle: a 402 is unauthenticated, so paying an unrecognised host "
       + "means paying whoever answered.",
     );
+  }
+  if (resourcePathMode === "direct") {
+    return { site: u.origin, slug: "", restPath: u.pathname };
   }
   const segments = u.pathname.split("/").filter(Boolean);
   if (segments.length === 0) {
@@ -530,6 +537,8 @@ export interface Aifp1FetchOptions {
    * the tiers move.
    */
   units?:    number;
+  /** Maximum quoted batch cost in USD; only tightens the agent's budget caps. */
+  maxAmountUsd?: number;
   /** Where /v1/quote and /v1/pay live. Default https://api.aifinpay.io */
   apiBaseUrl?: string;
   /**
@@ -538,6 +547,12 @@ export interface Aifp1FetchOptions {
    * never to a host you do not control the paywall of.
    */
   gatewayOrigins?: readonly string[];
+  /**
+   * "gateway" strips the hosted merchant slug (default). "direct" uses the
+   * full URL pathname and probes for the merchant before reusing a receipt.
+   * Direct origins must still be explicitly trusted through gatewayOrigins.
+   */
+  resourcePathMode?: "gateway" | "direct";
   /** Value for the AIFP-Agent-Id header; defaults to the agent's EVM address. */
   agentId?:  string;
   /** How long to keep retrying /v1/pay while the chain catches up (AIFP-425). */
@@ -718,7 +733,15 @@ export async function aifp1Fetch(
   init: RequestInit = {},
   opts: Aifp1FetchOptions = {},
 ): Promise<Response | null> {
-  const { site, restPath } = parseGatewayUrl(url, opts.gatewayOrigins ?? DEFAULT_GATEWAY_ORIGINS);
+  if (opts.maxAmountUsd !== undefined
+      && (!Number.isFinite(opts.maxAmountUsd) || opts.maxAmountUsd <= 0)) {
+    throw new Aifp1QuoteError("maxAmountUsd must be a positive finite USD amount");
+  }
+  const direct = opts.resourcePathMode === "direct";
+  let { site, restPath } = parseGatewayUrl(
+    url, opts.gatewayOrigins ?? DEFAULT_GATEWAY_ORIGINS, opts.resourcePathMode,
+  );
+  let directMerchant: string | undefined;
 
   // A paid flow sends the request twice, so the body has to survive being sent
   // twice. A stream cannot, and finding that out after paying would mean money
@@ -739,6 +762,7 @@ export async function aifp1Fetch(
     // silently dropping every header the caller set, including their auth.
     const headers = new Headers(init.headers);
     headers.set("AIFP-Agent-Id", deps.agentId);
+    if (direct) headers.delete("AIFP-Receipt");
     if (receiptJwt) headers.set("AIFP-Receipt", receiptJwt);
     return deps.fetchImpl(url, {
       ...init,
@@ -746,14 +770,29 @@ export async function aifp1Fetch(
       // The receipt is a bearer token. fetch follows redirects by default and
       // only strips authorization/cookie/host on a cross-origin hop — a custom
       // header rides along, so one 302 from a merchant upstream would hand the
-      // batch to another host. Stop at the redirect and let the caller decide.
-      ...(receiptJwt ? { redirect: "manual" as const } : {}),
+      // batch to another host. Direct probes also stop here: a redirect must
+      // not turn an untrusted origin's 402 into an authorized purchase.
+      ...((receiptJwt || direct) ? { redirect: "manual" as const } : {}),
     });
   };
 
   // 1. Spend a batch we already own, if one covers this path.
-  const held = deps.cache.find(site, restPath);
-  const resp = await send(held?.jwt);
+  let held = direct ? undefined : deps.cache.find(site, restPath);
+  let resp = await send(held?.jwt);
+  if (direct && resp.status === 402) {
+    // A direct origin can serve several merchants. Learn this resource's
+    // merchant before attaching a bearer receipt, even for a cached batch.
+    const probe = await resp.clone().json().catch(() => null);
+    if (isAifp1Challenge(probe)) {
+      if (probe.resource !== restPath) {
+        throw new Aifp1QuoteError("direct AIFP-1 challenge resource must match the full URL pathname");
+      }
+      directMerchant = probe.merchant_id;
+      site = `direct:${JSON.stringify([site, directMerchant])}`;
+      held = deps.cache.find(site, restPath);
+      if (held) resp = await send(held.jwt);
+    }
+  }
   if (held) {
     // Absent header, not "zero left": the gateway sets AIFP-Quota-Remaining
     // only on a metered paid call, and `Number(null)` is 0 — reading it
@@ -794,6 +833,9 @@ export async function aifp1Fetch(
   // untouched; call() owns those flows.
   const challenge = await resp.clone().json().catch(() => null);
   if (!isAifp1Challenge(challenge)) return resp;
+  if (direct && (challenge.merchant_id !== directMerchant || challenge.resource !== restPath)) {
+    throw new Aifp1QuoteError("direct AIFP-1 resource or merchant changed during receipt verification");
+  }
 
   // The batch we were spending is spent (or expired) — the gateway just said
   // so. Forget it before quoting the next one, or find() would keep handing
@@ -849,6 +891,9 @@ export async function aifp1Fetch(
     const amountUsd = Number(quote.amount);
     if (!Number.isFinite(amountUsd) || amountUsd < 0) {
       throw new Aifp1QuoteError(`quote ${quote.quote_id} has an unusable amount "${quote.amount}"`);
+    }
+    if (opts.maxAmountUsd !== undefined && amountUsd > opts.maxAmountUsd) {
+      throw new Aifp1QuoteError(`quote ${quote.quote_id} costs $${amountUsd}, above maxAmountUsd $${opts.maxAmountUsd}`);
     }
     if (!deps.checkPerCall(amountUsd)) return null;
     const reservation = await deps.reserveDaily(amountUsd);

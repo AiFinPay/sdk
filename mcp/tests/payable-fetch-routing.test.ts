@@ -22,7 +22,7 @@ function resp(status: number, bodyText = ""): Response {
 
 /** A ctx whose two payment paths are spies with scripted return values. */
 function makeCtx(opts: {
-  fetchPaid?: (url: string) => Promise<Response | null>;
+  fetchPaid?: (url: string, init?: RequestInit, options?: Record<string, unknown>) => Promise<Response | null>;
   innerPay?: (url: string) => Promise<Response>;
 }) {
   const fetchPaid = vi.fn(opts.fetchPaid ?? (async () => resp(200, "aifp1-paid")));
@@ -65,7 +65,7 @@ describe("payable_fetch protocol routing", () => {
       fetchPaid: async () => resp(402, "x402-challenge"),
       innerPay: async () => resp(200, "x402-paid"),
     });
-    const out = await runPayableFetch(ctx, { url: "https://x402.example/protected" });
+    const out = await runPayableFetch(ctx, { url: "https://gateway.aifinpay.io/protected" });
     expect(fetchPaid).toHaveBeenCalledOnce();
     expect(innerPay).toHaveBeenCalledOnce();
     expect(bodyOf(out)).toBe("x402-paid");
@@ -83,6 +83,16 @@ describe("payable_fetch protocol routing", () => {
     expect(innerPay).toHaveBeenCalledOnce();
   });
 
+  it("passes direct path mode and the tighter cap to the SDK", async () => {
+    const seen: Record<string, unknown> = {};
+    const { ctx } = makeCtx({
+      fetchPaid: async (_url, _init, options) => { Object.assign(seen, options); return resp(200, "paid"); },
+    });
+    (ctx as any).config = { baseUrl: "https://api.example.test", gatewayOrigins: ["https://gateway.example.test"], gatewayPathMode: "direct", maxAmountUsd: 0.1 };
+    await runPayableFetch(ctx, { url: "https://gateway.example.test/r/a", max_amount_usd: 0.2 });
+    expect(seen).toMatchObject({ apiBaseUrl: "https://api.example.test", resourcePathMode: "direct", maxAmountUsd: 0.1 });
+  });
+
   it("a budget skip is not laundered into an x402 payment", async () => {
     // fetchPaid returns null when a cap is hit and on_limit_exceeded="skip".
     // Trying inner.pay next would pay anyway, defeating the cap the caller set.
@@ -96,9 +106,23 @@ describe("payable_fetch protocol routing", () => {
   });
 
   it("returns a non-paywalled 200 straight through", async () => {
-    const { ctx, innerPay } = makeCtx({ fetchPaid: async () => resp(200, "free") });
+    const { ctx, innerPay } = makeCtx({ innerPay: async () => resp(200, "free") });
     const out = await runPayableFetch(ctx, { url: "https://free.example/" });
-    expect(innerPay).not.toHaveBeenCalled();
+    expect(innerPay).toHaveBeenCalledOnce();
     expect(bodyOf(out)).toBe("free");
+  });
+
+  it("preserves public recovery context after settlement", async () => {
+    const { ctx } = makeCtx({ fetchPaid: async () => {
+      const error = new Error("receipt failed after settlement");
+      error.name = "Aifp1PayError";
+      Object.assign(error, { txRef: "0xabc", quoteId: "q1", recovery: { apiBaseUrl: "https://api.example.test", quote: { quote_id: "q1" }, txRef: "0xabc", asset: "MATIC" } });
+      throw error;
+    } });
+    const out = await runPayableFetch(ctx, { url: "https://gateway.aifinpay.io/acme/x" });
+    const text = (out as any).content.map((entry: any) => entry.text).join("\n");
+    expect(text).toContain("already completed on-chain");
+    expect(text).toContain("0xabc");
+    expect(text).not.toContain("funded Seat PDA");
   });
 });

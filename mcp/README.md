@@ -76,7 +76,7 @@ A client configuration can use the keystore without embedding its secret:
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["-y", "@aifinpay/mcp@2.0.0-rc.6"],
+      "args": ["-y", "@aifinpay/mcp@2.0.0-rc.11"],
       "env": {
         "AIFINPAY_AGENTS_FILE": "/absolute/project/aifinpay/agents.json",
         "AIFINPAY_AGENT_ID": "research-agent"
@@ -110,6 +110,8 @@ snapshot. Verify `agent_address` against the wallet you intend to use.
 | `AIFINPAY_BASE_URL` | `https://aifinpay.io` | Backend URL. |
 | `AIFINPAY_TIMEOUT_MS` | `30000` | Request timeout. |
 | `AIFINPAY_MAX_USD` | — | Configures the underlying agent's per-call cap; it does not enable signing. |
+| `AIFINPAY_GATEWAY_ORIGINS` | SDK default | Comma-separated exact HTTPS origins trusted for AIFP-1 settlement. |
+| `AIFINPAY_GATEWAY_PATH_MODE` | `gateway` | Use `gateway` for merchant-slug identity or `direct` for full request-path identity. |
 
 `agent_history({address, source:"transactions"})` reads indexed Polygon
 settlements; `source:"receipts"` reads retained batches, including test-mode
@@ -133,11 +135,18 @@ The programmatic equivalents of identity environment options are `seedHash`,
 - AIFINPAY_BASE_URL: backend origin; default https://aifinpay.io.
 - AIFINPAY_HOME: directory of the legacy agent.json keystore.
 - AIFINPAY_MODE=dev: expose dev_payment_quote; requires a separate dev base URL.
+
 - AIFINPAY_TIMEOUT_MS: SDK request timeout.
 - AIFINPAY_MAX_USD: legacy per-call budget; does not enable signing.
 - AIFINPAY_TRUSTED_HOSTS: exact hosts allowed to bypass the DNS pre-check.
 - AIFINPAY_ALLOW_PRIVATE_FETCH=1: explicit local-development network access.
   Never enable this on the public hosted MCP.
+
+For a self-hosted AIFP-1 gateway, set `AIFINPAY_GATEWAY_ORIGINS` to exact HTTPS
+origins. `AIFINPAY_GATEWAY_PATH_MODE=direct` makes the process use each request's
+full pathname as its AIFP-1 resource identity; `gateway` uses the merchant slug.
+The mode is process-wide, does not broaden the trusted-origin allowlist, and
+does not enable the retired signing tools in the production RC.
 
 Dev quoting does not bypass wallet signatures, issuer verification or
 receipt metering. See the bundled skill for backend prerequisites and the

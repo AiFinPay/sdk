@@ -55,6 +55,32 @@ describe("gateway origins", () => {
   });
 });
 
+describe("gateway path mode", () => {
+  it("defaults to gateway and accepts direct", () => {
+    const previous = process.env.AIFINPAY_GATEWAY_PATH_MODE;
+    try {
+      delete process.env.AIFINPAY_GATEWAY_PATH_MODE;
+      expect(loadConfigFromEnv().gatewayPathMode).toBe("gateway");
+      process.env.AIFINPAY_GATEWAY_PATH_MODE = "direct";
+      expect(loadConfigFromEnv().gatewayPathMode).toBe("direct");
+    } finally {
+      if (previous === undefined) delete process.env.AIFINPAY_GATEWAY_PATH_MODE;
+      else process.env.AIFINPAY_GATEWAY_PATH_MODE = previous;
+    }
+  });
+
+  it("rejects unknown values", () => {
+    const previous = process.env.AIFINPAY_GATEWAY_PATH_MODE;
+    try {
+      process.env.AIFINPAY_GATEWAY_PATH_MODE = "merchant";
+      expect(() => loadConfigFromEnv()).toThrow(/AIFINPAY_GATEWAY_PATH_MODE/);
+    } finally {
+      if (previous === undefined) delete process.env.AIFINPAY_GATEWAY_PATH_MODE;
+      else process.env.AIFINPAY_GATEWAY_PATH_MODE = previous;
+    }
+  });
+});
+
 describe("trusted hosts skip the DNS pre-check, and nothing else", () => {
   it("a trusted host skips the resolution branch", async () => {
     // A name that cannot resolve is normally refused with "cannot resolve".

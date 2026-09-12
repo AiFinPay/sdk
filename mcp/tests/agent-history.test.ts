@@ -5,8 +5,9 @@ import type { ToolContext } from "../src/server.js";
 
 const ADDRESS = '0x' + 'ab'.repeat(20);
 const PASSPORT = { agent: { agent_id: 'aifp_agent_' + 'a'.repeat(32), agent_number: 1,
-  agent_number_display: 'AIFP-000000001', username: '@test_agent', status: 'active',
-  wallets: [{ network: 'polygon', chain_family: 'evm', address: ADDRESS, verified_at: 1, is_primary: true }] } };
+  agent_number_display: 'AIFP-000000001', username: '@test_agent', status: 'active', integrity_state: 'ok',
+  issuer: { key_id: 'test', public_key: 'test', signature: 'test' },
+  wallets: [{ network: 'polygon', chain_family: 'evm', address: ADDRESS, verified_at: 1, is_primary: true, status: 'active' }] } };
 
 for (const implementation of ['MCP', 'SDK']) describe(`${implementation} payment history`, () => {
   async function run(args: any, fetchImpl: typeof fetch) {
