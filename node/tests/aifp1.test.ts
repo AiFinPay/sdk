@@ -851,6 +851,22 @@ describe("aifp1: keeping a batch that is still good", () => {
 });
 
 describe("aifp1: concurrency", () => {
+  it("shares a paid receipt failure with all waiting callers without another settlement", async () => {
+    const server = mockServer();
+    server.payUnavailableTimes = 4;
+    const { agent, settlements } = await agentFor(server);
+    const outcomes = await Promise.allSettled(Array.from({ length: 4 }, (_, i) =>
+      agent.fetchPaid(`${GATEWAY}/acme/articles/${i}`, {}, { settlementConfirmMs: 0 }),
+    ));
+    expect(settlements).toHaveLength(1);
+    expect(server.quotes).toBe(1);
+    expect(outcomes.every((outcome) => outcome.status === "rejected")).toBe(true);
+    const failures = outcomes.map((outcome) => (outcome as PromiseRejectedResult).reason);
+    expect(failures[0]).toBeInstanceOf(Aifp1PayError);
+    expect(failures[0].recovery).toMatchObject({ txRef: "0x" + "ab".repeat(32) });
+    expect(failures.every((failure) => failure === failures[0])).toBe(true);
+  });
+
   it("ten workers arriving together buy one batch, not ten", async () => {
     // The cache is empty between deciding to buy and the receipt arriving, so
     // every concurrent caller missed and every one settled. It recurred at

@@ -454,7 +454,9 @@ export class Aifp1ReceiptCache {
   async coalesce<T>(site: string, buy: () => Promise<T>): Promise<T | "retry"> {
     const running = this.inflight.get(site);
     if (running) {
-      await running.catch(() => { /* the winner's failure is theirs to throw */ });
+      // The winner may already have paid. Share its failure and recovery
+      // context; swallowing it would let every waiter buy another batch.
+      await running;
       return "retry";
     }
     const p = buy().finally(() => { this.inflight.delete(site); });

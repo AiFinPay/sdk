@@ -7,6 +7,7 @@
 import { describe, it, expect } from "vitest";
 import { AiFinPayAgent } from "../src/unifiedAgent.js";
 import { privateKeyToAccount } from "viem/accounts";
+import { verifyMessage } from "viem";
 
 describe("wallet recovery", () => {
   it("new() produces an agent recoverable from its Solana secret alone", async () => {
@@ -77,5 +78,28 @@ describe("wallet recovery", () => {
     const prefixed = await AiFinPayAgent.fromSeed(`0x${"AB".repeat(32)}`);
     expect(prefixed.evmAddress).toBe(plain.evmAddress);
     expect(prefixed.solanaAddress).toBe(plain.solanaAddress);
+  });
+
+  it.each([
+    ["fromSeed", false], ["fromSeed", true],
+    ["fromSolanaSecret", false], ["fromSolanaSecret", true],
+    ["new", false], ["new", true],
+  ] as const)("%s uses one EVM signer for native and standard x402 (override=%s)", async (factory, imported) => {
+    const seed = "11".repeat(32);
+    const evmPrivateKey = `0x${"33".repeat(32)}` as `0x${string}`;
+    const opts = imported ? { evmPrivateKey } : {};
+    type Inner = { secretB58: string; evmAddress(): Promise<string>; evmAccount(): ReturnType<import("../src/agent.js").Agent["evmAccount"]> };
+    const fixture = await AiFinPayAgent.fromSeed(seed);
+    const secret = (fixture as unknown as { inner: Inner }).inner.secretB58;
+    const agent = factory === "new" ? await AiFinPayAgent.new(opts)
+      : factory === "fromSolanaSecret" ? await AiFinPayAgent.fromSolanaSecret(secret, opts)
+      : await AiFinPayAgent.fromSeed(seed, opts);
+    const inner = (agent as unknown as { inner: Inner }).inner;
+    const expected = imported ? privateKeyToAccount(evmPrivateKey).address : agent.evmAddress;
+    expect(await inner.evmAddress()).toBe(expected);
+    expect(agent.evmAddress).toBe(expected);
+    const message = "synthetic x402 wallet identity regression";
+    const signature = await (await inner.evmAccount()).signMessage({ message });
+    expect(await verifyMessage({ address: agent.evmAddress as `0x${string}`, message, signature })).toBe(true);
   });
 });

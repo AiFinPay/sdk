@@ -24,6 +24,9 @@ export interface AgentOptions {
   baseUrl?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  /** Import an existing EVM wallet for standard x402; keep this key alongside
+   * the Solana secret when backing up an agent with an override. */
+  evmPrivateKey?: `0x${string}`;
 }
 
 export interface PayInit extends Omit<RequestInit, "method"> {
@@ -47,6 +50,9 @@ export class Agent {
   ) {
     this.secretKey = secretKey;
     this.publicKey = publicKey;
+    if (opts.evmPrivateKey !== undefined) {
+      this._evm = privateKeyToAccount(opts.evmPrivateKey);
+    }
     this.baseUrl = (opts.baseUrl || DEFAULT_BASE_URL).replace(/\/$/, "");
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.fetchImpl = opts.fetchImpl ?? globalThis.fetch;
@@ -113,7 +119,9 @@ export class Agent {
    * The agent's EVM account (viem), derived from the same 32-byte seed as the
    * Solana key via domain-separated SHA-256 ("aifinpay:evm:v1\0" || seed) —
    * byte-for-byte identical to AiFinPayAgent's EVM address. Used by the
-   * standard x402 (EIP-3009) facilitator. Node-only (sync SHA-256).
+   * standard x402 (EIP-3009) facilitator. An explicitly imported EVM key is
+   * cached during construction and takes priority over derivation.
+   * Default derivation is Node-only (sync SHA-256).
    */
   async evmAccount(): Promise<PrivateKeyAccount> {
     if (this._evm) return this._evm;

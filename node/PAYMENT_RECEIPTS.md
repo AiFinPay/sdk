@@ -11,6 +11,10 @@ within `settlementConfirmMs`. These retries request the receipt; they never
 send another on-chain transaction. If retries are exhausted,
 `Aifp1PayError.recovery` contains serializable quote and payment context, with
 no private key or authorization signature. Save it for a later retry.
+Concurrent callers waiting for that batch receive the same failure and
+recovery context. After this error, retry `recoverAifp1Payment` with that
+context instead of calling `fetchPaid` again: a new `fetchPaid` request can
+buy another batch when no receipt has been cached.
 
 ```ts
 import { recoverAifp1Payment } from '@aifinpay/agent';
