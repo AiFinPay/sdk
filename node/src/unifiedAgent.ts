@@ -746,21 +746,25 @@ export class AiFinPayAgent {
    * TODO(phase-1): replace with BIP-39/BIP-44 derivation
    *   m/44'/501'/0'/0' (Solana) + m/44'/60'/0'/0/0 (EVM) once the
    *   wallet-import audit recommendation lands.
+   * An explicit opts.evmPrivateKey imports an existing EVM wallet instead;
+   * keep that key as well as the seed to restore the same EVM address.
    */
   static async fromSeed(
     seedHex: string,
     opts: AiFinPayAgentOptions = {},
   ): Promise<AiFinPayAgent> {
-    const seed = hexToBytes(seedHex.replace(/^0x/, ""));
-    if (seed.length !== 32) {
+    const normalizedSeed = seedHex.replace(/^0x/, "");
+    if (!/^[0-9a-fA-F]{64}$/.test(normalizedSeed)) {
       throw new AiFinPayError(`fromSeed: seed must be 32 bytes (64 hex chars)`);
     }
+    const seed = hexToBytes(normalizedSeed);
     const kp = nacl.sign.keyPair.fromSeed(seed);
     const inner = (Agent as unknown as { _ofKeyPair(kp: nacl.SignKeyPair, opts?: AgentOptions): Agent })
       ._ofKeyPair?.(kp, opts) ?? Agent.fromSecretB58(bs58.encode(kp.secretKey), opts);
 
     // Derive EVM key from seed (independent, not BIP-44 — see TODO above)
-    const evmHex = ("0x" + bytesToHex(crypto32(seed))) as `0x${string}`;
+    const evmHex = opts.evmPrivateKey
+      ?? (("0x" + bytesToHex(crypto32(seed))) as `0x${string}`);
     const evmAccount = privateKeyToAccount(evmHex);
     return new AiFinPayAgent(inner, evmAccount, opts);
   }
@@ -1723,6 +1727,8 @@ export class AiFinPayAgent {
       // (backend/aifp/agent-policy.js normalizeAddress) — a Solana pubkey here
       // would silently opt the agent out of its owner's own limits.
       agentId:   opts.agentId ?? this.evmAddress,
+      payerAddress: this.evmAddress,
+      signPaymentAuthorization: (message) => this.evmAccount.signMessage({ message }),
       settle: (p) => this.settleSplitterNative({
         // Polygon-only, and not by preference: /v1/pay verifies the settlement
         // by reading the Splitter's Payment event, and that verifier implements

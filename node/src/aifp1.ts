@@ -57,12 +57,38 @@ export class Aifp1SettlementUnsupportedError extends Aifp1Error {}
  * Carries the tx hash because that is the only thing standing between the
  * caller and a lost payment: the quote is still settleable through
  * `POST /v1/pay` by hand with the same Idempotency-Key, and without the hash
- * in the error there is nothing to retry with.
+ * in the error there is nothing to retry with. `recovery` additionally preserves
+ * the quote nonce and issuer domain needed to sign a fresh receipt claim.
  */
 export class Aifp1PayError extends Aifp1Error {
-  constructor(msg: string, public readonly txRef?: string, public readonly quoteId?: string) {
+  constructor(msg: string, public readonly txRef?: string, public readonly quoteId?: string,
+    public readonly recovery?: Aifp1PaymentRecovery) {
     super(msg);
   }
+}
+
+/** Public settlement context; contains no private key or authorization signature. */
+export interface Aifp1PaymentRecovery {
+  apiBaseUrl: string;
+  quote: Aifp1Quote;
+  txRef: `0x${string}`;
+  asset: string;
+}
+
+export interface Aifp1PaymentSigner {
+  payerAddress: string;
+  signPaymentAuthorization(message: string): Promise<string>;
+  fetchImpl?: typeof fetch;
+}
+
+/** Recover an already settled Polygon payment. Never sends an on-chain transaction. */
+export function recoverAifp1Payment(
+  recovery: Aifp1PaymentRecovery,
+  signer: Aifp1PaymentSigner,
+  options: Pick<Aifp1FetchOptions, "settlementConfirmMs"> = {},
+): Promise<Aifp1PayResult> {
+  return submitPayment({ ...signer, agentId: signer.payerAddress, fetchImpl: signer.fetchImpl ?? fetch },
+    recovery.apiBaseUrl, recovery.quote, recovery.txRef, recovery.asset, options);
 }
 
 /** The gateway rejected a receipt we believed covered the request. */
@@ -88,6 +114,9 @@ export interface Aifp1Challenge {
 /** POST /v1/quote 200 body — routes/aifp.js (`used` is stripped server-side). */
 export interface Aifp1Quote {
   quote_id:        string;
+  payer?:          string;
+  network_mode?:   "live" | "test";
+  payment_authorization?: { scheme: "wallet-signature-v1"; domain: string; max_age_seconds: number };
   merchant_id:     string;
   resource:        string;
   scope:           Aifp1Scope;
@@ -335,7 +364,9 @@ export class Aifp1ReceiptCache {
   async coalesce<T>(site: string, buy: () => Promise<T>): Promise<T | "retry"> {
     const running = this.inflight.get(site);
     if (running) {
-      await running.catch(() => { /* the winner's failure is theirs to throw */ });
+      // The winner may already have paid. Share its failure and recovery
+      // context; swallowing it would let every waiter buy another batch.
+      await running;
       return "retry";
     }
     const p = buy().finally(() => { this.inflight.delete(site); });
@@ -409,6 +440,8 @@ export interface Aifp1FetchOptions {
    * the tiers move.
    */
   units?:    number;
+  /** Maximum quoted batch cost in USD; only tightens the agent's budget caps. */
+  maxAmountUsd?: number;
   /** Where /v1/quote and /v1/pay live. Default https://api.aifinpay.io */
   apiBaseUrl?: string;
   /**
@@ -419,7 +452,7 @@ export interface Aifp1FetchOptions {
   gatewayOrigins?: readonly string[];
   /** Value for the AIFP-Agent-Id header; defaults to the agent's EVM address. */
   agentId?:  string;
-  /** How long to keep retrying /v1/pay while the chain catches up (AIFP-425). */
+  /** How long to retry /v1/pay on HTTP 425, HTTP 503 or connection failures. */
   settlementConfirmMs?: number;
 }
 
@@ -502,6 +535,9 @@ export interface Aifp1Deps {
   cache:     Aifp1ReceiptCache;
   /** AIFP-Agent-Id / agent_id — a 0x address, or agent policies cannot key on it. */
   agentId:   string;
+  /** Actual settlement wallet, independent of any display/agent identifier. */
+  payerAddress: string;
+  signPaymentAuthorization(message: string): Promise<string>;
   /**
    * Settle `totalWei` to `merchantWallet` with `orderId`, returning a hash
    * whose transaction was included AND succeeded.
@@ -550,6 +586,10 @@ export async function aifp1Fetch(
   init: RequestInit = {},
   opts: Aifp1FetchOptions = {},
 ): Promise<Response | null> {
+  if (opts.maxAmountUsd !== undefined
+      && (!Number.isFinite(opts.maxAmountUsd) || opts.maxAmountUsd <= 0)) {
+    throw new Aifp1QuoteError("maxAmountUsd must be a positive finite USD amount");
+  }
   const { site, restPath } = parseGatewayUrl(url, opts.gatewayOrigins ?? DEFAULT_GATEWAY_ORIGINS);
 
   // A paid flow sends the request twice, so the body has to survive being sent
@@ -641,16 +681,35 @@ export async function aifp1Fetch(
   // spend it, and if it does not they buy their own, which is a different
   // batch rather than a duplicate.
   const buyBatch = async (): Promise<Response | null> => {
+    if (typeof deps.signPaymentAuthorization !== "function" || !/^0x[0-9a-fA-F]{40}$/.test(deps.payerAddress || "")) {
+      throw new Aifp1QuoteError("a settlement wallet signer is required to receive a payment receipt");
+    }
     // 2. Quote.
     const apiBase = (opts.apiBaseUrl ?? DEFAULT_API_BASE).replace(/\/$/, "");
     const { scope, resource } = resolveScope(opts, challenge);
     const quote = await requestQuote(deps, apiBase, {
       merchant_id: challenge.merchant_id,
+      payer: deps.payerAddress,
       ...(resource !== undefined ? { resource } : {}),
       scope,
       units: opts.units ?? defaultUnitsFor(challenge),
       agent_id: deps.agentId,
     });
+    const authorization = quote.payment_authorization;
+    if (!authorization || authorization.scheme !== "wallet-signature-v1"
+        || typeof authorization.domain !== "string" || !authorization.domain.trim()
+        || !Number.isSafeInteger(authorization.max_age_seconds)
+        || authorization.max_age_seconds < 1 || authorization.max_age_seconds > 300) {
+      throw new Aifp1QuoteError("quote does not advertise supported wallet-signature-v1 receipt authorization");
+    }
+    if (quote.payer != null && (typeof quote.payer !== "string"
+        || quote.payer.toLowerCase() !== deps.payerAddress.toLowerCase())) {
+      throw new Aifp1QuoteError("quote names a different paying wallet");
+    }
+    const quoteExpiry = Date.parse(quote.expires_at);
+    if (!Number.isFinite(quoteExpiry) || quoteExpiry <= Date.now()) {
+      throw new Aifp1QuoteError("quote is expired or has invalid expires_at; request a fresh quote before paying");
+    }
 
     // The merchant we are about to pay must be the merchant that refused us.
     // Cheap, and the failure it catches is the one worth catching.
@@ -665,6 +724,9 @@ export async function aifp1Fetch(
     const amountUsd = Number(quote.amount);
     if (!Number.isFinite(amountUsd) || amountUsd < 0) {
       throw new Aifp1QuoteError(`quote ${quote.quote_id} has an unusable amount "${quote.amount}"`);
+    }
+    if (opts.maxAmountUsd !== undefined && amountUsd > opts.maxAmountUsd) {
+      throw new Aifp1QuoteError(`quote ${quote.quote_id} costs $${amountUsd}, above maxAmountUsd $${opts.maxAmountUsd}`);
     }
     if (!deps.checkPerCall(amountUsd)) return null;
     const reservation = await deps.reserveDaily(amountUsd);
@@ -841,15 +903,14 @@ async function requestQuote(
 /**
  * Exchange a settled transaction for a receipt.
  *
- * The retry loop exists for exactly one server answer: AIFP-425, "settlement
- * not yet confirmed — retry with the same Idempotency-Key shortly". Our money
- * is already on-chain at that point, so giving up would mean a paid batch with
+ * Retry pending settlement, unavailable accounting and connection failures.
+ * Our money is already on-chain, so giving up would mean a paid batch with
  * no receipt to spend it. Every retry reuses the same key, so a retry that
  * crosses with the server's first success replays that success rather than
  * minting a second receipt.
  */
 async function submitPayment(
-  deps: Aifp1Deps,
+  deps: Pick<Aifp1Deps, 'fetchImpl' | 'agentId' | 'payerAddress' | 'signPaymentAuthorization'>,
   apiBase: string,
   quote: Aifp1Quote,
   txRef: `0x${string}`,
@@ -860,9 +921,20 @@ async function submitPayment(
   const idempotencyKey = idempotencyKeyFor({ quoteId: quote.quote_id, chain, asset, txRef });
   const deadline = Date.now() + (opts.settlementConfirmMs ?? DEFAULT_SETTLEMENT_CONFIRM_MS);
 
+  const recovery: Aifp1PaymentRecovery = { apiBaseUrl: apiBase, quote, txRef, asset };
+  const failure = (message: string) => new Aifp1PayError(message, txRef, quote.quote_id, recovery);
   let lastDetail = "";
   for (let attempt = 0; ; attempt++) {
+    const expiresAt = Math.floor(Date.now() / 1000) + Math.min(quote.payment_authorization?.max_age_seconds ?? 240, 240);
+    const payer = deps.payerAddress.toLowerCase();
+    // Construct this locally; never sign an arbitrary server-provided message.
+    const message = paymentAuthorizationMessage({ quote, apiBase, chain, txRef,
+      asset, idempotencyKey, payer, expiresAt });
+    let signature: string;
+    try { signature = await deps.signPaymentAuthorization(message); }
+    catch (e) { throw failure(`payment already settled; wallet could not sign receipt authorization: ${(e as Error).message}`); }
     let r: Response;
+    let text: string;
     try {
       r = await deps.fetchImpl(`${apiBase}/v1/pay`, {
         method: "POST",
@@ -873,31 +945,45 @@ async function submitPayment(
         },
         body: JSON.stringify({
           quote_id: quote.quote_id, chain, asset, tx_ref: txRef, agent_id: deps.agentId,
+          payment_authorization: { payer, expires_at: expiresAt, signature },
         }),
       });
+      text = await r.text();
     } catch (e) {
-      throw new Aifp1PayError(
-        `POST ${apiBase}/v1/pay failed after settling: ${(e as Error).message}`,
-        txRef, quote.quote_id,
-      );
+      if (Date.now() >= deadline) {
+        throw failure(`POST ${apiBase}/v1/pay failed after settling: ${(e as Error).message}`);
+      }
+      await sleep(Math.min(1000 * 2 ** attempt, 8000));
+      continue;
     }
-    const text = await r.text();
     if (r.ok) {
-      const paid = JSON.parse(text) as Aifp1PayResult;
+      let paid: Aifp1PayResult;
+      try { paid = JSON.parse(text) as Aifp1PayResult; }
+      catch { throw failure(`/v1/pay returned invalid JSON after settlement`); }
       if (!paid.receipt) {
-        throw new Aifp1PayError(`/v1/pay → 200 without a receipt: ${text.slice(0, 300)}`, txRef, quote.quote_id);
+        throw failure(`/v1/pay → 200 without a receipt: ${text.slice(0, 300)}`);
       }
       return paid;
     }
     lastDetail = text.slice(0, 400);
-    // 425 is the only status worth retrying: the chain has not caught up with
-    // us yet. Everything else is a verdict.
-    if (r.status !== 425 || Date.now() >= deadline) {
-      throw new Aifp1PayError(
-        `POST /v1/pay → ${r.status} after on-chain settlement ${txRef} for quote ${quote.quote_id}: ${lastDetail}`,
-        txRef, quote.quote_id,
-      );
+    // A 503 after settlement may mean accounting is unavailable, or that a
+    // committed response was lost. Retry issuance, never the transfer.
+    if (![425, 503].includes(r.status) || Date.now() >= deadline) {
+      throw failure(`POST /v1/pay → ${r.status} after on-chain settlement ${txRef} for quote ${quote.quote_id}: ${lastDetail}`);
     }
     await sleep(Math.min(1000 * 2 ** attempt, 8000));
   }
+}
+
+/** Fixed, domain-separated receipt claim; sign with the wallet that settled. */
+export function paymentAuthorizationMessage(p: {
+  quote: Aifp1Quote; apiBase: string; chain: string; txRef: string;
+  asset: string; idempotencyKey: string; payer: string; expiresAt: number;
+}): string {
+  return JSON.stringify([
+    'AiFinPay receipt authorization v1',
+    p.quote.payment_authorization?.domain ?? p.apiBase.replace(/\/$/, ''),
+    p.quote.quote_id, p.quote.nonce, p.quote.merchant_id, p.quote.network_mode || 'live',
+    p.chain, p.txRef, p.asset || '', p.idempotencyKey, p.payer, p.expiresAt,
+  ]);
 }

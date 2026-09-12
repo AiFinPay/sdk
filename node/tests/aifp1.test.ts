@@ -15,11 +15,14 @@
 // pass while the SDK talks to nobody.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { verifyMessage } from "viem";
 import { AiFinPayAgent, BudgetCapExceededError } from "../src/unifiedAgent.js";
 import { MemorySpendLedger } from "../src/spendLedger.js";
 import {
   Aifp1ReceiptCache,
   Aifp1QuoteError,
+  Aifp1PayError,
+  recoverAifp1Payment,
   idempotencyKeyFor,
   scopeCovers,
   prefixHint,
@@ -62,6 +65,8 @@ interface MockServer {
   merchants: Record<string, string>;
   /** Number of AIFP-425 answers /v1/pay gives before settling. */
   payNotConfirmedTimes: number;
+  payFailures: Array<number | "network">;
+  payBodies: Array<Record<string, any>>;
   receipts: Map<string, MockReceipt>;
   fetch: typeof fetch;
 }
@@ -100,6 +105,8 @@ function mockServer(): MockServer {
     weights: {},
     merchants: { acme: "mrch_acme", other: "mrch_other" },
     payNotConfirmedTimes: 0,
+    payFailures: [],
+    payBodies: [],
     receipts: new Map(),
     fetch: null as unknown as typeof fetch,
   };
@@ -128,6 +135,11 @@ function mockServer(): MockServer {
       const quote_id = `qt_${String(++seq).padStart(16, "0")}`;
       return json({
         quote_id,
+        payer: body.payer?.toLowerCase(),
+        network_mode: "live",
+        payment_authorization: {
+          scheme: "wallet-signature-v1", domain: API, max_age_seconds: 300,
+        },
         merchant_id: body.merchant_id,
         resource,
         scope,
@@ -169,17 +181,41 @@ function mockServer(): MockServer {
       const key = headers.get("Idempotency-Key");
       if (!key) return json({ error: "AIFP-400", detail: "Idempotency-Key header is required" }, 400);
       s.idempotencyKeys.push(key);
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      s.payBodies.push(body);
+      // The quote the client just paid — replayed from the sequence it holds.
+      const quoted = lastQuotes.get(body.quote_id);
+      if (!quoted) return json({ error: "AIFP-404", detail: "unknown or expired quote_id" }, 404);
+      const auth = body.payment_authorization;
+      const subject = typeof auth?.payer === "string" ? auth.payer.toLowerCase() : "";
+      const now = Math.floor(Date.now() / 1000);
+      // Construct the server's wire format independently of SDK helpers. The
+      // published 1.8.4 client paid first, omitted this proof, then received 401.
+      const message = JSON.stringify([
+        "AiFinPay receipt authorization v1", API, quoted.quote_id, quoted.nonce,
+        quoted.merchant_id, "live", body.chain, body.tx_ref, body.asset || "",
+        key, subject, auth?.expires_at,
+      ]);
+      let authenticated = false;
+      if (/^0x[0-9a-f]{40}$/.test(subject) && Number.isSafeInteger(auth?.expires_at)
+          && auth.expires_at > now && auth.expires_at <= now + 300
+          && typeof auth.signature === "string") {
+        authenticated = await verifyMessage({ address: subject as `0x${string}`, message,
+          signature: auth.signature as `0x${string}` }).catch(() => false);
+      }
+      if (!authenticated) return json({ error: "AIFP-401-PAYER", detail: "wallet signature required" }, 401);
+      if (quoted.payer && subject !== quoted.payer) return json({ error: "AIFP-403-PAYER" }, 403);
       if (s.payNotConfirmedTimes > 0) {
         s.payNotConfirmedTimes--;
         return json({ error: "AIFP-425", detail: "settlement not yet confirmed" }, 425);
       }
+      const failure = s.payFailures.shift();
+      if (failure === "network") throw new Error("connection lost after settlement");
+      if (failure) return json({ error: `AIFP-${failure}`, detail: "receipt unavailable" }, failure);
+      if (committedPayments.has(key)) return json(committedPayments.get(key));
       s.pays++;
-      const body = JSON.parse(String(init?.body ?? "{}"));
       const receiptId = `rcpt_${String(++seq).padStart(16, "0")}`;
       const jwt = `jwt.${receiptId}`;
-      // The quote the client just paid — replayed from the sequence it holds.
-      const quoted = lastQuotes.get(body.quote_id);
-      if (!quoted) return json({ error: "AIFP-404", detail: "unknown or expired quote_id" }, 404);
       s.receipts.set(jwt, {
         receiptId,
         merchantId: quoted.merchant_id,
@@ -189,7 +225,7 @@ function mockServer(): MockServer {
         used: 0,
         expMs: Date.now() + 30 * 24 * 3600 * 1000,
       });
-      return json({
+      const paid = {
         receipt_id: receiptId, receipt: jwt, status: "settled", tx_ref: body.tx_ref,
         merchant_id: quoted.merchant_id, resource: quoted.resource, scope: quoted.scope,
         amount: quoted.amount, currency: "USD", tier: "standard", unit_price: "0.0001",
@@ -200,7 +236,9 @@ function mockServer(): MockServer {
         expires_at: s.expiresAtOverride
           ?? new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
         settlement: { chain: "polygon", tx_ref: body.tx_ref },
-      });
+      };
+      committedPayments.set(key, paid);
+      return json(paid);
     }
 
     // ── The gateway ─────────────────────────────────────────────────────
@@ -256,6 +294,7 @@ function mockServer(): MockServer {
 
   // /v1/pay needs the quote it is settling; the real server stores it, so does this.
   const lastQuotes = new Map<string, any>();
+  const committedPayments = new Map<string, any>();
   const wrapped = s.fetch;
   s.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const r = await wrapped(input, init);
@@ -562,9 +601,132 @@ describe("aifp1: idempotency key", () => {
   });
 });
 
+describe("aifp1: signed receipt compatibility", () => {
+  it("signs as the settlement wallet when agentId is a display identifier", async () => {
+    const server = mockServer();
+    const { agent, settlements } = await agentFor(server);
+    const response = await agent.fetchPaid(`${GATEWAY}/acme/articles/a`, {}, { agentId: "display-agent" });
+    expect(response!.status).toBe(200);
+    expect(settlements).toHaveLength(1);
+    expect(server.payBodies[0]!.agent_id).toBe("display-agent");
+    expect(server.payBodies[0]!.payment_authorization.payer).toBe(agent.evmAddress.toLowerCase());
+  });
+
+  it.each([503, "network"] as const)("retries %s with the same transaction and idempotency key", async (failure) => {
+    const server = mockServer();
+    server.payFailures = [failure];
+    const { agent, settlements } = await agentFor(server);
+    const response = await agent.fetchPaid(`${GATEWAY}/acme/articles/a`, {}, { settlementConfirmMs: 5000 });
+    expect(response!.status).toBe(200);
+    expect(settlements).toHaveLength(1);
+    expect(server.payBodies).toHaveLength(2);
+    expect(new Set(server.payBodies.map((body) => body.tx_ref)).size).toBe(1);
+    expect(new Set(server.idempotencyKeys).size).toBe(1);
+    expect(server.pays).toBe(1);
+  });
+
+  it("recovers the saved payment and replays its receipt without a second settlement", async () => {
+    const server = mockServer();
+    server.payFailures = [503];
+    const { agent, settlements } = await agentFor(server);
+    let failure: unknown;
+    try {
+      await agent.fetchPaid(`${GATEWAY}/acme/articles/a`, {}, { settlementConfirmMs: 0 });
+    } catch (error) { failure = error; }
+    expect(failure).toBeInstanceOf(Aifp1PayError);
+    const recovery = (failure as Aifp1PayError).recovery!;
+    expect(recovery.quote.nonce).toBeTruthy();
+    expect(recovery.quote.payment_authorization!.domain).toBe(API);
+    expect(recovery.quote.payment_authorization).not.toHaveProperty("signature");
+    expect(recovery).not.toHaveProperty("privateKey");
+    const signer = {
+      payerAddress: agent.evmAddress,
+      signPaymentAuthorization: (message: string) => (agent as any).evmAccount.signMessage({ message }),
+      fetchImpl: server.fetch,
+    };
+    const paid = await recoverAifp1Payment(JSON.parse(JSON.stringify(recovery)), signer);
+    const replay = await recoverAifp1Payment(recovery, signer);
+    expect(replay.receipt).toBe(paid.receipt);
+    expect(server.pays).toBe(1);
+    expect(settlements).toHaveLength(1);
+    expect(new Set(server.idempotencyKeys).size).toBe(1);
+    const content = await server.fetch(`${GATEWAY}/acme/articles/a`, {
+      headers: { "AIFP-Receipt": paid.receipt },
+    });
+    expect(content.status).toBe(200);
+  });
+
+  it("retains recovery context but does not retry a permanent receipt refusal", async () => {
+    const server = mockServer();
+    server.payFailures = [422];
+    const { agent, settlements } = await agentFor(server);
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/articles/a`)).rejects.toMatchObject({
+      recovery: { apiBaseUrl: API, asset: "POL", txRef: "0x" + "ab".repeat(32) },
+    });
+    expect(settlements).toHaveLength(1);
+    expect(server.payBodies).toHaveLength(1);
+  });
+
+  it.each([
+    ["missing authorization", { payment_authorization: undefined }],
+    ["unsupported authorization", { payment_authorization: { scheme: "other", domain: API, max_age_seconds: 300 } }],
+    ["missing issuer", { payment_authorization: { scheme: "wallet-signature-v1", domain: "", max_age_seconds: 300 } }],
+    ["invalid lifetime", { payment_authorization: { scheme: "wallet-signature-v1", domain: API, max_age_seconds: 0 } }],
+    ["excessive lifetime", { payment_authorization: { scheme: "wallet-signature-v1", domain: API, max_age_seconds: 301 } }],
+    ["different payer", { payer: MERCHANT_WALLET }],
+    ["malformed payer", { payer: {} }],
+    ["invalid expiry", { expires_at: "not-a-date" }],
+    ["expired quote", { expires_at: "2020-01-01T00:00:00.000Z" }],
+  ])("refuses %s before settlement", async (_name, fields) => {
+    const server = mockServer();
+    const base = server.fetch;
+    server.fetch = (async (input, init) => {
+      const response = await base(input, init);
+      if (String(input) === `${API}/v1/quote` && response.ok) {
+        return json({ ...await response.json(), ...(fields as object) });
+      }
+      return response;
+    }) as typeof fetch;
+    const { agent, settlements } = await agentFor(server);
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/articles/a`)).rejects.toBeInstanceOf(Aifp1QuoteError);
+    expect(settlements).toHaveLength(0);
+    expect(server.payBodies).toHaveLength(0);
+  });
+});
+
 // ── Budget caps and loud failures ─────────────────────────────────────────
 
 describe("aifp1: budget caps and refusals", () => {
+  it.each([0, -1, NaN, Infinity])("refuses invalid maxAmountUsd %s before requesting a quote", async (maxAmountUsd) => {
+    const server = mockServer();
+    const { agent, settlements } = await agentFor(server);
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/articles/a`, {}, { maxAmountUsd }))
+      .rejects.toBeInstanceOf(Aifp1QuoteError);
+    expect(server.quotes).toBe(0);
+    expect(settlements).toHaveLength(0);
+  });
+
+  it("refuses a batch above maxAmountUsd without sending a transaction", async () => {
+    const server = mockServer();
+    const { agent, settlements } = await agentFor(server);
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/articles/a`, {}, { maxAmountUsd: 0.05 }))
+      .rejects.toThrow(/maxAmountUsd/);
+    expect(server.quotes).toBe(1);
+    expect(settlements).toHaveLength(0);
+    expect(server.pays).toBe(0);
+  });
+
+  it("accepts maxAmountUsd at the batch total but does not widen the agent cap", async () => {
+    const server = mockServer();
+    const { agent, settlements } = await agentFor(server);
+    expect((await agent.fetchPaid(`${GATEWAY}/acme/articles/a`, {}, { maxAmountUsd: 0.1 }))!.status).toBe(200);
+    expect(settlements).toHaveLength(1);
+    const capped = await agentFor(mockServer(), { budgetCaps: { per_call_usd: 0.05 } });
+    await expect(capped.agent.fetchPaid(`${GATEWAY}/acme/articles/a`, {}, { maxAmountUsd: 1 }))
+      .rejects.toBeInstanceOf(BudgetCapExceededError);
+    expect(capped.settlements).toHaveLength(0);
+  });
+
   it("refuses to settle a batch above the per-call cap", async () => {
     const server = mockServer();
     const { agent, settlements } = await agentFor(server, {
@@ -761,6 +923,22 @@ describe("aifp1: keeping a batch that is still good", () => {
 });
 
 describe("aifp1: concurrency", () => {
+  it("shares a paid receipt failure with all waiting callers without another settlement", async () => {
+    const server = mockServer();
+    server.payFailures = [503, 503, 503, 503];
+    const { agent, settlements } = await agentFor(server);
+    const outcomes = await Promise.allSettled(Array.from({ length: 4 }, (_, i) =>
+      agent.fetchPaid(`${GATEWAY}/acme/articles/${i}`, {}, { settlementConfirmMs: 0 }),
+    ));
+    expect(settlements).toHaveLength(1);
+    expect(server.quotes).toBe(1);
+    expect(outcomes.every((outcome) => outcome.status === "rejected")).toBe(true);
+    const failures = outcomes.map((outcome) => (outcome as PromiseRejectedResult).reason);
+    expect(failures[0]).toBeInstanceOf(Aifp1PayError);
+    expect(failures[0].recovery).toMatchObject({ txRef: "0x" + "ab".repeat(32) });
+    expect(failures.every((failure) => failure === failures[0])).toBe(true);
+  });
+
   it("ten workers arriving together buy one batch, not ten", async () => {
     // The cache is empty between deciding to buy and the receipt arriving, so
     // every concurrent caller missed and every one settled. It recurred at
