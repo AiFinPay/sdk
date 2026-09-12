@@ -1,0 +1,31 @@
+{
+  "name": "@aifinpay/internal-tokenlist",
+  "version": "0.1.0",
+  "description": "Token list & contract ABIs for AiFinPay internal assets. The token list is GENERATED from on-chain reads — never hand-edit tokenlist/internal.json.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "tokenlist/internal.json",
+    "abi"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "generate": "node scripts/gen-tokenlist.mjs",
+    "generate:check": "node scripts/gen-tokenlist.mjs --check",
+    "test": "vitest run"
+  },
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AiFinPay/sdk.git",
+    "directory": "node/internal-tokenlist"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.5"
+  }
+}

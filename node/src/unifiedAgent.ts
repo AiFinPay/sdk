@@ -28,8 +28,8 @@ import {
   privateKeyToAccount,
   type PrivateKeyAccount,
 } from "viem/accounts";
-import { defineChain } from "viem";
 import { polygon, base, arbitrum, optimism, bsc, mainnet, unichain, type Chain } from "viem/chains";
+import { botchain, xrplevm } from "./chains.js";
 import {
   Connection,
   Keypair,
@@ -319,28 +319,9 @@ export function paymentIdFor(orderId: string): `0x${string}` {
 // on-chain (eth_getCode returned bytecode for every address below,
 // 2026-07-15). Do NOT add chains here without re-running that check.
 //
-// BOT Chain (677) and XRPL EVM (1440000) are not shipped with viem/chains,
-// so we defineChain() them locally.
-
-const botchain: Chain = defineChain({
-  id:   677,
-  name: "BOT Chain",
-  nativeCurrency: { name: "BOT", symbol: "BOT", decimals: 18 },
-  rpcUrls: { default: { http: ["https://rpc.botchain.ai"] } },
-  blockExplorers: {
-    default: { name: "BOT Chain Explorer", url: "https://scan.botchain.ai" },
-  },
-});
-
-const xrplevm: Chain = defineChain({
-  id:   1440000,
-  name: "XRPL EVM",
-  nativeCurrency: { name: "XRP", symbol: "XRP", decimals: 18 },
-  rpcUrls: { default: { http: ["https://rpc.xrplevm.org"] } },
-  blockExplorers: {
-    default: { name: "XRPL EVM Explorer", url: "https://explorer.xrplevm.org" },
-  },
-});
+// BOT Chain (677) and XRPL EVM (1440000) are not shipped with viem/chains.
+// They live in ./chains.js so this module and splitterRoutes.ts cannot drift
+// apart on a chain id or RPC.
 
 /** EVM chains with a live, on-chain-verified B2BSplitter deployment. */
 export type SplitterChainName =
@@ -1612,13 +1593,26 @@ export class AiFinPayAgent {
       );
     }
 
-    // ipCreator routing: prefer the caller's explicit ip_creator; else route
-    // the royalty slot to the splitter's treasury (mirrors the Solana branch).
-    // Passing address(0) would skip the transfer and permanently strand the
-    // 1bp inside B2BSplitter — the contract has no sweep function.
-    const ipCreator = p.ipCreator
-      ?? await this.splitterTreasury(p.splitter, p.chain)
-      ?? "0x0000000000000000000000000000000000000000";
+    // ipCreator routing: the caller's explicit ip_creator, or address(0).
+    //
+    // This used to fall back to the splitter's own treasury, on the reasoning
+    // that address(0) "would skip the transfer and permanently strand the 1bp
+    // inside B2BSplitter — the contract has no sweep function". That premise is
+    // false. B2BSplitter._split(), lines 238-244:
+    //
+    //     if (_ipCreator != address(0)) { ipAmt = _total * ipCreatorBps / D; }
+    //     // else: ipAmt stays 0 and is absorbed into merchantAmt below
+    //     merchantAmt = _total - treasuryAmt - ipAmt;
+    //
+    // With address(0) the royalty is not stranded — it is folded into the
+    // MERCHANT's leg, which is where it belongs when no creator was named. The
+    // fallback therefore took 1bp off every payment whose merchant had not set
+    // a creator, and paid it to OUR treasury.
+    //
+    // Fixed in the Python client on 2026-08-27 and not ported here. That is the
+    // third instance this week of one implementation being corrected and its
+    // twin left alone; the others were gate/src/scope.ts and this file.
+    const ipCreator = p.ipCreator ?? "0x0000000000000000000000000000000000000000";
     const { publicClient, walletClient } = this.splitterClients(p.chain);
     // The entrypoint follows the deployed contract, not the SDK release: v1.2
     // (Polygon, Optimism, BOT Chain, XRPL EVM as of 2026-07-31) takes a bytes32
@@ -1697,6 +1691,27 @@ export class AiFinPayAgent {
   get aifp1Receipts(): Aifp1ReceiptCache { return this._aifp1Cache; }
 
   /**
+   * Legacy fetchPaid cannot safely execute a v1.3 quote yet: it has no
+   * independently pinned runtime hash/profile input. Keep it fail-closed until
+   * it is wired through SettlementClient + executeSettlementInvoice.
+   *
+   * Tests replace this method with a chain stub; production never signs here.
+   */
+  private async settleAifp1NativeV13(_p: {
+    merchantWallet: `0x${string}`;
+    grossWei: bigint;
+    merchantWei: bigint;
+    treasuryWei: bigint;
+    creatorWei: bigint;
+    validUntil: bigint;
+    orderId: string;
+  }): Promise<`0x${string}`> {
+    throw new AiFinPayError(
+      "AIFP-1 fetchPaid settlement is disabled until a trusted v1.3 deployment/runtime profile is supplied; use SettlementClient with an independent TrustedSettlementRoutePin",
+    );
+  }
+
+  /**
    * Fetch a paywalled URL, paying the AIFP-1 gateway if it asks.
    *
    *   const res = await agent.fetchPaid("https://gateway.aifinpay.io/acme/articles/2026/x");
@@ -1713,9 +1728,8 @@ export class AiFinPayAgent {
   async fetchPaid(
     url:  string,
     init: RequestInit = {},
-    opts: Aifp1FetchOptions & { splitter?: `0x${string}` } = {},
+    opts: Aifp1FetchOptions = {},
   ): Promise<Response | null> {
-    const deployment = SPLITTER_DEPLOYMENTS.polygon;
     const deps: Aifp1Deps = {
       fetchImpl: this.inner.fetchImpl,
       cache:     this._aifp1Cache,
@@ -1723,25 +1737,9 @@ export class AiFinPayAgent {
       // (backend/aifp/agent-policy.js normalizeAddress) — a Solana pubkey here
       // would silently opt the agent out of its owner's own limits.
       agentId:   opts.agentId ?? this.evmAddress,
-      settle: (p) => this.settleSplitterNative({
-        // Polygon-only, and not by preference: /v1/pay verifies the settlement
-        // by reading the Splitter's Payment event, and that verifier implements
-        // Polygon alone (backend/aifp/verify-settlement.js — Solana returns
-        // notImplemented, anything else unsupported_chain). Settling elsewhere
-        // would move real money for a receipt that can never be issued.
-        chain:          "polygon",
-        // The address is not carried in the quote, so it comes from this SDK's
-        // own verified registry. The backend checks the tx against its
-        // configured SPLITTER_ADDRESS_POLYGON; if an operator has pointed that
-        // somewhere else, /v1/pay answers no_splitter_payment_event, which is
-        // loud. Override here if you are running against such a deployment.
-        splitter:       opts.splitter ?? deployment.splitter,
-        // Left undetected on purpose — settleSplitterNative asks the contract,
-        // which is the only source that cannot disagree with itself.
-        merchantWallet: p.merchantWallet,
-        totalWei:       p.totalWei,
-        orderId:        p.orderId,
-      }),
+      payerAddress: this.evmAddress,
+      signPaymentAuthorization: (message) => this.evmAccount.signMessage({ message }),
+      settle: (p) => this.settleAifp1NativeV13(p),
       checkPerCall: (usd) => this.checkPerCall(usd),
       reserveDaily: (usd) => this.reserveDaily(usd),
       commit:  (id, usd) => this.ledger.commit(id, usd),
@@ -1947,9 +1945,6 @@ export class AiFinPayAgent {
     }
   }
 
-  // Cache: "chain:splitter address" → treasury address (constant per deployment).
-  private splitterTreasuryCache = new Map<string, `0x${string}`>();
-
   /** Read + cache B2BSplitter.treasury() on the given chain (default
    *  polygon for back-compat). Returns null on RPC failure. */
   /**
@@ -1996,27 +1991,6 @@ export class AiFinPayAgent {
     }
   }
 
-  private async splitterTreasury(
-    splitter: `0x${string}`,
-    chainName: SplitterChainName = "polygon",
-  ): Promise<`0x${string}` | null> {
-    const cacheKey = `${chainName}:${splitter.toLowerCase()}`;
-    const cached = this.splitterTreasuryCache.get(cacheKey);
-    if (cached) return cached;
-    try {
-      const { publicClient } = this.splitterClients(chainName);
-      const treasury = await publicClient.readContract({
-        address:      splitter,
-        abi:          SPLITTER_TREASURY_ABI,
-        functionName: "treasury",
-      }) as `0x${string}`;
-      if (!treasury || treasury === "0x0000000000000000000000000000000000000000") return null;
-      this.splitterTreasuryCache.set(cacheKey, treasury);
-      return treasury;
-    } catch {
-      return null;
-    }
-  }
 
   /**
    * Read the native Polygon USDC (Circle-issued, 6 decimals) balance for the

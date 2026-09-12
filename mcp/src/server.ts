@@ -6,7 +6,9 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import type { McpConfig } from "./config.js";
 import { agentAddressTool, runAgentAddress } from "./tools/agent-address.js";
+import { agentQuotaTool, runAgentQuota } from "./tools/agent-quota.js";
 import { makeSafeFetch } from "./safe-fetch.js";
+import { loadConfigFromEnv } from "./config.js";
 import {
   agentPassportResolveTool,
   runAgentPassportResolve,
@@ -21,6 +23,9 @@ import {
 // may explicitly use AIFINPAY_ALLOW_PRIVATE_FETCH=1.
 const safeFetch = makeSafeFetch({
   allowPrivate: process.env.AIFINPAY_ALLOW_PRIVATE_FETCH === "1",
+  // Exact hosts an operator vouches for. Skips only the DNS pre-check, and only
+  // for those names — see safe-fetch.ts for why this is not a proxy switch.
+  trustedHosts: loadConfigFromEnv().trustedHosts,
 });
 
 /**
@@ -88,6 +93,7 @@ export async function createServer(config: McpConfig = {}) {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       agentAddressTool(),
+      agentQuotaTool(),
       agentPassportResolveTool(),
       settlementRoutesTool(),
       settlementInvoiceTool(),
@@ -100,6 +106,8 @@ export async function createServer(config: McpConfig = {}) {
     switch (name) {
       case "agent_address":
         return runAgentAddress(ctx, args ?? {});
+      case "agent_quota":
+        return runAgentQuota(ctx, args ?? {});
       case "agent_passport_resolve":
         return runAgentPassportResolve(ctx, args ?? {});
       case "settlement_routes":

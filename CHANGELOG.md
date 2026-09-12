@@ -4,6 +4,36 @@ All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
 `1.0.0` onward the public API is stable and changes follow semver.
 
+## aifinpay-agent 1.5.0 · @aifinpay/mcp 2.0.0-rc.3 — 2026-08-27
+
+**aifinpay-agent 1.5.0 changes where money goes. Read this before upgrading.**
+
+The royalty slot now defaults to `address(0)` instead of the splitter's own
+treasury. `B2BSplitter._split` folds that share into the merchant's when the
+recipient is zero and attempts no transfer, so the merchant keeps it — which is
+what `/v1/quote` has always published.
+
+The previous fallback was justified in the code as "address(0) would strand the
+1bp inside the contract", which the contract does not do. The effect was that
+0.01% of every payment with no explicit `ip_creator` went to us instead of the
+merchant, silently. Observed on Polygon in tx `0x6b853876…`: merchant 98.99%,
+treasury 1.01% across one address, against a quoted 99/1/0.
+
+Minor rather than patch: an agent that upgrades builds a different transaction.
+
+**@aifinpay/mcp 2.0.0-rc.3** adds two operator allowlists, both off by default:
+
+- `AIFINPAY_GATEWAY_ORIGINS` — origins this agent may settle against. The
+  wrapper never exposed a parameter `@aifinpay/agent` has always supported, so
+  self-hosted merchants were unreachable: `payable_fetch` reached the 402 and
+  refused. Validated as bare https origins with plain hostnames — a wildcard is
+  rejected rather than stored and silently matched against nothing.
+- `AIFINPAY_TRUSTED_HOSTS` — hosts whose DNS pre-check is skipped, matched
+  exactly. Behind an HTTP proxy the client cannot resolve at all, so the SSRF
+  guard refused every host as "cannot resolve". Deliberately per-host and not a
+  proxy-detection switch: "disable the check when proxied" turns an environment
+  quirk into a blanket SSRF bypass.
+
 ## @aifinpay/agent 1.8.4 · aifinpay-agent 1.4.1
 
 ### Fixed
