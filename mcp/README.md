@@ -107,15 +107,21 @@ uses the same source priority and reapplies the operator's payment cap. Confirm
 | `AIFINPAY_HOME` | `~/.aifinpay` | Legacy keystore directory. |
 | `AIFINPAY_WALLET_PASSPHRASE` | — | Opens an existing encrypted keystore; init creates a plaintext file. |
 | `AIFINPAY_GATEWAY_ORIGINS` | SDK default | Comma-separated exact HTTPS origins for self-hosted AIFP-1 gateways. |
+| `AIFINPAY_GATEWAY_PATH_MODE` | `gateway` | AIFP-1 resource identity: `gateway` uses the merchant slug; `direct` uses the full request path for self-hosted route namespaces. |
 | `AIFINPAY_BASE_URL` | `https://aifinpay.io` | Backend URL for nonce + funding probes. |
 | `AIFINPAY_TIMEOUT_MS` | `30000` | Request timeout. |
 | `AIFINPAY_MAX_USD` | — | Hard cap per single payment. Strongly recommended. |
+
+The path mode applies to this MCP process. Keep the default `gateway` mode for
+hosted `gateway.aifinpay.io/{merchant}/...` URLs; use a separate configuration
+when also working with direct resources.
 
 For the Raters self-hosted gateway, set this in the MCP client's environment:
 
 ```json
 {
-  "AIFINPAY_GATEWAY_ORIGINS": "https://dev.ratersapp.com,https://gateway.aifinpay.io",
+  "AIFINPAY_GATEWAY_ORIGINS": "https://dev.ratersapp.com",
+  "AIFINPAY_GATEWAY_PATH_MODE": "direct",
   "AIFINPAY_BASE_URL": "https://api.aifinpay.io",
   "AIFINPAY_MAX_USD": "0.50"
 }
@@ -124,6 +130,9 @@ For the Raters self-hosted gateway, set this in the MCP client's environment:
 Only those exact gateway origins are trusted for AIFP-1 payment handling. The
 list rejects wildcards, paths, credentials and plaintext HTTP; DNS/private-address
 protection still applies. Omit the setting to keep the SDK's default gateway.
+Use `direct` for a self-hosted gateway whose routes share a merchant slug but
+must be billed by their full pathname; this does not broaden the trusted origin
+allowlist or infer trust from the challenge.
 Reconnect the MCP process after changing its environment, then inspect the paid
 URL with `agent_quote` before invoking `payable_fetch`.
 

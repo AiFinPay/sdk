@@ -3,6 +3,19 @@ import { loadConfigFromEnv } from "../src/config.js";
 
 afterEach(() => vi.unstubAllEnvs());
 
+describe("AIFP-1 gateway path mode", () => {
+  it("defaults to gateway and accepts direct", () => {
+    expect(loadConfigFromEnv().gatewayPathMode).toBe("gateway");
+    vi.stubEnv("AIFINPAY_GATEWAY_PATH_MODE", "direct");
+    expect(loadConfigFromEnv().gatewayPathMode).toBe("direct");
+  });
+
+  it("rejects an invalid path mode", () => {
+    vi.stubEnv("AIFINPAY_GATEWAY_PATH_MODE", "merchant");
+    expect(() => loadConfigFromEnv()).toThrow(/AIFINPAY_GATEWAY_PATH_MODE/);
+  });
+});
+
 describe("operator gateway origins", () => {
   it("keeps the SDK default when unset or empty", () => {
     for (const value of [undefined, "", " , "]) {

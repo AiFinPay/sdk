@@ -16,6 +16,27 @@ at $0.10. This must be a positive finite amount; it can only tighten the
 agent's existing per-call and daily limits. Gas is additional. Requests
 covered by a cached receipt do not buy another batch.
 
+For a direct merchant endpoint such as `/api/agent/genres`, explicitly select
+the full-path format as well as the trusted origin:
+
+```ts
+await agent.fetchPaid('https://merchant.example/api/agent/genres', {}, {
+  gatewayOrigins: ['https://merchant.example'],
+  resourcePathMode: 'direct',
+  maxAmountUsd: 0.10,
+});
+```
+
+Direct mode probes the resource without a receipt before each call, then
+reuses only a receipt for the same origin, merchant and covered full path.
+The challenge's resource must equal the URL pathname. This extra unpaid
+probe prevents a merchant-wide receipt from being sent to another merchant
+on the same host. The default `gateway` mode keeps hosted URLs in the
+`/{merchant-slug}/{resource}` format. An origin is never trusted merely
+because it returns an AIFP-1 challenge. Direct probes return redirects to the
+caller without following them, so another origin cannot supply the payment
+challenge through a redirect.
+
 After settlement, the SDK retries HTTP 425, HTTP 503 and connection failures
 within `settlementConfirmMs`. These retries request the receipt; they never
 send another on-chain transaction. If retries are exhausted,
@@ -59,4 +80,6 @@ expires and keep the same transaction reference; paying again is unnecessary.
 
 The `fetchPaid` settlement route and its existing deployment verification
 requirements are unchanged. Receipt authorization does not enable a disabled
-settlement route or replace independent route verification.
+settlement route or replace independent route verification. This maintenance
+release preserves the existing legacy Polygon native-POL executor; it does
+not enable v1.4 settlement or guarded RC routes.

@@ -116,6 +116,7 @@ export async function runPayableFetch(
         {
           apiBaseUrl: ctx.config.baseUrl,
           gatewayOrigins: ctx.config.gatewayOrigins,
+          resourcePathMode: ctx.config.gatewayPathMode,
           maxAmountUsd,
         },
       );

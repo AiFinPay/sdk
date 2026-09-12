@@ -923,6 +923,134 @@ describe("aifp1: keeping a batch that is still good", () => {
 });
 
 describe("aifp1: concurrency", () => {
+  it("reuses a direct origin receipt with the full merchant resource path", async () => {
+    const server = mockServer();
+    const directOrigin = "https://raters.example";
+    const base = server.fetch;
+    server.fetch = (async (input, init) => {
+      const url = new URL(String(input));
+      return base(url.origin === directOrigin
+        ? `${GATEWAY}/acme${url.pathname}${url.search}` : input, init);
+    }) as typeof fetch;
+    const { agent, settlements } = await agentFor(server);
+    const options = { gatewayOrigins: [directOrigin], resourcePathMode: "direct" as const };
+    const first = await agent.fetchPaid(`${directOrigin}/api/agent/genres`, {}, options);
+    const second = await agent.fetchPaid(`${directOrigin}/api/agent/genres`, {}, options);
+    expect(first!.status).toBe(200);
+    expect(second!.status).toBe(200);
+    expect(settlements).toHaveLength(1);
+    expect(server.quotes).toBe(1);
+    expect(server.gatewayHits.filter((hit) => hit.receipt)).toHaveLength(2);
+  });
+
+  it("does not follow a direct probe redirect into an untrusted payment challenge", async () => {
+    const server = mockServer();
+    const directOrigin = "https://raters.example";
+    let untrustedRequests = 0;
+    const base = server.fetch;
+    server.fetch = (async (input, init) => {
+      const url = new URL(String(input));
+      if (url.origin !== directOrigin) return base(input, init);
+      // Match fetch redirect semantics: default/follow reaches the second
+      // origin and exposes its 402; manual returns the original 302 only.
+      if (init?.redirect === "manual") {
+        return new Response(null, { status: 302, headers: {
+          location: `https://untrusted.example${url.pathname}`,
+        } });
+      }
+      untrustedRequests++;
+      return base(`${GATEWAY}/other${url.pathname}`, init);
+    }) as typeof fetch;
+    const { agent, settlements } = await agentFor(server);
+    const response = await agent.fetchPaid(`${directOrigin}/api/agent/genres`, { redirect: "follow" }, {
+      gatewayOrigins: [directOrigin], resourcePathMode: "direct",
+    });
+    expect(response!.status).toBe(302);
+    expect(untrustedRequests).toBe(0);
+    expect(server.quotes).toBe(0);
+    expect(settlements).toHaveLength(0);
+  });
+
+  it("does not send a direct merchant-wide receipt to another merchant on the same origin", async () => {
+    const server = mockServer();
+    const directOrigin = "https://raters.example";
+    const base = server.fetch;
+    server.fetch = (async (input, init) => {
+      const url = new URL(String(input));
+      const slug = url.pathname.endsWith("genres") ? "acme" : "other";
+      return base(url.origin === directOrigin
+        ? `${GATEWAY}/${slug}${url.pathname}` : input, init);
+    }) as typeof fetch;
+    const { agent, settlements } = await agentFor(server);
+    const options = { gatewayOrigins: [directOrigin], resourcePathMode: "direct" as const, scope: "merchant" as const };
+    for (const path of ["genres", "reviews", "genres", "reviews"]) {
+      expect((await agent.fetchPaid(`${directOrigin}/api/agent/${path}`, {}, options))!.status).toBe(200);
+    }
+    expect(settlements).toHaveLength(2);
+    expect(server.quotes).toBe(2);
+    const receiptHits = server.gatewayHits.filter((hit) => hit.receipt);
+    expect(receiptHits).toHaveLength(4);
+    for (const hit of receiptHits) {
+      expect(server.receipts.get(hit.receipt!)!.merchantId)
+        .toBe(hit.path.endsWith("genres") ? "mrch_acme" : "mrch_other");
+    }
+  });
+
+  it("coalesces concurrent direct-origin requests into one settlement", async () => {
+    const server = mockServer();
+    const directOrigin = "https://raters.example";
+    const base = server.fetch;
+    server.fetch = (async (input, init) => {
+      const url = new URL(String(input));
+      return base(url.origin === directOrigin ? `${GATEWAY}/acme${url.pathname}` : input, init);
+    }) as typeof fetch;
+    const { agent, settlements } = await agentFor(server);
+    const responses = await Promise.all(Array.from({ length: 4 }, (_, i) =>
+      agent.fetchPaid(`${directOrigin}/api/agent/${i}`, {}, {
+        gatewayOrigins: [directOrigin], resourcePathMode: "direct",
+      }),
+    ));
+    expect(responses.every((response) => response!.status === 200)).toBe(true);
+    expect(settlements).toHaveLength(1);
+    expect(server.quotes).toBe(1);
+  });
+
+  it("rejects an unknown resource path mode before any request", async () => {
+    const server = mockServer();
+    const { agent, settlements } = await agentFor(server);
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/paid`, {}, {
+      resourcePathMode: "auto" as "direct",
+    })).rejects.toThrow(/resourcePathMode/);
+    expect(server.gatewayHits).toHaveLength(0);
+    expect(settlements).toHaveLength(0);
+  });
+
+  it("still refuses an unconfigured origin in direct mode before any request", async () => {
+    const server = mockServer();
+    const { agent, settlements } = await agentFor(server);
+    await expect(agent.fetchPaid("https://unconfigured.example/api/agent/genres", {}, {
+      resourcePathMode: "direct",
+    })).rejects.toThrow(/not a known AiFinPay gateway/);
+    expect(server.gatewayHits).toHaveLength(0);
+    expect(settlements).toHaveLength(0);
+  });
+
+  it("does not settle a direct quote for a different resource path", async () => {
+    const server = mockServer();
+    const directOrigin = "https://raters.example";
+    const base = server.fetch;
+    server.fetch = (async (input, init) => {
+      const url = new URL(String(input));
+      return base(url.origin === directOrigin ? `${GATEWAY}/acme/different` : input, init);
+    }) as typeof fetch;
+    const { agent, settlements } = await agentFor(server);
+    await expect(agent.fetchPaid(`${directOrigin}/api/agent/genres`, {}, {
+      gatewayOrigins: [directOrigin], resourcePathMode: "direct",
+    })).rejects.toThrow(/full URL pathname/);
+    expect(settlements).toHaveLength(0);
+    expect(server.quotes).toBe(0);
+  });
+
   it("shares a paid receipt failure with all waiting callers without another settlement", async () => {
     const server = mockServer();
     server.payFailures = [503, 503, 503, 503];

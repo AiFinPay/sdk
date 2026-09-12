@@ -70,6 +70,7 @@ describe("payable_fetch protocol routing", () => {
     (ctx as any).config = {
       baseUrl: "https://api.example.test",
       gatewayOrigins: ["https://gateway.example.test"],
+      gatewayPathMode: "direct",
       maxAmountUsd: 0.1,
     };
     await runPayableFetch(ctx, {
@@ -79,6 +80,7 @@ describe("payable_fetch protocol routing", () => {
     expect(seen).toMatchObject({
       apiBaseUrl: "https://api.example.test",
       gatewayOrigins: ["https://gateway.example.test"],
+      resourcePathMode: "direct",
       maxAmountUsd: 0.03,
     });
     expect(innerPay).not.toHaveBeenCalled();

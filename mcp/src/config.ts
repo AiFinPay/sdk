@@ -22,6 +22,9 @@ export interface McpConfig {
    * request-level DNS/private-address checks. Undefined keeps the SDK default. */
   gatewayOrigins?: string[];
 
+  /** AIFP-1 resource identity mode: gateway slug or full direct path. */
+  gatewayPathMode?: "gateway" | "direct";
+
   /** Optional log destination (defaults to stderr). */
   logFn?: (level: "info" | "warn" | "error", msg: string) => void;
 }
@@ -42,7 +45,14 @@ export function loadConfigFromEnv(): McpConfig {
       ? Number(process.env.AIFINPAY_MAX_USD)
       : undefined,
     gatewayOrigins: parseGatewayOrigins(process.env.AIFINPAY_GATEWAY_ORIGINS),
+    gatewayPathMode: parseGatewayPathMode(process.env.AIFINPAY_GATEWAY_PATH_MODE),
   };
+}
+
+function parseGatewayPathMode(raw: string | undefined): "gateway" | "direct" {
+  if (raw === undefined || raw.trim() === "") return "gateway";
+  if (raw === "gateway" || raw === "direct") return raw;
+  throw new Error("AIFINPAY_GATEWAY_PATH_MODE must be either gateway or direct");
 }
 
 function parseGatewayOrigins(raw: string | undefined): string[] | undefined {
