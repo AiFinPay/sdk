@@ -169,4 +169,6 @@ export {
 } from "./spendLedger.js";
 
 export { deriveWallet, newWallet } from "./wallet.js";
+export { getAgentHistory } from "./agentHistory.js";
+export type { AgentHistoryOptions } from "./agentHistory.js";
 export type { DerivedWallet } from "./wallet.js";

@@ -1,3 +1,5 @@
+import { aifinpayApiUrl } from "./apiUrl.js";
+
 export type AgentPassportNetwork =
   | "polygon" | "avalanche" | "arbitrum" | "bnb" | "base" | "unichain"
   | "optimism" | "botchain" | "xrplevm" | "solana" | "near" | "aptos" | "casper";
@@ -88,7 +90,7 @@ export async function resolveAgentPassport(
   fetchImpl: typeof fetch = fetch,
 ): Promise<AgentPassportIdentity> {
   const normalized = normalizeAgentPassportIdentifier(identifier);
-  const url = `${baseUrl.replace(/\/$/, "")}/api/agent/resolve/${encodeURIComponent(normalized)}`;
+  const url = aifinpayApiUrl(baseUrl, `/api/agent/resolve/${encodeURIComponent(normalized)}`);
   const response = await fetchImpl(url, { headers: { accept: "application/json" } });
   let body: unknown;
   try { body = await response.json(); }

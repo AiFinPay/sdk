@@ -3,8 +3,14 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { readFileSync } from "node:fs";
 import type { McpConfig } from "./config.js";
+import { loadWalletIdentity } from "./identity.js";
+import { agentHistoryTool, runAgentHistory } from "./tools/agent-history.js";
+import { devPaymentQuoteTool, runDevPaymentQuote } from "./tools/dev-payment-quote.js";
 import { agentAddressTool, runAgentAddress } from "./tools/agent-address.js";
 import { agentQuotaTool, runAgentQuota } from "./tools/agent-quota.js";
 import { makeSafeFetch } from "./safe-fetch.js";
@@ -45,30 +51,22 @@ const safeFetch = makeSafeFetch({
 export async function createServer(config: McpConfig = {}) {
   const log = config.logFn ?? defaultLog;
 
-  const agent = config.agentSecretB58
-    ? await AiFinPayAgent.fromSolanaSecret(config.agentSecretB58, {
-        fetchImpl: safeFetch,
-        baseUrl: config.baseUrl,
-        timeoutMs: config.timeoutMs,
-      })
-    : await (async () => {
-        const a = await AiFinPayAgent.new({
-          fetchImpl: safeFetch,
-          baseUrl: config.baseUrl,
-          timeoutMs: config.timeoutMs,
-        });
-        log(
-          "warn",
-          `[aifinpay-mcp] no AIFINPAY_AGENT_SECRET set — generated an EPHEMERAL, NON-RECOVERABLE agent.\n` +
-            `  solana_address: ${a.solanaAddress}\n` +
-            `  evm_address:    ${a.evmAddress}\n` +
-            `  >> DO NOT FUND these addresses. This identity is lost when the process exits.\n` +
-            `  >> For a persistent wallet, create one from a seed you back up\n` +
-            `     (AiFinPayAgent.fromSeed / \`aifinpay init\`) and set AIFINPAY_AGENT_SECRET.`,
-        );
-        return a;
-      })();
-
+  let identitySource = "ephemeral";
+  async function configuredAgent() {
+    const identity = loadWalletIdentity(config);
+    if (!identity) return null;
+    const options = { fetchImpl: safeFetch, baseUrl: config.baseUrl, timeoutMs: config.timeoutMs };
+    const loaded = identity.seedHash
+      ? await AiFinPayAgent.fromSeed(identity.seedHash, options)
+      : await AiFinPayAgent.fromSolanaSecret(identity.secretB58!, options);
+    return { loaded, source: identity.source };
+  }
+  const configured = await configuredAgent();
+  let agent = configured?.loaded ?? await AiFinPayAgent.new({
+    fetchImpl: safeFetch, baseUrl: config.baseUrl, timeoutMs: config.timeoutMs,
+  });
+  identitySource = configured?.source ?? "ephemeral";
+  if (!configured) log("warn", "[aifinpay-mcp] EPHEMERAL wallet — DO NOT FUND. Run `npx @aifinpay/mcp init`, then agent_reload in this connection.");
   // Keep the legacy agent budget configured even though this RC exposes no
   // signing tool. It remains an additional defence for downstream/private code
   // and for the subsequent v2 MCP executor integration.
@@ -85,15 +83,33 @@ export async function createServer(config: McpConfig = {}) {
   const server = new Server(
     {
       name: "@aifinpay/mcp",
-      version: "2.0.0-rc.1",
+      version: JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version,
     },
-    { capabilities: { tools: {} } },
+    { capabilities: { tools: {}, resources: {} } },
   );
+
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: [{
+    uri: "aifinpay://skill", name: "AiFinPay skill", mimeType: "text/markdown",
+    description: "Wallet source priority, payment history routes, reconnect behavior and dev testing limits",
+  }] }));
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    if (request.params.uri !== "aifinpay://skill") throw new Error("Unknown resource");
+    return { contents: [{ uri: "aifinpay://skill", mimeType: "text/markdown",
+      text: readFileSync(new URL("../skills/SKILL.md", import.meta.url), "utf8") }] };
+  });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       agentAddressTool(),
+      {
+        name: "agent_reload",
+        description: "Reload the configured local wallet files after init or a file update, without starting a new conversation. Returns public addresses only. Shell environment changes still require reconnecting the MCP process.",
+        inputSchema: { type: "object", properties: {}, additionalProperties: false },
+        annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      },
       agentQuotaTool(),
+      agentHistoryTool(),
+      ...(config.devMode ? [devPaymentQuoteTool()] : []),
       agentPassportResolveTool(),
       settlementRoutesTool(),
       settlementInvoiceTool(),
@@ -104,10 +120,30 @@ export async function createServer(config: McpConfig = {}) {
     const { name, arguments: args } = request.params;
     const ctx = { agent, config, log };
     switch (name) {
+      case "agent_reload":
+        try {
+          const replacement = await configuredAgent();
+          if (!replacement) throw new Error("No persistent wallet configured; run init or configure the project wallet first");
+          if (config.maxAmountUsd !== undefined && Number.isFinite(config.maxAmountUsd)) {
+            replacement.loaded.setBudget({ per_call_usd: config.maxAmountUsd });
+          }
+          agent = replacement.loaded;
+          identitySource = replacement.source;
+          return { content: [{ type: "text", text: JSON.stringify({
+            source: identitySource, solana: agent.solanaAddress, evm: agent.evmAddress,
+            casper: agent.casperAddress, reloaded: true,
+          }) }] };
+        } catch (error) {
+          return { isError: true, content: [{ type: "text", text: `Wallet reload failed: ${(error as Error).message}` }] };
+        }
       case "agent_address":
         return runAgentAddress(ctx, args ?? {});
       case "agent_quota":
         return runAgentQuota(ctx, args ?? {});
+      case "agent_history":
+        return runAgentHistory(ctx, args ?? {});
+      case "dev_payment_quote":
+        return runDevPaymentQuote(ctx, args ?? {});
       case "agent_passport_resolve":
         return runAgentPassportResolve(ctx, args ?? {});
       case "settlement_routes":
@@ -122,7 +158,7 @@ export async function createServer(config: McpConfig = {}) {
     }
   });
 
-  return { server, agent };
+  return { server, get agent() { return agent; } };
 }
 
 export interface ToolContext {
