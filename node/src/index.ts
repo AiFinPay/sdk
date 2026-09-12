@@ -64,6 +64,58 @@ export type {
 } from "./splitterRoutes.js";
 export { botchain, xrplevm } from "./chains.js";
 
+// ── Environment & protocol-version resolver (AIFINP-223) ─────────────────
+export {
+  resolveDeployment,
+  isV14Available,
+  DeploymentResolverError,
+  UnsupportedDevNetworkError,
+  VersionUnavailableError,
+  NoDeploymentError,
+} from "./deploymentResolver.js";
+export type {
+  SdkEnvironment,
+  ProtocolVersion,
+  RequestedVersion,
+  ResolveDeploymentOptions,
+  ResolvedDeployment,
+} from "./deploymentResolver.js";
+export {
+  V14_DEPLOYMENTS,
+  V14_DEPLOYMENTS_SOURCE,
+  V14_DEV_NETWORKS,
+} from "./v14Deployments.generated.js";
+export type {
+  V14Deployment,
+  V14Splitter,
+  V14Safe,
+} from "./v14Deployments.generated.js";
+
+// ── Solana environment & protocol-version resolver (AIFINP-224) ──────────
+export {
+  resolveSolanaDeployment,
+  isSolanaV14Available,
+  UnsupportedSolanaDevNetworkError,
+  SolanaVersionUnavailableError,
+  SolanaV12UnavailableError,
+  NoSolanaDeploymentError,
+} from "./solanaDeploymentResolver.js";
+export type {
+  SolanaProtocolVersion,
+  SolanaRequestedVersion,
+  ResolveSolanaDeploymentOptions,
+  ResolvedSolanaDeployment,
+} from "./solanaDeploymentResolver.js";
+export {
+  SOLANA_V14_DEPLOYMENTS,
+  SOLANA_V14_DEPLOYMENTS_SOURCE,
+  SOLANA_DEV_NETWORKS,
+} from "./solanaV14Deployments.generated.js";
+export type {
+  SolanaV14Deployment,
+  SolanaNetwork,
+} from "./solanaV14Deployments.generated.js";
+
 export { AiFinPayAgent, SPLITTER_DEPLOYMENTS, paymentIdFor } from "./unifiedAgent.js";
 export type {
   AiFinPayAgentOptions,
