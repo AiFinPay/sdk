@@ -15,7 +15,7 @@
 // pass while the SDK talks to nobody.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { verifyMessage } from "viem";
+import { verifyMessage, keccak256, stringToHex, encodeFunctionData } from "viem";
 import { AiFinPayAgent, BudgetCapExceededError } from "../src/unifiedAgent.js";
 import { MemorySpendLedger } from "../src/spendLedger.js";
 import {
@@ -158,6 +158,12 @@ function mockServer(): MockServer {
         accepted_assets: ["USDC", "USDT", "POL"],
         accepted_chains: ["polygon"],
         pay_to: { polygon: MERCHANT_WALLET },
+        settlement_call: {
+          chain: 'polygon', contract: '0x2222222222222222222222222222222222222222', splitter_version: '1.3', asset: 'POL',
+          function: 'payNative((bytes32,address,uint256,address,uint256,string))', arg_encoding: 'tuple', value_wei: quotedTotalWei.toString(),
+          args: { payment_id: keccak256(stringToHex(quote_id)), merchant: MERCHANT_WALLET, gross_amount: quotedTotalWei.toString(),
+            ip_creator: '0x0000000000000000000000000000000000000000', valid_until: Math.floor(Date.parse(expiresAt) / 1000), order_id: quote_id },
+        },
         fee_bps: 100,
         no_minimum_fee: true,
         native_settlement: {
@@ -336,6 +342,125 @@ async function agentFor(server: MockServer, opts: Record<string, unknown> = {}) 
     };
   return { agent, settlements };
 }
+
+describe("fetchPaid executes the verified v1.3 invoice", () => {
+  it.each(['missing target', 'different contract', 'legacy version', 'wrong chain', 'wrong amount', 'wrong asset', 'wrong decimals', 'unsupported POL'])("refuses a quote with %s before settlement", async (fault) => {
+    const server = mockServer(); const original = server.fetch;
+    server.fetch = (async (input, init) => {
+      const response = await original(input, init);
+      if (!String(input).endsWith('/v1/quote')) return response;
+      const q = await response.json();
+      if (fault === 'missing target') delete q.settlement_call;
+      if (fault === 'different contract') q.settlement_call.contract = MERCHANT_WALLET;
+      if (fault === 'legacy version') q.settlement_call.splitter_version = '1.2';
+      if (fault === 'wrong chain') q.settlement_call.chain = 'amoy';
+      if (fault === 'wrong amount') q.settlement_call.args.gross_amount = '1';
+      if (fault === 'wrong asset') q.native_settlement.asset = 'ETH';
+      if (fault === 'wrong decimals') q.native_settlement.decimals = 6;
+      if (fault === 'unsupported POL') q.accepted_assets = ['USDC'];
+      return Response.json(q);
+    }) as typeof fetch;
+    const { agent, settlements } = await agentFor(server);
+    const settlementPin = { route_class: 'AIFP-1', chain: 'polygon', chain_id: 137, splitter_version: '1.3', splitter: '0x2222222222222222222222222222222222222222', runtime_code_hash: `0x${'ab'.repeat(32)}` } as const;
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/paid`, {}, { settlementPin, nativeUsdPrice: { usd: 0.073, observedAtMs: Date.now() } }))
+      .rejects.toThrow(/receipt settlement|settlement_call/);
+    expect(settlements).toHaveLength(0);
+    expect(server.pays).toBe(0);
+  });
+
+  it.each(["issuer", "redirect", "timeout"])("refuses a quote %s violation before payment", async (violation) => {
+    const server = mockServer();
+    const original = server.fetch;
+    server.fetch = (async (input, init) => {
+      if (!String(input).endsWith("/v1/quote")) return original(input, init);
+      expect(init?.redirect).toBe("error");
+      if (violation === "redirect") return new Response(null, { status: 307, headers: { location: "https://other.invalid" } });
+      if (violation === "timeout") return new Response(new ReadableStream());
+      const quote = await (await original(input, init)).json();
+      quote.payment_authorization = { scheme: "wallet-signature-v1", domain: "https://other.invalid", max_age_seconds: 300 };
+      return Response.json(quote);
+    }) as typeof fetch;
+    const { agent, settlements } = await agentFor(server);
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/paid`, {}, { apiTimeoutMs: 10 })).rejects.toThrow(/trusted paymentIssuer|redirect|timed out/);
+    expect(settlements).toHaveLength(0);
+  });
+  it.each(["success", "timeout"])("runs the real executor and handles confirmation %s without paying twice", async (confirmation) => {
+    const server = mockServer();
+    const original = server.fetch;
+    const code = "0x6001600055" as const;
+    const splitter = "0x2222222222222222222222222222222222222222" as const;
+    const hash = `0x${"ab".repeat(32)}` as const;
+    let confirmed = false;
+    const writes: any[] = [];
+    server.fetch = (async (input, init) => {
+      if (String(input).endsWith("/v1/pay")) expect(confirmed).toBe(true);
+      if (!String(input).endsWith("/v1/settlement/invoice")) return original(input, init);
+      const req = JSON.parse(String(init?.body));
+      const gross = BigInt(req.gross_amount), fee = gross / 100n;
+      const paymentId = keccak256(stringToHex(req.order_id));
+      return Response.json({
+        ...req, chain_id: 137, splitter_version: "1.3", splitter,
+        runtime_code_hash: keccak256(code), settlement_semantics: "gross-inclusive", fee_on_top: false,
+        payment_id: paymentId, authorization: "wallet signature required",
+        breakdown: { gross_amount: gross.toString(), merchant_amount: (gross - fee).toString(), protocol_fee_amount: fee.toString(), creator_amount: "0", protocol_fee_bps: 100, creator_bps: 0 },
+        transaction: { kind: "evm_contract_call", function: "payNative((bytes32,address,uint256,address,uint256,string))", value: gross.toString(), args: { paymentId, merchant: req.merchant_wallet, grossAmount: gross.toString(), ipCreator: "0x0000000000000000000000000000000000000000", validUntil: req.valid_until, orderId: req.order_id } },
+      });
+    }) as typeof fetch;
+    const { agent } = await agentFor(server);
+    Reflect.deleteProperty(agent, "settleAifp1NativeV13");
+    Object.assign(agent, {
+      _polygonPublic: {
+        getChainId: async () => 137,
+        getBytecode: async () => code,
+        readContract: async ({ functionName }: any) => functionName === "treasuryBps" ? 100n : 0n,
+        waitForTransactionReceipt: async () => {
+          if (confirmation === "timeout") throw new Error("RPC confirmation timed out");
+          confirmed = true; return { status: "success", blockNumber: 42n };
+        },
+      },
+      _polygonWallet: { account: { address: agent.evmAddress }, chain: { id: 137 }, getChainId: async () => 137, writeContract: async (call: any) => { writes.push(call); return hash; } },
+    });
+    const opts = { nativeUsdPrice: { usd: 0.073, observedAtMs: Date.now() }, settlementPin: { route_class: "AIFP-1", chain: "polygon", chain_id: 137, splitter_version: "1.3", splitter, runtime_code_hash: keccak256(code) } } as const;
+    if (confirmation === "timeout") {
+      try {
+        await agent.fetchPaid(`${GATEWAY}/acme/paid`, {}, opts);
+        expect.fail("confirmation must not be reported as success");
+      } catch (error) {
+        expect(error).toBeInstanceOf(Aifp1PayError);
+        expect((error as Aifp1PayError).txRef).toBe(hash);
+        expect((error as Aifp1PayError).recovery).toMatchObject({ txRef: hash, asset: "POL", apiBaseUrl: API });
+      }
+      expect(writes).toHaveLength(1);
+      expect(server.pays).toBe(0);
+      return;
+    }
+    expect((await agent.fetchPaid(`${GATEWAY}/acme/paid`, {}, opts))?.status).toBe(200);
+    expect((await agent.fetchPaid(`${GATEWAY}/acme/paid`, {}, opts))?.status).toBe(200);
+    expect(writes).toHaveLength(1);
+    expect(encodeFunctionData(writes[0]).slice(0, 10)).toBe("0x27a3bbaf");
+    expect(server.pays).toBe(1);
+    expect(server.quotes).toBe(1);
+  });
+
+  it("rejects a self-consistent quote with forged native FX before invoice or signing", async () => {
+    const server = mockServer();
+    const original = server.fetch;
+    server.fetch = (async (input, init) => {
+      const response = await original(input, init);
+      if (!String(input).endsWith("/v1/quote")) return response;
+      const quote = await response.json();
+      const gross = 1_000_000n * 10n ** 18n;
+      Object.assign(quote.native_settlement, { total_wei: String(gross), gross_wei: String(gross), payer_total_wei: String(gross), merchant_wei: String(gross * 99n / 100n), treasury_wei: String(gross / 100n), creator_wei: "0", rate_usd: "0.0000001" });
+      return Response.json(quote);
+    }) as typeof fetch;
+    const { agent, settlements } = await agentFor(server);
+    const settlementPin = { route_class: "AIFP-1", chain: "polygon", chain_id: 137, splitter_version: "1.3", splitter: MERCHANT_WALLET, runtime_code_hash: `0x${"ab".repeat(32)}` } as const;
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/paid`, {}, { settlementPin })).rejects.toThrow(/independent/);
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/paid`, {}, { settlementPin, nativeUsdPrice: { usd: 0.073, observedAtMs: Date.now() }, maxAmountUsd: 0.10 })).rejects.toThrow(/independent/);
+    expect(settlements).toHaveLength(0);
+    expect(server.pays).toBe(0);
+  });
+});
 
 describe("aifp1: additive backend quote compatibility", () => {
   function legacyQuote(server: MockServer, alter?: (quote: any) => void) {
@@ -655,6 +780,36 @@ describe("aifp1: idempotency key", () => {
 // ── Budget caps and loud failures ─────────────────────────────────────────
 
 describe("aifp1: budget caps and refusals", () => {
+  it.each([0, -1, NaN, Infinity])("refuses invalid maxAmountUsd %s before requesting a quote", async (maxAmountUsd) => {
+    const server = mockServer();
+    const { agent, settlements } = await agentFor(server);
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/articles/a`, {}, { maxAmountUsd }))
+      .rejects.toBeInstanceOf(Aifp1QuoteError);
+    expect(server.quotes).toBe(0);
+    expect(settlements).toHaveLength(0);
+  });
+
+  it("refuses a batch above maxAmountUsd without sending a transaction", async () => {
+    const server = mockServer();
+    const { agent, settlements } = await agentFor(server);
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/articles/a`, {}, { maxAmountUsd: 0.05 }))
+      .rejects.toThrow(/maxAmountUsd/);
+    expect(server.quotes).toBe(1);
+    expect(settlements).toHaveLength(0);
+    expect(server.pays).toBe(0);
+  });
+
+  it("accepts maxAmountUsd at the batch total but does not widen the agent cap", async () => {
+    const server = mockServer();
+    const { agent, settlements } = await agentFor(server);
+    expect((await agent.fetchPaid(`${GATEWAY}/acme/articles/a`, {}, { maxAmountUsd: 0.1 }))!.status).toBe(200);
+    expect(settlements).toHaveLength(1);
+    const capped = await agentFor(mockServer(), { budgetCaps: { per_call_usd: 0.05 } });
+    await expect(capped.agent.fetchPaid(`${GATEWAY}/acme/articles/a`, {}, { maxAmountUsd: 1 }))
+      .rejects.toBeInstanceOf(BudgetCapExceededError);
+    expect(capped.settlements).toHaveLength(0);
+  });
+
   it("refuses to settle a batch above the per-call cap", async () => {
     const server = mockServer();
     const { agent, settlements } = await agentFor(server, {
@@ -851,6 +1006,134 @@ describe("aifp1: keeping a batch that is still good", () => {
 });
 
 describe("aifp1: concurrency", () => {
+  it("reuses a direct origin receipt with the full merchant resource path", async () => {
+    const server = mockServer();
+    const directOrigin = "https://raters.example";
+    const base = server.fetch;
+    server.fetch = (async (input, init) => {
+      const url = new URL(String(input));
+      return base(url.origin === directOrigin
+        ? `${GATEWAY}/acme${url.pathname}${url.search}` : input, init);
+    }) as typeof fetch;
+    const { agent, settlements } = await agentFor(server);
+    const options = { gatewayOrigins: [directOrigin], resourcePathMode: "direct" as const };
+    const first = await agent.fetchPaid(`${directOrigin}/api/agent/genres`, {}, options);
+    const second = await agent.fetchPaid(`${directOrigin}/api/agent/genres`, {}, options);
+    expect(first!.status).toBe(200);
+    expect(second!.status).toBe(200);
+    expect(settlements).toHaveLength(1);
+    expect(server.quotes).toBe(1);
+    expect(server.gatewayHits.filter((hit) => hit.receipt)).toHaveLength(2);
+  });
+
+  it("does not follow a direct probe redirect into an untrusted payment challenge", async () => {
+    const server = mockServer();
+    const directOrigin = "https://raters.example";
+    let untrustedRequests = 0;
+    const base = server.fetch;
+    server.fetch = (async (input, init) => {
+      const url = new URL(String(input));
+      if (url.origin !== directOrigin) return base(input, init);
+      // Match fetch redirect semantics: default/follow reaches the second
+      // origin and exposes its 402; manual returns the original 302 only.
+      if (init?.redirect === "manual") {
+        return new Response(null, { status: 302, headers: {
+          location: `https://untrusted.example${url.pathname}`,
+        } });
+      }
+      untrustedRequests++;
+      return base(`${GATEWAY}/other${url.pathname}`, init);
+    }) as typeof fetch;
+    const { agent, settlements } = await agentFor(server);
+    const response = await agent.fetchPaid(`${directOrigin}/api/agent/genres`, { redirect: "follow" }, {
+      gatewayOrigins: [directOrigin], resourcePathMode: "direct",
+    });
+    expect(response!.status).toBe(302);
+    expect(untrustedRequests).toBe(0);
+    expect(server.quotes).toBe(0);
+    expect(settlements).toHaveLength(0);
+  });
+
+  it("does not send a direct merchant-wide receipt to another merchant on the same origin", async () => {
+    const server = mockServer();
+    const directOrigin = "https://raters.example";
+    const base = server.fetch;
+    server.fetch = (async (input, init) => {
+      const url = new URL(String(input));
+      const slug = url.pathname.endsWith("genres") ? "acme" : "other";
+      return base(url.origin === directOrigin
+        ? `${GATEWAY}/${slug}${url.pathname}` : input, init);
+    }) as typeof fetch;
+    const { agent, settlements } = await agentFor(server);
+    const options = { gatewayOrigins: [directOrigin], resourcePathMode: "direct" as const, scope: "merchant" as const };
+    for (const path of ["genres", "reviews", "genres", "reviews"]) {
+      expect((await agent.fetchPaid(`${directOrigin}/api/agent/${path}`, {}, options))!.status).toBe(200);
+    }
+    expect(settlements).toHaveLength(2);
+    expect(server.quotes).toBe(2);
+    const receiptHits = server.gatewayHits.filter((hit) => hit.receipt);
+    expect(receiptHits).toHaveLength(4);
+    for (const hit of receiptHits) {
+      expect(server.receipts.get(hit.receipt!)!.merchantId)
+        .toBe(hit.path.endsWith("genres") ? "mrch_acme" : "mrch_other");
+    }
+  });
+
+  it("coalesces concurrent direct-origin requests into one settlement", async () => {
+    const server = mockServer();
+    const directOrigin = "https://raters.example";
+    const base = server.fetch;
+    server.fetch = (async (input, init) => {
+      const url = new URL(String(input));
+      return base(url.origin === directOrigin ? `${GATEWAY}/acme${url.pathname}` : input, init);
+    }) as typeof fetch;
+    const { agent, settlements } = await agentFor(server);
+    const responses = await Promise.all(Array.from({ length: 4 }, (_, i) =>
+      agent.fetchPaid(`${directOrigin}/api/agent/${i}`, {}, {
+        gatewayOrigins: [directOrigin], resourcePathMode: "direct",
+      }),
+    ));
+    expect(responses.every((response) => response!.status === 200)).toBe(true);
+    expect(settlements).toHaveLength(1);
+    expect(server.quotes).toBe(1);
+  });
+
+  it("rejects an unknown resource path mode before any request", async () => {
+    const server = mockServer();
+    const { agent, settlements } = await agentFor(server);
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/paid`, {}, {
+      resourcePathMode: "auto" as "direct",
+    })).rejects.toThrow(/resourcePathMode/);
+    expect(server.gatewayHits).toHaveLength(0);
+    expect(settlements).toHaveLength(0);
+  });
+
+  it("still refuses an unconfigured origin in direct mode before any request", async () => {
+    const server = mockServer();
+    const { agent, settlements } = await agentFor(server);
+    await expect(agent.fetchPaid("https://unconfigured.example/api/agent/genres", {}, {
+      resourcePathMode: "direct",
+    })).rejects.toThrow(/not a known AiFinPay gateway/);
+    expect(server.gatewayHits).toHaveLength(0);
+    expect(settlements).toHaveLength(0);
+  });
+
+  it("does not settle a direct quote for a different resource path", async () => {
+    const server = mockServer();
+    const directOrigin = "https://raters.example";
+    const base = server.fetch;
+    server.fetch = (async (input, init) => {
+      const url = new URL(String(input));
+      return base(url.origin === directOrigin ? `${GATEWAY}/acme/different` : input, init);
+    }) as typeof fetch;
+    const { agent, settlements } = await agentFor(server);
+    await expect(agent.fetchPaid(`${directOrigin}/api/agent/genres`, {}, {
+      gatewayOrigins: [directOrigin], resourcePathMode: "direct",
+    })).rejects.toThrow(/full URL pathname/);
+    expect(settlements).toHaveLength(0);
+    expect(server.quotes).toBe(0);
+  });
+
   it("shares a paid receipt failure with all waiting callers without another settlement", async () => {
     const server = mockServer();
     server.payUnavailableTimes = 4;
@@ -968,6 +1251,66 @@ describe("aifp1: a default batch is an amount of money, not a unit count", () =>
 
 
 describe('authenticated receipt recovery', () => {
+  it('keeps purchased access if the first content retry loses its connection', async () => {
+    const server = mockServer();
+    const base = server.fetch;
+    let disconnected = false;
+    server.fetch = (async (input, init) => {
+      if (!disconnected && new Headers(init?.headers).has('AIFP-Receipt')) {
+        disconnected = true;
+        throw new Error('connection lost');
+      }
+      return base(input, init);
+    }) as typeof fetch;
+    const { agent, settlements } = await agentFor(server);
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/paid`)).rejects.toMatchObject({
+      name: 'Aifp1PayError', recovery: { txRef: '0x' + 'ab'.repeat(32) },
+    });
+    const response = await agent.fetchPaid(`${GATEWAY}/acme/paid`);
+    expect(response?.status).toBe(200);
+    expect(settlements).toHaveLength(1);
+    expect(server.quotes).toBe(1);
+    expect(server.pays).toBe(1);
+  });
+
+  it.each(['redirect', 'stalled body', 'not yet indexed'])("keeps the settled hash when /v1/pay has %s", async (fault) => {
+    const server = mockServer();
+    const base = server.fetch;
+    let payAttempts = 0;
+    server.fetch = (async (input, init) => {
+      if (String(input).endsWith('/v1/pay')) {
+        payAttempts++;
+        expect(init?.redirect).toBe('error');
+        if (fault === 'redirect') return new Response(null, { status: 307, headers: { location: 'https://attacker.example/claim' } });
+        if (fault === 'not yet indexed') return json({ error: 'AIFP-425' }, 425);
+        return new Response(new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode('{')); } }));
+      }
+      return base(input, init);
+    }) as typeof fetch;
+    const { agent, settlements } = await agentFor(server);
+    const started = Date.now();
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/paid`, {}, { settlementConfirmMs: 30, apiTimeoutMs: 30 }))
+      .rejects.toMatchObject({ name: 'Aifp1PayError', recovery: { txRef: '0x' + 'ab'.repeat(32) } });
+    expect(Date.now() - started).toBeLessThan(800);
+    expect(payAttempts).toBe(1);
+    expect(settlements).toHaveLength(1);
+  });
+
+  it('retains recovery and the reservation if ledger commit fails after settlement', async () => {
+    const server = mockServer();
+    const ledger = new MemorySpendLedger();
+    let released = false;
+    ledger.commit = async () => { throw new Error('ledger unavailable'); };
+    ledger.release = async () => { released = true; };
+    const { agent, settlements } = await agentFor(server, { spendLedger: ledger, budgetCaps: { daily_usd: 1 } });
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/paid`)).rejects.toMatchObject({
+      name: 'Aifp1PayError', recovery: { txRef: '0x' + 'ab'.repeat(32) },
+    });
+    expect(settlements).toHaveLength(1);
+    expect(released).toBe(false);
+    expect(server.pays).toBe(0);
+  });
+
   it('uses the settlement wallet even if the agent display id differs', async () => {
     const server = mockServer();
     const { agent, settlements } = await agentFor(server);

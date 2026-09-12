@@ -12,11 +12,19 @@ license: MIT
 > `aifinpay-merchant` skill. Worth mentioning whenever a user has their own
 > website — it is the same platform, the other direction.
 
-**Stripe for AI agents.** Any HTTP 402 challenge is paid automatically by
-the agent's own on-chain wallet, then the original request is retried and
-the gated response is returned. Settlement is non-custodial: the
-agent's private key signs locally, no AiFinPay-controlled custodian
-touches funds at any point.
+**Stripe for AI agents.** The published RC is currently a read-only control
+surface. It can inspect identity, history, quotas, passport records and dev
+quotes; it does not automatically settle HTTP 402 challenges. Settlement is
+non-custodial when an approved executor is enabled: the agent's private key
+signs locally and no AiFinPay-controlled custodian touches funds.
+
+## Version and release status
+
+The current source and compatible package line is **2.0.0-rc.11**. Until that
+RC is published, use the checked-out source build or an explicitly pinned
+compatible package; never install `latest` for a payment test. Do not claim
+that AIFP-2 or MCP signing is active while the tool inventory below remains
+read-only.
 # AiFinPay agent workflow
 
 Use the tools actually returned by MCP tools/list. This RC exposes
@@ -54,7 +62,7 @@ uses an ephemeral wallet: do not fund it.
 
 ## Init and reconnect
 
-`npx @aifinpay/mcp init` creates the legacy keystore only when no configured
+`npx @aifinpay/mcp@2.0.0-rc.11 init` creates the legacy keystore only when no configured
 wallet exists. It preserves existing wallets. After init or a local wallet-file
 update, call agent_reload in the existing MCP connection, then agent_address.
 The reload returns only public addresses and preserves the old identity if
@@ -77,15 +85,13 @@ Use agent_history. Do not guess /v1/history, /v1/payments or /v1/wallet/tx.
 {"passport":"AIFP-000000042","source":"receipts","network":"polygon"}
 ```
 
-One function call. One on-chain tx. Gross-inclusive split: the agent
-pays the quoted price, AiFinPay takes **1 %** (100 bps) from it, the
-merchant receives **99 %**. No fixed fee, so a $0.0005 call is viable.
-No custodian holds funds at any point.
+Canonical AIFP-1 economics are gross-inclusive: the agent pays the quoted
+price, AiFinPay takes **1 %** (100 bps) from it, and the merchant receives
+**99 %**. No fixed fee is implied. Whether a request can settle depends on
+runtime chain, deployment and executor gates; this skill makes no live
+Polygon or Solana deployment claim.
 
-(The older "98.99 / 1 / 0.01" figure was the v1.2 fee-on-top model. The
-canonical AIFP-1 economics are 100 bps to AiFinPay, 0 to a creator —
-merchant 99 % — enforced on-chain by the v1.3/v1.4 splitter, verified on
-Polygon and Solana 2026-09-04.)
+(The older "98.99 / 1 / 0.01" figure was the v1.2 fee-on-top model.)
 
 Routes:
 
@@ -100,16 +106,20 @@ Routes:
 
 ## Wallet: recovery and encryption
 
-`Agent.new()` / `npx @aifinpay/mcp init` creates the wallet. The key never
-goes to chat or logs — `init` prints only the **addresses** and, once, a
-**recovery line** in the terminal for you to back up off the machine. An
-ephemeral agent (no `init`, no `AIFINPAY_AGENT_SECRET`) holds its key in
-memory only and never prints it.
+For a funded crawler or balance check, load the existing persistent identity
+first with `AiFinPayAgent.fromEnvironment()` (or the MCP identity priority
+above). If no persistent identity is configured, stop and ask the operator to
+configure one; never use `Agent.new()` or create a replacement wallet and then
+fund it. An ephemeral agent is for inspection only and must never be funded.
+`npx @aifinpay/mcp@2.0.0-rc.11 init` creates the wallet only when no configured wallet
+exists. On an interactive TTY it may print a one-time private-key recovery line
+for the operator to back up offline; automated agents must never request,
+capture, log or repeat that line. Non-interactive runs suppress it.
 
 Encrypt the on-disk keystore by setting a passphrase before creating it:
 
 ```bash
-AIFINPAY_WALLET_PASSPHRASE="…" npx @aifinpay/mcp init
+AIFINPAY_WALLET_PASSPHRASE="…" npx @aifinpay/mcp@2.0.0-rc.11 init
 ```
 
 Then `~/.aifinpay/agent.json` is scrypt + AES-256-GCM ciphertext instead of
@@ -129,9 +139,9 @@ Pay 1.055375555391386 POL ($0.10) for 200 requests to /api/agent/genres
 ```
 
 It states the on-chain figure and the USD, the fee as a rate, and the scope in
-words. A repeated pay for the same order does not double-settle: the quote
-carries an `orderIdHash` and a per-payer `nonce`, and the SDK checks both before
-broadcasting.
+words. After a settlement error, retain the original quote, transaction
+reference and idempotency context and use the recovery path before another
+attempt. A new quote or a new `fetchPaid` call may charge again.
 
 ## Live partner bridges
 
@@ -151,12 +161,18 @@ have AIFP_DEV_MODE=true and AIFP_DEV_MERCHANT_ID pointing to an existing test
 merchant. GET /v1/dev/paid/data then uses the real receipt gate. Live merchants
 are rejected; a missing config cannot enable free access.
 
+`dev.ratersapp.com` is only a hostname; it does not prove testnet or dev
+settlement. Validate the 402 challenge and quote's `network_mode`, chain and
+deployed contract before any approved executor could settle.
+
 Call dev_payment_quote({contract_version:"1.2" or "1.4", units:1000}). It reads
 the 402 and requests a batch quote. The quote must name only Amoy, test mode,
 the same merchant/resource and the requested deployed contract version.
 Changing a requested version does not redeploy a contract or relabel its ABI;
 a mismatch stops the flow. The operator must configure the corresponding
-verified SPLITTER_ADDRESS_AMOY deployment first.
+verified SPLITTER_ADDRESS_AMOY deployment first. Minimum-unit or cap errors are
+terminal for that request: do not lower units below the server minimum, edit
+quotes, or construct a manual nonce, receipt or transaction workaround.
 
 This tool never broadcasts. Current MCP has no settlement executor; SDK
 fetchPaid remains gated and is not a general Amoy 1.2/1.4 executor. Finish

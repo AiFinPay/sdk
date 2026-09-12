@@ -32,6 +32,22 @@ const LEGACY_CHAIN_IDS: Record<string, number> = {
   bsc: 56,
 };
 
+// Circle-issued USDC, independently pinned by chain and contract. A server's
+// token name or decimals are not evidence of dollar value. Source (2026-09-12):
+// https://developers.circle.com/stablecoins/usdc-contract-addresses
+// Testnet entries are protocol test units, not real dollars.
+const USDC_BY_CHAIN: Readonly<Record<number, string>> = Object.freeze({
+  1: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+  10: "0x0b2c639c533813f4aa9d7837caf62653d097ff85",
+  137: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
+  130: "0x078d782b760474a361dda0af3839290b0ef57ad6",
+  8453: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+  42161: "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+  43114: "0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e",
+  84532: "0x036cbd53842c5426634e7929541ec2318f3dcf7e",
+  80002: "0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582",
+});
+
 const TRANSFER_WITH_AUTHORIZATION_TYPES = {
   TransferWithAuthorization: [
     { name: "from", type: "address" },
@@ -103,41 +119,42 @@ function address(value: unknown): `0x${string}` | null {
 }
 
 function positiveAtomicAmount(value: unknown): string | null {
-  if (typeof value !== "string" || !/^[0-9]+$/.test(value)) return null;
+  if (typeof value !== "string" || !/^[0-9]{1,78}$/.test(value)) return null;
   try {
-    if (BigInt(value) <= 0n) return null;
+    if (BigInt(value) <= 0n || BigInt(value) >= 2n ** 256n) return null;
   } catch {
     return null;
   }
   return value;
 }
 
-function enforceUsdCap(value: string, extra: JsonRecord, opts: PayOptions): void {
+function enforceUsdCap(value: string, extra: JsonRecord, opts: PayOptions, chainId: number, asset: string): void {
   if (opts.maxAmountUsd === undefined) return;
   if (!Number.isFinite(opts.maxAmountUsd) || opts.maxAmountUsd < 0) {
     throw new PaymentTooExpensiveError("maxAmountUsd must be a finite non-negative number");
   }
 
-  // A USD cap can only be enforced without an oracle for an explicitly named
-  // USD stablecoin. x402 exact is token-generic, so unknown assets fail closed
-  // rather than assuming every token is $1 or has 6 decimals.
+  // USD caps use the independently identified asset's fixed six decimals.
   const name = String(extra.name ?? "").trim().toLowerCase();
   const isUsdc = name === "usdc" || name === "usd coin";
-  if (!isUsdc) {
+  if (!isUsdc || USDC_BY_CHAIN[chainId] !== asset.toLowerCase()) {
     throw new UnsupportedFacilitatorError(
-      "maxAmountUsd cannot be safely enforced for this x402 asset without a USD price; only explicitly identified USDC is supported when a USD cap is set",
+      "maxAmountUsd cannot be safely enforced for this x402 asset; a pinned USDC contract on this chain is required",
     );
   }
   const decimalsRaw = extra.decimals ?? 6;
   const decimals = Number(decimalsRaw);
-  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 18) {
-    throw new UnsupportedFacilitatorError("x402 USDC requirement has invalid token decimals");
+  if (decimals !== 6) {
+    throw new UnsupportedFacilitatorError("x402 USDC requirement contradicts the pinned 6 token decimals");
   }
-  const divisor = 10 ** decimals;
-  const approxUsd = Number(value) / divisor;
-  if (!Number.isFinite(approxUsd) || approxUsd > opts.maxAmountUsd) {
+  const [mantissa, exponent = "0"] = opts.maxAmountUsd.toString().split("e");
+  const [whole, fraction = ""] = mantissa.split(".");
+  const shift = 6 + Number(exponent) - fraction.length;
+  const digits = BigInt(whole + fraction);
+  const capAtomic = shift >= 0 ? digits * 10n ** BigInt(shift) : digits / 10n ** BigInt(-shift);
+  if (BigInt(value) > capAtomic) {
     throw new PaymentTooExpensiveError(
-      `x402 wants ~$${Number.isFinite(approxUsd) ? approxUsd.toFixed(6) : "unbounded"}, caller cap is $${opts.maxAmountUsd.toFixed(6)}`,
+      `x402 wants ${value} USDC atomic units, caller cap allows ${capAtomic}`,
     );
   }
 }
@@ -201,7 +218,7 @@ export class StandardX402Facilitator implements Facilitator {
     }
 
     const extra = asRecord(req.extra) ?? {};
-    enforceUsdCap(value, extra, opts);
+    enforceUsdCap(value, extra, opts, chainId, asset);
 
     const timeoutRaw = Number(req.maxTimeoutSeconds ?? 60);
     if (!Number.isFinite(timeoutRaw) || timeoutRaw <= 0 || timeoutRaw > 3600) {
@@ -286,7 +303,7 @@ export class StandardX402Facilitator implements Facilitator {
       throw new UnsupportedFacilitatorError("legacy x402 requirement is missing/invalid asset, payTo or maxAmountRequired");
     }
     const extra = asRecord(req.extra) ?? {};
-    enforceUsdCap(value, extra, opts);
+    enforceUsdCap(value, extra, opts, LEGACY_CHAIN_IDS[network], asset);
 
     const timeout = Number(req.maxTimeoutSeconds ?? 600);
     const boundedTimeout = Number.isFinite(timeout) && timeout > 0 ? Math.min(Math.floor(timeout), 3600) : 600;

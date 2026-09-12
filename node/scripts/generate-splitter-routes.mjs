@@ -46,6 +46,7 @@ const FROM = fromIndex === -1 ? null : args[fromIndex + 1];
 
 /** viem's chain export name, a default RPC and an explorer, per chain. */
 const CHAIN_TRANSPORT = {
+  amoy: { viem: "polygonAmoy", rpc: "https://rpc-amoy.polygon.technology", explorer: "https://amoy.polygonscan.com" },
   polygon: { viem: "polygon", rpc: "https://polygon-bor-rpc.publicnode.com", explorer: "https://polygonscan.com" },
   optimism: { viem: "optimism", rpc: "https://mainnet.optimism.io", explorer: "https://optimistic.etherscan.io" },
   bnb: { viem: "bsc", rpc: "https://bsc-dataseed.bnbchain.org", explorer: "https://bscscan.com" },
@@ -63,7 +64,7 @@ const LOCAL_CHAINS = new Set(["botchain", "xrplevm"]);
 /** The two v1.3 protocol routes. An unexpected route is an error, not a pass. */
 const ROUTES = new Set(["merchant-aifp1", "agent-x402"]);
 
-const EXPECTED_ROUTE_COUNT = 18;
+const EXPECTED_ROUTE_COUNT = 20;
 
 function sha256(buffer) {
   return createHash("sha256").update(buffer).digest("hex");
@@ -115,7 +116,11 @@ function selectRoutes(artifact) {
     if (!ROUTES.has(route.route)) {
       throw new Error(`${key}: unknown protocol route "${route.route}".`);
     }
-    if (route.owner.toLowerCase() !== artifact.governance.safe.toLowerCase()) {
+    const amoyTestnet = route.chain === "amoy" && route.chainId === 80002 && route.testnet === true;
+    if ((route.testnet === true || route.chain === "amoy" || route.chainId === 80002) && !amoyTestnet) {
+      throw new Error(`${key}: inconsistent or unknown testnet identity.`);
+    }
+    if (!amoyTestnet && route.owner.toLowerCase() !== artifact.governance.safe.toLowerCase()) {
       throw new Error(
         `${key}: owner ${route.owner} is not the governance Safe ${artifact.governance.safe}.`,
       );
@@ -159,6 +164,7 @@ function render({ artifact, source }, selected) {
     ipCreatorBps: ${r.ipCreatorBps},
     runtimeCodeHash: "${r.runtimeCodeHash}",
     settlementEnabled: ${r.settlementEnabled},
+    testnet: ${r.testnet === true},
     rpcQuorum: ${r.rpcQuorum},
     stablecoins: ${JSON.stringify(r.stablecoins)},
     validFrom: "${r.validFrom}",

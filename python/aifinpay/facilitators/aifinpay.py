@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 import hashlib
-from typing import TYPE_CHECKING
+import json
+import re
+import time
+from typing import TYPE_CHECKING, Any, Optional
+from urllib.parse import urlsplit
 
 import base58
 import requests
 
-from .base import Facilitator, PayOptions
+from .base import Facilitator, PayOptions, canonical_origin
 
 if TYPE_CHECKING:
     from ..client import Agent
@@ -21,7 +25,7 @@ class AiFinPayFacilitator:
           `agreement_hash`, `treasury_vault`, …
         - Client retries with three headers:
             x-agent-pubkey, x-nonce, x-signature
-        - Signature: Ed25519 over SHA-256("AiFinPay-x402:{nonce}:{pubkey}")
+        - Signature: Ed25519 over SHA-256(canonical v2 request binding)
     """
 
     name = "aifinpay"
@@ -46,21 +50,32 @@ class AiFinPayFacilitator:
             "treasury_vault" in body or "program_id" in body
         )
 
-    def __init__(self, base_url: str = "https://aifinpay.io", timeout: int = 30):
-        # base_url is needed to fetch a fresh nonce. Defaults to the
-        # canonical AiFinPay backend; can be pointed at a self-hosted
-        # facilitator in tests.
-        self.base_url = base_url.rstrip("/")
-        self.timeout = timeout
-
-    def _fetch_nonce(self, session: requests.Session) -> str:
-        r = session.get(f"{self.base_url}/nonce", timeout=self.timeout)
-        r.raise_for_status()
-        return r.json()["nonce"]
-
     @staticmethod
-    def _sign_nonce(agent: "Agent", nonce: str) -> str:
-        msg = f"AiFinPay-x402:{nonce}:{agent.address}".encode()
+    def _sign_request(
+        agent: "Agent",
+        nonce: str,
+        origin: str,
+        method: str,
+        resource: str,
+        body_digest: str,
+        expires_at: int,
+    ) -> str:
+        # Must match JSON.stringify([...]) in the Node SDK and backend.
+        msg = json.dumps(
+            [
+                "AiFinPay-x402",
+                "v2",
+                nonce,
+                agent.address,
+                origin,
+                method.upper(),
+                resource,
+                body_digest,
+                expires_at,
+            ],
+            separators=(",", ":"),
+            ensure_ascii=True,
+        ).encode()
         digest = hashlib.sha256(msg).digest()
         sig = agent._sk.sign(digest).signature
         return base58.b58encode(sig).decode()
@@ -70,31 +85,84 @@ class AiFinPayFacilitator:
         resp: requests.Response,
         agent: "Agent",
         opts: PayOptions,
+        context: Optional[dict[str, Any]] = None,
     ) -> dict:
-        # AiFinPay 402 means the agent has no live Seat PDA. The SDK
-        # cannot transparently "pay" — that requires submitting an
-        # on-chain reserve_seat tx through Solana. We sign whatever
-        # nonce the server gave us; if the server still 402s after that,
-        # the caller must fund a Seat first.
-        nonce = self._inband_nonce(resp) or self._fetch_nonce(agent._session)
+        if not context:
+            raise ValueError(
+                "AiFinPay native auth v1 is no longer supported. Retry through Agent.pay() so the SDK can bind the challenge to the request."
+            )
+        target = urlsplit(str(context["url"]))
+        trusted_origin = str(context["trusted_origin"])
+        target_origin = canonical_origin(str(context["url"]))
+        if target_origin != trusted_origin:
+            raise ValueError(
+                f"refusing native authentication for untrusted origin {target_origin}; configure Agent.base_url for that facilitator explicitly"
+            )
+        if resp.url:
+            try:
+                response_origin = canonical_origin(resp.url)
+            except ValueError as exc:
+                raise ValueError("refusing native authentication for an invalid response origin") from exc
+            if response_origin != trusted_origin:
+                raise ValueError("refusing native authentication after a cross-origin response")
+
+        body_digest = str(context["body_digest"])
+        challenge = self._inband_challenge(resp, body_digest)
+        if challenge is None:
+            raise ValueError(
+                "AiFinPay native auth v2 requires an in-band request-bound challenge. Retry the original request without credentials."
+            )
+        nonce, expires_at = challenge
+        resource = target.path or "/"
+        if target.query:
+            resource += f"?{target.query}"
         headers = {
             "x-agent-pubkey": agent.address,
             "x-nonce": nonce,
-            "x-signature": self._sign_nonce(agent, nonce),
+            "x-signature": self._sign_request(
+                agent,
+                nonce,
+                trusted_origin,
+                str(context["method"]),
+                resource,
+                body_digest,
+                expires_at,
+            ),
+            "x-aifinpay-auth-version": "2",
         }
         return {"headers": headers}
 
     @staticmethod
-    def _inband_nonce(resp: requests.Response) -> str | None:
-        """Return the nonce the server included inside the 402 body, if any.
-
-        Saves a round-trip vs. always GETting /nonce.
-        """
+    def _inband_challenge(
+        resp: requests.Response, expected_body_digest: str = ""
+    ) -> tuple[str, int] | None:
+        """Read the v2 challenge issued for this exact unauthenticated request."""
         try:
             body = resp.json()
         except ValueError:
             return None
         if not isinstance(body, dict):
             return None
-        candidate = body.get("x-nonce") or body.get("nonce")
-        return candidate if isinstance(candidate, str) and candidate else None
+        nonce = body.get("x-nonce")
+        expires_at = body.get("x-nonce-expires-at")
+        version = body.get("x-aifinpay-auth-version")
+        body_digest = body.get("x-aifinpay-body-sha256")
+        if (
+            not isinstance(nonce, str)
+            or re.fullmatch(r"[A-Za-z0-9_-]{16,128}", nonce) is None
+            or str(version) != "2"
+            or not isinstance(expires_at, (str, int))
+            or not (str(expires_at).isdigit() and 1 <= len(str(expires_at)) <= 16)
+            or not isinstance(body_digest, str)
+            or len(body_digest) != 64
+            or any(ch not in "0123456789abcdef" for ch in body_digest)
+            or body_digest != expected_body_digest
+        ):
+            return None
+        parsed_expiry = int(expires_at)
+        now = int(time.time() * 1000)
+        return (
+            (nonce, parsed_expiry)
+            if now < parsed_expiry <= now + 5 * 60_000
+            else None
+        )

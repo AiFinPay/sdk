@@ -4,6 +4,38 @@ All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
 `1.0.0` onward the public API is stable and changes follow semver.
 
+## Unreleased — Node/MCP 2.0.0-rc.12 · Python 2.0.0rc1 — 2026-09-12
+
+Security RC; these versions have not been published by this change.
+
+- Preserve existing wallet identity across SDK startup and concurrent MCP
+  initialization. Fail on missing, invalid or ambiguous seed configuration;
+  never overwrite an existing wallet or advertise an unsaved deposit address.
+- Fix v1.3 native/stable tuple ABI. Bind invoice/order/payment ID, independently
+  pin target bytecode, chain, economics and stable token, and wait for mined
+  success. Retain broadcast hashes when confirmation is uncertain.
+- Wire Polygon AIFP-1 `fetchPaid` to that executor. Require a reviewed
+  deployment pin and fresh independent native/USD price. Match quote target
+  and calldata before payment; preserve receipts across content-request errors.
+- Synchronize canonical deployment registry and add explicit Amoy testnet
+  opt-in. Mainnet activation is unchanged. Add matching backend routes via the
+  coordinated dev PR; older backend quotes may be refused.
+- Bound API HTTP redirects, timeouts and response sizes; pin receipt issuer.
+  MCP honors redirect modes and blocks cross-origin credentials/body leakage
+  and private IPv4-mapped IPv6 destinations. Standard x402 USD caps require a
+  known chain/USDC pair and use integer atomic amounts.
+- Quarantine v1.4 signing while quotes omit mutable fee/treasury commitments.
+  Legacy Node/Python `call()` payments and unbound native v1 authentication
+  are refused; free calls remain available. Native auth v2 requires the
+  coordinated backend update. These are intentional breaking security changes.
+- Pin CI Actions to commit SHAs and reject high/critical runtime dependency
+  advisories. Update vulnerable MCP transitive dependencies. Moderate Solana
+  dependency advisories remain tracked; no forced dependency downgrade.
+
+Read `node/PAYMENT_RECEIPTS.md` for recovery and required configuration.
+No mainnet transaction, production activation or package publication is part
+of this release candidate. Passing component tests is not paid end-to-end proof.
+
 ## aifinpay-agent 1.5.0 · @aifinpay/mcp 2.0.0-rc.3 — 2026-08-27
 
 **aifinpay-agent 1.5.0 changes where money goes. Read this before upgrading.**

@@ -52,6 +52,7 @@ export type SplitterRoute = "merchant-aifp1" | "agent-x402";
 
 /** Chains carrying v1.3 route splitters. */
 export type SplitterRouteChain =
+  | "amoy"
   | "polygon"
   | "optimism"
   | "bnb"
@@ -91,6 +92,8 @@ export interface SplitterRouteDeployment {
    * settlement on that exact route with verified balance deltas.
    */
   settlementEnabled: boolean;
+  /** Testnet entries require an explicit opt-in; they never activate mainnet. */
+  testnet: boolean;
   /**
    * How many independent RPC providers agreed on every field above when the
    * registry was verified. A route verified from one provider can never be
@@ -158,9 +161,13 @@ export function resolveSettlingSplitterRoute(
   chain: SplitterRouteChain | string,
   route: SplitterRoute | string,
   now: Date = new Date(),
+  options: { allowTestnet?: boolean } = {},
 ): SplitterRouteDeployment {
   const entry = resolveSplitterRoute(chain, route);
   const key = `${entry.chain}:${entry.route}`;
+  if (entry.testnet && options.allowTestnet !== true) {
+    throw new SplitterRouteNotSettlingError(key, "testnet settlement requires explicit allowTestnet opt-in");
+  }
   if (!entry.settlementEnabled) {
     throw new SplitterRouteNotSettlingError(
       key,

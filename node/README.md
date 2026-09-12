@@ -1,12 +1,22 @@
 # @aifinpay/agent (Node / TypeScript)
 
+This source is the unpublished `2.0.0-rc.12` security candidate. New AIFP-1
+payments require a reviewed Polygon v1.3 deployment pin and fresh independent
+native/USD price; see [receipt configuration and recovery](./PAYMENT_RECEIPTS.md).
+Legacy `call()` payments and v1.4 submission are disabled. Native authentication
+requires a request-bound v2 challenge from the coordinated backend release;
+`authHeaders()` cannot issue the retired unbound proof. No automatic fallback
+or deployment activation is performed.
+
 Non-custodial payment client for autonomous AI agents on
 [AiFinPay](https://aifinpay.io). AIFP-1 is gross-inclusive: payer total equals
 the quote, merchant receives 99%, AiFinPay receives 1%, creator/referral
 receives 0%. AIFP-2/x402 currently charges 0% at the protocol layer. Legacy
-`/api/b2b` split-invoice methods are retired. Settlement fails closed unless
-the selected deployment, runtime hash, governance profile, merchant target,
-asset and paid E2E evidence are verified.
+`/api/b2b` split-invoice methods are retired. The v1.3 executor checks the
+independently supplied deployment/runtime pin, chain, fee profile, merchant
+target and asset. Deployment activation and funded E2E approval remain
+separate operator responsibilities; a matching runtime hash alone is not
+production-readiness evidence.
 
 The Ed25519 keypair is generated locally with `tweetnacl` and never leaves
 your process. The SDK only sends a one-time SHA-256 + Ed25519 signature in
@@ -14,45 +24,75 @@ the `x-signature` header to authenticate against AiFinPay-protected endpoints.
 
 ## Install
 
-```bash
-# install (latest)
-npm install @aifinpay/agent
-# or pnpm add @aifinpay/agent
-# or yarn add @aifinpay/agent
+This quickstart requires `2.0.0-rc.12`, which includes `fromEnvironment()`.
+That release is not published yet; the published `latest` version `1.8.4`
+does not provide this method. Until publication, build this source checkout:
 
-# stable (when 1.0 ships)
-npm install @aifinpay/agent
+```bash
+# From the SDK repository root
+cd node
+npm ci
+npm run build
+npm pack
+```
+
+Install the resulting tarball in your application:
+
+```bash
+npm install /absolute/path/to/sdk/node/aifinpay-agent-2.0.0-rc.12.tgz
+```
+
+After this exact version has been published, install it directly:
+
+```bash
+npm install @aifinpay/agent@2.0.0-rc.12
 ```
 
 ## Quick start
 
+Load the wallet you already configured before sharing a deposit address:
+
 ```ts
-import { Agent } from "@aifinpay/agent";
+import { AiFinPayAgent } from "@aifinpay/agent";
 
-// Generate a fresh keypair locally — never transmitted
-const agent = Agent.new();
-console.log("Fund this address:", agent.address);
-console.log("Save this secret:", agent.secretB58); // store securely!
-
-// Wait until the wallet has at least $0.01 worth on-chain
-await agent.waitForFunding({ minUsdCents: 1 });
-
-// Request an invoice for a Seat (USDC on Solana)
-const invoice = await agent.reserveSeatInvoice({
-  amountUsd: 1.0,
-  asset: "USDC",
-});
-// Build + sign + submit the on-chain tx with @solana/web3.js or viem.
-// `invoice.raw` has program_id, treasury_vault, mints, nonce, etc.
-
-// Once the Seat is on-chain, gated endpoints just work:
-const res = await agent.get("https://aifinpay.io/api/stats");
-console.log(await res.json());
+const agent = await AiFinPayAgent.fromEnvironment();
+console.log({ evm: agent.evmAddress, solana: agent.solanaAddress });
 ```
+
+`fromEnvironment()` is a **load-only** Node API. It selects one identity in
+this order, matching MCP:
+
+1. `SEED_HASH`: a 32-byte seed encoded as 64 hex characters, optionally `0x` prefixed.
+2. `./aifinpay/agents.json` relative to the process working directory. Set
+   `AIFINPAY_AGENTS_FILE` for another path and `AIFINPAY_AGENT_ID` when selecting
+   from multiple records (`{"agents":[{"id":"crawler","seed_hash":"…"}]}`).
+3. `AIFINPAY_AGENT_SECRET`: an existing base58 Solana secret.
+4. `~/.aifinpay/agent.json`, or `AIFINPAY_HOME/agent.json`: the existing MCP
+   keystore. Encrypted keystores require `AIFINPAY_WALLET_PASSPHRASE`.
+
+The loader never creates or overwrites a wallet, prints its keys, or calls the
+network. Missing configuration, an invalid seed, an ambiguous project file or
+a decryption failure throws instead of selecting a new wallet. Load any `.env`
+through your runtime before calling it; this API reads `process.env` and does
+not read `.env` files. `SEED_HEX` is not an alias for `SEED_HASH`. Keep private
+inputs and wallet files out of chats, logs and version control.
+
+The same configured inputs restore the same addresses after a process restart.
+An explicit `evmPrivateKey` option overrides the derived EVM identity; retain
+that separate key as well to recover the imported wallet. Loading a wallet
+does not enable the RC's gated settlement routes.
+
+`AiFinPayAgent.new()` and `Agent.new()` intentionally create a fresh ephemeral
+wallet each time. They do not load existing environment variables or keystores
+and do not persist their generated keys. Use them only when you deliberately
+need a new identity and will store its recovery material privately before
+funding it. Never rerun `new()` to recover an existing funded address.
 
 ## Loading an existing keypair
 
 ```ts
+import { Agent } from "@aifinpay/agent";
+
 // from solana-keygen JSON file (Node only)
 const agent = await Agent.fromKeypairFile("./agent-wallet.json");
 

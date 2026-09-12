@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional, Protocol, runtime_checkable
+import ipaddress
+from typing import TYPE_CHECKING, Any, Optional, Protocol, runtime_checkable
+from urllib.parse import urlsplit
 
 import requests
 
@@ -30,6 +32,36 @@ class PayOptions:
     """Extra headers to attach AFTER the facilitator's auth headers."""
 
 
+def canonical_origin(url: str) -> str:
+    """Normalize an http(s) origin exactly like URL.origin in the Node SDK."""
+    parsed = urlsplit(url)
+    if (
+        parsed.scheme.lower() not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+    ):
+        raise ValueError("expected an absolute http(s) URL without credentials")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("URL has an invalid port") from exc
+    scheme = parsed.scheme.lower()
+    host = parsed.hostname.lower()
+    if ":" in host:
+        # urllib removes IPv6 brackets; put them back so this agrees with
+        # WHATWG URL.origin.  Scope-zone URLs are deliberately unsupported.
+        if "%" in host:
+            raise ValueError("URL has an unsupported IPv6 scope zone")
+        try:
+            host = f"[{ipaddress.IPv6Address(host).compressed}]"
+        except ValueError as exc:
+            raise ValueError("URL has an invalid IPv6 host") from exc
+    if port is None or (scheme == "https" and port == 443) or (scheme == "http" and port == 80):
+        return f"{scheme}://{host}"
+    return f"{scheme}://{host}:{port}"
+
+
 @runtime_checkable
 class Facilitator(Protocol):
     """A facilitator handles one x402 wire format.
@@ -50,6 +82,7 @@ class Facilitator(Protocol):
         resp: requests.Response,
         agent: "Agent",
         opts: PayOptions,
+        context: Optional[dict[str, Any]] = None,
     ) -> dict:
         """Return the kwargs to merge into the retry request.
 

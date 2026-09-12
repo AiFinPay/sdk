@@ -168,55 +168,20 @@ describe("§8.6 — never re-broadcast", () => {
   });
 });
 
-describe("execute — nothing is broadcast until every check has passed", () => {
-  /** Uses the real clock: executeV14Settlement has no nowMs override by design. */
-  const live = (o: Record<string, unknown> = {}, q: Record<string, unknown> = {}) => callFor(o, q, Date.now());
-
-  // The lesson from the backend side today: a helper can be perfect and never
-  // called. These drive the real entry point, so they fail if the wiring goes.
-  const publicClient = {
-    async readContract({ functionName }: { functionName: string }) {
-      return ({ consumedNonce: false, payerNonce: 0n, paused: false } as Record<string, unknown>)[functionName];
-    },
-  } as never;
-
-  it("sends settleNative with value equal to grossAmount", async () => {
-    let sent: Record<string, unknown> | null = null;
-    const walletClient = { async writeContract(a: Record<string, unknown>) { sent = a; return "0x" + "11".repeat(32); } } as never;
-    const r = await executeV14Settlement(live(), { publicClient, walletClient, account: PAYER, orderId: ORDER });
-    expect(r.route).toBe("merchant-aifp1");
-    expect(sent!.functionName).toBe("settleNative");
-    expect(sent!.value).toBe(1000000000000000n);
-    expect(sent!.address).toBe(CONTRACT);
-  });
-
-  it("does not broadcast when validation fails", async () => {
-    let called = false;
-    const walletClient = { async writeContract() { called = true; return "0x"; } } as never;
-    await expect(executeV14Settlement(
-      live({}, { orderIdHash: keccak256(stringToHex("qt_other")) }),
-      { publicClient, walletClient, account: PAYER, orderId: ORDER },
-    )).rejects.toThrow(/different order/);
-    expect(called).toBe(false);
-  });
-
-  it("does not broadcast when the nonce is already spent", async () => {
-    let called = false;
-    const spent = { async readContract({ functionName }: { functionName: string }) {
-      return ({ consumedNonce: true, payerNonce: 0n, paused: false } as Record<string, unknown>)[functionName]; } } as never;
-    const walletClient = { async writeContract() { called = true; return "0x"; } } as never;
-    await expect(executeV14Settlement(live(), { publicClient: spent, walletClient, account: PAYER, orderId: ORDER }))
-      .rejects.toThrow(/already been spent/);
-    expect(called).toBe(false);
-  });
-
-  it("refuses stablecoin settlement rather than sending without an allowance", async () => {
-    // settleStable reverts without approve() first. Approving on the agent's
-    // behalf is its policy layer's decision, not this function's.
-    const walletClient = { async writeContract() { return "0x"; } } as never;
-    await expect(executeV14Settlement(
-      live({ value_wei: "1000000" }, { token: "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582", grossAmount: "1000000" }),
-      { publicClient, walletClient, account: PAYER, orderId: ORDER },
-    )).rejects.toThrow(/approve/);
+describe("execute — v1.4 is quarantined until signed economics are immutable", () => {
+  it.each([
+    { name: "native", over: {}, quote: {} },
+    { name: "stable", over: { value_wei: "0" }, quote: { token: MERCHANT } },
+    { name: "hostile target", over: { contract: MERCHANT }, quote: {} },
+    { name: "unknown chain", over: { chain: "hostile" }, quote: {} },
+  ])("refuses $name without RPC, approval, signing or broadcast", async ({ over, quote }) => {
+    let touched = false;
+    const clients = new Proxy({}, { get() { touched = true; throw new Error("client touched"); } });
+    await expect(executeV14Settlement(callFor(over, quote, Date.now()), {
+      publicClient: clients as never, walletClient: clients as never, account: PAYER,
+      // Even the old skip flag must not bypass the quarantine.
+      skipPreflight: true,
+    })).rejects.toMatchObject({ code: "V14_SETTLEMENT_DISABLED" });
+    expect(touched).toBe(false);
   });
 });

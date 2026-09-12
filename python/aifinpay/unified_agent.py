@@ -5,18 +5,10 @@ Mirrors `@aifinpay/agent`'s `AiFinPayAgent` TypeScript class. One seed
 derives a Solana base58 pubkey, a Polygon EVM 0x address, and a Casper
 account hash. Casper is identity only — the address is derived and can be
 funded, but this SDK does not sign Casper deploys.
-Per-call payment via `agent.call(provider=…)` does:
-
-  1. Registry lookup at /api/providers (falls back to /providers)
-  2. POST to the bridge → expect HTTP 402
-  3. Build + sign + send the on-chain payment:
-       - Polygon  → B2BSplitter.payMatic(merchant, ipCreator, orderId)
-                    with msg.value = total_wei
-       - Solana   → b2b_pay_with_split(merchant_amount_lamports, order_id)
-                    on program 5g9zWHF1…KFx2
-  4. Retry the bridge POST with x-tx-hash + x-order-id (Polygon) or
-     x-solana-tx + x-order-id (Solana)
-  5. Return the upstream response body
+Legacy paid `agent.call(provider=…)` is fail-closed after a 402 challenge:
+free/read-only bridge responses still pass through. This Python surface has no
+paid replacement; use the Node SDK's reviewed `fetchPaid` v1.3 route with a
+fresh trusted quote/FX result.
 
 Dependencies (declared in pyproject.toml):
   • PyNaCl, base58   (already there)
@@ -643,8 +635,10 @@ class AiFinPayAgent:
              method: str = "POST", chain: Optional[str] = None,
              cost: Optional[float] = None, timeout: float = 60.0) -> requests.Response:
         """
-        Make a paid call to a registered provider. Returns the upstream
-        Response after the on-chain settlement has been confirmed.
+        Call a registered provider. Free responses pass through; a paid 402
+        fails closed because this legacy settlement surface has no reviewed
+        target. The Python surface has no paid replacement; use the Node SDK's
+        reviewed fetchPaid v1.3 route for paid requests.
 
         :param provider: Registry name ("exa", "io-net", "venice", …)
         :param body: JSON-serializable body forwarded to the bridge
@@ -697,9 +691,25 @@ class AiFinPayAgent:
         except Exception:
             raise X402Error("bridge returned 402 with non-JSON body")
 
-        if picked_chain == "solana":
-            return self._settle_solana(full_url, challenge, method, body, timeout, cost=cost)
-        return self._settle_polygon(full_url, challenge, method, body, timeout, cost=cost)
+        # Legacy bridge settlement is fail-closed. The challenge historically
+        # supplied arbitrary splitter/program addresses and native amounts, so
+        # continuing could sign against an unreviewed target or let missing
+        # pricing bypass the budget. Free/read-only responses still pass above;
+        # every paid legacy challenge stops before signing or broadcast.
+        effective_cost = p.price_usd if cost is None else cost
+        if not isinstance(effective_cost, (int, float)) or not isinstance(p.price_usd, (int, float)) \
+                or not float(effective_cost) > 0 or not float(p.price_usd) > 0:
+            raise AiFinPayError(
+                f"legacy call() refused {provider!r}: no trusted positive USD price; "
+                "use the Node SDK's reviewed fetchPaid v1.3 route with fresh trusted FX instead"
+            )
+        raise AiFinPayError(
+            "legacy call() settlement is disabled: challenge targets are not trusted "
+            "for mainnet payment; use the Node SDK fetchPaid with a reviewed v1.3 settlement pin "
+            "and fresh trusted FX"
+        )
+
+        # No legacy signer is reachable after the refusal above.
 
     # ── Cross-chain orchestration (Phase 1.5a: EVM↔EVM via LiFi) ───────────
     #
@@ -809,207 +819,17 @@ class AiFinPayAgent:
     def _settle_polygon(self, full_url: str, challenge: dict, method: str,
                         body: Optional[dict], timeout: float,
                         cost: Optional[float] = None) -> requests.Response:
-        # Both names, newest first. The production bridges renamed the block
-        # pay_matic -> pay_native on 2026-08-04 when the on-chain entrypoint
-        # became payNative, and no SDK branch followed — so reading only the
-        # old name made this method fail against every live bridge with a
-        # message blaming facilitator wiring (AIFINP-118).
-        pm = native_pay_block(challenge)
-        if not pm:
-            raise X402Error(
-                "bridge returned 402 with neither a pay_native nor a pay_matic "
-                "block — it is speaking a protocol this SDK does not implement "
-                f"(fields: {', '.join(sorted(challenge.keys()))})"
-            )
-
-        w3 = self._web3()
-        splitter_v12 = w3.eth.contract(
-            address=Web3.to_checksum_address(pm["splitter"]),
-            abi=SPLITTER_PAY_NATIVE_ABI,
+        """Retained for compatibility; legacy Polygon settlement is disabled."""
+        raise AiFinPayError(
+            "legacy Polygon settlement is disabled; use the Node SDK fetchPaid "
+            "with a reviewed v1.3 settlement pin"
         )
-        splitter = w3.eth.contract(
-            address=Web3.to_checksum_address(pm["splitter"]),
-            abi=SPLITTER_PAY_MATIC_ABI,
-        )
-        merchant = Web3.to_checksum_address(pm["merchant_wallet"])
-        # ipCreator routing: the challenge's explicit ip_creator, or address(0).
-        #
-        # This used to fall back to the splitter's OWN treasury, justified as
-        # "passing address(0) would skip the transfer and permanently strand the
-        # 1bp inside B2BSplitter — no sweep function". That is not what the
-        # contract does. B2BSplitter._split:
-        #
-        #     if (_ipCreator != address(0)) { ipAmt = ...; }
-        #     // else: ipAmt stays 0 and is absorbed into merchantAmt below
-        #     merchantAmt = _total - treasuryAmt - ipAmt;
-        #     ...
-        #     if (ipAmt > 0) { transfer to _ipCreator }
-        #
-        # With address(0) the royalty share is not stranded — it goes to the
-        # MERCHANT, and no transfer is attempted. Nothing to sweep.
-        #
-        # The fallback therefore moved 0.01% of every unattributed payment from
-        # the merchant to us, silently, while /v1/quote published a 99/1/0 split.
-        # Observed on-chain 2026-08-27 in tx 0x6b853876…: merchant 98.99%,
-        # treasury 1.00%, ipCreator 0.01% paid to 0xD31d82…3c8e — our own Safe.
-        # AIFINP-211.
-        #
-        # Default to address(0): no royalty recipient means the merchant keeps
-        # it, which is both what the contract implements and what we publish.
-        ip_creator = pm.get("ip_creator") or ("0x" + "00" * 20)
-        ip_creator = Web3.to_checksum_address(ip_creator)
-        order_id = pm["order_id"]
-        total_wei = int(pm["total_wei"])
-
-        matic_usd = float(os.environ.get("AIFINPAY_MATIC_USD", "0.70"))
-        _guard_challenge_usd(total_wei / 1e18 * matic_usd, cost, full_url)
-
-        nonce = w3.eth.get_transaction_count(self.evm_address)
-        gas_price = w3.eth.gas_price
-        # Defaults to 1.1 so an older backend that does not send the field keeps
-        # working unchanged.
-        if str(pm.get("splitter_version", "1.1")) == "1.2":
-            fn = splitter_v12.functions.payNative(
-                payment_id_for(order_id), merchant, ip_creator, order_id
-            )
-        else:
-            fn = splitter.functions.payMatic(merchant, ip_creator, order_id)
-        tx = fn.build_transaction({
-            "from":     self.evm_address,
-            "value":    total_wei,
-            "nonce":    nonce,
-            "gasPrice": gas_price,
-            "chainId":  137,  # Polygon mainnet
-        })
-        # Estimate gas with a small buffer
-        try:
-            gas_est = w3.eth.estimate_gas(tx)
-            tx["gas"] = int(gas_est * 1.2)
-        except Exception:
-            tx["gas"] = 300_000  # safe default
-
-        signed = w3.eth.account.sign_transaction(tx, self.evm_account.key)
-        tx_hash = w3.eth.send_raw_transaction(_signed_raw_tx(signed))
-        receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
-        if receipt.status != 1:
-            raise AiFinPayError(f"Polygon tx reverted: {tx_hash.hex()}")
-
-        # Retry the bridge with payment proof
-        paid_resp = requests.request(
-            method, full_url,
-            json=body if body is not None else None,
-            timeout=timeout,
-            headers={
-                "content-type": "application/json",
-                "x-tx-hash":    tx_hash.hex(),
-                "x-order-id":   order_id,
-            },
-        )
-        if not paid_resp.ok:
-            raise AiFinPayError(
-                f"Bridge retry failed {paid_resp.status_code} after on-chain payment "
-                f"{tx_hash.hex()}: {paid_resp.text[:300]}"
-            )
-        return paid_resp
-
-    # ── Solana settlement (b2b_pay_with_split) ───────────────────────────
 
     def _settle_solana(self, full_url: str, challenge: dict, method: str,
                        body: Optional[dict], timeout: float,
                        cost: Optional[float] = None) -> requests.Response:
-        ps = challenge.get("pay_solana")
-        if not ps:
-            raise X402Error(
-                f"bridge returned 402 without a pay_solana block — operator has not "
-                f"set BRIDGE_MERCHANT_SOLANA. Use chain='polygon' instead."
-            )
-
-        sol_usd = float(os.environ.get("AIFINPAY_SOL_USD", "200"))
-        lamports_est = int(ps.get("total_lamports") or ps["merchant_amount_lamports"])
-        _guard_challenge_usd(lamports_est / 1e9 * sol_usd, cost, full_url)
-
-        program_id = SolPubkey.from_string(ps["program_id"])
-        merchant   = SolPubkey.from_string(ps["merchant_wallet"])
-        treasury   = SolPubkey.from_string(ps["treasury"])
-        ip_creator = treasury  # default routing; future: per-merchant slot
-        order_id   = ps["order_id"]
-        merchant_amount_lamports = int(ps["merchant_amount_lamports"])
-
-        # PDAs derived from program_id with seeds ["config"] and ["vault"]
-        config_pda, _ = SolPubkey.find_program_address([b"config"], program_id)
-        vault_pda,  _ = SolPubkey.find_program_address([b"vault"],  program_id)
-
-        # Instruction data: discriminator + Borsh(u64 + string)
-        order_bytes = order_id.encode("utf-8")
-        if len(order_bytes) > 64:
-            raise AiFinPayError(f"order_id too long ({len(order_bytes)} bytes > 64)")
-        data = (
-            B2B_PAY_WITH_SPLIT_DISC
-            + struct.pack("<Q", merchant_amount_lamports)
-            + struct.pack("<I", len(order_bytes))
-            + order_bytes
+        """Retained for compatibility; legacy Solana settlement is disabled."""
+        raise AiFinPayError(
+            "legacy Solana settlement is disabled; use the Node SDK fetchPaid "
+            "with a reviewed v1.3 settlement pin"
         )
-
-        agent_pubkey = self.sol_keypair.pubkey()
-        keys = [
-            AccountMeta(pubkey=config_pda,            is_signer=False, is_writable=False),
-            AccountMeta(pubkey=vault_pda,             is_signer=False, is_writable=False),
-            AccountMeta(pubkey=agent_pubkey,          is_signer=True,  is_writable=True),
-            AccountMeta(pubkey=treasury,              is_signer=False, is_writable=True),
-            AccountMeta(pubkey=ip_creator,            is_signer=False, is_writable=True),
-            AccountMeta(pubkey=merchant,              is_signer=False, is_writable=True),
-            AccountMeta(pubkey=SolPubkey.from_string(str(SYSTEM_PROGRAM_ID)), is_signer=False, is_writable=False),
-        ]
-        ix = Instruction(program_id=program_id, accounts=keys, data=data)
-
-        # Fetch recent blockhash + submit
-        rpc_req = lambda payload: requests.post(self.solana_rpc, json=payload, timeout=timeout).json()
-        bh_resp = rpc_req({"jsonrpc": "2.0", "id": 1, "method": "getLatestBlockhash",
-                           "params": [{"commitment": "confirmed"}]})
-        blockhash = SolHash.from_string(bh_resp["result"]["value"]["blockhash"])
-
-        msg = SolMessage.new_with_blockhash([ix], agent_pubkey, blockhash)
-        tx  = SolTransaction([self.sol_keypair], msg, blockhash)
-
-        # Solana RPC sendTransaction accepts base58 (deprecated) or base64 —
-        # NOT hex. The old {"encoding": "hex"} form failed on every node.
-        import base64 as _b64
-        send_resp = rpc_req({"jsonrpc": "2.0", "id": 1, "method": "sendTransaction",
-                             "params": [_b64.b64encode(bytes(tx)).decode("ascii"),
-                                        {"encoding": "base64", "preflightCommitment": "confirmed"}]})
-        if "error" in send_resp:
-            raise AiFinPayError(f"Solana send failed: {send_resp['error']}")
-        tx_sig = send_resp["result"]
-
-        # Wait for confirmation (poll up to ~30s)
-        deadline = time.time() + 30
-        confirmed = False
-        while time.time() < deadline:
-            time.sleep(2)
-            st = rpc_req({"jsonrpc": "2.0", "id": 1, "method": "getSignatureStatuses",
-                          "params": [[tx_sig], {"searchTransactionHistory": True}]})
-            value = (st.get("result", {}) or {}).get("value", [None])[0]
-            if value and value.get("confirmationStatus") in ("confirmed", "finalized"):
-                if value.get("err") is not None:
-                    raise AiFinPayError(f"Solana tx errored: {value['err']}")
-                confirmed = True
-                break
-        if not confirmed:
-            raise AiFinPayError(f"Solana tx {tx_sig} not confirmed within 30s")
-
-        paid_resp = requests.request(
-            method, full_url,
-            json=body if body is not None else None,
-            timeout=timeout,
-            headers={
-                "content-type": "application/json",
-                "x-solana-tx":  tx_sig,
-                "x-order-id":   order_id,
-            },
-        )
-        if not paid_resp.ok:
-            raise AiFinPayError(
-                f"Bridge retry failed {paid_resp.status_code} after Solana payment "
-                f"{tx_sig}: {paid_resp.text[:300]}"
-            )
-        return paid_resp

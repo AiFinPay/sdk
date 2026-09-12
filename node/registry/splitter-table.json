@@ -5,7 +5,7 @@
     "difference, so hand-edits are rejected rather than shipped."
   ],
   "schemaVersion": 4,
-  "sourceUpdatedAt": "2026-08-28",
+  "sourceUpdatedAt": "2026-08-30",
   "governance": {
     "safe": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
     "threshold": 3,
@@ -45,6 +45,7 @@
       "validFrom": "2026-08-04T00:00:00.000Z",
       "validUntil": "2026-09-03T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-07"
     },
     "base:legacy": {
@@ -64,6 +65,7 @@
       "validFrom": "2026-08-04T00:00:00.000Z",
       "validUntil": "2026-09-03T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-07"
     },
     "optimism:legacy": {
@@ -83,6 +85,7 @@
       "validFrom": "2026-08-04T00:00:00.000Z",
       "validUntil": "2026-09-03T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-07"
     },
     "unichain:legacy": {
@@ -102,6 +105,7 @@
       "validFrom": "2026-08-04T00:00:00.000Z",
       "validUntil": "2026-09-03T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-07"
     },
     "botchain:legacy": {
@@ -121,6 +125,7 @@
       "validFrom": "2026-08-04T00:00:00.000Z",
       "validUntil": "2026-09-03T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-07"
     },
     "xrplevm:legacy": {
@@ -140,6 +145,7 @@
       "validFrom": "2026-08-04T00:00:00.000Z",
       "validUntil": "2026-09-03T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-07"
     },
     "polygon:merchant-aifp1": {
@@ -162,6 +168,7 @@
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-27"
     },
     "polygon:agent-x402": {
@@ -184,6 +191,7 @@
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-27"
     },
     "optimism:merchant-aifp1": {
@@ -206,6 +214,7 @@
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-27"
     },
     "optimism:agent-x402": {
@@ -228,6 +237,7 @@
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-27"
     },
     "bnb:merchant-aifp1": {
@@ -250,6 +260,7 @@
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-27"
     },
     "bnb:agent-x402": {
@@ -272,6 +283,7 @@
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-27"
     },
     "unichain:merchant-aifp1": {
@@ -294,6 +306,7 @@
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-27"
     },
     "unichain:agent-x402": {
@@ -316,6 +329,7 @@
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-27"
     },
     "botchain:merchant-aifp1": {
@@ -338,6 +352,7 @@
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-27"
     },
     "botchain:agent-x402": {
@@ -360,6 +375,7 @@
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-27"
     },
     "base:merchant-aifp1": {
@@ -382,6 +398,7 @@
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-27"
     },
     "base:agent-x402": {
@@ -404,6 +421,7 @@
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-27"
     },
     "arbitrum:merchant-aifp1": {
@@ -426,6 +444,7 @@
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-27"
     },
     "arbitrum:agent-x402": {
@@ -448,6 +467,7 @@
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-27"
     },
     "avalanche:merchant-aifp1": {
@@ -470,6 +490,7 @@
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-27"
     },
     "avalanche:agent-x402": {
@@ -492,6 +513,7 @@
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-27"
     },
     "xrplevm:merchant-aifp1": {
@@ -514,6 +536,7 @@
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-27"
     },
     "xrplevm:agent-x402": {
@@ -536,7 +559,54 @@
       "validFrom": "2026-08-27T00:00:00.000Z",
       "validUntil": "2026-11-25T00:00:00.000Z",
       "settlementEnabled": false,
+      "testnet": false,
       "verifiedAt": "2026-08-27"
+    },
+    "amoy:merchant-aifp1": {
+      "chain": "amoy",
+      "route": "merchant-aifp1",
+      "chainId": 80002,
+      "version": "1.3",
+      "superseded": false,
+      "splitter": "0xdB772E64F63854bf31f2366BF27e47D5699fe7fC",
+      "runtimeCodeHash": "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
+      "owner": "0x000035156F0cff1b4C36854773472fe0bd258E4d",
+      "treasury": "0x000035156F0cff1b4C36854773472fe0bd258E4d",
+      "treasuryBps": 100,
+      "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582",
+        "USDT": null
+      },
+      "rpcQuorum": 2,
+      "validFrom": "2026-08-29T00:00:00.000Z",
+      "validUntil": "2026-11-27T00:00:00.000Z",
+      "settlementEnabled": true,
+      "testnet": true,
+      "verifiedAt": "2026-08-29"
+    },
+    "amoy:agent-x402": {
+      "chain": "amoy",
+      "route": "agent-x402",
+      "chainId": 80002,
+      "version": "1.3",
+      "superseded": false,
+      "splitter": "0xFd1622847A89FB3De240d64DFCbd09C65c77D99d",
+      "runtimeCodeHash": "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
+      "owner": "0x000035156F0cff1b4C36854773472fe0bd258E4d",
+      "treasury": "0x000035156F0cff1b4C36854773472fe0bd258E4d",
+      "treasuryBps": 0,
+      "ipCreatorBps": 0,
+      "stablecoins": {
+        "USDC": "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582",
+        "USDT": null
+      },
+      "rpcQuorum": 2,
+      "validFrom": "2026-08-29T00:00:00.000Z",
+      "validUntil": "2026-11-27T00:00:00.000Z",
+      "settlementEnabled": true,
+      "testnet": true,
+      "verifiedAt": "2026-08-30"
     }
   }
 }

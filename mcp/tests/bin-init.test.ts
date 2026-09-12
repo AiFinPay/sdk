@@ -18,8 +18,8 @@
 // would not have caught that `--help` used to start a stdio server and hang.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, existsSync, statSync, readFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, existsSync, statSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -38,12 +38,21 @@ afterEach(() => { rmSync(home, { recursive: true, force: true }); });
  * failed against a binary that was behaving correctly — the assertions were
  * looking at the wrong pipe.
  */
-function run(args: string[], extraEnv: Record<string, string> = {}): string {
-  const r = spawnSync(process.execPath, [BIN, ...args], {
+function isolatedEnv(extraEnv: Record<string, string> = {}): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, AIFINPAY_HOME: home };
+  for (const key of ["SEED_HASH", "AIFINPAY_AGENTS_FILE", "AIFINPAY_AGENT_ID", "AIFINPAY_AGENT_SECRET", "AIFINPAY_WALLET_PASSPHRASE"]) {
+    delete env[key];
+  }
+  return { ...env, ...extraEnv };
+}
+
+function run(args: string[], extraEnv: Record<string, string> = {}, nodeArgs: string[] = []): string {
+  const r = spawnSync(process.execPath, [...nodeArgs, BIN, ...args], {
     encoding: "utf8",
     timeout: 60_000,
+    cwd: home,
     input: "",                       // stdio server would otherwise wait forever
-    env: { ...process.env, AIFINPAY_HOME: home, ...extraEnv },
+    env: isolatedEnv(extraEnv),
   });
   if (r.error) throw r.error;
   if (r.status !== 0) {
@@ -80,8 +89,9 @@ describe("aifinpay-mcp init", () => {
     const second = run(["init"]);
     const after = JSON.parse(readFileSync(join(home, "agent.json"), "utf8")).secretB58;
 
-    expect(after).toBe(secret);
+    expect(after === secret).toBe(true);
     expect(second).toMatch(/Existing wallet found/);
+    expect(second.includes("hold nothing yet")).toBe(false);
     // The address a user may have funded has to be the same one they see the
     // second time, or they will fund the wrong one.
     expect(second.match(EVM)?.[0]).toBe(first.match(EVM)?.[0]);
@@ -92,8 +102,78 @@ describe("aifinpay-mcp init", () => {
     const secret = JSON.parse(readFileSync(join(home, "agent.json"), "utf8")).secretB58;
     const block = out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1);
     expect(block).toContain("mcpServers");
-    expect(block).not.toContain(secret);
+    expect(block.includes(secret)).toBe(false);
   });
+
+  it("pins the printed MCP config to the version that initialized the wallet", () => {
+    const out = run(["init"]);
+    const block = out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1);
+    const config = JSON.parse(block);
+    const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+    expect(config.mcpServers.aifinpay.command).toBe("npx");
+    expect(config.mcpServers.aifinpay.args).toEqual(["-y", `@aifinpay/mcp@${version}`]);
+  });
+
+  it.each([false, true])("concurrent init preserves one wallet (encrypted=%s)", async (encrypted) => {
+    const barrier = join(home, "init-barrier.mjs");
+    writeFileSync(barrier, `import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
+const originalWrite = fs.writeFileSync, originalLink = fs.linkSync;
+function waitAtPublish(target) {
+  if (String(target) !== process.env.AIFINPAY_HOME + '/agent.json') return;
+  const marker = process.env.AIFINPAY_HOME + '/' + process.env.AIFP_TEST_WRITER;
+  originalWrite(marker + '.ready', 'ready', {mode: 0o600});
+  const deadline = Date.now() + 15000;
+  while (!fs.existsSync(marker + '.release')) {
+    if (Date.now() > deadline) throw new Error('test publish barrier timed out');
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+  }
+}
+fs.writeFileSync = function(target, ...args) { waitAtPublish(target); return originalWrite.call(this, target, ...args); };
+fs.linkSync = function(source, target) { waitAtPublish(target); return originalLink.call(this, source, target); };
+syncBuiltinESMExports();
+`, { mode: 0o600 });
+    const children: ReturnType<typeof spawn>[] = [];
+    const launch = (writer: string) => {
+      const child = spawn(process.execPath, ["--import", barrier, BIN, "init"], {
+        cwd: home,
+        env: isolatedEnv({ AIFP_TEST_WRITER: writer,
+          ...(encrypted ? { AIFINPAY_WALLET_PASSPHRASE: "fixture-passphrase" } : {}) }),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      children.push(child);
+      let output = "";
+      child.stdout!.on("data", chunk => { output += chunk; });
+      child.stderr!.on("data", chunk => { output += chunk; });
+      return new Promise<{ code: number | null; output: string }>(resolve =>
+        child.on("close", code => resolve({ code, output })));
+    };
+    try {
+      const a = launch("a"), b = launch("b");
+      const deadline = Date.now() + 15000;
+      while (!existsSync(join(home, "a.ready")) || !existsSync(join(home, "b.ready"))) {
+        if (Date.now() > deadline) throw new Error("concurrent init did not reach publish barrier");
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      writeFileSync(join(home, "a.release"), "go");
+      const first = await a;
+      const before = readFileSync(join(home, "agent.json"), "utf8");
+      writeFileSync(join(home, "b.release"), "go");
+      const second = await b;
+      const after = readFileSync(join(home, "agent.json"), "utf8");
+      expect(first.code).toBe(0);
+      expect(second.code).toBe(0);
+      expect(after === before).toBe(true);
+      expect(first.output.match(EVM)?.[0]).toBe(second.output.match(EVM)?.[0]);
+      expect(first.output.includes("Created ")).toBe(true);
+      expect(second.output.includes("Created ")).toBe(false);
+      expect(second.output.includes("Existing wallet found")).toBe(true);
+      expect((first.output + second.output).includes("RECOVERY KEY")).toBe(false);
+      expect(readdirSync(home).some(name => name.startsWith(".agent-init-"))).toBe(false);
+    } finally {
+      for (const child of children) if (child.exitCode === null) child.kill("SIGKILL");
+    }
+  }, 25000);
 });
 
 describe("aifinpay-mcp server", () => {
@@ -131,21 +211,28 @@ describe("aifinpay-mcp flags", () => {
 
   // ── Recovery output and secret leakage (AIFINP-220 §3) ─────────────────
   //
-  // The rule the audit sets: the private key must never reach chat or logs. The
-  // recovery print is not a violation of that — it is a one-time backup on the
-  // TERMINAL, a channel the human running init controls. These tests hold both
-  // halves: the recovery line IS there on a fresh plaintext init, and the secret
-  // is NOT anywhere it could be retained.
+  // A fresh plaintext wallet may show its recovery key on a TTY. Piped output,
+  // repeat init, and encrypted wallets must never expose the secret.
 
-  it("prints the recovery key once, on a fresh plaintext wallet", () => {
+  it("keeps the recovery key out of noninteractive init output", () => {
     const out = run(["init"]);
-    // The base58 secret is on disk; the recovery block surfaces it once for an
-    // off-machine backup.
     const secret = JSON.parse(readFileSync(join(home, "agent.json"), "utf8")).secretB58 as string;
-    expect(out).toContain("RECOVERY KEY");
-    expect(out).toContain(secret);
-    expect(out).toMatch(/shown once/i);
-    expect(out).toMatch(/do NOT paste it into a chat/i);
+    expect(out.includes("RECOVERY KEY")).toBe(false);
+    expect(out.includes(secret)).toBe(false);
+    expect(out).toMatch(EVM);
+  });
+
+  it("shows a fresh plaintext recovery key only when stdout reports a TTY", () => {
+    const tty = join(home, "tty-fixture.mjs");
+    writeFileSync(tty, "Object.defineProperty(process.stdout, 'isTTY', { value: true });\n", { mode: 0o600 });
+    const out = run(["init"], {}, ["--import", tty]);
+    const secret = JSON.parse(readFileSync(join(home, "agent.json"), "utf8")).secretB58 as string;
+    // Keep even a failing assertion from printing the captured recovery key.
+    expect(out.includes("RECOVERY KEY")).toBe(true);
+    expect(out.includes(secret)).toBe(true);
+    const second = run(["init"], {}, ["--import", tty]);
+    expect(second.includes("RECOVERY KEY")).toBe(false);
+    expect(second.includes(secret)).toBe(false);
   });
 
   it("does NOT reprint the recovery key on a second init", () => {

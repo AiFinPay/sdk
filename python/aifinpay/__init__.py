@@ -61,7 +61,7 @@ def __getattr__(name: str):
         return getattr(unified_agent, name)
     raise AttributeError(name)
 
-__version__ = "1.0.0"
+__version__ = "2.0.0rc1"
 __all__ = [
     "Agent",
     "AiFinPayAgent",

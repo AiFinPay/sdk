@@ -4,6 +4,12 @@ description: Discover an agent wallet, retrieve payment history and prepaid quot
 license: MIT
 ---
 
+The current source and compatible package line is **2.0.0-rc.12**. Until that
+RC is published, use the checked-out source build or an explicitly pinned
+compatible package; never install `latest` for a payment test. The production
+RC tool inventory below is read-only; do not claim MCP signing or AIFP-2
+settlement is active.
+
 # AiFinPay agent workflow
 
 Use the tools actually returned by MCP tools/list. This RC exposes
@@ -41,11 +47,19 @@ uses an ephemeral wallet: do not fund it.
 
 ## Init and reconnect
 
-`npx @aifinpay/mcp init` creates the legacy keystore only when no configured
-wallet exists. It preserves existing wallets. After init or a local wallet-file
-update, call agent_reload in the existing MCP connection, then agent_address.
+For a funded crawler or balance check, load the existing persistent identity
+first through the configured MCP identity sources or
+`AiFinPayAgent.fromEnvironment()`. If none exists, stop and ask the operator
+to configure one; never call `Agent.new()` to create a wallet that will be
+funded. `npx @aifinpay/mcp@2.0.0-rc.12 init` creates the legacy keystore only when no
+configured wallet exists. It preserves existing wallets. After init or a local
+wallet-file update, call agent_reload in the existing MCP connection, then agent_address.
 The reload returns only public addresses and preserves the old identity if
 loading fails. This server does not require a new conversation.
+
+On an interactive TTY, init may print a one-time private-key recovery line for
+the operator to back up offline. Automated agents must never request, capture,
+log or repeat that line; non-interactive runs suppress it.
 
 Installing a new package or changing launch environment variables requires the
 MCP host to launch/reconnect the server process. Shell exports cannot change an
@@ -95,6 +109,13 @@ Node SDK: getAgentHistory({address, passport, source, network, limit, offset,
 baseUrl}) uses the same route flow. Retrieve a paid bearer receipt separately
 with the signed recovery API; never put it in a public history report.
 
+After a settlement error, retain the original quote, transaction reference and
+idempotency context and use the recovery path before another attempt. A new
+quote or a new `fetchPaid` call may charge again; this RC has no payment
+executor. `dev.ratersapp.com` is only a hostname, not proof of testnet or dev
+settlement. Validate the 402 challenge and quote's `network_mode`, chain and
+deployed contract before any approved executor could settle.
+
 ## Dev paid-content inspection
 
 Configure AIFINPAY_MODE=dev and a separate AIFINPAY_BASE_URL. The backend must
@@ -107,7 +128,9 @@ the 402 and requests a batch quote. The quote must name only Amoy, test mode,
 the same merchant/resource and the requested deployed contract version.
 Changing a requested version does not redeploy a contract or relabel its ABI;
 a mismatch stops the flow. The operator must configure the corresponding
-verified SPLITTER_ADDRESS_AMOY deployment first.
+verified SPLITTER_ADDRESS_AMOY deployment first. Minimum-unit and cap errors
+stop the request; do not lower units below the server minimum, edit quote
+responses, or invent manual nonces, receipts or transactions.
 
 This tool never broadcasts. Current MCP has no settlement executor; SDK
 fetchPaid remains gated and is not a general Amoy 1.2/1.4 executor. Finish

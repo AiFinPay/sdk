@@ -103,7 +103,8 @@ export interface V14ValidateOptions {
 }
 
 /**
- * Every check §8 requires, before anything is broadcast.
+ * Read-only structural checks. Success does not authenticate the signer,
+ * deployment, fees or treasury and does not authorize settlement.
  *
  * Throws on the first failure with a code, because these are not equivalent:
  * an expired quote should be re-requested, a foreign payer is a caller bug, and
@@ -231,66 +232,28 @@ export async function checkV14Submittable(
   return { submittable: true };
 }
 
-const SETTLE_ABI = parseAbi([
-  "function settleNative((address payer,address merchant,address token,uint256 grossAmount,address ipCreator,uint256 validUntil,bytes32 orderIdHash,uint256 nonce,bytes32 routeId) quote, bytes signature) payable",
-  "function settleStable((address payer,address merchant,address token,uint256 grossAmount,address ipCreator,uint256 validUntil,bytes32 orderIdHash,uint256 nonce,bytes32 routeId) quote, bytes signature)",
-]);
-
-const asTuple = (q: V14Quote) => ({
-  payer: q.payer, merchant: q.merchant, token: q.token,
-  grossAmount: BigInt(q.grossAmount), ipCreator: q.ipCreator,
-  validUntil: BigInt(q.validUntil), orderIdHash: q.orderIdHash,
-  nonce: BigInt(q.nonce), routeId: q.routeId,
-});
-
 /**
- * Validate, check submittability, then send.
- *
- * The order matters and is not stylistic: every check that can be made without
- * the chain runs before the one that costs a round trip, and all of them run
- * before anything is broadcast. Once `writeContract` is called the agent has
- * spent gas whatever happens next.
+ * v1.4 signing is quarantined. Its current signed Quote omits mutable profile
+ * fees and treasury. RPC preflight cannot bind those values at execution time.
+ * Keep the exported API for callers to handle the refusal, but provide no
+ * bypass: re-enabling requires a contract-bound economics commitment, reviewed
+ * deployment/signer/token pins, approval handling and mined-success recovery.
+ * Validation and nonce inspection above remain read-only diagnostics.
  */
 export async function executeV14Settlement(
-  call: V14SettlementCall,
-  ctx: {
+  _call: V14SettlementCall,
+  _ctx: {
     publicClient: PublicClient;
     walletClient: WalletClient;
     account: Address;
     orderId?: string;
     minSecondsRemaining?: number;
-    /** Skip the on-chain pre-flight. Only for a caller that has just done it. */
+    /** @deprecated Cannot bypass the v1.4 settlement quarantine. */
     skipPreflight?: boolean;
   },
 ): Promise<{ hash: Hex; route: string }> {
-  const { route } = validateV14SettlementCall(call, {
-    orderId: ctx.orderId, payer: ctx.account, minSecondsRemaining: ctx.minSecondsRemaining,
-  });
-
-  if (!ctx.skipPreflight) {
-    const pre = await checkV14Submittable(ctx.publicClient, call);
-    if (!pre.submittable) throw new V14SettlementError(pre.code, pre.reason);
-  }
-
-  const q = call.args.quote;
-  const native = lc(q.token) === ZERO;
-  if (!native) {
-    // §9.1 — settleStable needs an allowance first. Refused rather than
-    // silently attempted: approving on the agent's behalf is a decision the
-    // agent's own policy layer makes, not this function.
-    throw new V14SettlementError("V14_STABLE_NOT_SUPPORTED",
-      "stablecoin settlement requires approve(splitter, grossAmount) first and is not yet wired here — " +
-      "quote in native for now");
-  }
-
-  const hash = await ctx.walletClient.writeContract({
-    address: call.contract,
-    abi: SETTLE_ABI,
-    functionName: "settleNative",
-    args: [asTuple(q), call.args.signature],
-    value: BigInt(q.grossAmount),
-    account: ctx.account,
-    chain: null,
-  });
-  return { hash, route };
+  throw new V14SettlementError("V14_SETTLEMENT_DISABLED",
+    "v1.4 settlement is disabled: signed quotes do not bind mutable fees and treasury. " +
+    "Use a separately reviewed v1.3 route or wait for the contract and SDK upgrade; " +
+    "do not manually submit this quote or automatically fall back to another contract.");
 }
