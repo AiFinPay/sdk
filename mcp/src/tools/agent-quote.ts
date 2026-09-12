@@ -57,6 +57,22 @@ export async function runAgentQuote(
   }
 
   try {
+    const challenge = await resp.clone().json().catch(() => null) as Record<string, unknown> | null;
+    if (
+      challenge?.protocol === "AIFP-1" &&
+      challenge.error === "AIFP-402" &&
+      typeof challenge.merchant_id === "string"
+    ) {
+      return {
+        content: [{ type: "text", text: JSON.stringify({
+          facilitator: "aifp1",
+          status: 402,
+          payment_model: "gross-inclusive",
+          note: "AIFP-1 quote totals are the payer's gross amount; the merchant receives the quoted split amount and the protocol fee is included in that gross total.",
+          merchant_terms: challenge,
+        }, null, 2) }],
+      };
+    }
     const facilitator = await detectFacilitator(resp);
     let bodyPreview: unknown = null;
     try {
