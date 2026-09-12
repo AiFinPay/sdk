@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
 import { scryptSync, createDecipheriv } from "node:crypto";
@@ -30,14 +30,21 @@ export function loadWalletIdentity(config: McpConfig): WalletIdentity | null {
       ? agents.filter((a: any) => a?.id === config.agentId)
       : agents;
     if (matches.length !== 1) throw new Error("Select exactly one agents.json record with AIFINPAY_AGENT_ID; refusing an ambiguous wallet");
-    const selected = matches[0];
-    return { source: "agents.json", seedHash: seed(selected?.seed_hash) };
+    return { source: "agents.json", seedHash: seed(matches[0]?.seed_hash) };
   }
   if (config.agentsFile) throw new Error("Configured AIFINPAY_AGENTS_FILE does not exist");
   if (config.agentSecretB58) return { source: "AIFINPAY_AGENT_SECRET", secretB58: config.agentSecretB58 };
   const legacyPath = join(config.walletHome || join(homedir(), ".aifinpay"), "agent.json");
   if (!existsSync(legacyPath)) return null;
   const legacy = readJson(legacyPath);
+  try {
+    const mode = statSync(legacyPath).mode & 0o777;
+    if (mode & 0o077) {
+      const message = `[aifinpay-mcp] ${legacyPath} is mode ${mode.toString(8)} — readable beyond your user. Run: chmod 600 ${legacyPath}`;
+      if (config.logFn) config.logFn("warn", message);
+      else process.stderr.write(`[warn] ${message}\n`);
+    }
+  } catch { /* A stat failure does not change which wallet was selected. */ }
   if (legacy.enc) {
     if (legacy.enc !== "scrypt-aes-256-gcm" || !config.walletPassphrase) {
       throw new Error("Encrypted keystore requires AIFINPAY_WALLET_PASSPHRASE and the supported encryption format");

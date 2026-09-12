@@ -12,13 +12,25 @@ export {
   AgentPassportError,
   normalizeAgentPassportIdentifier,
   resolveAgentPassport,
+  generateAgentPassportHolderKeypair,
+  signAgentPassportHolderMessage,
+  issueAgentPassport,
+  createAgentPassport,
+  requestAgentPassportWalletBinding,
+  confirmAgentPassportWalletBinding,
+  verifyAgentPassportIssuerSignature,
   agentPassportWallet,
 } from "./agentPassport.js";
 export type {
   AgentPassportNetwork,
   AgentPassportChainFamily,
+  AgentPassportStatus,
+  AgentPassportWalletStatus,
   AgentPassportWalletBinding,
+  AgentPassportIssuerProof,
   AgentPassportIdentity,
+  AgentPassportHolderKeypair,
+  AgentPassportWalletChallenge,
 } from "./agentPassport.js";
 
 // ── Canonical route-specific v1.3 settlement ─────────────────────────────

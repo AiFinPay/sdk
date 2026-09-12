@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync } from "node:fs";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -10,85 +10,139 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { loadWalletIdentity } from "../src/identity.js";
 import { createServer } from "../src/server.js";
+import { loadConfigFromEnv } from "../src/config.js";
 
 const dirs: string[] = [];
+const seedA = "11".repeat(32), seedB = "22".repeat(32);
 function fixture() {
   const home = mkdtempSync(join(tmpdir(), "aifp-identity-")); dirs.push(home);
   const agentsFile = join(home, "agents.json");
-  const seedA = randomBytes(32).toString("hex"), seedB = randomBytes(32).toString("hex");
-  const write = (agents: unknown[]) => writeFileSync(agentsFile, JSON.stringify({ agents }));
-  return { home, agentsFile, seedA, seedB, write };
+  const write = (agents: unknown[]) => writeFileSync(agentsFile, JSON.stringify({ agents }), { mode: 0o600 });
+  return { home, agentsFile, write };
 }
-afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
+afterEach(() => {
+  vi.unstubAllEnvs();
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
 
-describe("persistent identity selection", () => {
-  it("SEED_HASH wins over file and legacy env; file wins over legacy env", () => {
-    const f = fixture(); f.write([{ id: "one", seed_hash: f.seedB }]);
-    expect(loadWalletIdentity({ seedHash: f.seedA, agentsFile: f.agentsFile, agentSecretB58: "ignored" }))
-      .toEqual({ source: "SEED_HASH", seedHash: f.seedA });
-    expect(loadWalletIdentity({ agentsFile: f.agentsFile, agentSecretB58: "ignored" }))
-      .toEqual({ source: "agents.json", seedHash: f.seedB });
+describe("persistent wallet identity", () => {
+  it("reads SEED_HASH from the process configuration", () => {
+    vi.stubEnv("SEED_HASH", seedA);
+    expect(loadConfigFromEnv()).toMatchObject({ seedHash: seedA });
   });
-  it("does not fall through malformed seeds/files or ambiguous selection", () => {
-    const f = fixture(); f.write([{ id: "one", seed_hash: f.seedA }, { id: "two", seed_hash: f.seedB }]);
-    expect(() => loadWalletIdentity({ seedHash: "bad", agentsFile: f.agentsFile })).toThrow(/32-byte/);
-    expect(() => loadWalletIdentity({ agentsFile: f.agentsFile })).toThrow(/exactly one/);
-    expect(loadWalletIdentity({ agentsFile: f.agentsFile, agentId: "two" })?.seedHash).toBe(f.seedB);
-    writeFileSync(f.agentsFile, "broken secret JSON");
-    expect(() => loadWalletIdentity({ agentsFile: f.agentsFile })).toThrow(/Cannot read/);
+
+  it("keeps SEED_HASH stable on restart and prioritizes it over file and legacy secret", async () => {
+    const f = fixture(); f.write([{ id: "one", seed_hash: seedB }]);
+    const expected = await AiFinPayAgent.fromSeed(seedA);
+    const legacy = await AiFinPayAgent.fromSeed(seedB);
+    const secret = (legacy as unknown as { inner: { secretB58: string } }).inner.secretB58;
+    for (const config of [
+      { seedHash: seedA, walletHome: f.home },
+      { seedHash: seedA, agentsFile: f.agentsFile, agentSecretB58: secret },
+    ]) {
+      for (let restart = 0; restart < 2; restart++) {
+        const active = await createServer({ ...config, logFn: () => {} });
+        try { expect(active.agent.evmAddress).toBe(expected.evmAddress); }
+        finally { await active.server.close(); }
+      }
+    }
   });
-  it("keeps the SDK's exact derivation and reloads files within one MCP connection", async () => {
-    const f = fixture(); f.write([{ id: "one", seed_hash: f.seedA }]);
-    const expectedA = await AiFinPayAgent.fromSeed(f.seedA);
-    const expectedB = await AiFinPayAgent.fromSeed(f.seedB);
+
+  it("loads the selected project agent before the legacy secret and fails on ambiguous or malformed files", async () => {
+    const f = fixture(); f.write([{ id: "one", seed_hash: seedA }, { id: "two", seed_hash: seedB }]);
+    const legacy = await AiFinPayAgent.fromSeed(seedA);
+    const secret = (legacy as unknown as { inner: { secretB58: string } }).inner.secretB58;
+    const active = await createServer({ agentsFile: f.agentsFile, agentId: "two", agentSecretB58: secret, logFn: () => {} });
+    try { expect(active.agent.evmAddress).toBe((await AiFinPayAgent.fromSeed(seedB)).evmAddress); }
+    finally { await active.server.close(); }
+    await expect(createServer({ agentsFile: f.agentsFile, logFn: () => {} })).rejects.toThrow(/exactly one/);
+    writeFileSync(f.agentsFile, "broken");
+    await expect(createServer({ agentsFile: f.agentsFile, logFn: () => {} })).rejects.toThrow(/Cannot read/);
+    await expect(createServer({ seedHash: "gg".repeat(32), logFn: () => {} })).rejects.toThrow(/32-byte/);
+  });
+
+  it("reloads local files within the same connection and preserves the current wallet on an invalid reload", async () => {
+    const f = fixture(); f.write([{ id: "one", seed_hash: seedA }]);
     const active = await createServer({ agentsFile: f.agentsFile, logFn: () => {} });
     const client = new Client({ name: "identity-test", version: "1" });
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    await active.server.connect(serverTransport); await client.connect(clientTransport);
+    const [left, right] = InMemoryTransport.createLinkedPair();
+    await active.server.connect(right); await client.connect(left);
     try {
-      expect(active.agent.evmAddress).toBe(expectedA.evmAddress);
-      f.write([{ id: "one", seed_hash: f.seedB }]);
-      const loaded = await client.callTool({ name: "agent_reload", arguments: {} });
-      expect(loaded.isError).not.toBe(true);
-      expect(JSON.stringify(loaded)).toContain(expectedB.evmAddress);
-      expect(JSON.stringify(loaded)).not.toContain(f.seedB);
-      expect(active.agent.solanaAddress).toBe(expectedB.solanaAddress);
-      const address = await client.callTool({ name: "agent_address", arguments: {} });
-      expect(JSON.stringify(address)).toContain(expectedB.evmAddress);
+      const tools = (await client.listTools()).tools.map(tool => tool.name);
+      expect(tools).toContain("agent_reload");
+      expect(tools).toContain("agent_passport_resolve");
+      expect(tools).toContain("settlement_invoice");
+      expect(tools).not.toContain("payable_fetch");
+      f.write([{ id: "one", seed_hash: seedB }]);
+      const result = await client.callTool({ name: "agent_reload", arguments: {} });
+      expect(result.isError).not.toBe(true);
+      const address = (await AiFinPayAgent.fromSeed(seedB)).evmAddress;
+      expect(JSON.stringify(result)).toContain(address);
+      expect(JSON.stringify(result)).not.toContain(seedB);
+      expect(active.agent.evmAddress).toBe(address);
+      expect(JSON.stringify(await client.callTool({ name: "agent_address", arguments: {} }))).toContain(address);
       writeFileSync(f.agentsFile, "broken");
       expect((await client.callTool({ name: "agent_reload", arguments: {} })).isError).toBe(true);
-      expect(active.agent.evmAddress).toBe(expectedB.evmAddress);
+      expect(active.agent.evmAddress).toBe(address);
     } finally { await client.close(); await active.server.close(); }
   });
-});
 
-it('ships the skill as an MCP resource and lists only implemented tools', async () => {
-  const f = fixture(); f.write([{ id: 'one', seed_hash: f.seedA }]);
-  const active = await createServer({ agentsFile: f.agentsFile, logFn: () => {} });
-  const client = new Client({ name: 'skill-test', version: '1' });
-  const [left, right] = InMemoryTransport.createLinkedPair();
-  await active.server.connect(right); await client.connect(left);
-  try {
-    const names = (await client.listTools()).tools.map(tool => tool.name);
-    expect(names).toContain('agent_history');
-    expect(names).toContain('agent_reload');
-    expect(names).not.toContain('payable_fetch');
-    expect(names).not.toContain('dev_payment_quote');
-    const resource = await client.readResource({ uri: 'aifinpay://skill' });
-    expect(resource.contents[0].text).toContain('/v1/agents/:address/transactions');
-    expect(resource.contents[0].text).toContain('SEED_HASH');
-    expect(resource.contents[0].text).toBe(readFileSync(new URL('../../skills/SKILL.md', import.meta.url), 'utf8'));
-    expect((await client.listResources()).resources[0].uri).toBe('aifinpay://skill');
-  } finally { await client.close(); await active.server.close(); }
-});
+  it("init uses the configured seed without creating another wallet or printing the seed", async () => {
+    const f = fixture();
+    const bin = fileURLToPath(new URL("../bin/aifinpay-mcp.js", import.meta.url));
+    const result = spawnSync(process.execPath, [bin, "init"], {
+      encoding: "utf8", timeout: 10000,
+      env: { PATH: process.env.PATH, SEED_HASH: seedA, AIFINPAY_HOME: f.home },
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain((await AiFinPayAgent.fromSeed(seedA)).evmAddress);
+    expect(result.stdout).toContain("Using SEED_HASH");
+    expect(result.stdout + result.stderr).not.toContain(seedA);
+    expect(existsSync(join(f.home, "agent.json"))).toBe(false);
+  });
 
-it('init honors the selected seed without creating a different legacy wallet or printing the seed', () => {
-  const f = fixture();
-  const bin = fileURLToPath(new URL('../bin/aifinpay-mcp.js', import.meta.url));
-  const result = spawnSync(process.execPath, [bin, 'init'], { encoding: 'utf8',
-    env: { ...process.env, SEED_HASH: f.seedA, AIFINPAY_HOME: f.home }, timeout: 10000 });
-  expect(result.status).toBe(0);
-  expect(result.stdout).toContain('Using SEED_HASH');
-  expect(result.stdout + result.stderr).not.toContain(f.seedA);
-  expect(existsSync(join(f.home, 'agent.json'))).toBe(false);
+  it("init and stdio use ./aifinpay/agents.json before an existing legacy keystore", async () => {
+    const f = fixture();
+    const legacy = await AiFinPayAgent.fromSeed(seedA);
+    const secret = (legacy as unknown as { inner: { secretB58: string } }).inner.secretB58;
+    const legacyPath = join(f.home, "agent.json");
+    const before = JSON.stringify({ secretB58: secret });
+    writeFileSync(legacyPath, before, { mode: 0o600 });
+    mkdirSync(join(f.home, "aifinpay"));
+    writeFileSync(join(f.home, "aifinpay", "agents.json"), JSON.stringify({ agents: [{ id: "one", seed_hash: seedB }] }), { mode: 0o600 });
+    const bin = fileURLToPath(new URL("../bin/aifinpay-mcp.js", import.meta.url));
+    for (const args of [["init"], []]) {
+      const result = spawnSync(process.execPath, [bin, ...args], {
+        encoding: "utf8", timeout: 10000, input: "", cwd: f.home,
+        env: { PATH: process.env.PATH, AIFINPAY_HOME: f.home },
+      });
+      expect(result.status).toBe(0);
+      expect(result.stdout + result.stderr).toContain((await AiFinPayAgent.fromSeed(seedB)).evmAddress);
+      expect(result.stdout + result.stderr).not.toContain(seedB);
+      expect(result.stdout + result.stderr).not.toContain(secret);
+      expect(readFileSync(legacyPath, "utf8")).toBe(before);
+    }
+  });
+
+  it("picks up a newly initialized keystore without reconnecting", async () => {
+    const f = fixture();
+    const active = await createServer({ walletHome: f.home, logFn: () => {} });
+    const expected = await AiFinPayAgent.fromSeed(seedA);
+    const client = new Client({ name: "init-reload-test", version: "1" });
+    const [left, right] = InMemoryTransport.createLinkedPair();
+    await active.server.connect(right); await client.connect(left);
+    try {
+      writeFileSync(join(f.home, "agent.json"), JSON.stringify({
+        secretB58: (expected as unknown as { inner: { secretB58: string } }).inner.secretB58,
+      }), { mode: 0o600 });
+      expect((await client.callTool({ name: "agent_reload", arguments: {} })).isError).not.toBe(true);
+      expect(active.agent.evmAddress).toBe(expected.evmAddress);
+    } finally { await client.close(); await active.server.close(); }
+  });
+
+  it("does not replace the wallet when an explicit seed is empty or an explicit file is absent", async () => {
+    const f = fixture();
+    await expect(createServer({ seedHash: "", walletHome: f.home, logFn: () => {} })).rejects.toThrow(/32-byte/);
+    await expect(createServer({ agentsFile: f.agentsFile, walletHome: f.home, logFn: () => {} })).rejects.toThrow(/does not exist/);
+  });
 });

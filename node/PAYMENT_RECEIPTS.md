@@ -11,6 +11,10 @@ within `settlementConfirmMs`. These retries request the receipt; they never
 send another on-chain transaction. If retries are exhausted,
 `Aifp1PayError.recovery` contains serializable quote and payment context, with
 no private key or authorization signature. Save it for a later retry.
+Concurrent callers waiting for that batch receive the same failure and
+recovery context. After this error, retry `recoverAifp1Payment` with that
+context instead of calling `fetchPaid` again: a new `fetchPaid` request can
+buy another batch when no receipt has been cached.
 
 ```ts
 import { recoverAifp1Payment } from '@aifinpay/agent';
@@ -46,3 +50,10 @@ expires and keep the same transaction reference; paying again is unnecessary.
 The `fetchPaid` settlement route and its existing deployment verification
 requirements are unchanged. Receipt authorization does not enable a disabled
 settlement route or replace independent route verification.
+
+The API retains its legacy `settlement.fee_on_top` object during client upgrades.
+The RC client accepts that object only alongside explicit `gross-inclusive`
+metadata, with provider, treasury and creator amounts matching the canonical
+payer/recipient amounts. An inconsistent quote is rejected before settlement.
+Native `valid_until` may be a JSON integer or an integer string. These wire
+compatibility changes do not activate the RC's disabled settlement executor.

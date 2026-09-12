@@ -22,12 +22,14 @@
  *
  * Configure via env (all optional; the secret is read from the keystore below
  * when the variable is unset):
- *   AIFINPAY_AGENT_SECRET   base58 secret — overrides the keystore
+ *   SEED_HASH              32-byte hex seed — highest priority
+ *   AIFINPAY_AGENTS_FILE    project agents file — second priority
+ *   AIFINPAY_AGENT_SECRET   legacy base58 secret — overrides the legacy keystore
  *   AIFINPAY_BASE_URL       default https://aifinpay.io
  *   AIFINPAY_TIMEOUT_MS     default 30000
  *   AIFINPAY_MAX_USD        hard cap per single payment (no default)
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync, chmodSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { createRequire } from "node:module";
