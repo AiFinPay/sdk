@@ -165,17 +165,9 @@ export class Agent {
 
   /** Build a fresh AiFinPay-native x402 header set. */
   async authHeaders(): Promise<Record<string, string>> {
-    const { nonce } = await this.fetchNonce();
-    const msg = new TextEncoder().encode(
-      `AiFinPay-x402:${nonce}:${this.address}`,
+    throw new AiFinPayError(
+      "authHeaders() cannot safely sign the retired unbound native auth format. Use Agent.pay(url), which retries only a request-bound v2 challenge.",
     );
-    const digest = await sha256(msg);
-    const sig = nacl.sign.detached(digest, this.secretKey);
-    return {
-      "x-agent-pubkey": this.address,
-      "x-nonce": nonce,
-      "x-signature": bs58.encode(sig),
-    };
   }
 
   // ── Seat / funding ────────────────────────────────────────────────────
@@ -356,17 +348,27 @@ export class Agent {
       options = {},
       ...rest
     } = init;
+    let requestUrl: URL;
+    let trustedOrigin: string;
+    try {
+      requestUrl = new URL(url);
+      trustedOrigin = new URL(this.baseUrl).origin;
+    } catch {
+      throw new AiFinPayError("pay() requires an absolute URL and a valid Agent baseUrl");
+    }
     const baseHeaders = mergeHeaders(rest.headers, options.extraHeaders);
     const send = (
       m: string,
       headers: Record<string, string>,
       body?: BodyInit | null,
     ) =>
-      this.fetchImpl(url, {
+      this.fetchImpl(requestUrl.toString(), {
         ...rest,
         method: m,
         headers,
         body: body ?? rest.body,
+        // Never let an authenticated retry carry credentials through a redirect.
+        redirect: "error",
       });
 
     let resp = await send(method, { ...baseHeaders, "user-agent": SDK_UA });
@@ -378,7 +380,16 @@ export class Agent {
         resp,
         options.facilitator ?? "auto",
       );
-      const auth = await facilitator.buildAuth(resp, this, options);
+      const bodyDigest =
+        facilitator.name === "aifinpay"
+          ? await nativeBodyDigest(rest.body)
+          : "";
+      const auth = await facilitator.buildAuth(resp, this, options, {
+        url: requestUrl,
+        method,
+        trustedOrigin,
+        bodyDigest,
+      });
       const merged = mergeHeaders(baseHeaders, auth.headers);
       merged["user-agent"] = SDK_UA;
       resp = await send(auth.method ?? method, merged, auth.body);
@@ -465,4 +476,24 @@ function mergeHeaders(
     }
   }
   return out;
+}
+
+async function nativeBodyDigest(body: BodyInit | null | undefined): Promise<string> {
+  let bytes: Uint8Array;
+  if (body === undefined || body === null) {
+    bytes = new Uint8Array();
+  } else if (typeof body === "string" || body instanceof URLSearchParams) {
+    bytes = new TextEncoder().encode(body.toString());
+  } else if (body instanceof ArrayBuffer) {
+    bytes = new Uint8Array(body);
+  } else if (ArrayBuffer.isView(body)) {
+    bytes = new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
+  } else if (typeof Blob !== "undefined" && body instanceof Blob) {
+    bytes = new Uint8Array(await body.arrayBuffer());
+  } else {
+    throw new AiFinPayError(
+      "AiFinPay native auth v2 cannot sign this streaming or multipart request body safely. Send string or byte body data.",
+    );
+  }
+  return Array.from(await sha256(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }

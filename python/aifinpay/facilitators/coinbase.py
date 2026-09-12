@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 import requests
 
@@ -68,6 +68,7 @@ class CoinbaseX402Facilitator:
         resp: requests.Response,
         agent: "Agent",
         opts: PayOptions,
+        context: Optional[dict[str, Any]] = None,
     ) -> dict:
         # Parse the spec object so callers see useful errors instead of
         # opaque "not implemented".

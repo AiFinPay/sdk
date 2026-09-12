@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { isBlockedAddress, assertRequestAllowed, makeSafeFetch } from "../src/safe-fetch.js";
 
 // payable_fetch handed a caller-supplied URL to the agent, which requested it
@@ -31,6 +31,10 @@ describe("addresses that must never be reached", () => {
     // The one that walks through a check that only knows about IPv4.
     ["IPv4-mapped loopback", "::ffff:127.0.0.1"],
     ["IPv4-mapped metadata", "::ffff:169.254.169.254"],
+    ["mapped hex loopback", "::ffff:7f00:1"],
+    ["mapped hex private", "::ffff:a00:1"],
+    ["mapped hex metadata", "::ffff:a9fe:a9fe"],
+    ["expanded loopback", "0:0:0:0:0:0:0:1"],
   ] as const;
   for (const [label, addr] of blocked) {
     it(`blocks ${label} (${addr})`, () => expect(isBlockedAddress(addr)).toBe(true));
@@ -49,6 +53,10 @@ describe("URLs the server will not request", () => {
 
   it("refuses a bracketed IPv6 loopback", async () => {
     await expect(assertRequestAllowed("https://[::1]:4001/x")).rejects.toThrow(/not a public address/);
+  });
+
+  it("refuses a mapped address after URL canonicalization", async () => {
+    await expect(assertRequestAllowed("https://[::ffff:127.0.0.1]/")).rejects.toThrow(/not a public address/);
   });
 
   it("refuses plaintext http", async () => {
@@ -84,7 +92,7 @@ describe("redirects", () => {
     const original = globalThis.fetch;
     try {
       globalThis.fetch = (async (input: unknown) => {
-        if (String(input).includes("aifinpay.io")) {
+        if ((input instanceof Request ? input.url : String(input)).includes("aifinpay.io")) {
           return new Response(null, {
             status: 302,
             headers: { location: "http://169.254.169.254/latest/meta-data/" },
@@ -130,5 +138,69 @@ describe("redirects", () => {
     } finally {
       globalThis.fetch = original;
     }
+  });
+});
+
+describe("redirect request boundaries", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const options = { trustedHosts: ["source.invalid", "other.invalid"] };
+
+  it.each(["manual", "error"] as const)("honors redirect:%s without requesting the target", async (redirect) => {
+    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 302, headers: { location: "https://other.invalid/" } }));
+    vi.stubGlobal("fetch", fetch);
+    const result = makeSafeFetch(options)("https://source.invalid/", { redirect });
+    if (redirect === "manual") expect((await result).status).toBe(302);
+    else await expect(result).rejects.toThrow(/redirect/);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("strips credentials and payment proofs on cross-origin redirects", async () => {
+    const secretHeaders = ["authorization", "cookie", "proxy-authorization", "x-api-key", "x-payment", "payment-signature", "aifp-receipt", "x-signature", "x-nonce", "x-agent-pubkey"];
+    const fetch = vi.fn().mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: "https://other.invalid/" } })).mockResolvedValueOnce(new Response("ok"));
+    vi.stubGlobal("fetch", fetch);
+    await makeSafeFetch(options)("https://source.invalid/", {
+      headers: { ...Object.fromEntries(secretHeaders.map(key => [key, "sensitive-test-value"])), accept: "application/json" },
+    });
+    const [input, init] = fetch.mock.calls[1];
+    const request = new Request(input, init);
+    for (const key of secretHeaders) expect(request.headers.has(key), key).toBe(false);
+    expect(request.headers.get("accept")).toBe("application/json");
+    expect(request.credentials).toBe("omit");
+  });
+
+  it("preserves Request method, headers and body across a same-origin 307", async () => {
+    const seen: Request[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input, init) => {
+      const request = new Request(input, init);
+      seen.push(request);
+      return seen.length === 1 ? new Response(null, { status: 307, headers: { location: "/next" } }) : new Response("ok");
+    }));
+    await makeSafeFetch(options)(new Request("https://source.invalid/", {
+      method: "POST", headers: { authorization: "same-origin-test", "content-type": "application/json" }, body: '{"test":1}',
+    }));
+    expect(seen).toHaveLength(2);
+    for (const request of seen) {
+      expect(request.method).toBe("POST");
+      expect(request.headers.get("authorization")).toBe("same-origin-test");
+      expect(await request.text()).toBe('{"test":1}');
+    }
+  });
+
+  it("does not send a POST body to another origin on a 307", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 307, headers: { location: "https://other.invalid/" } }));
+    vi.stubGlobal("fetch", fetch);
+    await expect(makeSafeFetch(options)("https://source.invalid/", { method: "POST", body: "private-input" })).rejects.toThrow(/cross-origin.*body/);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops body headers when a 303 changes POST to GET", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(new Response(null, { status: 303, headers: { location: "/next" } })).mockResolvedValueOnce(new Response("ok"));
+    vi.stubGlobal("fetch", fetch);
+    await makeSafeFetch(options)("https://source.invalid/", { method: "POST", body: "test", headers: { "content-type": "text/plain", "content-length": "4" } });
+    const request = new Request(...fetch.mock.calls[1] as [RequestInfo, RequestInit]);
+    expect(request.method).toBe("GET");
+    expect(request.body).toBeNull();
+    expect(request.headers.has("content-type")).toBe(false);
+    expect(request.headers.has("content-length")).toBe(false);
   });
 });

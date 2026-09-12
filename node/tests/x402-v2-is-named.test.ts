@@ -136,6 +136,27 @@ describe("standard x402 version 2", () => {
     expect(await StandardX402Facilitator.detect(legacy)).toBe(true);
   });
 
+  it.each([1, 2])("v%s refuses forged USDC metadata before signing", async (version) => {
+    const facilitator = new StandardX402Facilitator();
+    for (const change of [
+      { extra: { name: "USDC", version: "2", decimals: 18 }, amount: "10000000000000000" },
+      { asset: "0x1111111111111111111111111111111111111111" },
+      { network: "eip155:137" },
+    ]) {
+      const req = { ...requirement, ...change };
+      const response = version === 2 ? v2Response([req]) : Response.json({ x402Version: 1, accepts: [{ ...req, network: change.network ? "polygon" : "base-sepolia", maxAmountRequired: req.amount }] }, { status: 402 });
+      const captured: Array<Record<string, unknown>> = [];
+      await expect(facilitator.buildAuth(response, fakeAgent(captured), { maxAmountUsd: 0.02 })).rejects.toThrow(/USDC|decimals|asset/);
+      expect(captured).toHaveLength(0);
+    }
+  });
+
+  it("compares signed atomic units to the exact cap without rounding up", async () => {
+    const captured: Array<Record<string, unknown>> = [];
+    await expect(new StandardX402Facilitator().buildAuth(v2Response([{ ...requirement, amount: "1" }]), fakeAgent(captured), { maxAmountUsd: 0.0000009999 })).rejects.toThrow(/cap/);
+    expect(captured).toHaveLength(0);
+  });
+
   it("does not detect a non-402 even if it carries PAYMENT-REQUIRED", async () => {
     const ok = new Response("{}", { status: 200, headers: { "payment-required": "e30=" } });
     expect(await StandardX402Facilitator.detect(ok)).toBe(false);

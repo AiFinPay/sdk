@@ -37,6 +37,7 @@ export type {
 export {
   SettlementClient,
   SettlementProtocolError,
+  SettlementConfirmationPendingError,
   validateSettlementInvoice,
   validateTrustedSettlementRoutePin,
   verifySettlementRouteOnChain,
@@ -47,6 +48,7 @@ export {
 export * from "./settlementV14.js";
 export type {
   SettlementRouteClass,
+  SettlementClientOptions,
   SettlementEvmNetwork,
   SettlementRoute,
   TrustedSettlementRoutePin,

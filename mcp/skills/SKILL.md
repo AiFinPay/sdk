@@ -4,7 +4,7 @@ description: Discover an agent wallet, retrieve payment history and prepaid quot
 license: MIT
 ---
 
-The current source and compatible package line is **2.0.0-rc.11**. Until that
+The current source and compatible package line is **2.0.0-rc.12**. Until that
 RC is published, use the checked-out source build or an explicitly pinned
 compatible package; never install `latest` for a payment test. The production
 RC tool inventory below is read-only; do not claim MCP signing or AIFP-2
@@ -51,7 +51,7 @@ For a funded crawler or balance check, load the existing persistent identity
 first through the configured MCP identity sources or
 `AiFinPayAgent.fromEnvironment()`. If none exists, stop and ask the operator
 to configure one; never call `Agent.new()` to create a wallet that will be
-funded. `npx @aifinpay/mcp@2.0.0-rc.11 init` creates the legacy keystore only when no
+funded. `npx @aifinpay/mcp@2.0.0-rc.12 init` creates the legacy keystore only when no
 configured wallet exists. It preserves existing wallets. After init or a local
 wallet-file update, call agent_reload in the existing MCP connection, then agent_address.
 The reload returns only public addresses and preserves the old identity if

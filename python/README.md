@@ -1,10 +1,17 @@
 # aifinpay-agent (Python)
 
+This source is the unpublished `2.0.0rc1` security candidate. Native auth now
+requires a request-bound v2 challenge from the coordinated backend update.
+`auth_headers()` refuses the retired unbound proof, and legacy paid `call()`
+settlement is disabled; free provider responses still pass through. Python
+does not yet expose Node's verified v1.3 `fetchPaid` executor. Do not interpret
+the historical payment examples below as enabled routes in this candidate.
+
 Non-custodial **multi-facilitator** x402 payment client for autonomous
 AI agents on [AiFinPay](https://aifinpay.io) — canonical domain
 **aifinpay.io** (the legacy `aifinpay.company` host is retired). SDK
-settlement: Polygon (default) + Solana; the protocol is live across 13
-networks — see [aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
+wallet derivation supports EVM and Solana identities; a wallet address alone
+does not mean a payment route is enabled.
 
 `agent.pay(url)` works against:
 - **AiFinPay** native flow (Solana Seat PDA + Ed25519)

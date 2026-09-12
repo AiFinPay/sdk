@@ -1,12 +1,22 @@
 # @aifinpay/agent (Node / TypeScript)
 
+This source is the unpublished `2.0.0-rc.12` security candidate. New AIFP-1
+payments require a reviewed Polygon v1.3 deployment pin and fresh independent
+native/USD price; see [receipt configuration and recovery](./PAYMENT_RECEIPTS.md).
+Legacy `call()` payments and v1.4 submission are disabled. Native authentication
+requires a request-bound v2 challenge from the coordinated backend release;
+`authHeaders()` cannot issue the retired unbound proof. No automatic fallback
+or deployment activation is performed.
+
 Non-custodial payment client for autonomous AI agents on
 [AiFinPay](https://aifinpay.io). AIFP-1 is gross-inclusive: payer total equals
 the quote, merchant receives 99%, AiFinPay receives 1%, creator/referral
 receives 0%. AIFP-2/x402 currently charges 0% at the protocol layer. Legacy
-`/api/b2b` split-invoice methods are retired. Settlement fails closed unless
-the selected deployment, runtime hash, governance profile, merchant target,
-asset and paid E2E evidence are verified.
+`/api/b2b` split-invoice methods are retired. The v1.3 executor checks the
+independently supplied deployment/runtime pin, chain, fee profile, merchant
+target and asset. Deployment activation and funded E2E approval remain
+separate operator responsibilities; a matching runtime hash alone is not
+production-readiness evidence.
 
 The Ed25519 keypair is generated locally with `tweetnacl` and never leaves
 your process. The SDK only sends a one-time SHA-256 + Ed25519 signature in
@@ -14,7 +24,7 @@ the `x-signature` header to authenticate against AiFinPay-protected endpoints.
 
 ## Install
 
-This quickstart requires `2.0.0-rc.11`, which includes `fromEnvironment()`.
+This quickstart requires `2.0.0-rc.12`, which includes `fromEnvironment()`.
 That release is not published yet; the published `latest` version `1.8.4`
 does not provide this method. Until publication, build this source checkout:
 
@@ -29,13 +39,13 @@ npm pack
 Install the resulting tarball in your application:
 
 ```bash
-npm install /absolute/path/to/sdk/node/aifinpay-agent-2.0.0-rc.11.tgz
+npm install /absolute/path/to/sdk/node/aifinpay-agent-2.0.0-rc.12.tgz
 ```
 
 After this exact version has been published, install it directly:
 
 ```bash
-npm install @aifinpay/agent@2.0.0-rc.11
+npm install @aifinpay/agent@2.0.0-rc.12
 ```
 
 ## Quick start

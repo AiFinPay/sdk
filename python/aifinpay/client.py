@@ -1,11 +1,12 @@
 """Low-level Agent client. Non-custodial: keypair never leaves this process."""
 from __future__ import annotations
 
-import hashlib
 import json
+import hashlib
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
+from urllib.parse import urlsplit
 
 import nacl.signing  # PyNaCl
 import base58
@@ -19,11 +20,26 @@ from .errors import (
     X402Error,
 )
 from .facilitators import PayOptions, detect_facilitator
+from .facilitators.base import canonical_origin
 
 # Canonical domain is aifinpay.io. The legacy aifinpay.company host is
 # fully retired (DNS removed) — do not use it.
 DEFAULT_BASE_URL = "https://aifinpay.io"
 DEFAULT_TIMEOUT = 30  # seconds
+
+
+def _native_body_digest(body: Any) -> str:
+    if body is None:
+        raw = b""
+    elif isinstance(body, str):
+        raw = body.encode()
+    elif isinstance(body, bytes):
+        raw = body
+    else:
+        raise AiFinPayError(
+            "AiFinPay native auth v2 cannot sign this streaming or multipart request body safely. Send string or byte body data."
+        )
+    return hashlib.sha256(raw).hexdigest()
 
 
 @dataclass
@@ -41,8 +57,8 @@ class Agent:
     """A non-custodial AiFinPay agent.
 
     The Ed25519 keypair lives only in this Python process. The SDK never
-    transmits the secret key; only ``signature(SHA256("AiFinPay-x402:{nonce}:{pubkey}"))``
-    is sent in the ``x-signature`` header for the AiFinPay-native flow,
+    transmits the secret key; only a request-bound native v2 signature is
+    sent in the ``x-signature`` header for the AiFinPay-native flow,
     or a base64 ``PaymentPayload`` in ``PAYMENT-SIGNATURE`` for the
     Coinbase x402 flow (when wired).
     """
@@ -118,26 +134,15 @@ class Agent:
 
     # ── x402 auth (AiFinPay native — kept for backwards compat) ────────────
 
-    def _fetch_nonce(self) -> Dict[str, Any]:
-        r = self._session.get(f"{self.base_url}/nonce", timeout=self.timeout)
-        r.raise_for_status()
-        return r.json()
-
-    def _sign_nonce(self, nonce: str) -> str:
-        msg = f"AiFinPay-x402:{nonce}:{self.address}".encode()
-        digest = hashlib.sha256(msg).digest()
-        sig = self._sk.sign(digest).signature
-        return base58.b58encode(sig).decode()
-
     def auth_headers(self) -> Dict[str, str]:
-        """Build a fresh AiFinPay-native x402 header set (one-time, 60s TTL)."""
-        nonce_info = self._fetch_nonce()
-        nonce = nonce_info["nonce"]
-        return {
-            "x-agent-pubkey": self.address,
-            "x-nonce": nonce,
-            "x-signature": self._sign_nonce(nonce),
-        }
+        """Refuse the retired unbound native-auth helper.
+
+        Use :meth:`pay`, which signs only an in-band v2 challenge tied to the
+        original origin, method, resource and expiry.
+        """
+        raise AiFinPayError(
+            "auth_headers() cannot safely sign the retired unbound native auth format. Use Agent.pay(url), which retries only a request-bound v2 challenge."
+        )
 
     # ── Funding / Seat ────────────────────────────────────────────────────
 
@@ -305,6 +310,17 @@ class Agent:
         """
         opts = options or PayOptions()
         base_headers = request_kwargs.pop("headers", {}) or {}
+        try:
+            target = urlsplit(url)
+            if not target.scheme or not target.netloc:
+                raise ValueError
+            # Prepare the configured origin exactly as requests will encode it;
+            # native signatures must never depend on an unnormalized URL.
+            configured_url = requests.Request("GET", self.base_url).prepare().url
+            trusted_origin = canonical_origin(configured_url)
+        except ValueError as exc:
+            raise AiFinPayError("pay() requires an absolute URL and a valid Agent base_url") from exc
+        request_kwargs.pop("allow_redirects", None)
 
         # First attempt — unauthenticated.
         resp = self._session.request(
@@ -312,6 +328,7 @@ class Agent:
             url,
             headers={**base_headers, **opts.extra_headers},
             timeout=self.timeout,
+            allow_redirects=False,
             **request_kwargs,
         )
 
@@ -319,7 +336,25 @@ class Agent:
         while resp.status_code == 402 and attempt < max_retries:
             attempt += 1
             facilitator = detect_facilitator(resp, override=opts.facilitator)
-            auth = facilitator.build_auth(resp, self, opts)
+            prepared = getattr(resp, "request", None)
+            signed_url = prepared.url if prepared is not None else url
+            signed_method = prepared.method if prepared is not None else method
+            body_digest = (
+                _native_body_digest(getattr(prepared, "body", None))
+                if facilitator.name == "aifinpay"
+                else ""
+            )
+            auth = facilitator.build_auth(
+                resp,
+                self,
+                opts,
+                {
+                    "url": signed_url,
+                    "method": signed_method,
+                    "trusted_origin": trusted_origin,
+                    "body_digest": body_digest,
+                },
+            )
             retry_kwargs = {**request_kwargs}
             if "method" in auth:
                 method = auth["method"]
@@ -335,6 +370,7 @@ class Agent:
                 url,
                 headers=merged_headers,
                 timeout=self.timeout,
+                allow_redirects=False,
                 **retry_kwargs,
             )
 

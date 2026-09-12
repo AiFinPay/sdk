@@ -17,13 +17,14 @@ import {
 const CHAIN_IDS: Record<string, number> = {
   polygon: 137, optimism: 10, bnb: 56, unichain: 130, botchain: 677,
   base: 8453, arbitrum: 42161, avalanche: 43114, xrplevm: 1440000,
+  amoy: 80002,
 };
 const BPS: Record<string, number> = { "merchant-aifp1": 100, "agent-x402": 0 };
 const entries = Object.entries(SPLITTER_ROUTES);
 
 describe("SPLITTER_ROUTES", () => {
-  it("has both routes on all nine chains", () => {
-    expect(entries).toHaveLength(18);
+  it("has both routes on nine mainnets plus Amoy testnet", () => {
+    expect(entries).toHaveLength(20);
     for (const chain of Object.keys(CHAIN_IDS)) {
       for (const route of Object.keys(BPS)) {
         expect(SPLITTER_ROUTES[`${chain}:${route}` as keyof typeof SPLITTER_ROUTES], `${chain}:${route}`).toBeDefined();
@@ -50,7 +51,7 @@ describe("SPLITTER_ROUTES", () => {
   });
 
   it("addresses are checksummed and the treasury is the same Safe everywhere", () => {
-    const treasuries = new Set(entries.map(([, d]) => d.treasury));
+    const treasuries = new Set(entries.filter(([, d]) => !d.testnet).map(([, d]) => d.treasury));
     expect(treasuries.size).toBe(1);
     for (const [key, d] of entries) {
       expect(getAddress(d.splitter), key).toBe(d.splitter);
@@ -75,7 +76,7 @@ describe("SPLITTER_ROUTES", () => {
   it("ships with settlement disabled on every route", () => {
     // Deployed and verified is not payable. Flipping these on is a deliberate
     // per-route act after a paid mainnet E2E, never a side effect of a release.
-    for (const [key, d] of entries) expect(d.settlementEnabled, key).toBe(false);
+    for (const [key, d] of entries.filter(([, d]) => !d.testnet)) expect(d.settlementEnabled, key).toBe(false);
   });
 });
 
@@ -247,7 +248,7 @@ describe("registry provenance", () => {
   });
 
   it("every route is owned by the governance Safe the registry verified", () => {
-    for (const [key, d] of entries) {
+    for (const [key, d] of entries.filter(([, d]) => !d.testnet)) {
       expect(getAddress(d.owner), key).toBe(getAddress(SPLITTER_GOVERNANCE.safe));
     }
   });
@@ -256,5 +257,20 @@ describe("registry provenance", () => {
     expect(SPLITTER_GOVERNANCE.threshold).toBe(3);
     expect(SPLITTER_GOVERNANCE.owners).toHaveLength(5);
     expect(new Set(SPLITTER_GOVERNANCE.owners).size).toBe(5);
+  });
+});
+
+describe("Amoy requires explicit testnet opt-in", () => {
+  const date = new Date("2026-09-12T00:00:00Z");
+  it.each(["merchant-aifp1", "agent-x402"])("does not activate %s by syncing metadata", (route) => {
+    expect(resolveSplitterRoute("amoy", route).testnet).toBe(true);
+    expect(() => resolveSettlingSplitterRoute("amoy", route, date)).toThrow(/testnet.*opt-in/);
+    const entry = resolveSettlingSplitterRoute("amoy", route, date, { allowTestnet: true });
+    expect(entry.chainId).toBe(80002);
+    expect(entry.viemChain.testnet).toBe(true);
+  });
+
+  it("testnet opt-in cannot enable a disabled mainnet route", () => {
+    expect(() => resolveSettlingSplitterRoute("polygon", "merchant-aifp1", date, { allowTestnet: true })).toThrow(/not enabled/);
   });
 });

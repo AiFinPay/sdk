@@ -76,7 +76,7 @@ A client configuration can use the keystore without embedding its secret:
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["-y", "@aifinpay/mcp@2.0.0-rc.11"],
+      "args": ["-y", "@aifinpay/mcp@2.0.0-rc.12"],
       "env": {
         "AIFINPAY_AGENTS_FILE": "/absolute/project/aifinpay/agents.json",
         "AIFINPAY_AGENT_ID": "research-agent"
