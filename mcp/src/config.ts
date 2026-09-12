@@ -1,8 +1,13 @@
 /** Runtime configuration loaded from env. */
 export interface McpConfig {
-  /** Base58 secret to load the agent identity. If absent, a fresh keypair is
-   *  generated AND printed to stderr at startup with a "save this!" warning. */
+  /** Legacy base58 secret, after SEED_HASH and the project agents file. */
   agentSecretB58?: string;
+  /** A 32-byte hex seed, used directly without an additional hash. */
+  seedHash?: string;
+  agentsFile?: string;
+  agentId?: string;
+  walletHome?: string;
+  walletPassphrase?: string;
 
   /** Custom AiFinPay backend URL. Defaults to production. */
   baseUrl?: string;
@@ -45,6 +50,11 @@ export interface McpConfig {
 
 export function loadConfigFromEnv(): McpConfig {
   return {
+    seedHash: process.env.SEED_HASH,
+    agentsFile: process.env.AIFINPAY_AGENTS_FILE || undefined,
+    agentId: process.env.AIFINPAY_AGENT_ID || undefined,
+    walletHome: process.env.AIFINPAY_HOME || undefined,
+    walletPassphrase: process.env.AIFINPAY_WALLET_PASSPHRASE || undefined,
     agentSecretB58: process.env.AIFINPAY_AGENT_SECRET || undefined,
     baseUrl: process.env.AIFINPAY_BASE_URL || undefined,
     timeoutMs: process.env.AIFINPAY_TIMEOUT_MS

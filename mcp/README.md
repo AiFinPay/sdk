@@ -1,79 +1,88 @@
 # @aifinpay/mcp
 
-MCP server exposing AiFinPay payment and quote primitives to MCP-aware
-agent runtimes. Canonical domain: **aifinpay.io**.
+AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
+route discovery and non-signing settlement invoices. Canonical domain:
+**aifinpay.io**.
 
-AIFP-1 is gross-inclusive: payer total equals the quote, merchant receives 99%,
-AiFinPay receives 1%, creator/referral receives 0%. AIFP-2/x402 currently
-charges 0% at the protocol layer. Fund-moving paths fail closed until the exact
-deployment, runtime hash, governance profile, merchant target, asset and paid
-E2E evidence are verified.
+This 2.0 release candidate does not expose payment-signing tools. Returning a
+wallet address or preparing an invoice does not authorize or execute a payment.
+Signing remains gated on the verified SDK v2 executor and its release evidence.
 
 ## Tools
 
-| Tool | What it does |
+| Tool | Purpose |
 |---|---|
-| `payable_fetch(url, opts?)` | Fetch any URL. On 402, auto-detect facilitator, sign, retry. |
-| `agent_address()` | Return the agent's funding addresses on **both** chains — Polygon `0x…` (default settlement: io.net, Exa, Venice bridges) and Solana base58 (Seat PDA / leaderboard). One seed, two chains — fund either. |
-| `agent_quote(url)` | Inspect a 402 challenge without paying. Shows the merchant's quoted amount + facilitator flavor. |
-| `agent_call(provider, …)` | Call a live provider from the AiFinPay directory (io.net, Exa, Venice, …) with automatic payment. |
-| `pay_with_split(…)` | Retired compatibility tool. Returns `legacy_split_route_retired`; never creates an invoice or moves funds. |
-| `quote_split(…)` | Retired compatibility tool. Use a canonical AIFP-1 quote. |
-| `agent_claim_self(magic_link_url)` | Link this agent to your dashboard account via a one-shot magic link from `aifinpay.io/login` — spend history shows up in the dashboard. |
+| `agent_address` | Read the current Solana, EVM and Casper addresses. |
+| `agent_reload` | Reload local wallet files in the current MCP connection. |
+| `agent_quota` | Read the agent's quota. |
+| `agent_passport_resolve` | Resolve the global Agent Passport identity. |
+| `settlement_routes` | Read the available verified settlement routes. |
+| `settlement_invoice` | Prepare a non-signing settlement invoice. |
 
-## Install
+Legacy `payable_fetch`, `agent_call`, `agent_quote`, `pay_with_split`,
+`quote_split` and `agent_claim_self` tools are not registered by this RC.
+
+## Persistent wallet selection
+
+The CLI (`init` and stdio), programmatic server and `agent_reload` use the same
+priority:
+
+1. `SEED_HASH`: an existing 32-byte seed encoded as 64 hex characters, optionally
+   prefixed with `0x`. It is passed directly to `AiFinPayAgent.fromSeed`; do not
+   hash it again or supply a mnemonic.
+2. `./aifinpay/agents.json`, relative to the MCP process's working directory.
+   Set an absolute `AIFINPAY_AGENTS_FILE` when a desktop client's working
+   directory differs from the project directory. The file contains an `agents`
+   array of records with `id` and private `seed_hash` fields. If there is more
+   than one record, select exactly one with `AIFINPAY_AGENT_ID`.
+3. `AIFINPAY_AGENT_SECRET`: a legacy base58 Solana secret.
+4. `~/.aifinpay/agent.json`, or `AIFINPAY_HOME/agent.json`: the legacy CLI
+   keystore. Encrypted files require `AIFINPAY_WALLET_PASSPHRASE`.
+
+Keep seeds and wallet files private and out of chat, source control and logs.
+Invalid or ambiguous configured inputs fail; they never generate a replacement
+wallet. With no configured wallet at all the server has an ephemeral identity:
+**do not fund it**.
+
+## Initialize and connect
 
 ```bash
-# Globally — usable as `npx @aifinpay/mcp` from any client config
-# (installs the latest stable — the old @alpha tag is retired, don't use it)
-npm install -g @aifinpay/mcp
+npx @aifinpay/mcp@next init
 ```
 
-## Use with Claude Desktop
+`init` prints the selected wallet's public addresses. If a seed or project wallet
+is already configured, it does not create a second legacy wallet. With no
+wallet, it creates the legacy keystore with mode `600`; existing keystores are
+retained. Back up that file privately. The `@next` tag selects the 2.0 RC lane;
+use the release containing these changes, or build this source checkout.
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+A client configuration can use the keystore without embedding its secret:
 
 ```json
 {
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["@aifinpay/mcp"],
-      "env": {
-        "AIFINPAY_AGENT_SECRET": "<base58 secret — see below>",
-        "AIFINPAY_MAX_USD": "0.50"
-      }
+      "args": ["-y", "@aifinpay/mcp@next"],
+      "env": { "AIFINPAY_MAX_USD": "0.50" }
     }
   }
 }
 ```
 
-Restart Claude Desktop. Now Claude can call `payable_fetch`, `agent_address`,
-and `agent_quote` like any other tool.
+Connect the MCP server once. After `init` or a wallet file update, call
+`agent_reload` in that same connection; no new conversation is required. A
+failed reload keeps the previous wallet. Changed shell environment variables
+require reconnecting the MCP process, since its environment is a startup
+snapshot. Verify `agent_address` against the wallet you intend to use.
 
-## First run — generating an agent
+## Other environment variables
 
-If `AIFINPAY_AGENT_SECRET` is not set, the server generates an ephemeral
-keypair and **prints it to stderr** at startup:
-
-```
-[warn] no AIFINPAY_AGENT_SECRET set — generated EPHEMERAL agent.
-  address: 9xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-  secret:  4xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-  >> Save this secret to AIFINPAY_AGENT_SECRET to keep the agent across restarts.
-```
-
-Save the secret to `AIFINPAY_AGENT_SECRET` in your client config so the
-agent identity (and any funded Seat) persists across restarts.
-
-## Environment variables
-
-| Var | Default | Purpose |
+| Variable | Default | Purpose |
 |---|---|---|
-| `AIFINPAY_AGENT_SECRET` | — | Base58 secret. If absent → ephemeral agent printed to stderr. |
-| `AIFINPAY_BASE_URL` | `https://aifinpay.io` | Backend URL for nonce + funding probes. |
+| `AIFINPAY_BASE_URL` | `https://aifinpay.io` | Backend URL. |
 | `AIFINPAY_TIMEOUT_MS` | `30000` | Request timeout. |
-| `AIFINPAY_MAX_USD` | — | Mandatory positive finite operator ceiling for any fund-moving tool. |
+| `AIFINPAY_MAX_USD` | — | Configures the underlying agent's per-call cap; it does not enable signing. |
 
 ## Programmatic use
 
@@ -81,25 +90,12 @@ agent identity (and any funded Seat) persists across restarts.
 import { createServer, loadConfigFromEnv } from "@aifinpay/mcp";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
-const { server } = await createServer({
-  ...loadConfigFromEnv(),
-  agentSecretB58: "your-secret-here",
-  maxAmountUsd: 0.10,
-});
+const { server } = await createServer(loadConfigFromEnv());
 await server.connect(new StdioServerTransport());
 ```
 
-## How `payable_fetch` works
-
-1. Sends the request unauthenticated.
-2. On `402`, the underlying [`@aifinpay/agent`](../node) SDK detects the
-   facilitator flavor (AiFinPay native, Coinbase x402, …).
-3. Signs a payment payload and retries.
-4. Returns `{ status, ok, headers, body }` to the agent.
-
-The flow is identical to calling `agent.pay(url)` directly — this
-package just wraps it as an MCP tool surface so LLM agents can call it
-without writing payment code.
+The programmatic equivalents of identity environment options are `seedHash`,
+`agentsFile`, `agentId`, `agentSecretB58`, `walletHome` and `walletPassphrase`.
 
 ## License
 

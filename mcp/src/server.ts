@@ -5,6 +5,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { McpConfig } from "./config.js";
+import { loadWalletIdentity } from "./identity.js";
 import { agentAddressTool, runAgentAddress } from "./tools/agent-address.js";
 import { agentQuotaTool, runAgentQuota } from "./tools/agent-quota.js";
 import { makeSafeFetch } from "./safe-fetch.js";
@@ -45,29 +46,20 @@ const safeFetch = makeSafeFetch({
 export async function createServer(config: McpConfig = {}) {
   const log = config.logFn ?? defaultLog;
 
-  const agent = config.agentSecretB58
-    ? await AiFinPayAgent.fromSolanaSecret(config.agentSecretB58, {
-        fetchImpl: safeFetch,
-        baseUrl: config.baseUrl,
-        timeoutMs: config.timeoutMs,
-      })
-    : await (async () => {
-        const a = await AiFinPayAgent.new({
-          fetchImpl: safeFetch,
-          baseUrl: config.baseUrl,
-          timeoutMs: config.timeoutMs,
-        });
-        log(
-          "warn",
-          `[aifinpay-mcp] no AIFINPAY_AGENT_SECRET set — generated an EPHEMERAL, NON-RECOVERABLE agent.\n` +
-            `  solana_address: ${a.solanaAddress}\n` +
-            `  evm_address:    ${a.evmAddress}\n` +
-            `  >> DO NOT FUND these addresses. This identity is lost when the process exits.\n` +
-            `  >> For a persistent wallet, create one from a seed you back up\n` +
-            `     (AiFinPayAgent.fromSeed / \`aifinpay init\`) and set AIFINPAY_AGENT_SECRET.`,
-        );
-        return a;
-      })();
+  async function configuredAgent() {
+    const identity = loadWalletIdentity(config);
+    if (!identity) return null;
+    const options = { fetchImpl: safeFetch, baseUrl: config.baseUrl, timeoutMs: config.timeoutMs };
+    const loaded = identity.seedHash
+      ? await AiFinPayAgent.fromSeed(identity.seedHash, options)
+      : await AiFinPayAgent.fromSolanaSecret(identity.secretB58!, options);
+    return { loaded, source: identity.source };
+  }
+  const configured = await configuredAgent();
+  let agent = configured?.loaded ?? await AiFinPayAgent.new({
+    fetchImpl: safeFetch, baseUrl: config.baseUrl, timeoutMs: config.timeoutMs,
+  });
+  if (!configured) log("warn", "[aifinpay-mcp] EPHEMERAL wallet — DO NOT FUND. Run `npx @aifinpay/mcp init`, then agent_reload in this connection.");
 
   // Keep the legacy agent budget configured even though this RC exposes no
   // signing tool. It remains an additional defence for downstream/private code
@@ -93,6 +85,12 @@ export async function createServer(config: McpConfig = {}) {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       agentAddressTool(),
+      {
+        name: "agent_reload",
+        description: "Reload the configured local wallet files after init or a file update, without starting a new conversation. Returns public addresses only. Shell environment changes still require reconnecting the MCP process.",
+        inputSchema: { type: "object", properties: {}, additionalProperties: false },
+        annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      },
       agentQuotaTool(),
       agentPassportResolveTool(),
       settlementRoutesTool(),
@@ -104,6 +102,21 @@ export async function createServer(config: McpConfig = {}) {
     const { name, arguments: args } = request.params;
     const ctx = { agent, config, log };
     switch (name) {
+      case "agent_reload":
+        try {
+          const replacement = await configuredAgent();
+          if (!replacement) throw new Error("No persistent wallet configured; run init or configure the project wallet first");
+          if (config.maxAmountUsd !== undefined && Number.isFinite(config.maxAmountUsd)) {
+            replacement.loaded.setBudget({ per_call_usd: config.maxAmountUsd });
+          }
+          agent = replacement.loaded;
+          return { content: [{ type: "text", text: JSON.stringify({
+            source: replacement.source, solana: agent.solanaAddress, evm: agent.evmAddress,
+            casper: agent.casperAddress, reloaded: true,
+          }) }] };
+        } catch (error) {
+          return { isError: true, content: [{ type: "text", text: `Wallet reload failed: ${(error as Error).message}` }] };
+        }
       case "agent_address":
         return runAgentAddress(ctx, args ?? {});
       case "agent_quota":
@@ -122,7 +135,7 @@ export async function createServer(config: McpConfig = {}) {
     }
   });
 
-  return { server, agent };
+  return { server, get agent() { return agent; } };
 }
 
 export interface ToolContext {

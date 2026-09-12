@@ -46,3 +46,10 @@ expires and keep the same transaction reference; paying again is unnecessary.
 The `fetchPaid` settlement route and its existing deployment verification
 requirements are unchanged. Receipt authorization does not enable a disabled
 settlement route or replace independent route verification.
+
+The API retains its legacy `settlement.fee_on_top` object during client upgrades.
+The RC client accepts that object only alongside explicit `gross-inclusive`
+metadata, with provider, treasury and creator amounts matching the canonical
+payer/recipient amounts. An inconsistent quote is rejected before settlement.
+Native `valid_until` may be a JSON integer or an integer string. These wire
+compatibility changes do not activate the RC's disabled settlement executor.

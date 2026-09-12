@@ -169,7 +169,7 @@ function mockServer(): MockServer {
           merchant_wei: quotedMerchantWei.toString(),
           treasury_wei: quotedTreasuryWei.toString(),
           creator_wei: "0",
-          valid_until: String(Math.floor(Date.parse(expiresAt) / 1000)),
+          valid_until: Math.floor(Date.parse(expiresAt) / 1000),
           settlement_semantics: "gross-inclusive",
         },
         settlement: {
@@ -336,6 +336,52 @@ async function agentFor(server: MockServer, opts: Record<string, unknown> = {}) 
     };
   return { agent, settlements };
 }
+
+describe("aifp1: additive backend quote compatibility", () => {
+  function legacyQuote(server: MockServer, alter?: (quote: any) => void) {
+    const original = server.fetch;
+    server.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await original(input, init);
+      if (!String(input).endsWith("/v1/quote") || !response.ok) return response;
+      const quote = await response.json();
+      const s = quote.settlement;
+      s.settlement_semantics = "gross-inclusive";
+      s.fee_on_top = {
+        provider: s.merchant_units, treasury: s.protocol_fee_units, creator: s.creator_units,
+      };
+      alter?.(quote);
+      return json(quote);
+    }) as typeof fetch;
+  }
+
+  it("accepts the backend's legacy fee object only with matching explicit gross metadata", async () => {
+    const server = mockServer();
+    legacyQuote(server);
+    const { agent, settlements } = await agentFor(server);
+    const result = await agent.fetchPaid(`${GATEWAY}/acme/paid`);
+    expect(result?.status).toBe(200);
+    expect(settlements).toHaveLength(1);
+    expect(settlements[0].merchantWei + settlements[0].treasuryWei).toBe(settlements[0].grossWei);
+    expect(server.provedPayers).toEqual([agent.evmAddress.toLowerCase()]);
+  });
+
+  it.each(["provider", "treasury", "creator"])("refuses a disagreeing legacy %s amount before settlement", async (leg) => {
+    const server = mockServer();
+    legacyQuote(server, (quote) => { quote.settlement.fee_on_top[leg] = "1"; });
+    const { agent, settlements } = await agentFor(server);
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/paid`)).rejects.toBeInstanceOf(Aifp1QuoteError);
+    expect(settlements).toHaveLength(0);
+    expect(server.pays).toBe(0);
+  });
+
+  it("does not interpret an unlabelled fee object as inclusive economics", async () => {
+    const server = mockServer();
+    legacyQuote(server, (quote) => { delete quote.settlement.settlement_semantics; });
+    const { agent, settlements } = await agentFor(server);
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/paid`)).rejects.toBeInstanceOf(Aifp1QuoteError);
+    expect(settlements).toHaveLength(0);
+  });
+});
 
 let originalFetch: typeof globalThis.fetch;
 beforeEach(() => { originalFetch = globalThis.fetch; });

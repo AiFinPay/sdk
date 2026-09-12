@@ -142,7 +142,7 @@ export interface Aifp1Quote {
     merchant_wei:          string;
     treasury_wei:          string;
     creator_wei:           string;
-    valid_until?:          string;       // Unix seconds; must equal expires_at
+    valid_until?:          number | string;       // Unix seconds; must equal expires_at
     settlement_semantics?: "gross-inclusive";
   };
   settlement: {
@@ -153,7 +153,9 @@ export interface Aifp1Quote {
     merchant_units:        string;
     protocol_fee_units:    string;
     creator_units:         string;
-    fee_on_top:            false;
+    /** Canonical form, or the backend's retained legacy breakdown (not an extra fee). */
+    fee_on_top:            false | { provider: string; treasury: string; creator: string };
+    settlement_semantics?: "gross-inclusive";
   };
   nonce:      string;
   expires_at: string;
@@ -655,8 +657,19 @@ function validateCanonicalQuoteEconomics(quote: Aifp1Quote): void {
     const protocol = BigInt(s.protocol_fee_units);
     const creator = BigInt(s.creator_units);
     const expectedProtocol = gross / 100n;
+    // Older backend clients consume this unfortunately named breakdown. It
+    // cannot be dropped during a rolling upgrade. Only accept it as inclusive
+    // when the explicit semantics and every leg agree with the canonical data.
+    const legacy = s.fee_on_top;
+    const matches = (value: unknown, expected: bigint) =>
+      typeof value === "string" && /^\d+$/.test(value) && BigInt(value) === expected;
+    const inclusiveLegacy = s.settlement_semantics === "gross-inclusive"
+      && legacy !== null && typeof legacy === "object" && !Array.isArray(legacy)
+      && matches(legacy.provider, merchant)
+      && matches(legacy.treasury, protocol)
+      && matches(legacy.creator, creator);
     if (
-      s.fee_on_top !== false
+      (s.fee_on_top !== false && !inclusiveLegacy)
       || gross <= 0n
       || payer !== gross
       || total !== gross
