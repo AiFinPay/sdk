@@ -108,12 +108,21 @@ export interface GateErrorBody {
   protocol?: "AIFP-1";
   merchant_id?: string;
   resource?: string;
+  /** Which paths a receipt for this resource opens. "exact" unless the mount
+   *  says otherwise — an agent cannot tell what it is buying without this. */
+  scope?: "exact" | "prefix" | "merchant";
   tier?: Tier;
   unit_weight?: number;
   unit_price_usd?: string;
   min_requests?: number;
   protocol_fee_bps?: 100;
   no_minimum_fee?: true;
+  /** Where accepted_chains, accepted_assets, amount, order_id and expiry come
+   *  from. They are deliberately not inlined: accepted_chains is per-merchant
+   *  (derived from pay_to) and accepted_assets is rate-dependent, so a static
+   *  challenge that listed them would sometimes promise a settlement the quote
+   *  refuses. */
+  settlement_terms_from?: string;
   how_to_pay?: string[];
   /** Escape hatch for walletless agents: the one-command SDK path to a wallet
    *  that then resolves this very 402 automatically. */

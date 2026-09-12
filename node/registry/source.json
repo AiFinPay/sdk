@@ -1,0 +1,14 @@
+{
+  "$comment": [
+    "Provenance for registry/splitter-table.json, which is a byte-for-byte copy of",
+    "the canonical artifact in AiFinPay/evm-contract. Nothing here is",
+    "hand-maintained: 'npm run registry:sync -- --from <path-to-evm-contract>'",
+    "rewrites both files together, and 'npm run registry:check' fails if the copy",
+    "no longer hashes to what is recorded here, or if src/splitterRoutes.generated.ts",
+    "no longer regenerates from it byte-for-byte."
+  ],
+  "repo": "AiFinPay/evm-contract",
+  "path": "registry/generated/splitter-table.json",
+  "commit": "8577d568932cae1e551fc08c7e7f22202cdffeb1",
+  "sha256": "ba556b411304c33861c778538d13921ecfbcec31937e0866a74f5e26e21e7a9f"
+}

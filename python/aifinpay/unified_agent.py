@@ -832,12 +832,31 @@ class AiFinPayAgent:
             abi=SPLITTER_PAY_MATIC_ABI,
         )
         merchant = Web3.to_checksum_address(pm["merchant_wallet"])
-        # ipCreator routing: prefer the challenge's explicit ip_creator; else
-        # route the royalty slot to the splitter's treasury (mirrors the Node
-        # SDK + Solana branch). Passing address(0) would skip the transfer and
-        # permanently strand the 1bp inside B2BSplitter — no sweep function.
-        ip_creator = pm.get("ip_creator") or self._splitter_treasury(pm["splitter"]) \
-            or ("0x" + "00" * 20)
+        # ipCreator routing: the challenge's explicit ip_creator, or address(0).
+        #
+        # This used to fall back to the splitter's OWN treasury, justified as
+        # "passing address(0) would skip the transfer and permanently strand the
+        # 1bp inside B2BSplitter — no sweep function". That is not what the
+        # contract does. B2BSplitter._split:
+        #
+        #     if (_ipCreator != address(0)) { ipAmt = ...; }
+        #     // else: ipAmt stays 0 and is absorbed into merchantAmt below
+        #     merchantAmt = _total - treasuryAmt - ipAmt;
+        #     ...
+        #     if (ipAmt > 0) { transfer to _ipCreator }
+        #
+        # With address(0) the royalty share is not stranded — it goes to the
+        # MERCHANT, and no transfer is attempted. Nothing to sweep.
+        #
+        # The fallback therefore moved 0.01% of every unattributed payment from
+        # the merchant to us, silently, while /v1/quote published a 99/1/0 split.
+        # Observed on-chain 2026-08-27 in tx 0x6b853876…: merchant 98.99%,
+        # treasury 1.00%, ipCreator 0.01% paid to 0xD31d82…3c8e — our own Safe.
+        # AIFINP-211.
+        #
+        # Default to address(0): no royalty recipient means the merchant keeps
+        # it, which is both what the contract implements and what we publish.
+        ip_creator = pm.get("ip_creator") or ("0x" + "00" * 20)
         ip_creator = Web3.to_checksum_address(ip_creator)
         order_id = pm["order_id"]
         total_wei = int(pm["total_wei"])

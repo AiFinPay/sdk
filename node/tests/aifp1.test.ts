@@ -15,11 +15,14 @@
 // pass while the SDK talks to nobody.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { verifyMessage } from "viem";
 import { AiFinPayAgent, BudgetCapExceededError } from "../src/unifiedAgent.js";
 import { MemorySpendLedger } from "../src/spendLedger.js";
 import {
   Aifp1ReceiptCache,
   Aifp1QuoteError,
+  Aifp1PayError,
+  recoverAifp1Payment,
   idempotencyKeyFor,
   scopeCovers,
   prefixHint,
@@ -62,6 +65,9 @@ interface MockServer {
   merchants: Record<string, string>;
   /** Number of AIFP-425 answers /v1/pay gives before settling. */
   payNotConfirmedTimes: number;
+  payUnavailableTimes?: number;
+  payNetworkErrors?: number;
+  provedPayers?: string[];
   receipts: Map<string, MockReceipt>;
   fetch: typeof fetch;
 }
@@ -137,6 +143,7 @@ function mockServer(): MockServer {
       const merchantUnits = grossUnits - protocolUnits;
       return json({
         quote_id,
+        payer: body.payer,
         merchant_id: body.merchant_id,
         resource,
         scope,
@@ -185,6 +192,20 @@ function mockServer(): MockServer {
       const key = headers.get("Idempotency-Key");
       if (!key) return json({ error: "AIFP-400", detail: "Idempotency-Key header is required" }, 400);
       s.idempotencyKeys.push(key);
+      const request = JSON.parse(String(init?.body ?? "{}"));
+      const q = lastQuotes.get(request.quote_id);
+      const auth = request.payment_authorization;
+      if (!q || !auth) return json({ error: 'payer proof required' }, 401);
+      if (q.payer && q.payer.toLowerCase() !== auth.payer) return json({ error: 'wrong payer' }, 403);
+      const expected = JSON.stringify(['AiFinPay receipt authorization v1', API,
+        q.quote_id, q.nonce, q.merchant_id, q.network_mode || 'live',
+        request.chain, request.tx_ref, request.asset || '', key, auth.payer, auth.expires_at]);
+      if (!await verifyMessage({ address: auth.payer, message: expected, signature: auth.signature })) {
+        return json({ error: 'invalid payer signature' }, 401);
+      }
+      (s.provedPayers ??= []).push(auth.payer);
+      if (s.payNetworkErrors) { s.payNetworkErrors--; throw new Error('lost connection'); }
+      if (s.payUnavailableTimes) { s.payUnavailableTimes--; return json({ error: 'AIFP-503' }, 503); }
       if (s.payNotConfirmedTimes > 0) {
         s.payNotConfirmedTimes--;
         return json({ error: "AIFP-425", detail: "settlement not yet confirmed" }, 425);
@@ -881,4 +902,44 @@ describe("aifp1: a default batch is an amount of money, not a unit count", () =>
       expect(n).toBe(200);
     }
   });
+});
+
+
+describe('authenticated receipt recovery', () => {
+  it('uses the settlement wallet even if the agent display id differs', async () => {
+    const server = mockServer();
+    const { agent, settlements } = await agentFor(server);
+    const res = await agent.fetchPaid(`${GATEWAY}/acme/paid`, {}, { agentId: 'display-only' });
+    expect(res!.status).toBe(200);
+    expect(server.provedPayers).toEqual([agent.evmAddress.toLowerCase()]);
+    expect(settlements).toHaveLength(1);
+  });
+  it('retries 503 and a lost connection without a second transfer', async () => {
+    const server = mockServer(); server.payUnavailableTimes = 1; server.payNetworkErrors = 1;
+    const { agent, settlements } = await agentFor(server);
+    const res = await agent.fetchPaid(`${GATEWAY}/acme/paid`);
+    expect(res!.status).toBe(200);
+    expect(settlements).toHaveLength(1);
+    expect(new Set(server.idempotencyKeys).size).toBe(1);
+    expect(server.provedPayers).toHaveLength(3);
+  });
+});
+
+
+it('exposes serializable recovery context and recovers without another settlement', async () => {
+  const server = mockServer(); server.payUnavailableTimes = 1;
+  const { agent, settlements } = await agentFor(server);
+  let failure: Aifp1PayError | undefined;
+  try { await agent.fetchPaid(`${GATEWAY}/acme/paid`, {}, { settlementConfirmMs: 0 }); }
+  catch(e) { failure = e as Aifp1PayError; }
+  expect(failure).toBeInstanceOf(Aifp1PayError);
+  expect(failure!.recovery).toBeDefined();
+  const saved = JSON.parse(JSON.stringify(failure!.recovery));
+  expect(JSON.stringify(saved)).not.toContain('signature');
+  // The recovery helper receives a signer, not a settlement function.
+  const signer = (agent as unknown as { evmAccount: { signMessage(p: { message: string }): Promise<string> } }).evmAccount;
+  const recovered = await recoverAifp1Payment(saved, { payerAddress: agent.evmAddress,
+    signPaymentAuthorization: message => signer.signMessage({ message }), fetchImpl: server.fetch });
+  expect(recovered.receipt).toBeTruthy();
+  expect(settlements).toHaveLength(1);
 });

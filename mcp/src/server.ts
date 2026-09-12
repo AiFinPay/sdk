@@ -8,6 +8,7 @@ import type { McpConfig } from "./config.js";
 import { agentAddressTool, runAgentAddress } from "./tools/agent-address.js";
 import { agentQuotaTool, runAgentQuota } from "./tools/agent-quota.js";
 import { makeSafeFetch } from "./safe-fetch.js";
+import { loadConfigFromEnv } from "./config.js";
 import {
   agentPassportResolveTool,
   runAgentPassportResolve,
@@ -22,6 +23,9 @@ import {
 // may explicitly use AIFINPAY_ALLOW_PRIVATE_FETCH=1.
 const safeFetch = makeSafeFetch({
   allowPrivate: process.env.AIFINPAY_ALLOW_PRIVATE_FETCH === "1",
+  // Exact hosts an operator vouches for. Skips only the DNS pre-check, and only
+  // for those names — see safe-fetch.ts for why this is not a proxy switch.
+  trustedHosts: loadConfigFromEnv().trustedHosts,
 });
 
 /**

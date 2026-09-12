@@ -24,6 +24,8 @@ export {
 } from "./core.js";
 
 export { aifpGate } from "./express.js";
+export { aifpDiscovery, buildDiscoveryDocument } from "./discovery.js";
+export type { DiscoveryOptions, DiscoveryResource } from "./discovery.js";
 
 export { MemoryStore } from "./stores/memory.js";
 export { redisStore, primeRedisStore, REDIS_INCRBY_SCRIPT } from "./stores/redis.js";

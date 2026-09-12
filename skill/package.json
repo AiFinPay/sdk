@@ -1,0 +1,21 @@
+{
+  "name": "@aifinpay/skill",
+  "version": "1.0.0",
+  "description": "Agent skill: instructs AI agents how to use AiFinPay for x402 payments — package choice, route discovery, wallet security, double-payment protection, and quote terms.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "aifinpay",
+  "license": "MIT",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "11.24.0",
+      "onFail": "download"
+    }
+  },
+  "packageManager": "pnpm@11.24.0",
+  "type": "module"
+}

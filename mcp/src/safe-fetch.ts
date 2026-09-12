@@ -92,7 +92,7 @@ export class BlockedRequestError extends Error {}
  */
 export async function assertRequestAllowed(
   rawUrl: string,
-  opts: { allowPrivate?: boolean } = {},
+  opts: { allowPrivate?: boolean; trustedHosts?: string[] } = {},
 ): Promise<URL> {
   let url: URL;
   try {
@@ -124,11 +124,34 @@ export async function assertRequestAllowed(
     return url;
   }
 
+  // An operator naming this exact host has vouched for it, so the resolution
+  // step is skipped for it and only for it.
+  //
+  // Why this exists: behind an HTTP proxy the client does not resolve at all —
+  // the proxy does — so lookup() fails with getaddrinfo EAI_AGAIN and every
+  // host is refused as "cannot resolve". That is the guard misfiring on the
+  // environment rather than on a threat, and it made the MCP server unusable in
+  // proxied setups (external E2E, 2026-08-27).
+  //
+  // Deliberately per-host and not a proxy-detection switch. "We seem to be
+  // behind a proxy, disable the SSRF check" turns one environment quirk into a
+  // blanket bypass, which is the shape of the vulnerability this file exists to
+  // prevent. Exact hostnames only — no suffix matching, because "example.com"
+  // trusting "evil-example.com" is the classic way an allowlist stops meaning
+  // anything.
+  if (opts.trustedHosts?.some((h) => h.toLowerCase() === host.toLowerCase())) {
+    return url;
+  }
+
   let addresses: { address: string }[];
   try {
     addresses = await lookup(host, { all: true });
   } catch (e) {
-    throw new BlockedRequestError(`cannot resolve ${host}: ${(e as Error).message}`);
+    throw new BlockedRequestError(
+      `cannot resolve ${host}: ${(e as Error).message}. `
+      + `If this host is reachable only through a proxy, name it in `
+      + `AIFINPAY_TRUSTED_HOSTS to skip the DNS pre-check for it alone.`,
+    );
   }
   if (!addresses.length) {
     throw new BlockedRequestError(`${host} resolved to nothing`);
@@ -151,7 +174,7 @@ export async function assertRequestAllowed(
  * Installed as the agent's fetchImpl so the whole payment flow inherits it —
  * the 402 probe, the retry with proof, and anything a bridge redirects to.
  */
-export function makeSafeFetch(opts: { allowPrivate?: boolean } = {}): typeof fetch {
+export function makeSafeFetch(opts: { allowPrivate?: boolean; trustedHosts?: string[] } = {}): typeof fetch {
   const safeFetch = async (
     input: Parameters<typeof fetch>[0],
     init?: Parameters<typeof fetch>[1],

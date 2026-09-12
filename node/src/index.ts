@@ -32,6 +32,7 @@ export {
   SETTLEMENT_CHAIN_IDS,
   SETTLEMENT_EXPECTED_BPS,
 } from "./settlement.js";
+export * from "./settlementV14.js";
 export type {
   SettlementRouteClass,
   SettlementEvmNetwork,
@@ -46,6 +47,23 @@ export type {
 } from "./settlement.js";
 
 // ── Unified surface (Phase 1+ / legacy callers remain source-compatible) ──
+export {
+  SPLITTER_ROUTES,
+  SPLITTER_GOVERNANCE,
+  SPLITTER_REGISTRY_SOURCE,
+  resolveSplitterRoute,
+  resolveSettlingSplitterRoute,
+  UnknownSplitterRouteError,
+  SplitterRouteNotSettlingError,
+} from "./splitterRoutes.js";
+export type {
+  SplitterRoute,
+  SplitterRouteChain,
+  SplitterRouteKey,
+  SplitterRouteDeployment,
+} from "./splitterRoutes.js";
+export { botchain, xrplevm } from "./chains.js";
+
 export { AiFinPayAgent, SPLITTER_DEPLOYMENTS, paymentIdFor } from "./unifiedAgent.js";
 export type {
   AiFinPayAgentOptions,
@@ -79,8 +97,13 @@ export {
   prefixHint,
   parseGatewayUrl,
   idempotencyKeyFor,
+  paymentAuthorizationMessage,
+  recoverAifp1Payment,
+  describeQuote,
 } from "./aifp1.js";
 export type {
+  Aifp1PaymentRecovery,
+  Aifp1PaymentSigner,
   Aifp1Scope,
   Aifp1Challenge,
   Aifp1Quote,
@@ -88,6 +111,7 @@ export type {
   Aifp1CachedReceipt,
   Aifp1FetchOptions,
   Aifp1Deps,
+  QuoteSummary,
 } from "./aifp1.js";
 export {
   Aifp1Error,

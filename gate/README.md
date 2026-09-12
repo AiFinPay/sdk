@@ -42,6 +42,76 @@ costs money if you get it wrong.
 
 ---
 
+## 1b. Next.js, and the two ways it silently earns you nothing
+
+Next.js runs middleware only on paths matched by `config.matcher`, and
+`aifpGate` charges every request unless you tell it not to. Both defaults are
+reasonable on their own and together they produce the two failure modes we see
+most often in real integrations — each of which leaves the dashboard showing
+`paywall_enabled: true` while the truth is very different.
+
+```ts
+// middleware.ts
+import { aifpGate, knownAiAgent } from "@aifinpay/gate";
+
+export default aifpGate({
+  merchantId: process.env.AIFP_MERCHANT_ID,
+  registry,
+  shouldCharge: knownAiAgent,     // ← see below
+});
+
+export const config = {
+  matcher: [
+    "/api/:path*",
+    // Every PAGE you registered has to be here too. A page resource that the
+    // matcher does not cover is never seen by the gate, and serves free.
+    "/",
+    "/movies/:path*",
+  ],
+};
+```
+
+**Without the matcher entry**, the middleware never runs on that path. The
+resource is registered, priced, and shown as enabled — and enforcement is zero.
+Nothing reports this; the endpoint simply answers 200 forever.
+
+**Without `shouldCharge`**, every request is charged, including human visitors
+and Googlebot. On an API that is usually right — agents are the only callers.
+On a **page** it is almost never right: you have put a 402 in front of your own
+readers and your search ranking.
+
+`knownAiAgent` returns true for the self-identifying AI crawlers — GPTBot,
+ClaudeBot, PerplexityBot, CCBot, Bytespider, Google-Extended and the rest — plus
+anything already speaking AIFP. A browser passes through free.
+
+Extend it rather than replacing it when you have your own signal:
+
+```ts
+shouldCharge: (req) => knownAiAgent(req) || myEdgeStampedAiHeader(req),
+```
+
+A predicate that **throws** charges the request. Of the two wrong answers a
+broken detector can give, a 402 to one human is visible and recoverable; a
+crawler served free is silent and permanent.
+
+### robots.txt decides whether any of this runs at all
+
+```
+User-agent: *
+Disallow: /
+```
+
+A well-behaved AI crawler reads that and leaves — before it ever reaches your
+paywall. You cannot forbid a crawler and bill it at the same time; those are
+opposite instructions to the same client, and robots.txt is the one it reads
+first.
+
+If you arrived here from "block the AI scrapers", this line is probably already
+in your site and it guarantees zero revenue. Monetising AI traffic means
+**stop blocking, start charging** — a business decision, not a config toggle.
+
+---
+
 ## 2. Register your endpoints with your API key
 
 Your routes live in code and change in pull requests. Their prices should too.
