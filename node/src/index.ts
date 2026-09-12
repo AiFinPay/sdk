@@ -91,6 +91,31 @@ export type {
   V14Safe,
 } from "./v14Deployments.generated.js";
 
+// ── Solana environment & protocol-version resolver (AIFINP-224) ──────────
+export {
+  resolveSolanaDeployment,
+  isSolanaV14Available,
+  UnsupportedSolanaDevNetworkError,
+  SolanaVersionUnavailableError,
+  SolanaV12UnavailableError,
+  NoSolanaDeploymentError,
+} from "./solanaDeploymentResolver.js";
+export type {
+  SolanaProtocolVersion,
+  SolanaRequestedVersion,
+  ResolveSolanaDeploymentOptions,
+  ResolvedSolanaDeployment,
+} from "./solanaDeploymentResolver.js";
+export {
+  SOLANA_V14_DEPLOYMENTS,
+  SOLANA_V14_DEPLOYMENTS_SOURCE,
+  SOLANA_DEV_NETWORKS,
+} from "./solanaV14Deployments.generated.js";
+export type {
+  SolanaV14Deployment,
+  SolanaNetwork,
+} from "./solanaV14Deployments.generated.js";
+
 export { AiFinPayAgent, SPLITTER_DEPLOYMENTS, paymentIdFor } from "./unifiedAgent.js";
 export type {
   AiFinPayAgentOptions,
