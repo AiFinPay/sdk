@@ -1,8 +1,10 @@
 {
   "name": "@aifinpay/wallet",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Derive an AiFinPay agent wallet (Solana + EVM + Casper) with four tiny crypto deps — no viem, no @solana/web3.js, ~4.5 MB. The light way to give an agent a wallet where the full SDK will not install.",
   "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "license": "MIT",
   "exports": {
     ".": {
@@ -15,11 +17,13 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "aifinpay",
@@ -32,6 +36,7 @@
     "derive",
     "keypair"
   ],
+  "author": "CoinSecurities (SECCO) <contact@aifinpay.io>",
   "homepage": "https://github.com/AiFinPay/sdk/tree/main/wallet#readme",
   "repository": {
     "type": "git",
@@ -41,6 +46,9 @@
   "bugs": "https://github.com/AiFinPay/sdk/issues",
   "engines": {
     "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@noble/curves": "^1.9.0",

@@ -22,6 +22,20 @@ build/
 .env.local
 *.pem
 
+# test / coverage artifacts (per-package files cover node/gate/mcp/wallet; root covers the rest)
+coverage/
+
+# logs (may carry secrets — never commit)
+*.log
+npm-debug.log*
+logs/
+
+# host-local configs may carry secrets (per-package files cover node/gate/mcp/wallet; root covers the rest)
+.mcp.json
+
+# npm pack tarballs (mcp-against-source flow, prepublish checks)
+*.tgz
+
 # package manager state
 .pnpm-store/
 .npm/

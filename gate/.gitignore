@@ -1,0 +1,9 @@
+# Local build output (also covered at repo root)
+dist/
+*.tsbuildinfo
+
+# Test / coverage artifacts
+coverage/
+
+# Host-local configs may carry secrets
+.mcp.json
