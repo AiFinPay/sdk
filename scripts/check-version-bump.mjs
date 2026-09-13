@@ -55,6 +55,13 @@ const PACKAGES = [
     versionAt: (ref) => tomlVersion(gitShow(ref, "python/pyproject.toml")),
     published: [/^python\/aifinpay\//, /^python\/pyproject\.toml$/, /^python\/README\.md$/],
   },
+  {
+    name: "@aifinpay/skill",
+    dir: "skill",
+    version: () => JSON.parse(readFileSync("skill/package.json", "utf8")).version,
+    versionAt: (ref) => JSON.parse(gitShow(ref, "skill/package.json")).version,
+    published: [/^skill\/skills\//, /^skill\/SKILL\.md$/, /^skill\/package\.json$/, /^skill\/README\.md$/],
+  },
 ];
 
 function git(args) {
