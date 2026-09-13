@@ -179,6 +179,40 @@ When asked to pay for a paid API or crawl a paywalled site:
   hash). Quote or invoice creation is not a completed payment — never
   report it as one.
 
+## Code examples (Node + Python)
+
+Payer-side code lives in the SDK repo (not in this package) — point the
+agent at these instead of inventing snippets:
+
+- `QUICKSTART.md` (Path 1 = Python, Path 2 = Node, Path 4 = frameworks):
+  `https://github.com/AiFinPay/sdk/blob/main/QUICKSTART.md`
+- Node SDK surface: `node/README.md`; receipt shape:
+  `node/PAYMENT_RECEIPTS.md`
+- Python SDK surface: `python/README.md` (`Agent.pay`,
+  `PayOptions(max_amount_usd=…)`)
+- Runnable: `examples/new-wallet/new-wallet.mjs`,
+  `examples/echo-x402-server/test-client.js`,
+  `examples/exa-x402-bridge/test-client.js` (Node);
+  `examples/langchain/agent.py`, `examples/openai-agent/agent.py`,
+  `examples/crewai/crew.py`, `examples/autogpt/loop.py` (Python).
+  Browse: `https://github.com/AiFinPay/sdk/tree/main/examples`
+
+## Ready snippets (wallet, budget, paid call)
+
+Runnable code lives in `examples/agent-snippets/` — read the files, never
+retype from memory:
+
+- `wallet-budget-paid.ts` (TypeScript): `fromEnvironment()` / `fromSeed`,
+  `setBudget({ per_call_usd, daily_usd })`, discovery + `fetchPaid`
+- `wallet-budget-paid.mjs` (JavaScript, ESM): same flow, no types
+- `wallet-budget-call.py` (Python): `from_seed(os.environ["SEED_HASH"])`,
+  `call(provider, body, cost=…)` cap; fails closed on paid 402s — use Node
+  `fetchPaid` for paid settlement
+
+Browse: `https://github.com/AiFinPay/sdk/tree/main/examples/agent-snippets`
+
+Never log or print seeds, secrets, or keystore JSON — public addresses only.
+
 ## Knowing what a payment buys
 
 Before settling, `describeQuote(quote)` turns the raw amount into the terms —

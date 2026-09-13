@@ -7,6 +7,7 @@ Reference integrations you can copy and adapt.
 | [`echo-x402-server`](./echo-x402-server) | Smallest possible **AiFinPay-gated API** in the pre-paid access mode (agent stakes once, gets unlimited gated calls). ~70 lines of Express. | Node 18+, Express |
 | [`exa-x402-bridge`](./exa-x402-bridge) | **Per-call paid bridge** in front of [Exa AI](https://exa.ai/) `/search`. Default integration template — verifies an on-chain splitter payment before forwarding. The same code is reusable for any pay-per-call API. | Node 18+, Express, viem |
 | [`venice-x402-bridge`](./venice-x402-bridge) | Same template applied to [Venice AI](https://venice.ai) `/chat/completions`. Demonstrates how to fork the bridge for a new service in ~5 minutes (three knob changes). | Node 18+, Express, viem |
+| [`agent-snippets`](./agent-snippets) | **Payer-side copy-paste snippets**: wallet create/load → `setBudget` → paid call, in TypeScript, JavaScript (ESM), and Python. | Node 18+ / Python 3.9+ |
 
 More coming as we build them. PRs welcome — open one against `main`.
 

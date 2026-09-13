@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.0.8
+
+- Payer skill points Ready snippets at runnable `examples/agent-snippets/`
+  files (TS/JS/Python) instead of inline code blocks.
+
+## 2.0.7
+
+- Payer skill adds Ready snippets: wallet create/load, `setBudget`, and
+  paid-call code for TypeScript, JavaScript, and Python (verified against
+  `node/src/unifiedAgent.ts` and `python/aifinpay/unified_agent.py`).
+
+## 2.0.6
+
+- Payer skill adds Code examples pointers: QUICKSTART paths, node/python
+  READMEs, and runnable Node + Python examples in `examples/`.
+
 ## 2.0.5
 
 - Payer skill adds Transaction display rules: never leak private keys/seeds
