@@ -1,5 +1,5 @@
 {
-  "extends": "../tsconfig.json",
+  "extends": "../node/tsconfig.json",
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",
@@ -8,5 +8,7 @@
     "sourceMap": true,
     "resolveJsonModule": true
   },
-  "include": ["src"]
+  "include": [
+      "src"
+  ]
 }

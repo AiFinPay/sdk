@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
-import type { ContractAbi, TokenList } from "./types.js";
+import type { ContractAbi, TokenList } from "./types";
 
-export type { TokenInfo, TokenList, ContractAbi } from "./types.js";
+export type { TokenInfo, TokenList, ContractAbi } from "./types";
 
 function loadJson<T>(rel: string): T {
   return JSON.parse(readFileSync(new URL(rel, import.meta.url), "utf8")) as T;

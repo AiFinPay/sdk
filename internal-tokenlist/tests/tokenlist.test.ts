@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ERC20_ABI, findToken, INTERNAL_TOKENLIST } from "../src/index.js";
+import { ERC20_ABI, findToken, INTERNAL_TOKENLIST } from "../src";
 
 // Offline guards. The live-chain verification is `npm run generate:check`
 // (the generator fails on any disagreement with the chain); these tests pin

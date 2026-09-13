@@ -35,7 +35,7 @@ and `npm test`.
 
 ## Adding an ABI
 
-Drop the JSON array in `abi/` and export it from `src/index.ts`. The AIFP
+Drop the JSON array in `abi` and export it from `src/index.ts`. The AIFP
 contract ABIs (Core, Passport, mSECCO, splitter) should be lifted from
 `backend/polygon.js`, which is verified against deployed bytecode — several
 fragments there were corrected after the deployed contracts diverged from
