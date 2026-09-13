@@ -8,11 +8,12 @@ doesn't carry yet (it has only an Ed25519 / Solana key). Wiring an EVM
 key plus EIP-3009 `transferWithAuthorization` flow is scheduled for a
 later SDK minor (see `14 - Design - Generic x402 Client.md` in vault).
 """
+
 from __future__ import annotations
 
 import base64
 import json
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import requests
 
@@ -35,21 +36,15 @@ PAYMENT_RESPONSE_HEADER = "PAYMENT-RESPONSE"
 def _decode_payment_required(resp: requests.Response) -> dict[str, Any]:
     raw = resp.headers.get(PAYMENT_REQUIRED_HEADER)
     if not raw:
-        raise UnsupportedFacilitatorError(
-            f"missing {PAYMENT_REQUIRED_HEADER} header on Coinbase x402 response"
-        )
+        raise UnsupportedFacilitatorError(f"missing {PAYMENT_REQUIRED_HEADER} header on Coinbase x402 response")
     try:
         decoded = base64.b64decode(raw).decode("utf-8")
     except Exception as e:
-        raise UnsupportedFacilitatorError(
-            f"{PAYMENT_REQUIRED_HEADER} is not valid base64: {e}"
-        ) from e
+        raise UnsupportedFacilitatorError(f"{PAYMENT_REQUIRED_HEADER} is not valid base64: {e}") from e
     try:
         return json.loads(decoded)
     except json.JSONDecodeError as e:
-        raise UnsupportedFacilitatorError(
-            f"{PAYMENT_REQUIRED_HEADER} body is not valid JSON: {e}"
-        ) from e
+        raise UnsupportedFacilitatorError(f"{PAYMENT_REQUIRED_HEADER} body is not valid JSON: {e}") from e
 
 
 class CoinbaseX402Facilitator:
@@ -66,9 +61,9 @@ class CoinbaseX402Facilitator:
     def build_auth(
         self,
         resp: requests.Response,
-        agent: "Agent",
+        agent: Agent,
         opts: PayOptions,
-        context: Optional[dict[str, Any]] = None,
+        context: [dict[str, Any]] = None,
     ) -> dict:
         # Parse the spec object so callers see useful errors instead of
         # opaque "not implemented".
@@ -82,8 +77,7 @@ class CoinbaseX402Facilitator:
             cheapest = _min_usd(accepts)
             if cheapest is not None and cheapest > opts.max_amount_usd:
                 raise PaymentTooExpensiveError(
-                    f"Coinbase x402 wants ${cheapest:.4f}, "
-                    f"caller cap is ${opts.max_amount_usd:.4f}"
+                    f"Coinbase x402 wants ${cheapest:.4f}, " f"caller cap is ${opts.max_amount_usd:.4f}"
                 )
 
         # Execution is the missing piece. We need an EVM (or SVM) key + a

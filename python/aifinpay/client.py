@@ -1,22 +1,21 @@
 """Low-level Agent client. Non-custodial: keypair never leaves this process."""
+
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 from urllib.parse import urlsplit
 
-import nacl.signing  # PyNaCl
 import base58
+import nacl.signing  # PyNaCl
 import requests
 
 from .errors import (
     AiFinPayError,
     FundingTimeoutError,
-    SeatNotFoundError,
-    UnsupportedFacilitatorError,
     X402Error,
 )
 from .facilitators import PayOptions, detect_facilitator
@@ -50,7 +49,7 @@ class Invoice:
     treasury_vault: str
     program_id: str
     nonce: str
-    raw: Dict[str, Any]
+    raw: dict[str, Any]
 
 
 class Agent:
@@ -79,24 +78,22 @@ class Agent:
     # ── Constructors ────────────────────────────────────────────────────────
 
     @classmethod
-    def new(cls, **kwargs) -> "Agent":
+    def new(cls, **kwargs) -> Agent:
         """Generate a fresh Ed25519 keypair locally."""
         return cls(nacl.signing.SigningKey.generate(), **kwargs)
 
     @classmethod
-    def from_secret_b58(cls, secret_b58: str, **kwargs) -> "Agent":
+    def from_secret_b58(cls, secret_b58: str, **kwargs) -> Agent:
         """Load from a 64-byte base58 secret (Solana style: secret + pub)."""
         raw = base58.b58decode(secret_b58)
         if len(raw) == 64:
             raw = raw[:32]
         if len(raw) != 32:
-            raise AiFinPayError(
-                f"secret must decode to 32 or 64 bytes, got {len(raw)}"
-            )
+            raise AiFinPayError(f"secret must decode to 32 or 64 bytes, got {len(raw)}")
         return cls(nacl.signing.SigningKey(raw), **kwargs)
 
     @classmethod
-    def from_keypair_file(cls, path: str, **kwargs) -> "Agent":
+    def from_keypair_file(cls, path: str, **kwargs) -> Agent:
         """Load a Solana CLI ``solana-keygen`` JSON file (array of 64 ints)."""
         with open(path) as f:
             arr = json.load(f)
@@ -118,23 +115,19 @@ class Agent:
 
     # ── Manifesto / discovery (AiFinPay native) ─────────────────────────────
 
-    def manifesto(self) -> Dict[str, Any]:
-        r = self._session.get(
-            f"{self.base_url}/manifesto.json", timeout=self.timeout
-        )
+    def manifesto(self) -> dict[str, Any]:
+        r = self._session.get(f"{self.base_url}/manifesto.json", timeout=self.timeout)
         r.raise_for_status()
         return r.json()
 
-    def well_known(self) -> Dict[str, Any]:
-        r = self._session.get(
-            f"{self.base_url}/.well-known/x402.json", timeout=self.timeout
-        )
+    def well_known(self) -> dict[str, Any]:
+        r = self._session.get(f"{self.base_url}/.well-known/x402.json", timeout=self.timeout)
         r.raise_for_status()
         return r.json()
 
     # ── x402 auth (AiFinPay native — kept for backwards compat) ────────────
 
-    def auth_headers(self) -> Dict[str, str]:
+    def auth_headers(self) -> dict[str, str]:
         """Refuse the retired unbound native-auth helper.
 
         Use :meth:`pay`, which signs only an in-band v2 challenge tied to the
@@ -147,15 +140,11 @@ class Agent:
     # ── Funding / Seat ────────────────────────────────────────────────────
 
     def has_seat(self) -> bool:
-        r = self._session.get(
-            f"{self.base_url}/api/seat/{self.address}", timeout=self.timeout
-        )
+        r = self._session.get(f"{self.base_url}/api/seat/{self.address}", timeout=self.timeout)
         r.raise_for_status()
         return bool(r.json().get("has_seat"))
 
-    def wait_for_funding(
-        self, min_usd_cents: int = 100, poll_seconds: int = 5, timeout: int = 600
-    ) -> None:
+    def wait_for_funding(self, min_usd_cents: int = 100, poll_seconds: int = 5, timeout: int = 600) -> None:
         """Poll the leaderboard until this address shows up with at least
         ``min_usd_cents`` reserved on its Seat. Raises FundingTimeoutError."""
         deadline = time.time() + timeout
@@ -171,28 +160,22 @@ class Agent:
                     if cents >= min_usd_cents:
                         return
             time.sleep(poll_seconds)
-        raise FundingTimeoutError(
-            f"address {self.address} never reached {min_usd_cents} cents on-chain"
-        )
+        raise FundingTimeoutError(f"address {self.address} never reached {min_usd_cents} cents on-chain")
 
     # ── Invoices (AiFinPay native — server returns instructions) ────────────
 
-    def reserve_seat_invoice(
-        self, amount_usd: float, asset: str = "USDC"
-    ) -> Invoice:
+    def reserve_seat_invoice(self, amount_usd: float, asset: str = "USDC") -> Invoice:
         """Request an invoice for reserving a Seat. The returned ``raw`` dict
         contains everything you need to build and submit the on-chain
         transaction with the Solana / Polygon SDK of your choice."""
         endpoint = "/api/invoice" if asset.upper() == "SOL" else "/api/invoice-spl"
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "amount_usd": amount_usd,
             "agent_pubkey": self.address,
         }
         if asset.upper() != "SOL":
             payload["asset"] = asset.upper()
-        r = self._session.post(
-            f"{self.base_url}{endpoint}", json=payload, timeout=self.timeout
-        )
+        r = self._session.post(f"{self.base_url}{endpoint}", json=payload, timeout=self.timeout)
         r.raise_for_status()
         data = r.json()
         return Invoice(
@@ -205,7 +188,7 @@ class Agent:
 
     # ── Fee-on-top split (b2b_pay_with_split / AiFinPaySplitter) ──────────
 
-    def quote_split(self, *, chain: str, merchant_amount: int) -> Dict[str, Any]:
+    def quote_split(self, *, chain: str, merchant_amount: int) -> dict[str, Any]:
         """Pure-view fee-on-top breakdown — no payment, no auth.
 
         Returns merchant amount, treasury fee, IP creator fee, and total —
@@ -213,9 +196,7 @@ class Agent:
         """
         if chain not in ("solana", "polygon"):
             raise AiFinPayError(f"chain must be 'solana' or 'polygon', got {chain!r}")
-        param = (
-            "merchant_amount_lamports" if chain == "solana" else "merchant_amount_wei"
-        )
+        param = "merchant_amount_lamports" if chain == "solana" else "merchant_amount_wei"
         r = self._session.get(
             f"{self.base_url}/api/b2b/quote-split",
             params={param: str(merchant_amount)},
@@ -231,8 +212,8 @@ class Agent:
         merchant_wallet: str,
         merchant_amount: int,
         order_id: str,
-        fee_recipient: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        fee_recipient: [str] = None,
+    ) -> dict[str, Any]:
         """Get the on-chain instructions for a fee-on-top split payment.
 
         The merchant receives ``merchant_amount`` units (lamports for Solana,
@@ -254,7 +235,7 @@ class Agent:
         if not order_id or len(order_id) > 64:
             raise AiFinPayError("order_id required, max 64 chars")
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "chain": chain,
             "agent_pubkey": self.address,
             "merchant_wallet": merchant_wallet,
@@ -286,7 +267,7 @@ class Agent:
         *,
         method: str = "GET",
         max_retries: int = 1,
-        options: Optional[PayOptions] = None,
+        options: [PayOptions] = None,
         **request_kwargs,
     ) -> requests.Response:
         """HTTP request that auto-handles x402 across multiple facilitators.
@@ -339,11 +320,7 @@ class Agent:
             prepared = getattr(resp, "request", None)
             signed_url = prepared.url if prepared is not None else url
             signed_method = prepared.method if prepared is not None else method
-            body_digest = (
-                _native_body_digest(getattr(prepared, "body", None))
-                if facilitator.name == "aifinpay"
-                else ""
-            )
+            body_digest = _native_body_digest(getattr(prepared, "body", None)) if facilitator.name == "aifinpay" else ""
             auth = facilitator.build_auth(
                 resp,
                 self,
@@ -379,10 +356,7 @@ class Agent:
                 challenge: Any = resp.json()
             except ValueError:
                 challenge = {"raw": resp.text[:500]}
-            raise X402Error(
-                f"402 Payment Required after {attempt} retry/retries. "
-                f"Challenge: {challenge}"
-            )
+            raise X402Error(f"402 Payment Required after {attempt} retry/retries. " f"Challenge: {challenge}")
 
         return resp
 
@@ -397,9 +371,12 @@ class Agent:
         **kwargs,
     ) -> requests.Response:
         """Compat wrapper. New code should call ``pay()`` directly."""
-        return self.pay(
-            url, method=method, max_retries=max_retries, **kwargs
-        )
+        return self.pay(url, method=method, max_retries=max_retries, **kwargs)
 
-    get = lambda self, url, **kw: self.pay(url, method="GET", **kw)
-    post = lambda self, url, **kw: self.pay(url, method="POST", **kw)
+    def get(self, url: str, **kw) -> requests.Response:
+        """Compat wrapper for GET requests."""
+        return self.pay(url, method="GET", **kw)
+
+    def post(self, url: str, **kw) -> requests.Response:
+        """Compat wrapper for POST requests."""
+        return self.pay(url, method="POST", **kw)

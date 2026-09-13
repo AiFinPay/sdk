@@ -18,7 +18,6 @@ Two properties are being defended, and the second is the dangerous one.
 
 import hashlib
 
-import nacl.signing
 import pytest
 
 from aifinpay.unified_agent import casper_identity_from_seed

@@ -1,4 +1,5 @@
 """Detection + adapter behavior tests. Run: python -m pytest tests/"""
+
 from __future__ import annotations
 
 import base64
@@ -99,9 +100,7 @@ def test_aifinpay_inband_challenge_extraction():
             "treasury_vault": "t",
         },
     )
-    assert AiFinPayFacilitator._inband_challenge(
-        resp, hashlib.sha256(b"").hexdigest()
-    ) == (
+    assert AiFinPayFacilitator._inband_challenge(resp, hashlib.sha256(b"").hexdigest()) == (
         "in-band-nonce-xyz",
         expiry,
     )
@@ -252,9 +251,7 @@ def test_aifinpay_signature_binds_request_context():
     )
 
     def verifies(bound):
-        digest = hashlib.sha256(
-            json.dumps(bound, separators=(",", ":"), ensure_ascii=True).encode()
-        ).digest()
+        digest = hashlib.sha256(json.dumps(bound, separators=(",", ":"), ensure_ascii=True).encode()).digest()
         try:
             agent._vk.verify(digest, signature)
             return True
@@ -337,9 +334,7 @@ def test_agent_pay_does_not_sign_attacker_challenge_for_trusted_agent():
 def test_agent_pay_binds_requests_normalized_unicode_resource_and_query():
     agent = Agent.new(base_url="https://aifinpay.io")
     requested_url = "https://aifinpay.io/v1/дані"
-    prepared = requests.Request(
-        "POST", requested_url, params={"city": "München"}, data=b"payload"
-    ).prepare()
+    prepared = requests.Request("POST", requested_url, params={"city": "München"}, data=b"payload").prepare()
     expiry = int(time.time() * 1000) + 60_000
     challenge = _resp(
         402,
@@ -380,9 +375,7 @@ def test_agent_pay_binds_requests_normalized_unicode_resource_and_query():
         expiry,
     ]
     agent._vk.verify(
-        hashlib.sha256(
-            json.dumps(message, separators=(",", ":"), ensure_ascii=True).encode()
-        ).digest(),
+        hashlib.sha256(json.dumps(message, separators=(",", ":"), ensure_ascii=True).encode()).digest(),
         signature,
     )
 
@@ -403,13 +396,13 @@ def test_agent_keypair_local_and_roundtrip():
 
 def test_quote_split_rejects_unknown_chain():
     a = Agent.new()
-    with pytest.raises(Exception):
+    with pytest.raises(AiFinPayError):
         a.quote_split(chain="ethereum", merchant_amount=1)
 
 
 def test_pay_with_split_rejects_unknown_chain():
     a = Agent.new()
-    with pytest.raises(Exception):
+    with pytest.raises(AiFinPayError):
         a.pay_with_split_invoice(
             chain="bitcoin",
             merchant_wallet="x",
@@ -420,7 +413,7 @@ def test_pay_with_split_rejects_unknown_chain():
 
 def test_pay_with_split_rejects_long_order_id():
     a = Agent.new()
-    with pytest.raises(Exception):
+    with pytest.raises(AiFinPayError):
         a.pay_with_split_invoice(
             chain="solana",
             merchant_wallet="x",

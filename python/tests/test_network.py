@@ -6,6 +6,7 @@ the backend re-verifies (routes/network-agents.js -> publishMessage):
 We recover the signer from the produced signature with eth_account so a drift
 in the template on either side fails this test.
 """
+
 from __future__ import annotations
 
 import json
@@ -16,7 +17,6 @@ from eth_account import Account
 from eth_account.messages import encode_defunct
 
 from aifinpay import AiFinPayAgent, NetworkAgent
-
 
 NONCE = "test-nonce-123"
 
@@ -54,21 +54,24 @@ def test_register_signs_canonical_message_and_posts_payload():
 
     from unittest.mock import patch
 
-    with patch("aifinpay.unified_agent.requests.get") as mget, \
-         patch("aifinpay.unified_agent.requests.post") as mpost:
+    with patch("aifinpay.unified_agent.requests.get") as mget, patch("aifinpay.unified_agent.requests.post") as mpost:
         mget.return_value = _ok_response({"nonce": NONCE})
-        mpost.return_value = _ok_response({
-            "ok": True,
-            "agent": {
-                "address": addr, "name": "Weather Oracle",
-                "description": "Forecasts on demand",
-                "endpoint": "https://weather.example.com/agent",
-                "capabilities": ["weather", "forecast"],
-                "pricing": {"per_call": 0.01, "currency": "USDC"},
-                "rating": None, "published_at": 1_700_000_000,
-                "created_at": 1_700_000_000,
-            },
-        })
+        mpost.return_value = _ok_response(
+            {
+                "ok": True,
+                "agent": {
+                    "address": addr,
+                    "name": "Weather Oracle",
+                    "description": "Forecasts on demand",
+                    "endpoint": "https://weather.example.com/agent",
+                    "capabilities": ["weather", "forecast"],
+                    "pricing": {"per_call": 0.01, "currency": "USDC"},
+                    "rating": None,
+                    "published_at": 1_700_000_000,
+                    "created_at": 1_700_000_000,
+                },
+            }
+        )
 
         result = agent.register(
             name="Weather Oracle",
@@ -105,8 +108,7 @@ def test_register_defaults_pricing_currency_and_nulls():
 
     from unittest.mock import patch
 
-    with patch("aifinpay.unified_agent.requests.get") as mget, \
-         patch("aifinpay.unified_agent.requests.post") as mpost:
+    with patch("aifinpay.unified_agent.requests.get") as mget, patch("aifinpay.unified_agent.requests.post") as mpost:
         mget.return_value = _ok_response({"nonce": NONCE})
         mpost.return_value = _ok_response({"ok": True, "agent": {"address": agent.evm_address.lower()}})
 
@@ -127,8 +129,7 @@ def test_register_raises_on_backend_rejection():
 
     from unittest.mock import patch
 
-    with patch("aifinpay.unified_agent.requests.get") as mget, \
-         patch("aifinpay.unified_agent.requests.post") as mpost:
+    with patch("aifinpay.unified_agent.requests.get") as mget, patch("aifinpay.unified_agent.requests.post") as mpost:
         mget.return_value = _ok_response({"nonce": NONCE})
         mpost.return_value = _json_response(401, {"error": "signature_invalid"})
 
@@ -146,8 +147,7 @@ def test_unregister_signs_unpublish_message():
 
     from unittest.mock import patch
 
-    with patch("aifinpay.unified_agent.requests.get") as mget, \
-         patch("aifinpay.unified_agent.requests.post") as mpost:
+    with patch("aifinpay.unified_agent.requests.get") as mget, patch("aifinpay.unified_agent.requests.post") as mpost:
         mget.return_value = _ok_response({"nonce": NONCE})
         mpost.return_value = _ok_response({"ok": True, "published": False})
 
@@ -169,13 +169,24 @@ def test_search_bare_capability_parses_agents():
     from unittest.mock import patch
 
     with patch("aifinpay.unified_agent.requests.get") as mget:
-        mget.return_value = _ok_response({"count": 1, "agents": [{
-            "address": "0x000000000000000000000000000000000000dead",
-            "name": "Weather Oracle", "description": None,
-            "endpoint": "https://w.example.com", "capabilities": ["weather"],
-            "pricing": None, "rating": None,
-            "published_at": 1_700_000_000, "created_at": 1_700_000_000,
-        }]})
+        mget.return_value = _ok_response(
+            {
+                "count": 1,
+                "agents": [
+                    {
+                        "address": "0x000000000000000000000000000000000000dead",
+                        "name": "Weather Oracle",
+                        "description": None,
+                        "endpoint": "https://w.example.com",
+                        "capabilities": ["weather"],
+                        "pricing": None,
+                        "rating": None,
+                        "published_at": 1_700_000_000,
+                        "created_at": 1_700_000_000,
+                    }
+                ],
+            }
+        )
 
         agents = agent.search("weather")
 

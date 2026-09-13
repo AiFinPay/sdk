@@ -1,7 +1,6 @@
 """Pick the right facilitator adapter for a given 402 response."""
-from __future__ import annotations
 
-from typing import Optional
+from __future__ import annotations
 
 import requests
 
@@ -9,7 +8,6 @@ from ..errors import UnsupportedFacilitatorError
 from .aifinpay import AiFinPayFacilitator
 from .base import Facilitator
 from .coinbase import CoinbaseX402Facilitator
-
 
 # Order matters: most-specific detector first. A response that matches
 # AiFinPay's body schema is *also* technically a 402, so we try AiFinPay
@@ -39,8 +37,7 @@ def detect_facilitator(
             if cls.name == override:
                 return cls()  # type: ignore[abstract]
         raise UnsupportedFacilitatorError(
-            f"unknown facilitator override: {override!r}. "
-            f"known: {[c.name for c in REGISTERED]}"
+            f"unknown facilitator override: {override!r}. " f"known: {[c.name for c in REGISTERED]}"
         )
 
     for cls in REGISTERED:

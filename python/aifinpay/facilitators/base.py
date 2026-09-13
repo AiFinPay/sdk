@@ -1,9 +1,10 @@
 """Facilitator protocol — the abstract interface every adapter implements."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import ipaddress
-from typing import TYPE_CHECKING, Any, Optional, Protocol, runtime_checkable
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from urllib.parse import urlsplit
 
 import requests
@@ -19,10 +20,10 @@ class PayOptions:
     All fields are optional. The SDK applies sensible defaults.
     """
 
-    max_amount_usd: Optional[float] = None
+    max_amount_usd: [float] = None
     """Refuse to pay if the facilitator requires more than this. None = no cap."""
 
-    preferred_chain: Optional[str] = None
+    preferred_chain: [str] = None
     """Hint for facilitators that accept multiple chains (e.g. 'solana', 'polygon')."""
 
     facilitator: str = "auto"
@@ -35,12 +36,7 @@ class PayOptions:
 def canonical_origin(url: str) -> str:
     """Normalize an http(s) origin exactly like URL.origin in the Node SDK."""
     parsed = urlsplit(url)
-    if (
-        parsed.scheme.lower() not in {"http", "https"}
-        or not parsed.hostname
-        or parsed.username
-        or parsed.password
-    ):
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
         raise ValueError("expected an absolute http(s) URL without credentials")
     try:
         port = parsed.port
@@ -80,9 +76,9 @@ class Facilitator(Protocol):
     def build_auth(
         self,
         resp: requests.Response,
-        agent: "Agent",
+        agent: Agent,
         opts: PayOptions,
-        context: Optional[dict[str, Any]] = None,
+        context: [dict[str, Any]] = None,
     ) -> dict:
         """Return the kwargs to merge into the retry request.
 

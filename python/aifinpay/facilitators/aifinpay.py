@@ -1,17 +1,18 @@
 """Native AiFinPay flavor — three custom headers, JSON body in the 402."""
+
 from __future__ import annotations
 
 import hashlib
 import json
 import re
 import time
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 import base58
 import requests
 
-from .base import Facilitator, PayOptions, canonical_origin
+from .base import PayOptions, canonical_origin
 
 if TYPE_CHECKING:
     from ..client import Agent
@@ -46,13 +47,11 @@ class AiFinPayFacilitator:
         if isinstance(protocol, str) and protocol.startswith("AiFinPay"):
             return True
         # Fallback fingerprint when an upstream proxy strips `protocol`.
-        return ("agreement_hash" in body or "manifesto" in body) and (
-            "treasury_vault" in body or "program_id" in body
-        )
+        return ("agreement_hash" in body or "manifesto" in body) and ("treasury_vault" in body or "program_id" in body)
 
     @staticmethod
     def _sign_request(
-        agent: "Agent",
+        agent: Agent,
         nonce: str,
         origin: str,
         method: str,
@@ -83,9 +82,9 @@ class AiFinPayFacilitator:
     def build_auth(
         self,
         resp: requests.Response,
-        agent: "Agent",
+        agent: Agent,
         opts: PayOptions,
-        context: Optional[dict[str, Any]] = None,
+        context: [dict[str, Any]] = None,
     ) -> dict:
         if not context:
             raise ValueError(
@@ -133,9 +132,7 @@ class AiFinPayFacilitator:
         return {"headers": headers}
 
     @staticmethod
-    def _inband_challenge(
-        resp: requests.Response, expected_body_digest: str = ""
-    ) -> tuple[str, int] | None:
+    def _inband_challenge(resp: requests.Response, expected_body_digest: str = "") -> tuple[str, int] | None:
         """Read the v2 challenge issued for this exact unauthenticated request."""
         try:
             body = resp.json()
@@ -161,8 +158,4 @@ class AiFinPayFacilitator:
             return None
         parsed_expiry = int(expires_at)
         now = int(time.time() * 1000)
-        return (
-            (nonce, parsed_expiry)
-            if now < parsed_expiry <= now + 5 * 60_000
-            else None
-        )
+        return (nonce, parsed_expiry) if now < parsed_expiry <= now + 5 * 60_000 else None

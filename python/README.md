@@ -14,6 +14,7 @@ wallet derivation supports EVM and Solana identities; a wallet address alone
 does not mean a payment route is enabled.
 
 `agent.pay(url)` works against:
+
 - **AiFinPay** native flow (Solana Seat PDA + Ed25519)
 - **Coinbase x402** spec — detection + parsing today; on-chain
   settlement coming in 0.3.x
@@ -31,6 +32,14 @@ pip install aifinpay-agent
 
 # stable (when 1.0 ships)
 pip install aifinpay-agent
+```
+
+## Development setup
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt -e .
 ```
 
 ## Quick start
