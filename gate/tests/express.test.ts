@@ -16,7 +16,7 @@ afterAll(() => {
   for (const s of servers) s.close();
 });
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 async function listen(app: any): Promise<string> {
   const server: Server = await new Promise((resolve) => {
     const s = app.listen(0, "127.0.0.1", () => resolve(s));

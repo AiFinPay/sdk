@@ -1406,7 +1406,7 @@ export class AiFinPayAgent {
     if (!this.checkPerCall(cost)) return null;
     const reservation = await this.reserveDaily(cost);
     if (reservation === "skip") return null;
-    let settled = false;
+    const settled = false;
 
     try {
 

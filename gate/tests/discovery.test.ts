@@ -58,7 +58,7 @@ describe("x402 discovery document", () => {
 describe("aifpDiscovery middleware", () => {
   function run(method: string, path: string) {
     const mw = aifpDiscovery(OPTS);
-    let served: { status?: number; body?: string; type?: string } = {};
+    const served: { status?: number; body?: string; type?: string } = {};
     let nexted = false;
     const req: any = { method, path, header: () => undefined };
     const res: any = {
