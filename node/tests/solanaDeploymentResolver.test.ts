@@ -10,35 +10,33 @@ import {
   UnsupportedSolanaDevNetworkError,
   SolanaVersionUnavailableError,
   SolanaV12UnavailableError,
+  SolanaDeploymentDisabledError,
   NoSolanaDeploymentError,
   DeploymentResolverError,
   SOLANA_V14_DEPLOYMENTS,
   SOLANA_DEV_NETWORKS,
-  type ResolvedSolanaDeployment,
 } from "../src/index.js";
 
-const DEVNET_PROGRAM = "Dg9v95m6ofTwaU9V69PNAyRaKeELwxrne4THUYuUTeon";
-const MAINNET_PROGRAM = "8dty5bD738Z9TzEkDu8vLSnhpJNWtEGMUEcYaKCUTY6y";
+const DEVNET_PROGRAM = "8dty5bD738Z9TzEkDu8vLSnhpJNWtEGMUEcYaKCUTY6y";
+const MAINNET_PROGRAM = "724Ut31i4ecY4dJ25z8HuZetu3A43xtNkPdk4JdbsfdD";
 
 describe("resolveSolanaDeployment — environment switch", () => {
-  it("dev supports devnet", () => {
-    const r = resolveSolanaDeployment({ environment: "dev", network: "devnet" });
-    expect(r.environment).toBe("dev");
-    expect(r.network).toBe("devnet");
-    expect(r.programId).toBe(DEVNET_PROGRAM);
+  it("recognises devnet but keeps settlement quarantined", () => {
+    expect(() =>
+      resolveSolanaDeployment({ environment: "dev", network: "devnet" }),
+    ).toThrow(SolanaDeploymentDisabledError);
   });
 
-  it("prod resolves mainnet", () => {
-    const r = resolveSolanaDeployment({ environment: "prod", network: "mainnet" });
-    expect(r.environment).toBe("prod");
-    expect(r.network).toBe("mainnet");
-    expect(r.programId).toBe(MAINNET_PROGRAM);
+  it("recognises mainnet but keeps settlement quarantined", () => {
+    expect(() =>
+      resolveSolanaDeployment({ environment: "prod", network: "mainnet" }),
+    ).toThrow(SolanaDeploymentDisabledError);
   });
 
   it("accepts mainnet-beta as an alias for mainnet", () => {
-    const r = resolveSolanaDeployment({ environment: "prod", network: "mainnet-beta" });
-    expect(r.network).toBe("mainnet");
-    expect(r.programId).toBe(MAINNET_PROGRAM);
+    expect(() =>
+      resolveSolanaDeployment({ environment: "prod", network: "mainnet-beta" }),
+    ).toThrow(SolanaDeploymentDisabledError);
   });
 
   it("dev rejects a non-devnet cluster with a typed error", () => {
@@ -70,50 +68,70 @@ describe("resolveSolanaDeployment — environment switch", () => {
 });
 
 describe("resolveSolanaDeployment — explicit version selection", () => {
-  it("explicit v1.4 returns v1.4 where deployed (mainnet)", () => {
-    const r = resolveSolanaDeployment({
-      environment: "prod",
-      network: "mainnet",
-      version: "v1.4",
-    });
-    expect(r.version).toBe("v1.4");
-    expect(r.programId).toBe(MAINNET_PROGRAM);
-    expect(r.deployment.idl.version).toBe("1.4.1");
+  it("explicit v1.4 refuses a quarantined mainnet deployment", () => {
+    expect(() =>
+      resolveSolanaDeployment({
+        environment: "prod",
+        network: "mainnet",
+        version: "v1.4",
+      }),
+    ).toThrow(SolanaDeploymentDisabledError);
   });
 
   it("explicit v1.4 does NOT silently downgrade — it throws when unavailable", () => {
     // prod/devnet has no v1.4 (devnet is a dev deployment), so explicit v1.4 throws.
     expect(() =>
-      resolveSolanaDeployment({ environment: "prod", network: "devnet", version: "v1.4" }),
+      resolveSolanaDeployment({
+        environment: "prod",
+        network: "devnet",
+        version: "v1.4",
+      }),
     ).toThrow(SolanaVersionUnavailableError);
   });
 
   it("explicit v1.2 always throws — Solana has no v1.2 deployment", () => {
     expect(() =>
-      resolveSolanaDeployment({ environment: "prod", network: "mainnet", version: "v1.2" }),
+      resolveSolanaDeployment({
+        environment: "prod",
+        network: "mainnet",
+        version: "v1.2",
+      }),
     ).toThrow(SolanaV12UnavailableError);
     expect(() =>
-      resolveSolanaDeployment({ environment: "dev", network: "devnet", version: "v1.2" }),
+      resolveSolanaDeployment({
+        environment: "dev",
+        network: "devnet",
+        version: "v1.2",
+      }),
     ).toThrow(SolanaV12UnavailableError);
   });
 });
 
 describe("resolveSolanaDeployment — automatic version selection", () => {
-  it("auto uses v1.4 on mainnet", () => {
-    const r = resolveSolanaDeployment({ environment: "prod", network: "mainnet", version: "auto" });
-    expect(r.version).toBe("v1.4");
-    expect(r.programId).toBe(MAINNET_PROGRAM);
+  it("auto refuses quarantined mainnet", () => {
+    expect(() =>
+      resolveSolanaDeployment({
+        environment: "prod",
+        network: "mainnet",
+        version: "auto",
+      }),
+    ).toThrow(SolanaDeploymentDisabledError);
   });
 
-  it("auto uses v1.4 on the dev cluster (devnet)", () => {
-    const r = resolveSolanaDeployment({ environment: "dev", network: "devnet", version: "auto" });
-    expect(r.version).toBe("v1.4");
-    expect(r.programId).toBe(DEVNET_PROGRAM);
+  it("auto refuses quarantined devnet", () => {
+    expect(() =>
+      resolveSolanaDeployment({
+        environment: "dev",
+        network: "devnet",
+        version: "auto",
+      }),
+    ).toThrow(SolanaDeploymentDisabledError);
   });
 
-  it("auto is the default when no version is given", () => {
-    const r = resolveSolanaDeployment({ environment: "prod", network: "mainnet" });
-    expect(r.version).toBe("v1.4");
+  it("auto is the fail-closed default when no version is given", () => {
+    expect(() =>
+      resolveSolanaDeployment({ environment: "prod", network: "mainnet" }),
+    ).toThrow(SolanaDeploymentDisabledError);
   });
 
   it("auto throws (no fallback) when v1.4 is not deployed for the network", () => {
@@ -125,10 +143,10 @@ describe("resolveSolanaDeployment — automatic version selection", () => {
 });
 
 describe("isSolanaV14Available", () => {
-  it("is true for mainnet prod and devnet dev, false otherwise", () => {
-    expect(isSolanaV14Available("prod", "mainnet")).toBe(true);
-    expect(isSolanaV14Available("prod", "mainnet-beta")).toBe(true);
-    expect(isSolanaV14Available("dev", "devnet")).toBe(true);
+  it("is false until settlement verification and governance gates pass", () => {
+    expect(isSolanaV14Available("prod", "mainnet")).toBe(false);
+    expect(isSolanaV14Available("prod", "mainnet-beta")).toBe(false);
+    expect(isSolanaV14Available("dev", "devnet")).toBe(false);
     expect(isSolanaV14Available("prod", "devnet")).toBe(false);
     expect(isSolanaV14Available("dev", "mainnet")).toBe(false);
   });
@@ -136,23 +154,23 @@ describe("isSolanaV14Available", () => {
 
 describe("resolveSolanaDeployment — input handling", () => {
   it("is case-insensitive on the cluster name", () => {
-    const r = resolveSolanaDeployment({ environment: "prod", network: "MAINNET" });
-    expect(r.programId).toBe(MAINNET_PROGRAM);
+    expect(() =>
+      resolveSolanaDeployment({ environment: "prod", network: "MAINNET" }),
+    ).toThrow(SolanaDeploymentDisabledError);
   });
 
-  it("returns a payload whose program id matches the bundled data", () => {
-    const r: ResolvedSolanaDeployment = resolveSolanaDeployment({
-      environment: "prod",
-      network: "mainnet",
-    });
-    expect(r.deployment).toBe(SOLANA_V14_DEPLOYMENTS.mainnet);
-    expect(r.programId).toBe(SOLANA_V14_DEPLOYMENTS.mainnet!.programId);
+  it("exposes program IDs as metadata without enabling settlement", () => {
+    expect(SOLANA_V14_DEPLOYMENTS.devnet.programId).toBe(DEVNET_PROGRAM);
+    expect(SOLANA_V14_DEPLOYMENTS.mainnet.programId).toBe(MAINNET_PROGRAM);
   });
 });
 
 describe("bundled Solana v1.4 data", () => {
   it("has exactly devnet (dev) and mainnet (prod) entries with 1.4 programs", () => {
-    expect(Object.keys(SOLANA_V14_DEPLOYMENTS).sort()).toEqual(["devnet", "mainnet"]);
+    expect(Object.keys(SOLANA_V14_DEPLOYMENTS).sort()).toEqual([
+      "devnet",
+      "mainnet",
+    ]);
     for (const [key, d] of Object.entries(SOLANA_V14_DEPLOYMENTS)) {
       expect(d.network).toBe(key);
       expect(d.splitterVersion).toBe("1.4");

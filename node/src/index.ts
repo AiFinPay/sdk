@@ -76,7 +76,7 @@ export type {
   SplitterRouteKey,
   SplitterRouteDeployment,
 } from "./splitterRoutes.js";
-export { botchain, xrplevm } from "./chains.js";
+export { botchain, robinhood, xrplevm } from "./chains.js";
 
 // ── Environment & protocol-version resolver (AIFINP-223) ─────────────────
 export {
@@ -85,6 +85,7 @@ export {
   DeploymentResolverError,
   UnsupportedDevNetworkError,
   VersionUnavailableError,
+  DeploymentDisabledError,
   NoDeploymentError,
 } from "./deploymentResolver.js";
 export type {
@@ -101,6 +102,7 @@ export {
 } from "./v14Deployments.generated.js";
 export type {
   V14Deployment,
+  V14Asset,
   V14Splitter,
   V14Safe,
 } from "./v14Deployments.generated.js";
@@ -112,6 +114,7 @@ export {
   UnsupportedSolanaDevNetworkError,
   SolanaVersionUnavailableError,
   SolanaV12UnavailableError,
+  SolanaDeploymentDisabledError,
   NoSolanaDeploymentError,
 } from "./solanaDeploymentResolver.js";
 export type {
@@ -130,7 +133,11 @@ export type {
   SolanaNetwork,
 } from "./solanaV14Deployments.generated.js";
 
-export { AiFinPayAgent, SPLITTER_DEPLOYMENTS, paymentIdFor } from "./unifiedAgent.js";
+export {
+  AiFinPayAgent,
+  SPLITTER_DEPLOYMENTS,
+  paymentIdFor,
+} from "./unifiedAgent.js";
 export type {
   AiFinPayAgentOptions,
   CallOptions,
