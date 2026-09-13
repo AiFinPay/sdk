@@ -1,0 +1,8 @@
+node_modules
+dist
+coverage
+*.log
+migrations/*.sql
+.env
+.env.*
+!.env.example
