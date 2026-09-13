@@ -90,7 +90,7 @@ export async function signReceipt(privateKey: CryptoKey, a: SignArgs = {}): Prom
  */
 export async function signActionReceipt(
   privateKey: CryptoKey,
-  a: { resource?: string; aud?: string; sub?: string } = {},
+  a: { resource?: string; aud?: string; sub?: string } = {}
 ): Promise<string> {
   const iat = Math.floor(Date.now() / 1000);
   return new jose.SignJWT({

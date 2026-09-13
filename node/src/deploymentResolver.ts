@@ -19,16 +19,8 @@
  * SPLITTER_DEPLOYMENTS table), never inline here — this module is selection
  * logic only, so a payout address can never be changed by editing control flow.
  */
-import {
-  SPLITTER_DEPLOYMENTS,
-  type SplitterChainName,
-  type SplitterDeployment,
-} from "./unifiedAgent.js";
-import {
-  V14_DEPLOYMENTS,
-  V14_DEV_NETWORKS,
-  type V14Deployment,
-} from "./v14Deployments.generated.js";
+import { SPLITTER_DEPLOYMENTS, type SplitterChainName, type SplitterDeployment } from "./unifiedAgent.js";
+import { V14_DEPLOYMENTS, V14_DEV_NETWORKS, type V14Deployment } from "./v14Deployments.generated.js";
 
 export type SdkEnvironment = "dev" | "prod";
 
@@ -85,7 +77,7 @@ export class UnsupportedDevNetworkError extends DeploymentResolverError {
     super(
       `Development environment supports ${V14_DEV_NETWORKS.join(", ")} only; ` +
         `"${network}" is not a supported development network. Use environment ` +
-        `"prod" for production networks.`,
+        `"prod" for production networks.`
     );
     this.name = "UnsupportedDevNetworkError";
     this.network = network;
@@ -97,14 +89,10 @@ export class UnsupportedDevNetworkError extends DeploymentResolverError {
  *  is never silently changed. */
 export class VersionUnavailableError extends DeploymentResolverError {
   readonly requested: ProtocolVersion;
-  constructor(
-    requested: ProtocolVersion,
-    environment: SdkEnvironment,
-    network: string,
-  ) {
+  constructor(requested: ProtocolVersion, environment: SdkEnvironment, network: string) {
     super(
       `${requested} is not deployed for ${environment}/${network}. It was ` +
-        `requested explicitly, so the SDK will not substitute another version.`,
+        `requested explicitly, so the SDK will not substitute another version.`
     );
     this.name = "VersionUnavailableError";
     this.requested = requested;
@@ -118,9 +106,7 @@ export class DeploymentDisabledError extends DeploymentResolverError {
   readonly reason: string;
 
   constructor(environment: SdkEnvironment, network: string, reason: string) {
-    super(
-      `v1.4 settlement is disabled for ${environment}/${network}: ${reason}`,
-    );
+    super(`v1.4 settlement is disabled for ${environment}/${network}: ${reason}`);
     this.name = "DeploymentDisabledError";
     this.environment = environment;
     this.network = network;
@@ -131,10 +117,7 @@ export class DeploymentDisabledError extends DeploymentResolverError {
 /** No usable deployment of either supported version exists here. */
 export class NoDeploymentError extends DeploymentResolverError {
   constructor(environment: SdkEnvironment, network: string) {
-    super(
-      `No enabled v1.4 or valid v1.2 deployment is known for ` +
-        `${environment}/${network}.`,
-    );
+    super(`No enabled v1.4 or valid v1.2 deployment is known for ` + `${environment}/${network}.`);
     this.name = "NoDeploymentError";
   }
 }
@@ -148,10 +131,7 @@ function normalize(network: string): string {
 /** The v1.4 deployment for this environment+network, or undefined. A v1.4
  *  record is only valid for the environment it was deployed under: the Amoy
  *  deployment is dev-only and must never resolve under "prod". */
-function findV14(
-  environment: SdkEnvironment,
-  network: string,
-): V14Deployment | undefined {
+function findV14(environment: SdkEnvironment, network: string): V14Deployment | undefined {
   const entry = V14_DEPLOYMENTS[network];
   if (!entry) return undefined;
   return entry.environment === environment ? entry : undefined;
@@ -159,21 +139,13 @@ function findV14(
 
 /** The legacy (v1.1/v1.2) deployment for this network, or undefined. These are
  *  all production mainnet deployments, so they are only offered under "prod". */
-function findV12(
-  environment: SdkEnvironment,
-  network: string,
-): SplitterDeployment | undefined {
+function findV12(environment: SdkEnvironment, network: string): SplitterDeployment | undefined {
   if (environment !== "prod") return undefined;
-  return (SPLITTER_DEPLOYMENTS as Partial<Record<string, SplitterDeployment>>)[
-    network
-  ];
+  return (SPLITTER_DEPLOYMENTS as Partial<Record<string, SplitterDeployment>>)[network];
 }
 
 /** Is a v1.4 deployment available for this environment+network? */
-export function isV14Available(
-  environment: SdkEnvironment,
-  network: string,
-): boolean {
+export function isV14Available(environment: SdkEnvironment, network: string): boolean {
   return findV14(environment, normalize(network))?.settlementEnabled === true;
 }
 
@@ -189,14 +161,10 @@ export function isV14Available(
  *                                     has no valid v1.2 fallback
  * @throws NoDeploymentError           neither version is known here
  */
-export function resolveDeployment(
-  options: ResolveDeploymentOptions,
-): ResolvedDeployment {
+export function resolveDeployment(options: ResolveDeploymentOptions): ResolvedDeployment {
   const { environment } = options;
   if (environment !== "dev" && environment !== "prod") {
-    throw new DeploymentResolverError(
-      `Unknown environment "${String(environment)}"; use "dev" or "prod".`,
-    );
+    throw new DeploymentResolverError(`Unknown environment "${String(environment)}"; use "dev" or "prod".`);
   }
 
   const network = normalize(options.network);
@@ -232,7 +200,7 @@ export function resolveDeployment(
       throw new DeploymentDisabledError(
         environment,
         network,
-        v14.disabledReason ?? "deployment has not passed the settlement gate",
+        v14.disabledReason ?? "deployment has not passed the settlement gate"
       );
     }
     return v14;
@@ -240,8 +208,7 @@ export function resolveDeployment(
 
   switch (requested) {
     case "v1.4":
-      if (!v14)
-        throw new VersionUnavailableError("v1.4", environment, options.network);
+      if (!v14) throw new VersionUnavailableError("v1.4", environment, options.network);
       return asV14(enabledV14());
     case "v1.2":
       if (v12) return asV12(v12);
@@ -253,13 +220,11 @@ export function resolveDeployment(
         throw new DeploymentDisabledError(
           environment,
           network,
-          v14.disabledReason ?? "deployment has not passed the settlement gate",
+          v14.disabledReason ?? "deployment has not passed the settlement gate"
         );
       }
       throw new NoDeploymentError(environment, options.network);
     default:
-      throw new DeploymentResolverError(
-        `Unknown version "${String(requested)}"; use "v1.2", "v1.4" or "auto".`,
-      );
+      throw new DeploymentResolverError(`Unknown version "${String(requested)}"; use "v1.2", "v1.4" or "auto".`);
   }
 }

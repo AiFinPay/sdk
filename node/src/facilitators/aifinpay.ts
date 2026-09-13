@@ -2,12 +2,7 @@ import nacl from "tweetnacl";
 import bs58 from "bs58";
 import type { Agent } from "../agent.js";
 import { sha256 } from "../crypto.js";
-import type {
-  AuthPayload,
-  AuthRequestContext,
-  Facilitator,
-  PayOptions,
-} from "./base.js";
+import type { AuthPayload, AuthRequestContext, Facilitator, PayOptions } from "./base.js";
 
 /**
  * Native AiFinPay flavor.
@@ -37,26 +32,18 @@ export class AiFinPayFacilitator implements Facilitator {
       return true;
     }
     // Fallback fingerprint when an upstream proxy strips `protocol`.
-    return (
-      ("agreement_hash" in b || "manifesto" in b) &&
-      ("treasury_vault" in b || "program_id" in b)
-    );
+    return ("agreement_hash" in b || "manifesto" in b) && ("treasury_vault" in b || "program_id" in b);
   }
 
-  async buildAuth(
-    resp: Response,
-    agent: Agent,
-    _opts: PayOptions,
-    context?: AuthRequestContext,
-  ): Promise<AuthPayload> {
+  async buildAuth(resp: Response, agent: Agent, _opts: PayOptions, context?: AuthRequestContext): Promise<AuthPayload> {
     if (!context) {
       throw new Error(
-        "AiFinPay native auth v1 is no longer supported. Retry through Agent.pay() so the SDK can bind the challenge to the request.",
+        "AiFinPay native auth v1 is no longer supported. Retry through Agent.pay() so the SDK can bind the challenge to the request."
       );
     }
     if (context.url.origin !== context.trustedOrigin) {
       throw new Error(
-        `refusing native authentication for untrusted origin ${context.url.origin}; configure Agent.baseUrl for that facilitator explicitly`,
+        `refusing native authentication for untrusted origin ${context.url.origin}; configure Agent.baseUrl for that facilitator explicitly`
       );
     }
     if (resp.url && new URL(resp.url).origin !== context.trustedOrigin) {
@@ -66,7 +53,7 @@ export class AiFinPayFacilitator implements Facilitator {
     const challenge = await this.inbandChallenge(resp, context.bodyDigest);
     if (!challenge) {
       throw new Error(
-        "AiFinPay native auth v2 requires an in-band request-bound challenge. Retry the original request without credentials.",
+        "AiFinPay native auth v2 requires an in-band request-bound challenge. Retry the original request without credentials."
       );
     }
     const message = JSON.stringify([
@@ -95,7 +82,7 @@ export class AiFinPayFacilitator implements Facilitator {
 
   private async inbandChallenge(
     resp: Response,
-    expectedBodyDigest: string,
+    expectedBodyDigest: string
   ): Promise<{ nonce: string; expiresAt: number; bodyDigest: string } | null> {
     let body: unknown;
     try {

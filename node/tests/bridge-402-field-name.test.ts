@@ -20,9 +20,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { nativePayBlock } from "../src/unifiedAgent.js";
 
-const FIXTURE = fileURLToPath(
-  new URL("./fixtures/bridge-402-io-net-2026-08-13.json", import.meta.url),
-);
+const FIXTURE = fileURLToPath(new URL("./fixtures/bridge-402-io-net-2026-08-13.json", import.meta.url));
 const live = JSON.parse(readFileSync(FIXTURE, "utf8"));
 
 describe("the captured production 402", () => {
@@ -52,8 +50,13 @@ describe("the captured production 402", () => {
 describe("nativePayBlock precedence", () => {
   const base = { error: "Payment Required", protocol: "AiFinPay", service: "t" };
   const block = (tag: string) =>
-    ({ chain: "polygon", splitter: "0x" + "1".repeat(40), merchant_wallet: "0x" + "2".repeat(40),
-       total_wei: "1", order_id: tag }) as never;
+    ({
+      chain: "polygon",
+      splitter: "0x" + "1".repeat(40),
+      merchant_wallet: "0x" + "2".repeat(40),
+      total_wei: "1",
+      order_id: tag,
+    }) as never;
 
   it("still accepts a legacy pay_matic-only bridge", () => {
     // Old bridges exist until every deployment is redeployed; dropping the old

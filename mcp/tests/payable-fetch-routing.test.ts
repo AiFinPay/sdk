@@ -86,11 +86,23 @@ describe("payable_fetch protocol routing", () => {
   it("passes direct path mode and the tighter cap to the SDK", async () => {
     const seen: Record<string, unknown> = {};
     const { ctx } = makeCtx({
-      fetchPaid: async (_url, _init, options) => { Object.assign(seen, options); return resp(200, "paid"); },
+      fetchPaid: async (_url, _init, options) => {
+        Object.assign(seen, options);
+        return resp(200, "paid");
+      },
     });
-    (ctx as any).config = { baseUrl: "https://api.example.test", gatewayOrigins: ["https://gateway.example.test"], gatewayPathMode: "direct", maxAmountUsd: 0.1 };
+    (ctx as any).config = {
+      baseUrl: "https://api.example.test",
+      gatewayOrigins: ["https://gateway.example.test"],
+      gatewayPathMode: "direct",
+      maxAmountUsd: 0.1,
+    };
     await runPayableFetch(ctx, { url: "https://gateway.example.test/r/a", max_amount_usd: 0.2 });
-    expect(seen).toMatchObject({ apiBaseUrl: "https://api.example.test", resourcePathMode: "direct", maxAmountUsd: 0.1 });
+    expect(seen).toMatchObject({
+      apiBaseUrl: "https://api.example.test",
+      resourcePathMode: "direct",
+      maxAmountUsd: 0.1,
+    });
   });
 
   it("a budget skip is not laundered into an x402 payment", async () => {
@@ -113,12 +125,23 @@ describe("payable_fetch protocol routing", () => {
   });
 
   it("preserves public recovery context after settlement", async () => {
-    const { ctx } = makeCtx({ fetchPaid: async () => {
-      const error = new Error("receipt failed after settlement");
-      error.name = "Aifp1PayError";
-      Object.assign(error, { txRef: "0xabc", quoteId: "q1", recovery: { apiBaseUrl: "https://api.example.test", quote: { quote_id: "q1" }, txRef: "0xabc", asset: "MATIC" } });
-      throw error;
-    } });
+    const { ctx } = makeCtx({
+      fetchPaid: async () => {
+        const error = new Error("receipt failed after settlement");
+        error.name = "Aifp1PayError";
+        Object.assign(error, {
+          txRef: "0xabc",
+          quoteId: "q1",
+          recovery: {
+            apiBaseUrl: "https://api.example.test",
+            quote: { quote_id: "q1" },
+            txRef: "0xabc",
+            asset: "MATIC",
+          },
+        });
+        throw error;
+      },
+    });
     const out = await runPayableFetch(ctx, { url: "https://gateway.aifinpay.io/acme/x" });
     const text = (out as any).content.map((entry: any) => entry.text).join("\n");
     expect(text).toContain("already completed on-chain");

@@ -17,8 +17,12 @@ import { MemorySpendLedger, FileSpendLedger } from "../src/spendLedger.js";
 
 const DAY = 24 * 3600 * 1000;
 let dir: string;
-beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), "aifp-ledger-")); });
-afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), "aifp-ledger-"));
+});
+afterEach(async () => {
+  await rm(dir, { recursive: true, force: true });
+});
 const fileLedger = () => new FileSpendLedger(join(dir, "spend.json"));
 
 describe.each([
@@ -35,7 +39,7 @@ describe.each([
     // The race: the second call must see the first one's money as gone even
     // though the first has not finished paying.
     const l = make();
-    await l.reserve(8, 10, DAY);          // reserved, not yet committed
+    await l.reserve(8, 10, DAY); // reserved, not yet committed
     expect(await l.reserve(5, 10, DAY)).toBeNull();
   });
 
@@ -56,7 +60,7 @@ describe.each([
   it("corrects the estimate when the real cost is known", async () => {
     const l = make();
     const id = (await l.reserve(9, 10, DAY))!;
-    await l.commit(id, 1);               // it actually cost $1
+    await l.commit(id, 1); // it actually cost $1
     expect(await l.total(DAY)).toBe(1);
     expect(await l.reserve(8, 10, DAY)).toBeTruthy();
   });
@@ -64,9 +68,7 @@ describe.each([
   it("lets concurrent reservations through only up to the cap", async () => {
     // Twenty callers at once, each wanting $1, against a $5 cap.
     const l = make();
-    const results = await Promise.all(
-      Array.from({ length: 20 }, () => l.reserve(1, 5, DAY)),
-    );
+    const results = await Promise.all(Array.from({ length: 20 }, () => l.reserve(1, 5, DAY)));
     expect(results.filter(Boolean)).toHaveLength(5);
   });
 });
@@ -78,7 +80,7 @@ describe("surviving a restart", () => {
     const first = fileLedger();
     await first.commit((await first.reserve(9, 10, DAY))!);
 
-    const afterRestart = fileLedger();          // a different object, as a new process would be
+    const afterRestart = fileLedger(); // a different object, as a new process would be
     expect(await afterRestart.total(DAY)).toBe(9);
     expect(await afterRestart.reserve(9, 10, DAY)).toBeNull();
   });
@@ -94,7 +96,7 @@ describe("surviving a restart", () => {
     // Age the reservation past its TTL, as the clock would.
     const raw = JSON.parse(await readFile(path, "utf8"));
     raw.find((e: { id: string }) => e.id === id).expiresAt = Date.now() - 1;
-    await new FileSpendLedger(path).release("nothing");   // forces a rewrite through the lock
+    await new FileSpendLedger(path).release("nothing"); // forces a rewrite through the lock
     const { writeFile } = await import("node:fs/promises");
     await writeFile(path, JSON.stringify(raw));
 

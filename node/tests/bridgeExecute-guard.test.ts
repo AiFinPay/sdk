@@ -33,43 +33,48 @@ const publicClient = {
   waitForTransactionReceipt: async () => ({ status: "success" }),
 } as never;
 
-const quote = (over: Record<string, unknown> = {}, txOver: Record<string, unknown> = {}) => ({
-  from: { chain: "base", token: USDC_BASE, amount: "1000000", ...(over.from as object ?? {}) },
-  to: { chain: "polygon", token: USDC_BASE, amount: "993100", amount_min: "988135" },
-  fees: { bridge_usd: 0.007, gas_usd: 0.002, total_usd: 0.009 },
-  eta_seconds: 60,
-  bridge_tool: "stargate",
-  ...over,
-  raw_quote: {
-    transactionRequest: {
-      to: ROUTER, data: "0xabcdef", value: "0x0", gasLimit: "0x7a120", chainId: 8453,
-      ...txOver,
+const quote = (over: Record<string, unknown> = {}, txOver: Record<string, unknown> = {}) =>
+  ({
+    from: { chain: "base", token: USDC_BASE, amount: "1000000", ...((over.from as object) ?? {}) },
+    to: { chain: "polygon", token: USDC_BASE, amount: "993100", amount_min: "988135" },
+    fees: { bridge_usd: 0.007, gas_usd: 0.002, total_usd: 0.009 },
+    eta_seconds: 60,
+    bridge_tool: "stargate",
+    ...over,
+    raw_quote: {
+      transactionRequest: {
+        to: ROUTER,
+        data: "0xabcdef",
+        value: "0x0",
+        gasLimit: "0x7a120",
+        chainId: 8453,
+        ...txOver,
+      },
     },
-  },
-}) as never;
+  }) as never;
 
 describe("a quote that does not describe the transaction it carries", () => {
   it("refuses native value on a token bridge", async () => {
     // The drain: the summary says "bridge 1 USDC", the transaction says
     // "send 1 ETH". Only the second one moves the agent's own coin.
-    await expect(
-      bridgeExecute(quote({}, { value: "0xde0b6b3a7640000" }), walletClient, publicClient),
-    ).rejects.toThrow(/sends 1000000000000000000 native units/);
+    await expect(bridgeExecute(quote({}, { value: "0xde0b6b3a7640000" }), walletClient, publicClient)).rejects.toThrow(
+      /sends 1000000000000000000 native units/
+    );
   });
 
   it("refuses more native value than the quote is for", async () => {
     await expect(
       bridgeExecute(
-        quote({ from: { chain: "base", token: NATIVE, amount: "1000000000000000" } },
-              { value: "0xde0b6b3a7640000" }),
-        walletClient, publicClient,
-      ),
+        quote({ from: { chain: "base", token: NATIVE, amount: "1000000000000000" } }, { value: "0xde0b6b3a7640000" }),
+        walletClient,
+        publicClient
+      )
     ).rejects.toThrow(/more than was quoted/);
   });
 
   it("refuses a gas limit that would drain the wallet through the fee", async () => {
     await expect(
-      bridgeExecute(quote({}, { gasLimit: "0x5f5e100" }), walletClient, publicClient), // 100M
+      bridgeExecute(quote({}, { gasLimit: "0x5f5e100" }), walletClient, publicClient) // 100M
     ).rejects.toThrow(/above the .* ceiling/);
   });
 
@@ -77,36 +82,43 @@ describe("a quote that does not describe the transaction it carries", () => {
     // A plain transfer to someone's wallet is the simplest form of this.
     const noCode = { ...publicClient, getBytecode: async () => "0x" } as never;
     await expect(
-      bridgeExecute(quote({ from: { chain: "base", token: NATIVE, amount: "1000" } },
-                          { value: "0x3e8" }), walletClient, noCode),
+      bridgeExecute(
+        quote({ from: { chain: "base", token: NATIVE, amount: "1000" } }, { value: "0x3e8" }),
+        walletClient,
+        noCode
+      )
     ).rejects.toThrow(/no code/);
   });
 
   it("still refuses a mismatched chain before anything else", async () => {
-    await expect(
-      bridgeExecute(quote({}, { chainId: 137 }), walletClient, publicClient),
-    ).rejects.toThrow(/walletClient is on chain/);
+    await expect(bridgeExecute(quote({}, { chainId: 137 }), walletClient, publicClient)).rejects.toThrow(
+      /walletClient is on chain/
+    );
   });
 
   it("lets a consistent quote through to signing", async () => {
     // Reaching sendTransaction is the pass condition: the guard must not be
     // refusing everything, which would make the tests above meaningless.
-    await expect(
-      bridgeExecute(quote(), walletClient, publicClient),
-    ).rejects.toThrow(/SIGNED/);
+    await expect(bridgeExecute(quote(), walletClient, publicClient)).rejects.toThrow(/SIGNED/);
   });
 
   it("lets a native bridge of exactly the quoted amount through", async () => {
     await expect(
       bridgeExecute(
         quote({ from: { chain: "base", token: NATIVE, amount: "1000" } }, { value: "0x3e8" }),
-        walletClient, publicClient,
-      ),
+        walletClient,
+        publicClient
+      )
     ).rejects.toThrow(/SIGNED/);
   });
 
   it("does not turn an unreadable RPC into a security verdict", async () => {
-    const broken = { ...publicClient, getBytecode: async () => { throw new Error("RPC down"); } } as never;
+    const broken = {
+      ...publicClient,
+      getBytecode: async () => {
+        throw new Error("RPC down");
+      },
+    } as never;
     await expect(bridgeExecute(quote(), walletClient, broken)).rejects.toThrow(/SIGNED/);
   });
 });

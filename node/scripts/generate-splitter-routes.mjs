@@ -82,7 +82,7 @@ function loadArtifact() {
       "registry/splitter-table.json does not hash to what registry/source.json records.\n" +
         `  recorded ${source.sha256}\n  actual   ${actual}\n` +
         "The artifact is a copy of the canonical registry, not a file to edit here. " +
-        "Re-run: npm run registry:sync -- --from <path-to-evm-contract>",
+        "Re-run: npm run registry:sync -- --from <path-to-evm-contract>"
     );
   }
   return { artifact: JSON.parse(raw.toString("utf8")), source };
@@ -102,7 +102,7 @@ function selectRoutes(artifact) {
   if (selected.length !== EXPECTED_ROUTE_COUNT) {
     throw new Error(
       `expected ${EXPECTED_ROUTE_COUNT} current v1.3 routes, found ${selected.length}. ` +
-        "Adding or removing a settlement route is not a regeneration; say so in the PR.",
+        "Adding or removing a settlement route is not a regeneration; say so in the PR."
     );
   }
 
@@ -110,7 +110,7 @@ function selectRoutes(artifact) {
     if (!CHAIN_TRANSPORT[route.chain]) {
       throw new Error(
         `${key}: no transport entry for chain "${route.chain}". Add it to CHAIN_TRANSPORT — ` +
-          "guessing an RPC for an unknown chain is how a route ends up pointing at nothing.",
+          "guessing an RPC for an unknown chain is how a route ends up pointing at nothing."
       );
     }
     if (!ROUTES.has(route.route)) {
@@ -121,9 +121,7 @@ function selectRoutes(artifact) {
       throw new Error(`${key}: inconsistent or unknown testnet identity.`);
     }
     if (!amoyTestnet && route.owner.toLowerCase() !== artifact.governance.safe.toLowerCase()) {
-      throw new Error(
-        `${key}: owner ${route.owner} is not the governance Safe ${artifact.governance.safe}.`,
-      );
+      throw new Error(`${key}: owner ${route.owner} is not the governance Safe ${artifact.governance.safe}.`);
     }
     if (route.settlementEnabled !== false && route.settlementEnabled !== true) {
       throw new Error(`${key}: settlementEnabled must be a boolean.`);
@@ -147,7 +145,10 @@ function render({ artifact, source }, selected) {
     .filter((c) => !LOCAL_CHAINS.has(c))
     .map((c) => CHAIN_TRANSPORT[c].viem)
     .sort();
-  const localImports = chains.filter((c) => LOCAL_CHAINS.has(c)).map((c) => CHAIN_TRANSPORT[c].viem).sort();
+  const localImports = chains
+    .filter((c) => LOCAL_CHAINS.has(c))
+    .map((c) => CHAIN_TRANSPORT[c].viem)
+    .sort();
 
   const entries = selected
     .map(([key, r]) => {
@@ -232,7 +233,7 @@ function syncFrom(evmContractPath) {
   if (dirty) {
     throw new Error(
       `${root} has uncommitted changes under registry/. Commit them first — provenance ` +
-        "recorded against a dirty tree points at a commit that does not contain this artifact.",
+        "recorded against a dirty tree points at a commit that does not contain this artifact."
     );
   }
   writeFileSync(ARTIFACT, raw);
@@ -266,7 +267,7 @@ try {
     throw new Error(
       "src/splitterRoutes.generated.ts has drifted from the canonical registry artifact.\n" +
         "  Either it was hand-edited, or the artifact changed and it was not regenerated.\n" +
-        "  Run: npm run registry:sync",
+        "  Run: npm run registry:sync"
     );
   }
   console.log("✓ SPLITTER_ROUTES matches the canonical registry artifact.");

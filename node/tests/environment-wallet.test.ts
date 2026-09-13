@@ -44,7 +44,12 @@ async function load(env: Record<string, string> = {}) {
 }
 async function fixture(seed = "11".repeat(32)) {
   const agent = await AiFinPayAgent.fromSeed(seed);
-  return { seed, secret: agent.inner.secretB58, evm: agent.evmAddress, solana: agent.solanaAddress };
+  return {
+    seed,
+    secret: agent.inner.secretB58,
+    evm: agent.evmAddress,
+    solana: agent.solanaAddress,
+  };
 }
 function store(value: unknown) {
   const path = join(walletHome, "agent.json");
@@ -60,11 +65,21 @@ function project(agents: unknown[]) {
 function encrypted(secret: string, passphrase: string) {
   const salt = Buffer.alloc(16, 3);
   const iv = Buffer.alloc(12, 4);
-  const key = scryptSync(passphrase, salt, 32, { N: 1 << 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+  const key = scryptSync(passphrase, salt, 32, {
+    N: 1 << 15,
+    r: 8,
+    p: 1,
+    maxmem: 64 * 1024 * 1024,
+  });
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   const ct = Buffer.concat([cipher.update(secret, "utf8"), cipher.final()]);
-  return { enc: "scrypt-aes-256-gcm", salt: salt.toString("base64"), iv: iv.toString("base64"),
-    tag: cipher.getAuthTag().toString("base64"), ct: ct.toString("base64") };
+  return {
+    enc: "scrypt-aes-256-gcm",
+    salt: salt.toString("base64"),
+    iv: iv.toString("base64"),
+    tag: cipher.getAuthTag().toString("base64"),
+    ct: ct.toString("base64"),
+  };
 }
 
 describe("load-only environment wallet", () => {
@@ -75,7 +90,11 @@ describe("load-only environment wallet", () => {
     const env = { SEED_HEX: "", AIFINPAY_AGENT_SECRET: wallet.secret };
     const first = await load(env);
     const second = await load(env);
-    expect(first.value).toMatchObject({ evm: wallet.evm, innerEvm: wallet.evm, solana: wallet.solana });
+    expect(first.value).toMatchObject({
+      evm: wallet.evm,
+      innerEvm: wallet.evm,
+      solana: wallet.solana,
+    });
     expect(second.value).toEqual(first.value);
     expect(readFileSync(path)).toEqual(before);
     expect(first.stdout + second.stdout + first.stderr + second.stderr).not.toContain(wallet.secret);
@@ -113,9 +132,15 @@ describe("load-only environment wallet", () => {
   it("selects one record in an explicitly configured project file", async () => {
     const wallet = await fixture();
     const path = join(dir, "agents.json");
-    writeFileSync(path, JSON.stringify({ agents: [
-      { id: "other", seed_hash: "22".repeat(32) }, { id: "chosen", seed_hash: wallet.seed },
-    ] }));
+    writeFileSync(
+      path,
+      JSON.stringify({
+        agents: [
+          { id: "other", seed_hash: "22".repeat(32) },
+          { id: "chosen", seed_hash: wallet.seed },
+        ],
+      })
+    );
     expect((await load({ AIFINPAY_AGENTS_FILE: path, AIFINPAY_AGENT_ID: "chosen" })).value.evm).toBe(wallet.evm);
   });
 
@@ -123,27 +148,42 @@ describe("load-only environment wallet", () => {
     const wallet = await fixture();
     const key = `0x${"33".repeat(32)}` as `0x${string}`;
     const expected = privateKeyToAccount(key).address;
-    expect((await load({ SEED_HASH: wallet.seed, FIXTURE_EVM_OVERRIDE: key })).value)
-      .toMatchObject({ evm: expected, innerEvm: expected, solana: wallet.solana });
+    expect((await load({ SEED_HASH: wallet.seed, FIXTURE_EVM_OVERRIDE: key })).value).toMatchObject({
+      evm: expected,
+      innerEvm: expected,
+      solana: wallet.solana,
+    });
   });
 
-  it.each(["", "gg".repeat(32), "11".repeat(32) + "f"])("refuses invalid supplied seed without falling through (%s)", async (seed) => {
-    const wallet = await fixture();
-    const result = await load({ SEED_HASH: seed, AIFINPAY_AGENT_SECRET: wallet.secret });
-    expect(result.value.error).toMatch(/SEED_HASH.*32-byte hex/);
-    expect(result.stdout + result.stderr).not.toContain(wallet.secret);
-  });
+  it.each(["", "gg".repeat(32), "11".repeat(32) + "f"])(
+    "refuses invalid supplied seed without falling through (%s)",
+    async (seed) => {
+      const wallet = await fixture();
+      const result = await load({ SEED_HASH: seed, AIFINPAY_AGENT_SECRET: wallet.secret });
+      expect(result.value.error).toMatch(/SEED_HASH.*32-byte hex/);
+      expect(result.stdout + result.stderr).not.toContain(wallet.secret);
+    }
+  );
 
   it("refuses ambiguous project selection despite an available legacy secret", async () => {
     const wallet = await fixture();
-    project([{ id: "one", seed_hash: wallet.seed }, { id: "two", seed_hash: "22".repeat(32) }]);
+    project([
+      { id: "one", seed_hash: wallet.seed },
+      { id: "two", seed_hash: "22".repeat(32) },
+    ]);
     expect((await load({ AIFINPAY_AGENT_SECRET: wallet.secret })).value.error).toMatch(/exactly one/);
   });
 
   it("refuses an explicit missing wallet file despite an available legacy secret", async () => {
     const wallet = await fixture();
-    expect((await load({ AIFINPAY_AGENTS_FILE: join(dir, "missing.json"), AIFINPAY_AGENT_SECRET: wallet.secret })).value.error)
-      .toMatch(/AIFINPAY_AGENTS_FILE.*does not exist/);
+    expect(
+      (
+        await load({
+          AIFINPAY_AGENTS_FILE: join(dir, "missing.json"),
+          AIFINPAY_AGENT_SECRET: wallet.secret,
+        })
+      ).value.error
+    ).toMatch(/AIFINPAY_AGENTS_FILE.*does not exist/);
   });
 
   it("does not overwrite an invalid stored wallet or expose its contents", async () => {

@@ -18,19 +18,8 @@
 // it shows up in the panel on the next refresh. There is no sync job and no
 // second store — see the README section on that.
 // ──────────────────────────────────────────────────────────────────────────
-import {
-  AifpAuthError,
-  AifpConflictError,
-  AifpGateError,
-  AifpValidationError,
-} from "./errors.js";
-import type {
-  AifpResource,
-  MerchantPublicView,
-  MerchantStats,
-  ResourceInput,
-  SettlementRecord,
-} from "./types.js";
+import { AifpAuthError, AifpConflictError, AifpGateError, AifpValidationError } from "./errors.js";
+import type { AifpResource, MerchantPublicView, MerchantStats, ResourceInput, SettlementRecord } from "./types.js";
 
 export interface AifpMerchantOptions {
   merchantId?: string;
@@ -58,14 +47,10 @@ export class AifpMerchant {
     const merchantId = opts.merchantId ?? process.env.AIFP_MERCHANT_ID ?? "";
     const secret = opts.secret ?? process.env.AIFP_MERCHANT_SECRET ?? "";
     if (!merchantId) {
-      throw new AifpGateError(
-        "AifpMerchant: merchantId is required (pass it, or set AIFP_MERCHANT_ID)",
-      );
+      throw new AifpGateError("AifpMerchant: merchantId is required (pass it, or set AIFP_MERCHANT_ID)");
     }
     if (!secret) {
-      throw new AifpGateError(
-        "AifpMerchant: secret is required (pass it, or set AIFP_MERCHANT_SECRET)",
-      );
+      throw new AifpGateError("AifpMerchant: secret is required (pass it, or set AIFP_MERCHANT_SECRET)");
     }
     this.merchantId = merchantId;
     this.baseUrl = (opts.baseUrl ?? DEFAULT_BASE).replace(/\/+$/, "");
@@ -103,7 +88,7 @@ export class AifpMerchant {
       "GET",
       `/resources/${encodeURIComponent(resourceId)}`,
       undefined,
-      { nullOn404: true },
+      { nullOn404: true }
     );
     return body ? body.resource : null;
   }
@@ -115,14 +100,11 @@ export class AifpMerchant {
     return body.resource;
   }
 
-  async updateResource(
-    resourceId: string,
-    patch: Partial<ResourceInput>,
-  ): Promise<AifpResource> {
+  async updateResource(resourceId: string, patch: Partial<ResourceInput>): Promise<AifpResource> {
     const body = await this.request<{ resource: AifpResource }>(
       "PATCH",
       `/resources/${encodeURIComponent(resourceId)}`,
-      patch,
+      patch
     );
     return body.resource;
   }
@@ -134,7 +116,7 @@ export class AifpMerchant {
       "DELETE",
       `/resources/${encodeURIComponent(resourceId)}`,
       undefined,
-      { nullOn404: true },
+      { nullOn404: true }
     );
     return body != null;
   }
@@ -166,13 +148,11 @@ export class AifpMerchant {
        * when forgotten.
        */
       onExisting?: "replace" | "skip";
-    } = {},
+    } = {}
   ): Promise<AifpResource[]> {
     const onExisting = opts.onExisting ?? "replace";
     const existing =
-      onExisting === "skip"
-        ? new Map((await this.listResources()).map((r) => [r.route_pattern, r]))
-        : null;
+      onExisting === "skip" ? new Map((await this.listResources()).map((r) => [r.route_pattern, r])) : null;
     const out: AifpResource[] = [];
     for (const input of inputs) {
       if (existing) {
@@ -195,7 +175,7 @@ export class AifpMerchant {
         console.warn(
           `[@aifinpay/gate] resource ${resource.route_pattern} was stored non-durably ` +
             "(control-plane storage degraded) — it will not appear in the dashboard and will " +
-            "not survive a restart. Re-run this step once the API reports healthy.",
+            "not survive a restart. Re-run this step once the API reports healthy."
         );
       }
       out.push(resource);
@@ -209,10 +189,7 @@ export class AifpMerchant {
     return this.request<MerchantPublicView>("GET", "");
   }
 
-  async updateMerchant(patch: {
-    name?: string;
-    pay_to?: Record<string, string>;
-  }): Promise<MerchantPublicView> {
+  async updateMerchant(patch: { name?: string; pay_to?: Record<string, string> }): Promise<MerchantPublicView> {
     return this.request<MerchantPublicView>("PATCH", "", patch);
   }
 
@@ -222,19 +199,13 @@ export class AifpMerchant {
 
   async activity(limit?: number): Promise<SettlementRecord[]> {
     const qs = limit ? `?limit=${encodeURIComponent(String(limit))}` : "";
-    const body = await this.request<SettlementRecord[] | { activity?: SettlementRecord[] }>(
-      "GET",
-      `/activity${qs}`,
-    );
-    return Array.isArray(body) ? body : body?.activity ?? [];
+    const body = await this.request<SettlementRecord[] | { activity?: SettlementRecord[] }>("GET", `/activity${qs}`);
+    return Array.isArray(body) ? body : (body?.activity ?? []);
   }
 
   async receipts(): Promise<SettlementRecord[]> {
-    const body = await this.request<SettlementRecord[] | { receipts?: SettlementRecord[] }>(
-      "GET",
-      "/receipts",
-    );
-    return Array.isArray(body) ? body : body?.receipts ?? [];
+    const body = await this.request<SettlementRecord[] | { receipts?: SettlementRecord[] }>("GET", "/receipts");
+    return Array.isArray(body) ? body : (body?.receipts ?? []);
   }
 
   async setWebhook(url: string | null): Promise<{ merchant_id: string; webhook: unknown }> {
@@ -247,7 +218,7 @@ export class AifpMerchant {
     method: string,
     path: string,
     body?: unknown,
-    opts: { nullOn404?: boolean } = {},
+    opts: { nullOn404?: boolean } = {}
   ): Promise<T> {
     const url = `${this.baseUrl}/v1/merchants/${encodeURIComponent(this.merchantId)}${path}`;
     const secret = (this as unknown as { _secret: string })._secret;
@@ -294,7 +265,7 @@ export class AifpMerchant {
     throw new AifpGateError(
       `AiFinPay API unreachable at ${this.baseUrl}: ${
         lastNetworkError instanceof Error ? lastNetworkError.message : String(lastNetworkError)
-      }`,
+      }`
     );
   }
 }

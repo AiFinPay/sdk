@@ -13,14 +13,7 @@
 // merchant edits in our dashboard would be a second source of truth for the
 // same rule, and the two would disagree on the day it mattered.
 // ──────────────────────────────────────────────────────────────────────────
-import type {
-  AifpContext,
-  AifpResource,
-  GateEvent,
-  GateRequest,
-  GateResult,
-  Tier,
-} from "./types.js";
+import type { AifpContext, AifpResource, GateEvent, GateRequest, GateResult, Tier } from "./types.js";
 import { MemoryStore } from "./stores/memory.js";
 import type { GateStore } from "./stores/types.js";
 import { createVerifier } from "./verify.js";
@@ -156,12 +149,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
   // to come from the mount, so a premium route quoted unit_price_usd $0.0005 and
   // then metered 10 units — the agent was told one price and charged another.
   // Whatever tier is advertised here must be the one `weight` was derived from.
-  const challenge = (
-    resource: string,
-    weight: number,
-    effectiveTier: Tier,
-    detail?: string,
-  ): GateResult => {
+  const challenge = (resource: string, weight: number, effectiveTier: Tier, detail?: string): GateResult => {
     emit({ kind: "402", resource, weight, detail });
     return {
       ok: false,
@@ -201,35 +189,37 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       // Refusing to price is the honest answer; a partner who prefers
       // availability over correct billing can opt in explicitly.
       if (options.registry.neverLoaded && options.registryUnavailable !== "mount-default") {
-        emit({ kind: "pricing_unavailable", resource: path, weight: 0, detail: "registry never loaded" });
+        emit({
+          kind: "pricing_unavailable",
+          resource: path,
+          weight: 0,
+          detail: "registry never loaded",
+        });
         return {
           ok: false,
           status: 503,
           headers: { "Content-Type": "application/json", "Retry-After": "30" },
           body: {
             error: "AIFP-503-PRICING",
-            detail:
-              "pricing unavailable — this gate has not been able to reach the AiFinPay control plane yet",
+            detail: "pricing unavailable — this gate has not been able to reach the AiFinPay control plane yet",
           },
         };
       }
       matched = options.registry.match(path);
     }
 
-    const resource = matched ? matched.route_pattern : options.resource ?? path;
+    const resource = matched ? matched.route_pattern : (options.resource ?? path);
     // One source of truth for "what does this call cost": the tier the weight
     // is derived from is the tier the 402 advertises.
     const effectiveTier: Tier = matched ? ((matched.tier as Tier) ?? tier) : tier;
-    const weight = matched
-      ? matched.unit_weight ?? weightForTier(effectiveTier)
-      : mountWeight;
+    const weight = matched ? (matched.unit_weight ?? weightForTier(effectiveTier)) : mountWeight;
 
     // The scope test runs against the request PATH, not the route pattern —
     // an agent's receipt names a real path, and "/api/lookup/*" is not one.
     // In static-mount mode the declared resource is the path the merchant
     // published, which is what the receipt was quoted for, so it wins over
     // req.path (which a mounted router may have already stripped a prefix off).
-    const scopePath = options.registry ? path : options.resource ?? path;
+    const scopePath = options.registry ? path : (options.resource ?? path);
 
     const agentHeader = req.header("AIFP-Agent-Id") ?? null;
 
@@ -238,7 +228,16 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // metering and no free-allowance spend: a free route must not quietly eat
     // an agent's prepaid units either.
     if (matched && matched.paywall_enabled === false) {
-      if (options.allow && !(await safeAllow(options.allow, { path, resource, weight, agent: agentHeader, receipt_id: null }))) {
+      if (
+        options.allow &&
+        !(await safeAllow(options.allow, {
+          path,
+          resource,
+          weight,
+          agent: agentHeader,
+          receipt_id: null,
+        }))
+      ) {
         return forbid(resource, weight, "blocked by merchant policy");
       }
       emit({ kind: "serve", resource, weight, agent: agentHeader });
@@ -278,7 +277,16 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
         charge = true;
       }
       if (!charge) {
-        if (options.allow && !(await safeAllow(options.allow, { path, resource, weight, agent: agentHeader, receipt_id: null }))) {
+        if (
+          options.allow &&
+          !(await safeAllow(options.allow, {
+            path,
+            resource,
+            weight,
+            agent: agentHeader,
+            receipt_id: null,
+          }))
+        ) {
           return forbid(resource, weight, "blocked by merchant policy");
         }
         emit({ kind: "serve", resource, weight, agent: agentHeader, exempt: true });
@@ -349,7 +357,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       return forbid(
         resource,
         weight,
-        `receipt type "${payload.typ_aifp}" is not spendable — this endpoint needs a quota receipt`,
+        `receipt type "${payload.typ_aifp}" is not spendable — this endpoint needs a quota receipt`
       );
     }
     // Belt and braces for the same class: any future token that reaches here
@@ -364,16 +372,11 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       return forbid(
         resource,
         weight,
-        `receipt is scoped to ${payload.resource} (${payload.scope || "exact"}), not ${scopePath}`,
+        `receipt is scoped to ${payload.resource} (${payload.scope || "exact"}), not ${scopePath}`
       );
     }
 
-    if (
-      options.requireAgentMatch &&
-      agentHeader &&
-      payload.sub &&
-      agentHeader !== payload.sub
-    ) {
+    if (options.requireAgentMatch && agentHeader && payload.sub && agentHeader !== payload.sub) {
       return forbid(resource, weight, "AIFP-Agent-Id does not match the receipt subject");
     }
 
@@ -394,9 +397,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // Limit is the receipt's unit_quota; legacy receipts carry a request
     // `quota` instead, which converts at the tier weight it was priced for.
     const limit = Number(
-      payload.unit_quota != null
-        ? payload.unit_quota
-        : (Number(payload.quota) || 1) * weightForTier(payload.tier),
+      payload.unit_quota != null ? payload.unit_quota : (Number(payload.quota) || 1) * weightForTier(payload.tier)
     );
     // The counter must die with the receipt: never longer (a stale counter
     // refuses paid calls), never shorter (an expired counter makes the whole
@@ -406,8 +407,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // A single-use receipt has no counter headroom to protect it, so replay is
     // checked explicitly. A multi-use batch does not need it: replaying it just
     // spends it, which is what it is for.
-    const wantsReplayCheck =
-      replayMode === "always" || (replayMode === "auto" && limit <= 1);
+    const wantsReplayCheck = replayMode === "always" || (replayMode === "auto" && limit <= 1);
     if (wantsReplayCheck) {
       // No nonce means no way to tell a first spend from a replay. Keying on
       // `undefined` would not fail open, it would fail WEIRD: every nonce-less
@@ -492,7 +492,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
  *  treated as "no opinion" and the paid flow continues. */
 async function safeAllow(
   allow: NonNullable<GateOptions["allow"]>,
-  ctx: Parameters<NonNullable<GateOptions["allow"]>>[0],
+  ctx: Parameters<NonNullable<GateOptions["allow"]>>[0]
 ): Promise<boolean> {
   try {
     return (await allow(ctx)) !== false;
@@ -504,11 +504,7 @@ async function safeAllow(
 /** Give back the units a call consumed after the handler failed. Exposed for
  *  refundOnError and for manual use; see the README on why this is off by
  *  default (a refund after the response has gone out is a unit served free). */
-export async function refundUnits(
-  store: GateStore,
-  ctx: AifpContext,
-  keyPrefix = "aifp:",
-): Promise<void> {
+export async function refundUnits(store: GateStore, ctx: AifpContext, keyPrefix = "aifp:"): Promise<void> {
   if (!store.decrBy || ctx.mode !== "paid" || ctx.weight <= 0) return;
   try {
     await store.decrBy(`${keyPrefix}used:${ctx.receipt_id}`, ctx.weight);

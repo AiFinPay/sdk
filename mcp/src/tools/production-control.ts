@@ -4,8 +4,15 @@ import { apiUrl } from "../api.js";
 const DEFAULT_BASE = "https://aifinpay.io";
 const ROUTES = new Set(["AIFP-1", "AIFP-2"]);
 const CHAINS = new Set([
-  "polygon", "avalanche", "arbitrum", "bnb", "base",
-  "unichain", "optimism", "botchain", "xrplevm",
+  "polygon",
+  "avalanche",
+  "arbitrum",
+  "bnb",
+  "base",
+  "unichain",
+  "optimism",
+  "botchain",
+  "xrplevm",
 ]);
 
 function result(value: unknown) {
@@ -21,9 +28,7 @@ async function api(ctx: ToolContext, path: string, init?: RequestInit) {
   const response = await ctx.agent.inner.fetchImpl(apiUrl(base(ctx), path), init);
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    const detail = body && typeof body === "object"
-      ? JSON.stringify(body)
-      : `HTTP ${response.status}`;
+    const detail = body && typeof body === "object" ? JSON.stringify(body) : `HTTP ${response.status}`;
     throw new Error(detail);
   }
   return body;
@@ -38,7 +43,10 @@ export function agentPassportResolveTool() {
     inputSchema: {
       type: "object",
       properties: {
-        identifier: { type: "string", description: "@username, AIFP-#########, or aifp_agent_* id" },
+        identifier: {
+          type: "string",
+          description: "@username, AIFP-#########, or aifp_agent_* id",
+        },
       },
       required: ["identifier"],
     },
@@ -97,11 +105,17 @@ export function settlementInvoiceTool() {
       properties: {
         route_class: { type: "string", enum: ["AIFP-1", "AIFP-2"] },
         chain: { type: "string", enum: [...CHAINS] },
-        asset: { type: "string", description: "Native symbol, USDC, or USDT if the route advertises it." },
+        asset: {
+          type: "string",
+          description: "Native symbol, USDC, or USDT if the route advertises it.",
+        },
         gross_amount: { type: "string", description: "Gross payer amount in base units." },
         merchant_wallet: { type: "string", description: "Merchant/provider EVM wallet." },
         order_id: { type: "string" },
-        valid_until: { type: "integer", description: "Optional Unix seconds, max 20 minutes ahead." },
+        valid_until: {
+          type: "integer",
+          description: "Optional Unix seconds, max 20 minutes ahead.",
+        },
       },
       required: ["route_class", "chain", "asset", "gross_amount", "merchant_wallet", "order_id"],
     },
@@ -125,11 +139,13 @@ export async function runSettlementInvoice(ctx: ToolContext, args: Record<string
       order_id: String(args.order_id || ""),
       ...(args.valid_until != null ? { valid_until: Number(args.valid_until) } : {}),
     };
-    return result(await api(ctx, "/v1/settlement/invoice", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    }));
+    return result(
+      await api(ctx, "/v1/settlement/invoice", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+    );
   } catch (e) {
     return errorResult(`Settlement invoice failed: ${(e as Error).message}`);
   }

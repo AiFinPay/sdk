@@ -40,7 +40,11 @@ describe("addresses that must never be reached", () => {
     it(`blocks ${label} (${addr})`, () => expect(isBlockedAddress(addr)).toBe(true));
   }
 
-  const allowed = [["a public v4", "8.8.8.8"], ["another", "104.21.90.50"], ["public v6", "2606:4700::1"]] as const;
+  const allowed = [
+    ["a public v4", "8.8.8.8"],
+    ["another", "104.21.90.50"],
+    ["public v6", "2606:4700::1"],
+  ] as const;
   for (const [label, addr] of allowed) {
     it(`allows ${label}`, () => expect(isBlockedAddress(addr)).toBe(false));
   }
@@ -79,9 +83,7 @@ describe("URLs the server will not request", () => {
   });
 
   it("lets an operator lift it deliberately", async () => {
-    await expect(
-      assertRequestAllowed("http://127.0.0.1:4001/x", { allowPrivate: true }),
-    ).resolves.toBeInstanceOf(URL);
+    await expect(assertRequestAllowed("http://127.0.0.1:4001/x", { allowPrivate: true })).resolves.toBeInstanceOf(URL);
   });
 });
 
@@ -102,9 +104,7 @@ describe("redirects", () => {
       }) as typeof fetch;
 
       const safe = makeSafeFetch();
-      await expect(safe("https://aifinpay.io/redirect-me")).rejects.toThrow(
-        /169\.254\.169\.254|must be https/,
-      );
+      await expect(safe("https://aifinpay.io/redirect-me")).rejects.toThrow(/169\.254\.169\.254|must be https/);
     } finally {
       globalThis.fetch = original;
     }
@@ -133,7 +133,10 @@ describe("redirects", () => {
     const original = globalThis.fetch;
     try {
       globalThis.fetch = (async () =>
-        new Response(null, { status: 302, headers: { location: "https://aifinpay.io/again" } })) as typeof fetch;
+        new Response(null, {
+          status: 302,
+          headers: { location: "https://aifinpay.io/again" },
+        })) as typeof fetch;
       await expect(makeSafeFetch()("https://aifinpay.io/loop")).rejects.toThrow(/too many redirects/);
     } finally {
       globalThis.fetch = original;
@@ -146,7 +149,9 @@ describe("redirect request boundaries", () => {
   const options = { trustedHosts: ["source.invalid", "other.invalid"] };
 
   it.each(["manual", "error"] as const)("honors redirect:%s without requesting the target", async (redirect) => {
-    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 302, headers: { location: "https://other.invalid/" } }));
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 302, headers: { location: "https://other.invalid/" } }));
     vi.stubGlobal("fetch", fetch);
     const result = makeSafeFetch(options)("https://source.invalid/", { redirect });
     if (redirect === "manual") expect((await result).status).toBe(302);
@@ -155,11 +160,28 @@ describe("redirect request boundaries", () => {
   });
 
   it("strips credentials and payment proofs on cross-origin redirects", async () => {
-    const secretHeaders = ["authorization", "cookie", "proxy-authorization", "x-api-key", "x-payment", "payment-signature", "aifp-receipt", "x-signature", "x-nonce", "x-agent-pubkey"];
-    const fetch = vi.fn().mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: "https://other.invalid/" } })).mockResolvedValueOnce(new Response("ok"));
+    const secretHeaders = [
+      "authorization",
+      "cookie",
+      "proxy-authorization",
+      "x-api-key",
+      "x-payment",
+      "payment-signature",
+      "aifp-receipt",
+      "x-signature",
+      "x-nonce",
+      "x-agent-pubkey",
+    ];
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: "https://other.invalid/" } }))
+      .mockResolvedValueOnce(new Response("ok"));
     vi.stubGlobal("fetch", fetch);
     await makeSafeFetch(options)("https://source.invalid/", {
-      headers: { ...Object.fromEntries(secretHeaders.map(key => [key, "sensitive-test-value"])), accept: "application/json" },
+      headers: {
+        ...Object.fromEntries(secretHeaders.map((key) => [key, "sensitive-test-value"])),
+        accept: "application/json",
+      },
     });
     const [input, init] = fetch.mock.calls[1];
     const request = new Request(input, init);
@@ -170,14 +192,23 @@ describe("redirect request boundaries", () => {
 
   it("preserves Request method, headers and body across a same-origin 307", async () => {
     const seen: Request[] = [];
-    vi.stubGlobal("fetch", vi.fn(async (input, init) => {
-      const request = new Request(input, init);
-      seen.push(request);
-      return seen.length === 1 ? new Response(null, { status: 307, headers: { location: "/next" } }) : new Response("ok");
-    }));
-    await makeSafeFetch(options)(new Request("https://source.invalid/", {
-      method: "POST", headers: { authorization: "same-origin-test", "content-type": "application/json" }, body: '{"test":1}',
-    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input, init) => {
+        const request = new Request(input, init);
+        seen.push(request);
+        return seen.length === 1
+          ? new Response(null, { status: 307, headers: { location: "/next" } })
+          : new Response("ok");
+      })
+    );
+    await makeSafeFetch(options)(
+      new Request("https://source.invalid/", {
+        method: "POST",
+        headers: { authorization: "same-origin-test", "content-type": "application/json" },
+        body: '{"test":1}',
+      })
+    );
     expect(seen).toHaveLength(2);
     for (const request of seen) {
       expect(request.method).toBe("POST");
@@ -187,17 +218,28 @@ describe("redirect request boundaries", () => {
   });
 
   it("does not send a POST body to another origin on a 307", async () => {
-    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 307, headers: { location: "https://other.invalid/" } }));
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 307, headers: { location: "https://other.invalid/" } }));
     vi.stubGlobal("fetch", fetch);
-    await expect(makeSafeFetch(options)("https://source.invalid/", { method: "POST", body: "private-input" })).rejects.toThrow(/cross-origin.*body/);
+    await expect(
+      makeSafeFetch(options)("https://source.invalid/", { method: "POST", body: "private-input" })
+    ).rejects.toThrow(/cross-origin.*body/);
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it("drops body headers when a 303 changes POST to GET", async () => {
-    const fetch = vi.fn().mockResolvedValueOnce(new Response(null, { status: 303, headers: { location: "/next" } })).mockResolvedValueOnce(new Response("ok"));
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 303, headers: { location: "/next" } }))
+      .mockResolvedValueOnce(new Response("ok"));
     vi.stubGlobal("fetch", fetch);
-    await makeSafeFetch(options)("https://source.invalid/", { method: "POST", body: "test", headers: { "content-type": "text/plain", "content-length": "4" } });
-    const request = new Request(...fetch.mock.calls[1] as [RequestInfo, RequestInit]);
+    await makeSafeFetch(options)("https://source.invalid/", {
+      method: "POST",
+      body: "test",
+      headers: { "content-type": "text/plain", "content-length": "4" },
+    });
+    const request = new Request(...(fetch.mock.calls[1] as [RequestInfo, RequestInit]));
     expect(request.method).toBe("GET");
     expect(request.body).toBeNull();
     expect(request.headers.has("content-type")).toBe(false);

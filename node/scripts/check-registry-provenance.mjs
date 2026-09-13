@@ -51,5 +51,7 @@ if (remoteHash !== localHash) {
   console.error("  The vendored artifact is not what the canonical repository holds at that commit.");
   process.exit(1);
 }
-console.log(`✓ registry/splitter-table.json is byte-identical to ${source.repo}@${source.commit.slice(0, 8)}:${source.path}`);
+console.log(
+  `✓ registry/splitter-table.json is byte-identical to ${source.repo}@${source.commit.slice(0, 8)}:${source.path}`
+);
 console.log(`  sha256 ${localHash}`);

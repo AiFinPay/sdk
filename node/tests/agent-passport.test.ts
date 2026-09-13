@@ -13,7 +13,10 @@ function canonicalize(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(canonicalize).join(",")}]`;
   const rec = value as Record<string, unknown>;
-  return `{${Object.keys(rec).sort().map((k) => `${JSON.stringify(k)}:${canonicalize(rec[k])}`).join(",")}}`;
+  return `{${Object.keys(rec)
+    .sort()
+    .map((k) => `${JSON.stringify(k)}:${canonicalize(rec[k])}`)
+    .join(",")}}`;
 }
 
 function passport(overrides: Partial<AgentPassportIdentity> = {}): AgentPassportIdentity {
@@ -35,8 +38,26 @@ function passport(overrides: Partial<AgentPassportIdentity> = {}): AgentPassport
     created_at: 1,
     updated_at: 1,
     wallets: [
-      { network: "polygon", chain_family: "evm", chain_ref: "eip155:137", address: "0x1111111111111111111111111111111111111111", public_key: null, is_primary: true, status: "active", verified_at: 1 },
-      { network: "solana", chain_family: "solana", chain_ref: "solana:mainnet", address: "11111111111111111111111111111111", public_key: "11111111111111111111111111111111", is_primary: true, status: "active", verified_at: 1 },
+      {
+        network: "polygon",
+        chain_family: "evm",
+        chain_ref: "eip155:137",
+        address: "0x1111111111111111111111111111111111111111",
+        public_key: null,
+        is_primary: true,
+        status: "active",
+        verified_at: 1,
+      },
+      {
+        network: "solana",
+        chain_family: "solana",
+        chain_ref: "solana:mainnet",
+        address: "11111111111111111111111111111111",
+        public_key: "11111111111111111111111111111111",
+        is_primary: true,
+        status: "active",
+        verified_at: 1,
+      },
     ],
     ...overrides,
   };
@@ -57,7 +78,20 @@ describe("AIFP-3 global Agent Passport vNext", () => {
   });
 
   it("does not use blocked wallets or compromised passport state", () => {
-    const p = passport({ wallets: [{ network: "polygon", chain_family: "evm", chain_ref: "eip155:137", address: "0x1111111111111111111111111111111111111111", public_key: null, is_primary: true, status: "blocked", verified_at: 1 }] });
+    const p = passport({
+      wallets: [
+        {
+          network: "polygon",
+          chain_family: "evm",
+          chain_ref: "eip155:137",
+          address: "0x1111111111111111111111111111111111111111",
+          public_key: null,
+          is_primary: true,
+          status: "blocked",
+          verified_at: 1,
+        },
+      ],
+    });
     expect(() => agentPassportWallet(p, "polygon")).toThrow(/no verified polygon wallet/);
     expect(() => agentPassportWallet(passport({ integrity_state: "failed" }), "polygon")).toThrow(/integrity_failed/);
   });
@@ -75,11 +109,31 @@ describe("AIFP-3 global Agent Passport vNext", () => {
     const p = passport();
     p.issuer = { key_id: "issuer-test", public_key: pub, signature: "" };
     const payload = {
-      schema: "aifp3.passport.vnext", agent_id: p.agent_id, agent_number: p.agent_number,
-      agent_number_display: p.agent_number_display, username: p.username, display_name: p.display_name,
-      status: p.status, verification_level: p.verification_level, holder_public_key: p.holder_public_key,
-      issuer_key_id: p.issuer.key_id, version: p.version, created_at: p.created_at, updated_at: p.updated_at,
-      wallets: p.wallets.map((w) => ({ network: w.network, chain_family: w.chain_family, chain_ref: w.chain_ref, address: w.address, public_key: w.public_key, is_primary: w.is_primary, status: w.status, verified_at: w.verified_at })).sort((a, b) => `${a.network}:${a.address}`.localeCompare(`${b.network}:${b.address}`)),
+      schema: "aifp3.passport.vnext",
+      agent_id: p.agent_id,
+      agent_number: p.agent_number,
+      agent_number_display: p.agent_number_display,
+      username: p.username,
+      display_name: p.display_name,
+      status: p.status,
+      verification_level: p.verification_level,
+      holder_public_key: p.holder_public_key,
+      issuer_key_id: p.issuer.key_id,
+      version: p.version,
+      created_at: p.created_at,
+      updated_at: p.updated_at,
+      wallets: p.wallets
+        .map((w) => ({
+          network: w.network,
+          chain_family: w.chain_family,
+          chain_ref: w.chain_ref,
+          address: w.address,
+          public_key: w.public_key,
+          is_primary: w.is_primary,
+          status: w.status,
+          verified_at: w.verified_at,
+        }))
+        .sort((a, b) => `${a.network}:${a.address}`.localeCompare(`${b.network}:${b.address}`)),
     };
     const canonical = canonicalize(payload);
     p.protected_payload_hash = createHash("sha256").update(Buffer.from(canonical)).digest("hex");

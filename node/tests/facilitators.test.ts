@@ -9,10 +9,7 @@ import {
   detectFacilitator,
 } from "../src/index.js";
 
-function makeResp(
-  status: number,
-  init: { headers?: Record<string, string>; body?: unknown } = {},
-): Response {
+function makeResp(status: number, init: { headers?: Record<string, string>; body?: unknown } = {}): Response {
   const headers = new Headers(init.headers);
   let body: BodyInit | null = null;
   if (init.body !== undefined) {
@@ -74,9 +71,7 @@ describe("detection", () => {
 
   it("unknown 402 raises UnsupportedFacilitatorError", async () => {
     const r = makeResp(402, { body: { random: "shape" } });
-    await expect(detectFacilitator(r)).rejects.toBeInstanceOf(
-      UnsupportedFacilitatorError,
-    );
+    await expect(detectFacilitator(r)).rejects.toBeInstanceOf(UnsupportedFacilitatorError);
   });
 
   it("override forces facilitator", async () => {
@@ -86,9 +81,7 @@ describe("detection", () => {
 
   it("override unknown name raises", async () => {
     const r = makeResp(402);
-    await expect(detectFacilitator(r, "not-real")).rejects.toBeInstanceOf(
-      UnsupportedFacilitatorError,
-    );
+    await expect(detectFacilitator(r, "not-real")).rejects.toBeInstanceOf(UnsupportedFacilitatorError);
   });
 });
 
@@ -98,9 +91,9 @@ describe("Coinbase adapter behavior", () => {
     const enc = Buffer.from(JSON.stringify(spec)).toString("base64");
     const r = makeResp(402, { headers: { "PAYMENT-REQUIRED": enc } });
     const agent = Agent.new();
-    await expect(
-      new CoinbaseX402Facilitator().buildAuth(r, agent, {}),
-    ).rejects.toBeInstanceOf(FacilitatorNotImplementedError);
+    await expect(new CoinbaseX402Facilitator().buildAuth(r, agent, {})).rejects.toBeInstanceOf(
+      FacilitatorNotImplementedError
+    );
   });
 
   it("budget cap blocks expensive payment before NotImplemented", async () => {
@@ -111,16 +104,16 @@ describe("Coinbase adapter behavior", () => {
     await expect(
       new CoinbaseX402Facilitator().buildAuth(r, agent, {
         maxAmountUsd: 0.1,
-      }),
+      })
     ).rejects.toBeInstanceOf(PaymentTooExpensiveError);
   });
 
   it("malformed PAYMENT-REQUIRED raises Unsupported", async () => {
     const r = makeResp(402, { headers: { "PAYMENT-REQUIRED": "not-base64!!" } });
     const agent = Agent.new();
-    await expect(
-      new CoinbaseX402Facilitator().buildAuth(r, agent, {}),
-    ).rejects.toBeInstanceOf(UnsupportedFacilitatorError);
+    await expect(new CoinbaseX402Facilitator().buildAuth(r, agent, {})).rejects.toBeInstanceOf(
+      UnsupportedFacilitatorError
+    );
   });
 });
 

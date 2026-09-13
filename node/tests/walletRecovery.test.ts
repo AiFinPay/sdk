@@ -15,7 +15,7 @@ describe("wallet recovery", () => {
     // The Solana secret is what operators are told to back up (and what the
     // CLI keystore and AIFINPAY_AGENT_SECRET hold), so it must be sufficient.
     const restored = await AiFinPayAgent.fromSolanaSecret(
-      (agent as unknown as { inner: { secretB58: string } }).inner.secretB58,
+      (agent as unknown as { inner: { secretB58: string } }).inner.secretB58
     );
     expect(restored.solanaAddress).toBe(agent.solanaAddress);
     expect(restored.evmAddress).toBe(agent.evmAddress);
@@ -59,7 +59,7 @@ describe("wallet recovery", () => {
     const agent = await AiFinPayAgent.fromSeed("11".repeat(32), { evmPrivateKey });
     const restored = await AiFinPayAgent.fromSolanaSecret(
       (agent as unknown as { inner: { secretB58: string } }).inner.secretB58,
-      { evmPrivateKey },
+      { evmPrivateKey }
     );
     expect(agent.evmAddress).toBe(privateKeyToAccount(evmPrivateKey).address);
     expect(restored.evmAddress).toBe(agent.evmAddress);
@@ -70,7 +70,7 @@ describe("wallet recovery", () => {
     "rejects malformed seeds instead of deriving a different fundable wallet (%s)",
     async (seed) => {
       await expect(AiFinPayAgent.fromSeed(seed)).rejects.toThrow(/32 bytes.*64 hex/);
-    },
+    }
   );
 
   it("keeps prefixed and uppercase valid seed addresses unchanged", async () => {
@@ -81,19 +81,29 @@ describe("wallet recovery", () => {
   });
 
   it.each([
-    ["fromSeed", false], ["fromSeed", true],
-    ["fromSolanaSecret", false], ["fromSolanaSecret", true],
-    ["new", false], ["new", true],
+    ["fromSeed", false],
+    ["fromSeed", true],
+    ["fromSolanaSecret", false],
+    ["fromSolanaSecret", true],
+    ["new", false],
+    ["new", true],
   ] as const)("%s uses one EVM signer for native and standard x402 (override=%s)", async (factory, imported) => {
     const seed = "11".repeat(32);
     const evmPrivateKey = `0x${"33".repeat(32)}` as `0x${string}`;
     const opts = imported ? { evmPrivateKey } : {};
-    type Inner = { secretB58: string; evmAddress(): Promise<string>; evmAccount(): ReturnType<import("../src/agent.js").Agent["evmAccount"]> };
+    type Inner = {
+      secretB58: string;
+      evmAddress(): Promise<string>;
+      evmAccount(): ReturnType<import("../src/agent.js").Agent["evmAccount"]>;
+    };
     const fixture = await AiFinPayAgent.fromSeed(seed);
     const secret = (fixture as unknown as { inner: Inner }).inner.secretB58;
-    const agent = factory === "new" ? await AiFinPayAgent.new(opts)
-      : factory === "fromSolanaSecret" ? await AiFinPayAgent.fromSolanaSecret(secret, opts)
-      : await AiFinPayAgent.fromSeed(seed, opts);
+    const agent =
+      factory === "new"
+        ? await AiFinPayAgent.new(opts)
+        : factory === "fromSolanaSecret"
+          ? await AiFinPayAgent.fromSolanaSecret(secret, opts)
+          : await AiFinPayAgent.fromSeed(seed, opts);
     const inner = (agent as unknown as { inner: Inner }).inner;
     const expected = imported ? privateKeyToAccount(evmPrivateKey).address : agent.evmAddress;
     expect(await inner.evmAddress()).toBe(expected);

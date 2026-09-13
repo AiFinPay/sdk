@@ -105,9 +105,7 @@ describe("agent_quota", () => {
     const { ctx, calls } = ctxWith([]);
     await runAgentQuota(ctx, {});
     expect(calls).toHaveLength(1);
-    expect(calls[0]).toBe(
-      "https://api.example.test/v1/agents/0x748DE415D6C197b0EA3cDe8c4e602eA05CeA8139/receipts",
-    );
+    expect(calls[0]).toBe("https://api.example.test/v1/agents/0x748DE415D6C197b0EA3cDe8c4e602eA05CeA8139/receipts");
   });
 
   it("a backend error is an error result, not an empty quota", async () => {

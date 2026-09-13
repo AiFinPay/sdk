@@ -18,7 +18,7 @@ describe("MemoryStore", () => {
             throw new Error("simulated backend failure");
           };
         },
-      },
+      }
     );
   });
 

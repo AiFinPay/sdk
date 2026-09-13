@@ -9,26 +9,16 @@ import { StandardX402Facilitator } from "./standard-x402.js";
  * the historical Coinbase compatibility adapter because HTTP header names are
  * case-insensitive and both may observe PAYMENT-REQUIRED.
  */
-export const REGISTERED: FacilitatorClass[] = [
-  AiFinPayFacilitator,
-  StandardX402Facilitator,
-  CoinbaseX402Facilitator,
-];
+export const REGISTERED: FacilitatorClass[] = [AiFinPayFacilitator, StandardX402Facilitator, CoinbaseX402Facilitator];
 
-const BY_NAME = new Map<string, FacilitatorClass>(
-  REGISTERED.map((cls) => [cls.name, cls]),
-);
+const BY_NAME = new Map<string, FacilitatorClass>(REGISTERED.map((cls) => [cls.name, cls]));
 
-export async function detectFacilitator(
-  resp: Response,
-  override: string = "auto",
-): Promise<Facilitator> {
+export async function detectFacilitator(resp: Response, override: string = "auto"): Promise<Facilitator> {
   if (override && override !== "auto") {
     const cls = BY_NAME.get(override);
     if (!cls) {
       throw new UnsupportedFacilitatorError(
-        `unknown facilitator override: '${override}'. ` +
-          `known: ${[...BY_NAME.keys()].join(", ")}`,
+        `unknown facilitator override: '${override}'. ` + `known: ${[...BY_NAME.keys()].join(", ")}`
       );
     }
     return new cls();
@@ -43,6 +33,6 @@ export async function detectFacilitator(
   throw new UnsupportedFacilitatorError(
     `402 response did not match any known facilitator. ` +
       `Status: ${resp.status}. ` +
-      `Headers: ${headerKeys.slice(0, 8).join(", ")}.`,
+      `Headers: ${headerKeys.slice(0, 8).join(", ")}.`
   );
 }

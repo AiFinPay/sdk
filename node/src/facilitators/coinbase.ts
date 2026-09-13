@@ -1,9 +1,5 @@
 import type { Agent } from "../agent.js";
-import {
-  FacilitatorNotImplementedError,
-  PaymentTooExpensiveError,
-  UnsupportedFacilitatorError,
-} from "../errors.js";
+import { FacilitatorNotImplementedError, PaymentTooExpensiveError, UnsupportedFacilitatorError } from "../errors.js";
 import type { AuthPayload, Facilitator, PayOptions } from "./base.js";
 
 /**
@@ -27,22 +23,15 @@ export class CoinbaseX402Facilitator implements Facilitator {
     return resp.headers.has(PAYMENT_REQUIRED_HEADER);
   }
 
-  async buildAuth(
-    resp: Response,
-    _agent: Agent,
-    opts: PayOptions,
-  ): Promise<AuthPayload> {
+  async buildAuth(resp: Response, _agent: Agent, opts: PayOptions): Promise<AuthPayload> {
     const spec = decodePaymentRequired(resp);
-    const accepts = (spec.accepts ?? spec.paymentRequirements ?? []) as Array<
-      Record<string, unknown>
-    >;
+    const accepts = (spec.accepts ?? spec.paymentRequirements ?? []) as Array<Record<string, unknown>>;
 
     if (accepts.length && opts.maxAmountUsd !== undefined) {
       const cheapest = minUsd(accepts);
       if (cheapest !== null && cheapest > opts.maxAmountUsd) {
         throw new PaymentTooExpensiveError(
-          `Coinbase x402 wants $${cheapest.toFixed(4)}, ` +
-            `caller cap is $${opts.maxAmountUsd.toFixed(4)}`,
+          `Coinbase x402 wants $${cheapest.toFixed(4)}, ` + `caller cap is $${opts.maxAmountUsd.toFixed(4)}`
         );
       }
     }
@@ -50,7 +39,7 @@ export class CoinbaseX402Facilitator implements Facilitator {
     throw new FacilitatorNotImplementedError(
       "Coinbase x402 detected, but payment execution is not yet wired. " +
         "This SDK build supports detection + parsing only. " +
-        "Track progress in `14 - Design - Generic x402 Client.md`.",
+        "Track progress in `14 - Design - Generic x402 Client.md`."
     );
   }
 }
@@ -58,27 +47,18 @@ export class CoinbaseX402Facilitator implements Facilitator {
 function decodePaymentRequired(resp: Response): Record<string, unknown> {
   const raw = resp.headers.get(PAYMENT_REQUIRED_HEADER);
   if (!raw) {
-    throw new UnsupportedFacilitatorError(
-      `missing ${PAYMENT_REQUIRED_HEADER} header on Coinbase x402 response`,
-    );
+    throw new UnsupportedFacilitatorError(`missing ${PAYMENT_REQUIRED_HEADER} header on Coinbase x402 response`);
   }
   let decoded: string;
   try {
-    decoded =
-      typeof Buffer !== "undefined"
-        ? Buffer.from(raw, "base64").toString("utf-8")
-        : atob(raw);
+    decoded = typeof Buffer !== "undefined" ? Buffer.from(raw, "base64").toString("utf-8") : atob(raw);
   } catch (e) {
-    throw new UnsupportedFacilitatorError(
-      `${PAYMENT_REQUIRED_HEADER} is not valid base64: ${(e as Error).message}`,
-    );
+    throw new UnsupportedFacilitatorError(`${PAYMENT_REQUIRED_HEADER} is not valid base64: ${(e as Error).message}`);
   }
   try {
     return JSON.parse(decoded);
   } catch (e) {
-    throw new UnsupportedFacilitatorError(
-      `${PAYMENT_REQUIRED_HEADER} body is not valid JSON: ${(e as Error).message}`,
-    );
+    throw new UnsupportedFacilitatorError(`${PAYMENT_REQUIRED_HEADER} body is not valid JSON: ${(e as Error).message}`);
   }
 }
 

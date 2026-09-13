@@ -36,14 +36,7 @@ export interface SafeErrorShape {
   quoteId?: string;
 }
 
-const SAFE_ERROR_STRING_FIELDS = [
-  "code",
-  "kind",
-  "stage",
-  "txHash",
-  "txRef",
-  "quoteId",
-] as const;
+const SAFE_ERROR_STRING_FIELDS = ["code", "kind", "stage", "txHash", "txRef", "quoteId"] as const;
 
 /** Serialize any thrown value to SafeErrorShape. Non-Errors become UnknownError. */
 export function toSafeError(err: unknown): SafeErrorShape {

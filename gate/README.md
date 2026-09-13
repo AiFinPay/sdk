@@ -25,13 +25,17 @@ import { aifpGate } from "@aifinpay/gate";
 
 const app = express();
 
-app.get("/api/search", aifpGate({
-  merchantId: process.env.AIFP_MERCHANT_ID,   // "mrch_…"
-  resource: "/api/search",
-  tier: "complex",                             // standard | complex | premium
-}), (req, res) => {
-  res.json({ results: [], billed_units: req.aifp.weight });
-});
+app.get(
+  "/api/search",
+  aifpGate({
+    merchantId: process.env.AIFP_MERCHANT_ID, // "mrch_…"
+    resource: "/api/search",
+    tier: "complex", // standard | complex | premium
+  }),
+  (req, res) => {
+    res.json({ results: [], billed_units: req.aifp.weight });
+  }
+);
 
 app.listen(3000);
 ```
@@ -57,7 +61,7 @@ import { aifpGate, knownAiAgent } from "@aifinpay/gate";
 export default aifpGate({
   merchantId: process.env.AIFP_MERCHANT_ID,
   registry,
-  shouldCharge: knownAiAgent,     // ← see below
+  shouldCharge: knownAiAgent, // ← see below
 });
 
 export const config = {
@@ -123,14 +127,14 @@ import { AifpMerchant, ResourceRegistry, aifpGate } from "@aifinpay/gate";
 const merchant = new AifpMerchant();
 
 await merchant.ensureResources([
-  { route_pattern: "/api/search",    type: "api", tier: "complex" },
-  { route_pattern: "/api/lookup/*",  type: "api", tier: "standard" },
-  { route_pattern: "/api/report",    type: "api", tier: "premium", name: "Generate report" },
-  { route_pattern: "/api/health",    type: "api", paywall_enabled: false },
+  { route_pattern: "/api/search", type: "api", tier: "complex" },
+  { route_pattern: "/api/lookup/*", type: "api", tier: "standard" },
+  { route_pattern: "/api/report", type: "api", tier: "premium", name: "Generate report" },
+  { route_pattern: "/api/health", type: "api", paywall_enabled: false },
 ]);
 
 const registry = new ResourceRegistry({ merchant });
-registry.start();                              // refreshes every 60s
+registry.start(); // refreshes every 60s
 
 app.use(aifpGate({ merchantId: merchant.merchantId, registry }));
 ```
@@ -157,11 +161,11 @@ The rest of the management surface, for scripts and internal tooling:
 ```js
 await merchant.listResources();
 await merchant.getResource("res_…");
-await merchant.createResource({ route_pattern: "/api/new", type: "api" });   // 409 if it exists
+await merchant.createResource({ route_pattern: "/api/new", type: "api" }); // 409 if it exists
 await merchant.updateResource("res_…", { tier: "premium" });
 await merchant.deleteResource("res_…");
-await merchant.merchant();                     // name, payout wallets — log this on boot so
-await merchant.stats();                        //   you can see WHICH merchant you configured
+await merchant.merchant(); // name, payout wallets — log this on boot so
+await merchant.stats(); //   you can see WHICH merchant you configured
 await merchant.activity(50);
 await merchant.setWebhook("https://you.example/aifp-webhook");
 ```
@@ -184,7 +188,7 @@ The store is where that count lives, and it has exactly two rules:
    what comes back. That is what makes overspend arithmetically impossible under
    concurrency: whichever request receives the value that crosses the limit is
    the one refused, exactly once.
-2. **The TTL is set on the first write only.** The counter must expire *with*
+2. **The TTL is set on the first write only.** The counter must expire _with_
    the receipt. A counter that outlives its receipt refuses paid calls; one that
    expires early makes the whole batch spendable a second time.
 
@@ -233,18 +237,18 @@ skeletons for DynamoDB and Postgres are in the source of
 
 ## 4. What the gate does per request
 
-| # | Condition | Answer |
-|---|---|---|
-| 1 | Resolve the resource and its weight — the registry record for this path, or the mount's `resource`/`tier`. An unregistered path stays **paywalled**, never free. | — |
-| 2 | The resource is registered with `paywall_enabled: false` | `200`, header `AIFP-Paywall: off`, no units spent |
-| 3 | No `AIFP-Receipt` header | `402` + the full challenge |
-| 4 | Receipt expired | `402` — `receipt expired — prepay a new batch` |
-| 4 | Bad signature, issuer, or audience | `403` — `receipt verification failed (signature/issuer/audience)` |
-| 4 | Our JWKS is unreachable and nothing is cached | `503 AIFP-503-METER` — fails **closed** |
-| 5 | Receipt is scoped to another path | `403` — names both the receipt's scope and the path |
-| 6 | Single-use receipt replayed | `403` — `receipt already spent (single-use)` |
-| 7 | `used + weight > unit_quota` | `402` — `quota exhausted — prepay the next batch` |
-| 8 | Otherwise | `200`, header `AIFP-Quota-Remaining`, `req.aifp` populated |
+| #   | Condition                                                                                                                                                        | Answer                                                            |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 1   | Resolve the resource and its weight — the registry record for this path, or the mount's `resource`/`tier`. An unregistered path stays **paywalled**, never free. | —                                                                 |
+| 2   | The resource is registered with `paywall_enabled: false`                                                                                                         | `200`, header `AIFP-Paywall: off`, no units spent                 |
+| 3   | No `AIFP-Receipt` header                                                                                                                                         | `402` + the full challenge                                        |
+| 4   | Receipt expired                                                                                                                                                  | `402` — `receipt expired — prepay a new batch`                    |
+| 4   | Bad signature, issuer, or audience                                                                                                                               | `403` — `receipt verification failed (signature/issuer/audience)` |
+| 4   | Our JWKS is unreachable and nothing is cached                                                                                                                    | `503 AIFP-503-METER` — fails **closed**                           |
+| 5   | Receipt is scoped to another path                                                                                                                                | `403` — names both the receipt's scope and the path               |
+| 6   | Single-use receipt replayed                                                                                                                                      | `403` — `receipt already spent (single-use)`                      |
+| 7   | `used + weight > unit_quota`                                                                                                                                     | `402` — `quota exhausted — prepay the next batch`                 |
+| 8   | Otherwise                                                                                                                                                        | `200`, header `AIFP-Quota-Remaining`, `req.aifp` populated        |
 
 Verification is local and stateless: an Ed25519 signature checked against our
 published JWKS, in your process, pinned to `EdDSA`. Your latency never depends
@@ -278,7 +282,7 @@ of a redeploy when we rotate keys).
 **And what your handler gets on a paid call:**
 
 ```js
-req.aifp
+req.aifp;
 // { agent: "agt_…", receipt_id: "rcpt_…", resource: "/api/search",
 //   weight: 4, unit_quota: 200, used: 8, remaining: 192, mode: "paid" }
 ```
@@ -290,11 +294,11 @@ Three fixed settings, per call. The displayed/quoted AIFP-1 price is the
 and the merchant receives **99% of gross** before external network or settlement
 costs. The 1% fee is **not added on top** of the displayed AIFP-1 price.
 
-| Tier | Gross price paid by agent | Merchant 99% | AiFinPay 1% | Billing units per call |
-|---|---:|---:|---:|---:|
-| `standard` | $0.0005 | $0.000495 | $0.000005 | 1 |
-| `complex` | $0.002 | $0.00198 | $0.00002 | 4 |
-| `premium` | $0.005 | $0.00495 | $0.00005 | 10 |
+| Tier       | Gross price paid by agent | Merchant 99% | AiFinPay 1% | Billing units per call |
+| ---------- | ------------------------: | -----------: | ----------: | ---------------------: |
+| `standard` |                   $0.0005 |    $0.000495 |   $0.000005 |                      1 |
+| `complex`  |                    $0.002 |     $0.00198 |    $0.00002 |                      4 |
+| `premium`  |                    $0.005 |     $0.00495 |    $0.00005 |                     10 |
 
 AIFP-2/x402 is a separate route: the provider receives 100% of its
 provider-defined price, while any AiFinPay AIFP-2 fee is payer-side/on-top. The
@@ -303,7 +307,7 @@ settlement profile and must not reduce the provider amount.
 
 > **During the migration (as of 2026-08-23).** The table above is the canonical
 > model and what the v1.3 settlement contract enforces on-chain. Polygon
-> *mainnet* still runs the previous splitter, whose immutable split is
+> _mainnet_ still runs the previous splitter, whose immutable split is
 > 98.99/1.00/0.01, and the backend grosses the total up from the merchant
 > amount to match it — so today an AIFP-1 merchant is made whole and the agent
 > pays slightly more than the displayed price. When v1.3 is deployed to
@@ -318,20 +322,20 @@ genuinely more expensive than its tier.
 
 ### Options worth knowing
 
-| Option | Default | Why you would change it |
-|---|---|---|
-| `store` | `MemoryStore` | Anything beyond one process. See §3. |
-| `registry` | — | Path-matched pricing from your registered endpoints. |
-| `onStoreError` | `"closed"` | `"open"` trades metering for availability, visibly. |
-| `onEvent` | — | `402` / `serve` / `403` / `meter_error` for your own metrics. |
-| `allow` | — | Your own veto, evaluated **before** any unit is metered, so a refused call costs the agent nothing. |
-| `jwks` | fetched | Pin the key set; removes all runtime network dependency on us. |
-| `requireAgentMatch` | `false` | Compares `AIFP-Agent-Id` to the receipt subject. Anti-accident, not anti-theft — the header is not authenticated. |
-| `refundOnError` | `false` | Give a unit back on a 5xx. Read the warning below first. |
+| Option              | Default       | Why you would change it                                                                                           |
+| ------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `store`             | `MemoryStore` | Anything beyond one process. See §3.                                                                              |
+| `registry`          | —             | Path-matched pricing from your registered endpoints.                                                              |
+| `onStoreError`      | `"closed"`    | `"open"` trades metering for availability, visibly.                                                               |
+| `onEvent`           | —             | `402` / `serve` / `403` / `meter_error` for your own metrics.                                                     |
+| `allow`             | —             | Your own veto, evaluated **before** any unit is metered, so a refused call costs the agent nothing.               |
+| `jwks`              | fetched       | Pin the key set; removes all runtime network dependency on us.                                                    |
+| `requireAgentMatch` | `false`       | Compares `AIFP-Agent-Id` to the receipt subject. Anti-accident, not anti-theft — the header is not authenticated. |
+| `refundOnError`     | `false`       | Give a unit back on a 5xx. Read the warning below first.                                                          |
 
 `refundOnError` fires after your response has already gone out. If the agent
 received a body, the refunded unit is a unit it got served for free — a slow
-double-spend. Enable it only when your upstream fails *before* doing any work,
+double-spend. Enable it only when your upstream fails _before_ doing any work,
 and understand that you are trading exact metering for generosity.
 
 ---

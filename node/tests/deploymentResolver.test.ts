@@ -24,12 +24,8 @@ describe("resolveDeployment — environment switch", () => {
   });
 
   it("dev rejects a non-amoy network with a typed error", () => {
-    expect(() =>
-      resolveDeployment({ environment: "dev", network: "polygon" }),
-    ).toThrow(UnsupportedDevNetworkError);
-    expect(() =>
-      resolveDeployment({ environment: "dev", network: "base" }),
-    ).toThrow(UnsupportedDevNetworkError);
+    expect(() => resolveDeployment({ environment: "dev", network: "polygon" })).toThrow(UnsupportedDevNetworkError);
+    expect(() => resolveDeployment({ environment: "dev", network: "base" })).toThrow(UnsupportedDevNetworkError);
   });
 
   it("prod resolves an explicitly requested legacy production network", () => {
@@ -45,7 +41,7 @@ describe("resolveDeployment — environment switch", () => {
   it("rejects an unknown environment", () => {
     expect(() =>
       // @ts-expect-error deliberately invalid
-      resolveDeployment({ environment: "staging", network: "polygon" }),
+      resolveDeployment({ environment: "staging", network: "polygon" })
     ).toThrow(DeploymentResolverError);
   });
 
@@ -56,7 +52,7 @@ describe("resolveDeployment — environment switch", () => {
         environment: "prod",
         network: "amoy",
         version: "v1.4",
-      }),
+      })
     ).toThrow(VersionUnavailableError);
   });
 });
@@ -68,7 +64,7 @@ describe("resolveDeployment — explicit version selection", () => {
         environment: "prod",
         network: "polygon",
         version: "v1.4",
-      }),
+      })
     ).toThrow(DeploymentDisabledError);
   });
 
@@ -122,7 +118,7 @@ describe("resolveDeployment — explicit version selection", () => {
         environment: "prod",
         network: "botchain",
         version: "v1.4",
-      }),
+      })
     ).toThrow(DeploymentDisabledError);
   });
 
@@ -132,7 +128,7 @@ describe("resolveDeployment — explicit version selection", () => {
         environment: "dev",
         network: "amoy",
         version: "v1.2",
-      }),
+      })
     ).toThrow(VersionUnavailableError);
   });
 });
@@ -168,9 +164,7 @@ describe("resolveDeployment — automatic version selection", () => {
   });
 
   it("auto throws when neither version exists for the network", () => {
-    expect(() =>
-      resolveDeployment({ environment: "prod", network: "does-not-exist" }),
-    ).toThrow(NoDeploymentError);
+    expect(() => resolveDeployment({ environment: "prod", network: "does-not-exist" })).toThrow(NoDeploymentError);
   });
 
   it("every legacy network without v1.4 falls back to v1.2 under auto", () => {
@@ -191,16 +185,7 @@ describe("isV14Available", () => {
   it("means settlement-enabled, not merely present in the registry", () => {
     expect(isV14Available("prod", "polygon")).toBe(false);
     expect(isV14Available("dev", "amoy")).toBe(true);
-    for (const network of [
-      "arbitrum",
-      "avalanche",
-      "base",
-      "bnb",
-      "optimism",
-      "unichain",
-      "xrplevm",
-      "robinhood",
-    ]) {
+    for (const network of ["arbitrum", "avalanche", "base", "bnb", "optimism", "unichain", "xrplevm", "robinhood"]) {
       expect(isV14Available("prod", network)).toBe(true);
     }
     expect(isV14Available("prod", "botchain")).toBe(false); // no v1.4 deployment
@@ -234,8 +219,7 @@ describe("resolveDeployment — input handling", () => {
       }),
     ];
     for (const r of results) {
-      if (r.version === "v1.4")
-        expect(r.deployment.splitterVersion).toBe("1.4");
+      if (r.version === "v1.4") expect(r.deployment.splitterVersion).toBe("1.4");
       else expect(["1.1", "1.2"]).toContain(r.deployment.version);
     }
   });

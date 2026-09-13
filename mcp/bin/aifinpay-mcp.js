@@ -29,7 +29,18 @@
  *   AIFINPAY_TIMEOUT_MS     default 30000
  *   AIFINPAY_MAX_USD        hard cap per single payment (no default)
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync, openSync, closeSync, fchmodSync, fsyncSync, linkSync, unlinkSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  existsSync,
+  openSync,
+  closeSync,
+  fchmodSync,
+  fsyncSync,
+  linkSync,
+  unlinkSync,
+} from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { createRequire } from "node:module";
@@ -90,27 +101,50 @@ const PASSPHRASE = process.env.AIFINPAY_WALLET_PASSPHRASE || null;
 // is unaffected: no passphrase => plaintext, exactly as before. scrypt to
 // stretch, AES-256-GCM so tampering is detected rather than decrypting to junk.
 function encryptSecret(secretB58) {
-  const salt = randomBytes(16), iv = randomBytes(12);
-  const key = scryptSync(PASSPHRASE, salt, 32, { N: 1 << 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+  const salt = randomBytes(16),
+    iv = randomBytes(12);
+  const key = scryptSync(PASSPHRASE, salt, 32, {
+    N: 1 << 15,
+    r: 8,
+    p: 1,
+    maxmem: 64 * 1024 * 1024,
+  });
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   const ct = Buffer.concat([cipher.update(secretB58, "utf8"), cipher.final()]);
-  return { enc: "scrypt-aes-256-gcm", salt: salt.toString("base64"), iv: iv.toString("base64"),
-           tag: cipher.getAuthTag().toString("base64"), ct: ct.toString("base64"),
-           created: new Date().toISOString() };
+  return {
+    enc: "scrypt-aes-256-gcm",
+    salt: salt.toString("base64"),
+    iv: iv.toString("base64"),
+    tag: cipher.getAuthTag().toString("base64"),
+    ct: ct.toString("base64"),
+    created: new Date().toISOString(),
+  };
 }
 function decryptSecret(store) {
   if (!PASSPHRASE) throw new Error(`${KEYSTORE} is encrypted but AIFINPAY_WALLET_PASSPHRASE is not set.`);
-  const key = scryptSync(PASSPHRASE, Buffer.from(store.salt, "base64"), 32, { N: 1 << 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+  const key = scryptSync(PASSPHRASE, Buffer.from(store.salt, "base64"), 32, {
+    N: 1 << 15,
+    r: 8,
+    p: 1,
+    maxmem: 64 * 1024 * 1024,
+  });
   const dc = createDecipheriv("aes-256-gcm", key, Buffer.from(store.iv, "base64"));
   dc.setAuthTag(Buffer.from(store.tag, "base64"));
-  try { return Buffer.concat([dc.update(Buffer.from(store.ct, "base64")), dc.final()]).toString("utf8"); }
-  catch { throw new Error(`could not decrypt ${KEYSTORE}: wrong AIFINPAY_WALLET_PASSPHRASE or the file was modified.`); }
+  try {
+    return Buffer.concat([dc.update(Buffer.from(store.ct, "base64")), dc.final()]).toString("utf8");
+  } catch {
+    throw new Error(`could not decrypt ${KEYSTORE}: wrong AIFINPAY_WALLET_PASSPHRASE or the file was modified.`);
+  }
 }
 
 function readKeystore() {
   if (!existsSync(KEYSTORE)) return null;
   let parsed;
-  try { parsed = JSON.parse(readFileSync(KEYSTORE, "utf8")); } catch { return null; }
+  try {
+    parsed = JSON.parse(readFileSync(KEYSTORE, "utf8"));
+  } catch {
+    return null;
+  }
   // A decrypt failure THROWS rather than returning null — null reads as "no
   // wallet" and mints a new one, which is how a mistyped passphrase loses a key.
   if (parsed?.enc) return { secretB58: decryptSecret(parsed), created: parsed.created, encrypted: true };
@@ -127,9 +161,11 @@ if (arg === "init") {
     const agent = selected.seedHash
       ? await AiFinPayAgent.fromSeed(selected.seedHash)
       : await AiFinPayAgent.fromSolanaSecret(selected.secretB58);
-    process.stdout.write(`Using ${selected.source}; no replacement wallet created.\n` +
-      `EVM ${agent.evmAddress}\nSolana ${agent.solanaAddress}\nCasper ${agent.casperAddress}\n` +
-      `Keep your configured seed backed up privately. Call agent_reload in an already connected MCP server.\n`);
+    process.stdout.write(
+      `Using ${selected.source}; no replacement wallet created.\n` +
+        `EVM ${agent.evmAddress}\nSolana ${agent.solanaAddress}\nCasper ${agent.casperAddress}\n` +
+        `Keep your configured seed backed up privately. Call agent_reload in an already connected MCP server.\n`
+    );
     process.exit(0);
   }
 
@@ -172,7 +208,7 @@ if (arg === "init") {
     process.stdout.write(
       PASSPHRASE
         ? `Created ${KEYSTORE} (mode 600, ENCRYPTED). Keep AIFINPAY_WALLET_PASSPHRASE — the wallet is unrecoverable without it.\n\n`
-        : `Created ${KEYSTORE} (mode 600, plaintext). For at-rest encryption, set AIFINPAY_WALLET_PASSPHRASE before init.\n\n`,
+        : `Created ${KEYSTORE} (mode 600, plaintext). For at-rest encryption, set AIFINPAY_WALLET_PASSPHRASE before init.\n\n`
     );
   } else {
     process.stdout.write(`Existing wallet found at ${KEYSTORE} — keeping it.\n\n`);
@@ -189,11 +225,11 @@ if (arg === "init") {
   if (freshlyCreated && !PASSPHRASE && process.stdout.isTTY) {
     process.stdout.write(
       `\n  RECOVERY KEY (shown once, never again):\n\n` +
-      `    ${store.secretB58}\n\n` +
-      `  Save this off this machine NOW. Anyone with it controls the wallet and\n` +
-      `  its funds. Do NOT paste it into a chat, an issue, or a config file — the\n` +
-      `  keystore at ${KEYSTORE} already holds it (encrypt it with\n` +
-      `  AIFINPAY_WALLET_PASSPHRASE). This line is your OFF-machine backup.\n\n`,
+        `    ${store.secretB58}\n\n` +
+        `  Save this off this machine NOW. Anyone with it controls the wallet and\n` +
+        `  its funds. Do NOT paste it into a chat, an issue, or a config file — the\n` +
+        `  keystore at ${KEYSTORE} already holds it (encrypt it with\n` +
+        `  AIFINPAY_WALLET_PASSPHRASE). This line is your OFF-machine backup.\n\n`
     );
   }
 
@@ -216,14 +252,14 @@ if (arg === "init") {
           },
         },
         null,
-        2,
+        2
       ) +
       `\n\nThe secret is NOT in that block on purpose — the server reads the\n` +
       `keystore. If this server is already connected, call agent_reload after init.\nA new conversation is not required by this server.\n\n` +
       `Back up ${KEYSTORE}. It is the only copy. The derivation is not\n` +
       `BIP-39, so no standard wallet can recover this from a phrase.\n\n` +
       `The EVM address is used for Polygon payments. Check its balance before\n` +
-      `funding it or paying for calls.\n`,
+      `funding it or paying for calls.\n`
   );
   process.exit(0);
 }

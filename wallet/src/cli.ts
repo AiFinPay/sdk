@@ -40,7 +40,7 @@ function print(w: DerivedWallet, created: boolean) {
       `@aifinpay/mcp reads, so \`npx @aifinpay/mcp\` uses it with no config.\n\n` +
       `Back up ${KEYSTORE}. It is the only copy, and the derivation is not\n` +
       `BIP-39 — no standard wallet can recover it from a phrase.\n\n` +
-      `The addresses hold nothing yet. Send POL to the EVM address to fund it.\n`,
+      `The addresses hold nothing yet. Send POL to the EVM address to fund it.\n`
   );
 }
 
@@ -51,17 +51,16 @@ async function create(force: boolean): Promise<DerivedWallet> {
     return walletFromSolanaSecret(existing.secretB58);
   }
   if (existing && force) {
-    process.stderr.write(
-      `Refusing: ${KEYSTORE} already exists and may hold funds. Move it aside first.\n`,
-    );
+    process.stderr.write(`Refusing: ${KEYSTORE} already exists and may hold funds. Move it aside first.\n`);
     process.exit(1);
   }
   const w = await newWallet();
   mkdirSync(HOME, { recursive: true, mode: 0o700 });
   writeFileSync(
     KEYSTORE,
-    JSON.stringify({ secretB58: w.keys.solanaSecretKeyB58, seedHex: w.keys.seedHex, created: nowIso() }, null, 2) + "\n",
-    { mode: 0o600 },
+    JSON.stringify({ secretB58: w.keys.solanaSecretKeyB58, seedHex: w.keys.seedHex, created: nowIso() }, null, 2) +
+      "\n",
+    { mode: 0o600 }
   );
   chmodSync(KEYSTORE, 0o600);
   return w;
@@ -87,7 +86,7 @@ if (cmd === "-h" || cmd === "--help" || cmd === "help") {
     `npx @aifinpay/wallet          create if absent, else show\n` +
       `npx @aifinpay/wallet new      create (won't overwrite a funded wallet)\n` +
       `npx @aifinpay/wallet show     print addresses\n` +
-      `npx @aifinpay/wallet export   print the seed to back up\n`,
+      `npx @aifinpay/wallet export   print the seed to back up\n`
   );
   process.exit(0);
 }

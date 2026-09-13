@@ -55,7 +55,7 @@ The local server selects one identity in this order:
 The project-file schema is:
 
 ```json
-{"agents":[{"id":"research-agent","seed_hash":"REDACTED"}]}
+{ "agents": [{ "id": "research-agent", "seed_hash": "REDACTED" }] }
 ```
 
 REDACTED is a placeholder, not a usable seed. With more than one record,
@@ -92,11 +92,11 @@ is client-specific; do not universally prescribe restarting the whole chat.
 Use agent_history. Do not guess /v1/history, /v1/payments or /v1/wallet/tx.
 
 ```json
-{"address":"0x…","source":"transactions","limit":25,"offset":0}
+{ "address": "0x…", "source": "transactions", "limit": 25, "offset": 0 }
 ```
 
 ```json
-{"passport":"AIFP-000000042","source":"receipts","network":"polygon"}
+{ "passport": "AIFP-000000042", "source": "receipts", "network": "polygon" }
 ```
 
 An omitted address/passport uses the current wallet. With both inputs, the
@@ -159,8 +159,8 @@ When asked to pay for a paid API or crawl a paywalled site:
   recipient, amount (rounded, e.g. `1.055 POL`), amount (exact base units,
   as a string), currency/token, network — plus the invoice as a table:
 
-  | resource | qty | price | total |
-  |---|---|---|---|
+  | resource          | qty | price   | total |
+  | ----------------- | --- | ------- | ----- |
   | /api/agent/genres | 200 | $0.0005 | $0.10 |
 
 - After sending, show payment id, transaction hash, status, and the

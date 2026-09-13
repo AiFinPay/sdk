@@ -77,7 +77,7 @@ export class ResourceRegistry {
         // paywalled and it is not priced from the registry at all.
         console.warn(
           "[aifinpay/gate] resource registry has never loaded — check AIFP-Merchant-Secret and network reachability. Requests are being priced at the mount default until the first successful fetch.",
-          err,
+          err
         );
       }
     }
@@ -95,8 +95,7 @@ export class ResourceRegistry {
     never_loaded: boolean;
     last_error: unknown;
   } {
-    const stale =
-      this.fetchedAt == null || Date.now() - Date.parse(this.fetchedAt) > this.refreshMs * 3;
+    const stale = this.fetchedAt == null || Date.now() - Date.parse(this.fetchedAt) > this.refreshMs * 3;
     return {
       resources: [...this.resources],
       fetched_at: this.fetchedAt,

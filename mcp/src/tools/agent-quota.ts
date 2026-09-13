@@ -36,14 +36,12 @@ export function agentQuotaTool() {
       properties: {
         merchant_id: {
           type: "string",
-          description:
-            "Optional mrch_… filter — only batches bought from this service.",
+          description: "Optional mrch_… filter — only batches bought from this service.",
         },
         include_exhausted: {
           type: "boolean",
           default: false,
-          description:
-            "Also list batches with 0 remaining (still retained, not yet expired).",
+          description: "Also list batches with 0 remaining (still retained, not yet expired).",
         },
       },
     },
@@ -68,22 +66,17 @@ interface WireReceipt {
   chain?: string;
 }
 
-export async function runAgentQuota(
-  ctx: ToolContext,
-  args: Record<string, unknown>,
-) {
+export async function runAgentQuota(ctx: ToolContext, args: Record<string, unknown>) {
   const base = (ctx.config.baseUrl ?? DEFAULT_BASE).replace(/\/+$/, "");
   const address = ctx.agent.evmAddress;
-  const merchantFilter =
-    typeof args.merchant_id === "string" && args.merchant_id ? args.merchant_id : null;
+  const merchantFilter = typeof args.merchant_id === "string" && args.merchant_id ? args.merchant_id : null;
   const includeExhausted = args.include_exhausted === true;
 
   let resp: Response;
   try {
-    resp = await ctx.agent.inner.fetchImpl(
-      `${base}/v1/agents/${address}/receipts`,
-      { method: "GET" },
-    );
+    resp = await ctx.agent.inner.fetchImpl(`${base}/v1/agents/${address}/receipts`, {
+      method: "GET",
+    });
   } catch (e) {
     const err = e as Error;
     return errorResult(`could not reach ${base}: ${err.message}`);

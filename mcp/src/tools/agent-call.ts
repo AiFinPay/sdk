@@ -66,14 +66,11 @@ export function agentCallTool() {
   };
 }
 
-export async function runAgentCall(
-  ctx: ToolContext,
-  args: Record<string, unknown>,
-) {
+export async function runAgentCall(ctx: ToolContext, args: Record<string, unknown>) {
   const provider = args.provider as string | undefined;
-  const body     = args.body     as Record<string, unknown> | undefined;
-  const method   = (args.method  as "GET" | "POST" | undefined) ?? "POST";
-  const cost     = args.cost     as number | undefined;
+  const body = args.body as Record<string, unknown> | undefined;
+  const method = (args.method as "GET" | "POST" | undefined) ?? "POST";
+  const cost = args.cost as number | undefined;
 
   if (!provider) {
     return {
@@ -97,7 +94,11 @@ export async function runAgentCall(
     }
     const text = await resp.text();
     let parsed: unknown = text;
-    try { parsed = JSON.parse(text); } catch { /* keep as text */ }
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      /* keep as text */
+    }
 
     // Pull the @internal settlement metadata attached by AiFinPayAgent.call
     // (see unifiedAgent.ts). Surfacing the tx hash here lets the agent show
@@ -109,9 +110,8 @@ export async function runAgentCall(
       ? `Paid on ${txChain ?? "polygon"}. Tx: ${txHash} → https://${txChain === "solana" ? "solscan.io/tx" : "polygonscan.com/tx"}/${txHash}\n\n`
       : "";
 
-    const bodyText = typeof parsed === "string"
-      ? parsed
-      : JSON.stringify({ status: resp.status, body: parsed }, null, 2);
+    const bodyText =
+      typeof parsed === "string" ? parsed : JSON.stringify({ status: resp.status, body: parsed }, null, 2);
 
     return {
       content: [
@@ -123,12 +123,11 @@ export async function runAgentCall(
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    const hint =
-      message.toLowerCase().includes("budget")
-        ? "Tip: increase the per-call cost cap or use `agent_quote` to preview before paying."
-        : message.toLowerCase().includes("revert") || message.toLowerCase().includes("insufficient")
-          ? `Tip: ensure the EVM address ${ctx.agent.evmAddress} holds enough POL on Polygon for gas + payment.`
-          : `Provider may be misconfigured. Check https://aifinpay.io/api/providers.`;
+    const hint = message.toLowerCase().includes("budget")
+      ? "Tip: increase the per-call cost cap or use `agent_quote` to preview before paying."
+      : message.toLowerCase().includes("revert") || message.toLowerCase().includes("insufficient")
+        ? `Tip: ensure the EVM address ${ctx.agent.evmAddress} holds enough POL on Polygon for gas + payment.`
+        : `Provider may be misconfigured. Check https://aifinpay.io/api/providers.`;
     return {
       isError: true,
       content: [{ type: "text", text: `agent_call failed: ${message}\n\n${hint}` }],

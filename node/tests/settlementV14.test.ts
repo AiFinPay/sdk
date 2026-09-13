@@ -10,37 +10,63 @@
 import { describe, it, expect } from "vitest";
 import { keccak256, stringToHex } from "viem";
 import {
-  validateV14SettlementCall, checkV14Submittable, executeV14Settlement,
-  routeIdOf, knownRouteIds, KNOWN_V14_ROUTES, V14SettlementError,
+  validateV14SettlementCall,
+  checkV14Submittable,
+  executeV14Settlement,
+  routeIdOf,
+  knownRouteIds,
+  KNOWN_V14_ROUTES,
+  V14SettlementError,
   type V14SettlementCall,
 } from "../src/settlementV14.js";
 
 const CONTRACT = "0xBdC126193FADf38A86Cd509e56018a95d5B6eeFA";
-const PAYER    = "0x1111111111111111111111111111111111111111";
+const PAYER = "0x1111111111111111111111111111111111111111";
 const MERCHANT = "0x2222222222222222222222222222222222222222";
-const ZERO     = "0x0000000000000000000000000000000000000000";
-const ORDER    = "qt_abc123";
-const NOW_MS   = 1_756_000_000_000;
+const ZERO = "0x0000000000000000000000000000000000000000";
+const ORDER = "qt_abc123";
+const NOW_MS = 1_756_000_000_000;
 
 // `nowMs` is fixed for the validation tests so expiry maths is exact, and left
 // real for the execute tests, which go through executeV14Settlement — a
 // production entry point that takes no clock override, and should not grow one
 // just to be testable.
-function callFor(over: Record<string, unknown> = {}, quoteOver: Record<string, unknown> = {},
-                 baseMs: number = NOW_MS): V14SettlementCall {
+function callFor(
+  over: Record<string, unknown> = {},
+  quoteOver: Record<string, unknown> = {},
+  baseMs: number = NOW_MS
+): V14SettlementCall {
   const quote = {
-    payer: PAYER, merchant: MERCHANT, token: ZERO,
-    grossAmount: "1000000000000000", ipCreator: ZERO,
-    validUntil: String(Math.floor(baseMs / 1000) + 300), orderIdHash: keccak256(stringToHex(ORDER)),
-    nonce: "0", routeId: routeIdOf("merchant-aifp1"),
+    payer: PAYER,
+    merchant: MERCHANT,
+    token: ZERO,
+    grossAmount: "1000000000000000",
+    ipCreator: ZERO,
+    validUntil: String(Math.floor(baseMs / 1000) + 300),
+    orderIdHash: keccak256(stringToHex(ORDER)),
+    nonce: "0",
+    routeId: routeIdOf("merchant-aifp1"),
     ...quoteOver,
   };
   return {
-    chain: "amoy", contract: CONTRACT, splitter_version: "1.4",
-    route: "merchant-aifp1", asset: "POL",
+    chain: "amoy",
+    contract: CONTRACT,
+    splitter_version: "1.4",
+    route: "merchant-aifp1",
+    asset: "POL",
     function: "settleNative((address,address,address,uint256,address,uint256,bytes32,uint256,bytes32),bytes)",
     arg_encoding: "struct+signature",
-    field_order: ["payer","merchant","token","grossAmount","ipCreator","validUntil","orderIdHash","nonce","routeId"],
+    field_order: [
+      "payer",
+      "merchant",
+      "token",
+      "grossAmount",
+      "ipCreator",
+      "validUntil",
+      "orderIdHash",
+      "nonce",
+      "routeId",
+    ],
     value_wei: String(quote.grossAmount),
     args: { quote, signature: ("0x" + "ab".repeat(65)) as `0x${string}` },
     bound_to_payer: PAYER,
@@ -52,7 +78,12 @@ const ok = (c: V14SettlementCall, o = {}) =>
   validateV14SettlementCall(c, { orderId: ORDER, payer: PAYER, nowMs: NOW_MS, ...o });
 
 const codeOf = (fn: () => unknown): string => {
-  try { fn(); return "DID_NOT_THROW"; } catch (e) { return (e as V14SettlementError).code; }
+  try {
+    fn();
+    return "DID_NOT_THROW";
+  } catch (e) {
+    return (e as V14SettlementError).code;
+  }
 };
 
 describe("routeId derivation", () => {
@@ -60,10 +91,8 @@ describe("routeId derivation", () => {
     // Verified against the deployed Amoy Profiles on 2026-09-02: routeId(name)
     // and keccak256(bytes(name)) agree for both routes. Deriving beats pinning
     // the hashes, which would be storing something the contract already derives.
-    expect(routeIdOf("merchant-aifp1"))
-      .toBe("0xb9dbf587b0df69870df1e60b22fba0317f53eb19d78a573abf94fc384a339a89");
-    expect(routeIdOf("agent-x402"))
-      .toBe("0x8dc505be335e565d2a5e2c96057c7fb0caff7c5009f61b82ac3ef5e7a9ec0f1e");
+    expect(routeIdOf("merchant-aifp1")).toBe("0xb9dbf587b0df69870df1e60b22fba0317f53eb19d78a573abf94fc384a339a89");
+    expect(routeIdOf("agent-x402")).toBe("0x8dc505be335e565d2a5e2c96057c7fb0caff7c5009f61b82ac3ef5e7a9ec0f1e");
   });
 
   it("knows exactly the two routes that exist today", () => {
@@ -83,8 +112,9 @@ describe("§8 — what the SDK must refuse", () => {
   it("§8.3 refuses a quote bound to a different order", () => {
     // The check that stops anything between the backend and here from binding
     // your payment to an order you never asked about.
-    expect(codeOf(() => ok(callFor({}, { orderIdHash: keccak256(stringToHex("qt_other")) }))))
-      .toBe("V14_ORDER_MISMATCH");
+    expect(codeOf(() => ok(callFor({}, { orderIdHash: keccak256(stringToHex("qt_other")) })))).toBe(
+      "V14_ORDER_MISMATCH"
+    );
   });
 
   it("§8.3 says plainly when it could not check", () => {
@@ -94,18 +124,17 @@ describe("§8 — what the SDK must refuse", () => {
   });
 
   it("§8.4 refuses an expired quote, and one about to expire", () => {
-    expect(codeOf(() => ok(callFor({}, { validUntil: String(Math.floor(NOW_MS / 1000) - 1) }))))
-      .toBe("V14_EXPIRED");
+    expect(codeOf(() => ok(callFor({}, { validUntil: String(Math.floor(NOW_MS / 1000) - 1) })))).toBe("V14_EXPIRED");
     // Headroom matters because the deadline applies when the transaction is
     // MINED. Ten seconds left is a revert that the agent pays for.
-    expect(codeOf(() => ok(callFor({}, { validUntil: String(Math.floor(NOW_MS / 1000) + 10) }))))
-      .toBe("V14_EXPIRING");
+    expect(codeOf(() => ok(callFor({}, { validUntil: String(Math.floor(NOW_MS / 1000) + 10) })))).toBe("V14_EXPIRING");
   });
 
   it("§8.2 refuses a quote signed for somebody else", () => {
     // The contract enforces payer == msg.sender. Catching it here is free.
-    expect(codeOf(() => ok(callFor(), { payer: "0x9999999999999999999999999999999999999999" })))
-      .toBe("V14_WRONG_PAYER");
+    expect(codeOf(() => ok(callFor(), { payer: "0x9999999999999999999999999999999999999999" }))).toBe(
+      "V14_WRONG_PAYER"
+    );
   });
 
   it("§8.7 refuses a route it does not understand, and accepts one it is told about", () => {
@@ -122,8 +151,9 @@ describe("§8 — what the SDK must refuse", () => {
   });
 
   it("refuses a signature that is not 65 bytes", () => {
-    expect(codeOf(() => ok(callFor({ args: { ...callFor().args, signature: "0xdeadbeef" } }))))
-      .toBe("V14_BAD_SIGNATURE");
+    expect(codeOf(() => ok(callFor({ args: { ...callFor().args, signature: "0xdeadbeef" } })))).toBe(
+      "V14_BAD_SIGNATURE"
+    );
   });
 
   it("refuses a v1.2 or v1.3 call sent down this path", () => {
@@ -133,17 +163,21 @@ describe("§8 — what the SDK must refuse", () => {
   it("refuses when bound_to_payer disagrees with the signed quote", () => {
     // These come from the same response. If they disagree, something rewrote
     // one of them, and the signed one is the only one that counts.
-    expect(codeOf(() => ok(callFor({ bound_to_payer: "0x9999999999999999999999999999999999999999" }))))
-      .toBe("V14_MALFORMED");
+    expect(codeOf(() => ok(callFor({ bound_to_payer: "0x9999999999999999999999999999999999999999" })))).toBe(
+      "V14_MALFORMED"
+    );
   });
 });
 
 describe("§8.6 — never re-broadcast", () => {
-  const client = (over: Record<string, unknown>) => ({
-    async readContract({ functionName }: { functionName: string }) {
-      return ({ consumedNonce: false, payerNonce: 0n, paused: false, ...over } as Record<string, unknown>)[functionName];
-    },
-  }) as never;
+  const client = (over: Record<string, unknown>) =>
+    ({
+      async readContract({ functionName }: { functionName: string }) {
+        return ({ consumedNonce: false, payerNonce: 0n, paused: false, ...over } as Record<string, unknown>)[
+          functionName
+        ];
+      },
+    }) as never;
 
   it("allows a fresh, expected nonce", async () => {
     expect(await checkV14Submittable(client({}), callFor())).toEqual({ submittable: true });
@@ -176,12 +210,24 @@ describe("execute — v1.4 is quarantined until signed economics are immutable",
     { name: "unknown chain", over: { chain: "hostile" }, quote: {} },
   ])("refuses $name without RPC, approval, signing or broadcast", async ({ over, quote }) => {
     let touched = false;
-    const clients = new Proxy({}, { get() { touched = true; throw new Error("client touched"); } });
-    await expect(executeV14Settlement(callFor(over, quote, Date.now()), {
-      publicClient: clients as never, walletClient: clients as never, account: PAYER,
-      // Even the old skip flag must not bypass the quarantine.
-      skipPreflight: true,
-    })).rejects.toMatchObject({ code: "V14_SETTLEMENT_DISABLED" });
+    const clients = new Proxy(
+      {},
+      {
+        get() {
+          touched = true;
+          throw new Error("client touched");
+        },
+      }
+    );
+    await expect(
+      executeV14Settlement(callFor(over, quote, Date.now()), {
+        publicClient: clients as never,
+        walletClient: clients as never,
+        account: PAYER,
+        // Even the old skip flag must not bypass the quarantine.
+        skipPreflight: true,
+      })
+    ).rejects.toMatchObject({ code: "V14_SETTLEMENT_DISABLED" });
     expect(touched).toBe(false);
   });
 });

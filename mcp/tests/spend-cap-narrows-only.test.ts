@@ -21,9 +21,11 @@ const SRC = readFileSync(new URL("../src/tools/payable-fetch.ts", import.meta.ur
 
 /** The same rule the tool implements, kept next to its assertions. */
 function resolveCap(operatorMax?: number, requestedMax?: number): number | undefined {
-  return operatorMax === undefined ? requestedMax
-    : requestedMax === undefined ? operatorMax
-    : Math.min(operatorMax, requestedMax);
+  return operatorMax === undefined
+    ? requestedMax
+    : requestedMax === undefined
+      ? operatorMax
+      : Math.min(operatorMax, requestedMax);
 }
 
 describe("the operator cap can be narrowed, never widened", () => {

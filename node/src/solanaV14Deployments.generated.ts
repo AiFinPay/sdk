@@ -16,41 +16,41 @@ export interface SolanaV14Deployment {
 }
 
 export const SOLANA_V14_DEPLOYMENTS_SOURCE = {
-  "repo": "AiFinPay/solana-contract",
-  "commit": "e5df8f5436cf646ab495381eee04e0d1a10b4e2f",
-  "path": "deployments/splitter_v14/",
-  "branch": "dev"
+  repo: "AiFinPay/solana-contract",
+  commit: "e5df8f5436cf646ab495381eee04e0d1a10b4e2f",
+  path: "deployments/splitter_v14/",
+  branch: "dev",
 } as const;
 
 export const SOLANA_V14_DEPLOYMENTS: Record<string, SolanaV14Deployment> = {
-  "devnet": {
-    "network": "devnet",
-    "environment": "dev",
-    "splitterVersion": "1.4",
-    "status": "disabled",
-    "settlementEnabled": false,
-    "disabledReason": "Backend Solana receipt verification is not implemented",
-    "programId": "8dty5bD738Z9TzEkDu8vLSnhpJNWtEGMUEcYaKCUTY6y",
-    "idl": {
-      "name": "splitter",
-      "version": "1.4.1",
-      "artifact": "deployments/splitter_v14/splitter.devnet.20260911-195503.json"
-    }
+  devnet: {
+    network: "devnet",
+    environment: "dev",
+    splitterVersion: "1.4",
+    status: "disabled",
+    settlementEnabled: false,
+    disabledReason: "Backend Solana receipt verification is not implemented",
+    programId: "8dty5bD738Z9TzEkDu8vLSnhpJNWtEGMUEcYaKCUTY6y",
+    idl: {
+      name: "splitter",
+      version: "1.4.1",
+      artifact: "deployments/splitter_v14/splitter.devnet.20260911-195503.json",
+    },
   },
-  "mainnet": {
-    "network": "mainnet",
-    "environment": "prod",
-    "splitterVersion": "1.4",
-    "status": "disabled",
-    "settlementEnabled": false,
-    "disabledReason": "Backend Solana receipt verification is not implemented and upgrade authority is not multisig",
-    "programId": "724Ut31i4ecY4dJ25z8HuZetu3A43xtNkPdk4JdbsfdD",
-    "idl": {
-      "name": "splitter",
-      "version": "1.4.1",
-      "artifact": "deployments/splitter_v14/splitter.mainnet.20260911-200222.json"
-    }
-  }
+  mainnet: {
+    network: "mainnet",
+    environment: "prod",
+    splitterVersion: "1.4",
+    status: "disabled",
+    settlementEnabled: false,
+    disabledReason: "Backend Solana receipt verification is not implemented and upgrade authority is not multisig",
+    programId: "724Ut31i4ecY4dJ25z8HuZetu3A43xtNkPdk4JdbsfdD",
+    idl: {
+      name: "splitter",
+      version: "1.4.1",
+      artifact: "deployments/splitter_v14/splitter.mainnet.20260911-200222.json",
+    },
+  },
 };
 
 export const SOLANA_DEV_NETWORKS = ["devnet"] as const;

@@ -15,8 +15,15 @@ import {
 } from "../src/index.js";
 
 const CHAIN_IDS: Record<string, number> = {
-  polygon: 137, optimism: 10, bnb: 56, unichain: 130, botchain: 677,
-  base: 8453, arbitrum: 42161, avalanche: 43114, xrplevm: 1440000,
+  polygon: 137,
+  optimism: 10,
+  bnb: 56,
+  unichain: 130,
+  botchain: 677,
+  base: 8453,
+  arbitrum: 42161,
+  avalanche: 43114,
+  xrplevm: 1440000,
   amoy: 80002,
 };
 const BPS: Record<string, number> = { "merchant-aifp1": 100, "agent-x402": 0 };
@@ -127,8 +134,7 @@ describe("resolveSplitterRoute", () => {
 
 describe("resolveSettlingSplitterRoute", () => {
   it("refuses a route that is not enabled for settlement", () => {
-    expect(() => resolveSettlingSplitterRoute("polygon", "merchant-aifp1"))
-      .toThrow(/settlement is not enabled/);
+    expect(() => resolveSettlingSplitterRoute("polygon", "merchant-aifp1")).toThrow(/settlement is not enabled/);
   });
 
   it("still refuses an unknown pair", () => {
@@ -271,6 +277,8 @@ describe("Amoy requires explicit testnet opt-in", () => {
   });
 
   it("testnet opt-in cannot enable a disabled mainnet route", () => {
-    expect(() => resolveSettlingSplitterRoute("polygon", "merchant-aifp1", date, { allowTestnet: true })).toThrow(/not enabled/);
+    expect(() => resolveSettlingSplitterRoute("polygon", "merchant-aifp1", date, { allowTestnet: true })).toThrow(
+      /not enabled/
+    );
   });
 });

@@ -125,7 +125,6 @@ on-chain, and serves the resource.
 
 MIT.
 
-
 ### Payment receipt authorization
 
 AIFP-1 receipts use the paying wallet signature. See [authorize and recover payment receipts](PAYMENT_RECEIPTS.md) for retries and recovery without a second transfer.
@@ -133,8 +132,8 @@ AIFP-1 receipts use the paying wallet signature. See [authorize and recover paym
 ### Payment history
 
 ```ts
-import { getAgentHistory } from '@aifinpay/agent';
-const history = await getAgentHistory({ address: '0x…', source: 'transactions' });
+import { getAgentHistory } from "@aifinpay/agent";
+const history = await getAgentHistory({ address: "0x…", source: "transactions" });
 // Or { passport: 'AIFP-000000042', network: 'polygon', source: 'receipts' }
 ```
 

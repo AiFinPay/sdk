@@ -13,14 +13,14 @@ as the MCP resource `aifinpay://skill`.
 
 ## Tools
 
-| Tool | Purpose |
-|---|---|
-| `agent_address` | Read the current Solana, EVM and Casper addresses. |
-| `agent_reload` | Reload local wallet files in the current MCP connection. |
-| `agent_quota` | Read the agent's quota. |
-| `agent_passport_resolve` | Resolve the global Agent Passport identity. |
-| `settlement_routes` | Read the available verified settlement routes. |
-| `settlement_invoice` | Prepare a non-signing settlement invoice. |
+| Tool                     | Purpose                                                  |
+| ------------------------ | -------------------------------------------------------- |
+| `agent_address`          | Read the current Solana, EVM and Casper addresses.       |
+| `agent_reload`           | Reload local wallet files in the current MCP connection. |
+| `agent_quota`            | Read the agent's quota.                                  |
+| `agent_passport_resolve` | Resolve the global Agent Passport identity.              |
+| `settlement_routes`      | Read the available verified settlement routes.           |
+| `settlement_invoice`     | Prepare a non-signing settlement invoice.                |
 
 Legacy `payable_fetch`, `agent_call`, `agent_quote`, `pay_with_split`,
 `quote_split` and `agent_claim_self` tools are not registered by this RC.
@@ -48,11 +48,13 @@ wallet. With no configured wallet at all the server has an ephemeral identity:
 **do not fund it**.
 
 ## Initialize and connect
+
 This RC does not register payment-signing tools. Its legacy SDK dependency
 supplies wallet derivation only; installing this MCP does not enable v2
 settlement. An invoice or quote is not a completed payment.
 
 ## Local configuration
+
 ```bash
 npx @aifinpay/mcp@next init
 ```
@@ -97,6 +99,7 @@ legacy file at creation. An already connected server can load it with
 launch environment requires a server reconnect, subject to host support.
 
 ## History
+
 Connect the MCP server once. After `init` or a wallet file update, call
 `agent_reload` in that same connection; no new conversation is required. A
 failed reload keeps the previous wallet. Changed shell environment variables
@@ -105,13 +108,13 @@ snapshot. Verify `agent_address` against the wallet you intend to use.
 
 ## Other environment variables
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `AIFINPAY_BASE_URL` | `https://aifinpay.io` | Backend URL. |
-| `AIFINPAY_TIMEOUT_MS` | `30000` | Request timeout. |
-| `AIFINPAY_MAX_USD` | — | Configures the underlying agent's per-call cap; it does not enable signing. |
-| `AIFINPAY_GATEWAY_ORIGINS` | SDK default | Comma-separated exact HTTPS origins trusted for AIFP-1 settlement. |
-| `AIFINPAY_GATEWAY_PATH_MODE` | `gateway` | Use `gateway` for merchant-slug identity or `direct` for full request-path identity. |
+| Variable                     | Default               | Purpose                                                                              |
+| ---------------------------- | --------------------- | ------------------------------------------------------------------------------------ |
+| `AIFINPAY_BASE_URL`          | `https://aifinpay.io` | Backend URL.                                                                         |
+| `AIFINPAY_TIMEOUT_MS`        | `30000`               | Request timeout.                                                                     |
+| `AIFINPAY_MAX_USD`           | —                     | Configures the underlying agent's per-call cap; it does not enable signing.          |
+| `AIFINPAY_GATEWAY_ORIGINS`   | SDK default           | Comma-separated exact HTTPS origins trusted for AIFP-1 settlement.                   |
+| `AIFINPAY_GATEWAY_PATH_MODE` | `gateway`             | Use `gateway` for merchant-slug identity or `direct` for full request-path identity. |
 
 `agent_history({address, source:"transactions"})` reads indexed Polygon
 settlements; `source:"receipts"` reads retained batches, including test-mode
@@ -130,7 +133,6 @@ await server.connect(new StdioServerTransport());
 
 The programmatic equivalents of identity environment options are `seedHash`,
 `agentsFile`, `agentId`, `agentSecretB58`, `walletHome` and `walletPassphrase`.
-
 
 - AIFINPAY_BASE_URL: backend origin; default https://aifinpay.io.
 - AIFINPAY_HOME: directory of the legacy agent.json keystore.

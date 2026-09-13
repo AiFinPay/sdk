@@ -1,8 +1,5 @@
 import type { Agent } from "../agent.js";
-import {
-  PaymentTooExpensiveError,
-  UnsupportedFacilitatorError,
-} from "../errors.js";
+import { PaymentTooExpensiveError, UnsupportedFacilitatorError } from "../errors.js";
 import type { AuthPayload, Facilitator, PayOptions } from "./base.js";
 
 /**
@@ -70,23 +67,17 @@ interface V2PaymentRequired {
 }
 
 function decodeBase64Json(value: string): unknown {
-  const text = typeof Buffer !== "undefined"
-    ? Buffer.from(value, "base64").toString("utf8")
-    : atob(value);
+  const text = typeof Buffer !== "undefined" ? Buffer.from(value, "base64").toString("utf8") : atob(value);
   return JSON.parse(text);
 }
 
 function encodeBase64Json(value: unknown): string {
   const json = JSON.stringify(value);
-  return typeof Buffer !== "undefined"
-    ? Buffer.from(json, "utf8").toString("base64")
-    : btoa(json);
+  return typeof Buffer !== "undefined" ? Buffer.from(json, "utf8").toString("base64") : btoa(json);
 }
 
 function asRecord(value: unknown): JsonRecord | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? value as JsonRecord
-    : null;
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : null;
 }
 
 function readV2Requirement(resp: Response): V2PaymentRequired | null {
@@ -135,11 +126,13 @@ function enforceUsdCap(value: string, extra: JsonRecord, opts: PayOptions, chain
   }
 
   // USD caps use the independently identified asset's fixed six decimals.
-  const name = String(extra.name ?? "").trim().toLowerCase();
+  const name = String(extra.name ?? "")
+    .trim()
+    .toLowerCase();
   const isUsdc = name === "usdc" || name === "usd coin";
   if (!isUsdc || USDC_BY_CHAIN[chainId] !== asset.toLowerCase()) {
     throw new UnsupportedFacilitatorError(
-      "maxAmountUsd cannot be safely enforced for this x402 asset; a pinned USDC contract on this chain is required",
+      "maxAmountUsd cannot be safely enforced for this x402 asset; a pinned USDC contract on this chain is required"
     );
   }
   const decimalsRaw = extra.decimals ?? 6;
@@ -153,9 +146,7 @@ function enforceUsdCap(value: string, extra: JsonRecord, opts: PayOptions, chain
   const digits = BigInt(whole + fraction);
   const capAtomic = shift >= 0 ? digits * 10n ** BigInt(shift) : digits / 10n ** BigInt(-shift);
   if (BigInt(value) > capAtomic) {
-    throw new PaymentTooExpensiveError(
-      `x402 wants ${value} USDC atomic units, caller cap allows ${capAtomic}`,
-    );
+    throw new PaymentTooExpensiveError(`x402 wants ${value} USDC atomic units, caller cap allows ${capAtomic}`);
   }
 }
 
@@ -179,30 +170,20 @@ export class StandardX402Facilitator implements Facilitator {
     }
   }
 
-  async buildAuth(
-    resp: Response,
-    agent: Agent,
-    opts: PayOptions,
-  ): Promise<AuthPayload> {
+  async buildAuth(resp: Response, agent: Agent, opts: PayOptions): Promise<AuthPayload> {
     const v2 = readV2Requirement(resp);
     if (v2) return this.buildV2Auth(v2, agent, opts);
     return this.buildLegacyV1Auth(resp, agent, opts);
   }
 
-  private async buildV2Auth(
-    required: V2PaymentRequired,
-    agent: Agent,
-    opts: PayOptions,
-  ): Promise<AuthPayload> {
+  private async buildV2Auth(required: V2PaymentRequired, agent: Agent, opts: PayOptions): Promise<AuthPayload> {
     const accepts = required.accepts;
-    const candidates = accepts.filter((item) =>
-      item.scheme === "exact" && parseCaip2Evm(item.network) !== null,
-    );
+    const candidates = accepts.filter((item) => item.scheme === "exact" && parseCaip2Evm(item.network) !== null);
     const req = candidates[0];
     if (!req) {
       throw new UnsupportedFacilitatorError(
         "x402 v2 detected but no supported EVM `exact` requirement was offered " +
-          `(offered: ${accepts.map((a) => `${a.scheme}/${a.network}`).join(", ") || "none"})`,
+          `(offered: ${accepts.map((a) => `${a.scheme}/${a.network}`).join(", ") || "none"})`
       );
     }
 
@@ -213,7 +194,7 @@ export class StandardX402Facilitator implements Facilitator {
     const value = positiveAtomicAmount(req.amount);
     if (!chainId || !asset || !payTo || !value) {
       throw new UnsupportedFacilitatorError(
-        "x402 v2 EVM exact requirement has invalid network, asset, payTo or amount",
+        "x402 v2 EVM exact requirement has invalid network, asset, payTo or amount"
       );
     }
 
@@ -222,7 +203,9 @@ export class StandardX402Facilitator implements Facilitator {
 
     const timeoutRaw = Number(req.maxTimeoutSeconds ?? 60);
     if (!Number.isFinite(timeoutRaw) || timeoutRaw <= 0 || timeoutRaw > 3600) {
-      throw new UnsupportedFacilitatorError("x402 v2 maxTimeoutSeconds is invalid or exceeds the 1-hour client safety bound");
+      throw new UnsupportedFacilitatorError(
+        "x402 v2 maxTimeoutSeconds is invalid or exceeds the 1-hour client safety bound"
+      );
     }
     const timeout = Math.floor(timeoutRaw);
     const now = Math.floor(Date.now() / 1000);
@@ -273,25 +256,20 @@ export class StandardX402Facilitator implements Facilitator {
     return { headers: { "PAYMENT-SIGNATURE": encodeBase64Json(paymentPayload) } };
   }
 
-  private async buildLegacyV1Auth(
-    resp: Response,
-    agent: Agent,
-    opts: PayOptions,
-  ): Promise<AuthPayload> {
+  private async buildLegacyV1Auth(resp: Response, agent: Agent, opts: PayOptions): Promise<AuthPayload> {
     const body = (await resp.clone().json()) as {
       x402Version?: number;
       accepts?: Array<JsonRecord>;
     };
     const accepts = body.accepts ?? [];
     const req = accepts.find(
-      (item) => item.scheme === "exact"
-        && typeof item.network === "string"
-        && LEGACY_CHAIN_IDS[item.network] !== undefined,
+      (item) =>
+        item.scheme === "exact" && typeof item.network === "string" && LEGACY_CHAIN_IDS[item.network] !== undefined
     );
     if (!req) {
       throw new UnsupportedFacilitatorError(
         "legacy x402 detected but no payable EVM `exact` requirement " +
-          `(offered: ${accepts.map((a) => `${a.scheme}/${a.network}`).join(", ") || "none"})`,
+          `(offered: ${accepts.map((a) => `${a.scheme}/${a.network}`).join(", ") || "none"})`
       );
     }
 
@@ -300,7 +278,9 @@ export class StandardX402Facilitator implements Facilitator {
     const payTo = address(req.payTo);
     const value = positiveAtomicAmount(req.maxAmountRequired);
     if (!asset || !payTo || !value) {
-      throw new UnsupportedFacilitatorError("legacy x402 requirement is missing/invalid asset, payTo or maxAmountRequired");
+      throw new UnsupportedFacilitatorError(
+        "legacy x402 requirement is missing/invalid asset, payTo or maxAmountRequired"
+      );
     }
     const extra = asRecord(req.extra) ?? {};
     enforceUsdCap(value, extra, opts, LEGACY_CHAIN_IDS[network], asset);
@@ -352,7 +332,9 @@ export class StandardX402Facilitator implements Facilitator {
 function randomNonce(): `0x${string}` {
   const random = globalThis.crypto;
   if (!random) {
-    throw new UnsupportedFacilitatorError("secure random source unavailable; refusing to construct x402 authorization nonce");
+    throw new UnsupportedFacilitatorError(
+      "secure random source unavailable; refusing to construct x402 authorization nonce"
+    );
   }
   const bytes = new Uint8Array(32);
   random.getRandomValues(bytes);

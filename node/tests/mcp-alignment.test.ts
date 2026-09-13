@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { AiFinPayAgent } from "../src/unifiedAgent.js";
 import { toSafeError, AiFinPayError } from "../src/errors.js";
-import {
-  AGENT_RECEIPT_FIELDS,
-  AGENT_TRANSACTION_FIELDS,
-} from "../src/agentHistory.js";
+import { AGENT_RECEIPT_FIELDS, AGENT_TRANSACTION_FIELDS } from "../src/agentHistory.js";
 
 // Node↔MCP alignment surface: non-signing helpers the MCP server should call
 // instead of reimplementing, plus the safe error shape for tool results.
@@ -15,7 +12,7 @@ class DetailedError extends AiFinPayError {
     msg: string,
     public code = "invoice_request_mismatch",
     public txRef = "0xabc",
-    public quoteId = "q-1",
+    public quoteId = "q-1"
   ) {
     super(msg);
   }
@@ -64,11 +61,15 @@ describe("history field allowlists", () => {
 
 describe("AiFinPayAgent non-signing MCP helpers", () => {
   const routesFetch = vi.fn().mockResolvedValue(
-    new Response(JSON.stringify({ routes: [] }), { headers: { "content-type": "application/json" } }),
+    new Response(JSON.stringify({ routes: [] }), {
+      headers: { "content-type": "application/json" },
+    })
   );
 
   it("settlementRoutes uses the injected fetch and returns the route table", async () => {
-    const agent = await AiFinPayAgent.fromSeed("ab".repeat(32), { fetchImpl: routesFetch as typeof fetch });
+    const agent = await AiFinPayAgent.fromSeed("ab".repeat(32), {
+      fetchImpl: routesFetch as typeof fetch,
+    });
     await expect(agent.settlementRoutes()).resolves.toEqual([]);
     expect(routesFetch).toHaveBeenCalledOnce();
     expect(String(routesFetch.mock.calls[0][0])).toContain("/v1/settlement/routes");
@@ -76,9 +77,13 @@ describe("AiFinPayAgent non-signing MCP helpers", () => {
 
   it("requestSettlementInvoice validates before returning (no signing)", async () => {
     const badFetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ bogus: true }), { headers: { "content-type": "application/json" } }),
+      new Response(JSON.stringify({ bogus: true }), {
+        headers: { "content-type": "application/json" },
+      })
     );
-    const agent = await AiFinPayAgent.fromSeed("ab".repeat(32), { fetchImpl: badFetch as typeof fetch });
+    const agent = await AiFinPayAgent.fromSeed("ab".repeat(32), {
+      fetchImpl: badFetch as typeof fetch,
+    });
     await expect(
       agent.requestSettlementInvoice({
         route_class: "AIFP-1",
@@ -87,7 +92,7 @@ describe("AiFinPayAgent non-signing MCP helpers", () => {
         gross_amount: "1000000",
         merchant_wallet: "0x0000000000000000000000000000000000000001",
         order_id: "order-1",
-      }),
+      })
     ).rejects.toThrow();
   });
 
@@ -99,13 +104,51 @@ describe("AiFinPayAgent non-signing MCP helpers", () => {
   it("getQuota filters, sorts, and rolls up retained receipts", async () => {
     const now = Math.floor(Date.now() / 1000);
     const receipts = [
-      { receipt_id: "r1", merchant_id: "mrch_a", resource: "/x", remaining: 3, used: 7, quota: 10, amount: "0.10", currency: "USD", exp: now + 3600 },
-      { receipt_id: "r2", merchant_id: "mrch_a", resource: "/y", remaining: 9, used: 1, quota: 10, amount: "0.10", currency: "USD", exp: now + 3600 },
-      { receipt_id: "r3", merchant_id: "mrch_b", resource: "/z", remaining: 0, used: 5, quota: 5, exp: now + 3600 },
-      { receipt_id: "r4", merchant_id: "mrch_b", resource: "/old", remaining: 5, used: 0, quota: 5, exp: now - 10 },
+      {
+        receipt_id: "r1",
+        merchant_id: "mrch_a",
+        resource: "/x",
+        remaining: 3,
+        used: 7,
+        quota: 10,
+        amount: "0.10",
+        currency: "USD",
+        exp: now + 3600,
+      },
+      {
+        receipt_id: "r2",
+        merchant_id: "mrch_a",
+        resource: "/y",
+        remaining: 9,
+        used: 1,
+        quota: 10,
+        amount: "0.10",
+        currency: "USD",
+        exp: now + 3600,
+      },
+      {
+        receipt_id: "r3",
+        merchant_id: "mrch_b",
+        resource: "/z",
+        remaining: 0,
+        used: 5,
+        quota: 5,
+        exp: now + 3600,
+      },
+      {
+        receipt_id: "r4",
+        merchant_id: "mrch_b",
+        resource: "/old",
+        remaining: 5,
+        used: 0,
+        quota: 5,
+        exp: now - 10,
+      },
     ];
     const fetchImpl = vi.fn().mockResolvedValue(Response.json({ receipts }));
-    const agent = await AiFinPayAgent.fromSeed("ab".repeat(32), { fetchImpl: fetchImpl as typeof fetch });
+    const agent = await AiFinPayAgent.fromSeed("ab".repeat(32), {
+      fetchImpl: fetchImpl as typeof fetch,
+    });
     const q = await agent.getQuota();
     // exhausted r3 and expired r4 excluded; most room first.
     expect(q.batches.map((b) => b.receipt_id)).toEqual(["r2", "r1"]);
@@ -115,15 +158,21 @@ describe("AiFinPayAgent non-signing MCP helpers", () => {
 
   it("getQuota honors a merchant filter and invalid addresses", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(Response.json({ receipts: [] }));
-    const agent = await AiFinPayAgent.fromSeed("ab".repeat(32), { fetchImpl: fetchImpl as typeof fetch });
+    const agent = await AiFinPayAgent.fromSeed("ab".repeat(32), {
+      fetchImpl: fetchImpl as typeof fetch,
+    });
     await expect(agent.getQuota({ merchantId: "mrch_a" })).resolves.toMatchObject({ batches: [] });
     const { getQuota } = await import("../src/agentHistory.js");
-    await expect(getQuota({ address: "not-an-address", fetchImpl: fetchImpl as typeof fetch })).rejects.toThrow(/EVM address/);
+    await expect(getQuota({ address: "not-an-address", fetchImpl: fetchImpl as typeof fetch })).rejects.toThrow(
+      /EVM address/
+    );
   });
 
   it("balance() prices from env and never fabricates a feed-less leg", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response("not mocked", { status: 404 }));
-    const agent = await AiFinPayAgent.fromSeed("ab".repeat(32), { fetchImpl: fetchImpl as typeof fetch });
+    const agent = await AiFinPayAgent.fromSeed("ab".repeat(32), {
+      fetchImpl: fetchImpl as typeof fetch,
+    });
     process.env.AIFINPAY_MATIC_USD = "0.5";
     process.env.AIFINPAY_SOL_USD = "100";
     try {

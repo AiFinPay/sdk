@@ -70,8 +70,11 @@ export function isBlockedAddress(addr: string): boolean {
     // URL canonicalization collapses expanded zeros AND rewrites mapped dotted
     // IPv4 into hex, e.g. ::ffff:127.0.0.1 becomes ::ffff:7f00:1.
     let lower: string;
-    try { lower = new URL(`https://[${addr}]/`).hostname.replace(/^\[|\]$/g, ""); }
-    catch { return true; }
+    try {
+      lower = new URL(`https://[${addr}]/`).hostname.replace(/^\[|\]$/g, "");
+    } catch {
+      return true;
+    }
     // An IPv4-mapped address is an IPv4 address wearing a hat. Unwrap it, or
     // ::ffff:127.0.0.1 walks straight through an IPv6-only check.
     const mapped = lower.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
@@ -99,7 +102,7 @@ export class BlockedRequestError extends Error {}
  */
 export async function assertRequestAllowed(
   rawUrl: string,
-  opts: { allowPrivate?: boolean; trustedHosts?: string[] } = {},
+  opts: { allowPrivate?: boolean; trustedHosts?: string[] } = {}
 ): Promise<URL> {
   let url: URL;
   try {
@@ -111,16 +114,12 @@ export async function assertRequestAllowed(
   if (opts.allowPrivate) return url; // an operator asked for this explicitly
 
   if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new BlockedRequestError(
-      `refusing ${url.protocol} — only http and https are requested by this server`,
-    );
+    throw new BlockedRequestError(`refusing ${url.protocol} — only http and https are requested by this server`);
   }
   if (url.protocol === "http:") {
     // Plaintext to a public host leaks the request and invites a redirect into
     // the private range from anyone on the path.
-    throw new BlockedRequestError(
-      `refusing http://${url.host} — payable requests must be https`,
-    );
+    throw new BlockedRequestError(`refusing http://${url.host} — payable requests must be https`);
   }
 
   const host = url.hostname.replace(/^\[|\]$/g, "");
@@ -155,9 +154,9 @@ export async function assertRequestAllowed(
     addresses = await lookup(host, { all: true });
   } catch (e) {
     throw new BlockedRequestError(
-      `cannot resolve ${host}: ${(e as Error).message}. `
-      + `If this host is reachable only through a proxy, name it in `
-      + `AIFINPAY_TRUSTED_HOSTS to skip the DNS pre-check for it alone.`,
+      `cannot resolve ${host}: ${(e as Error).message}. ` +
+        `If this host is reachable only through a proxy, name it in ` +
+        `AIFINPAY_TRUSTED_HOSTS to skip the DNS pre-check for it alone.`
     );
   }
   if (!addresses.length) {
@@ -167,9 +166,7 @@ export async function assertRequestAllowed(
   // for a host to be steering us somewhere internal.
   for (const { address } of addresses) {
     if (isBlockedAddress(address)) {
-      throw new BlockedRequestError(
-        `refusing ${host}: it resolves to ${address}, which is not a public address`,
-      );
+      throw new BlockedRequestError(`refusing ${host}: it resolves to ${address}, which is not a public address`);
     }
   }
   return url;
@@ -184,7 +181,7 @@ export async function assertRequestAllowed(
 export function makeSafeFetch(opts: { allowPrivate?: boolean; trustedHosts?: string[] } = {}): typeof fetch {
   const safeFetch = async (
     input: Parameters<typeof fetch>[0],
-    init?: Parameters<typeof fetch>[1],
+    init?: Parameters<typeof fetch>[1]
   ): Promise<Response> => {
     let request = new Request(input, init);
     const redirect = request.redirect;
@@ -202,8 +199,9 @@ export function makeSafeFetch(opts: { allowPrivate?: boolean; trustedHosts?: str
 
       const next = new URL(location, request.url);
       const crossOrigin = next.origin !== new URL(request.url).origin;
-      const dropBody = (res.status === 303 && !["GET", "HEAD"].includes(request.method))
-        || ([301, 302].includes(res.status) && request.method === "POST");
+      const dropBody =
+        (res.status === 303 && !["GET", "HEAD"].includes(request.method)) ||
+        ([301, 302].includes(res.status) && request.method === "POST");
       if (crossOrigin && request.body && !dropBody) {
         throw new BlockedRequestError("refusing cross-origin redirect with a request body");
       }
@@ -215,13 +213,29 @@ export function makeSafeFetch(opts: { allowPrivate?: boolean; trustedHosts?: str
         for (const key of Array.from(headers.keys())) if (!publicHeaders.has(key)) headers.delete(key);
       }
       if (dropBody) {
-        for (const key of ["content-type", "content-length", "content-encoding", "content-language", "content-location"]) headers.delete(key);
+        for (const key of [
+          "content-type",
+          "content-length",
+          "content-encoding",
+          "content-language",
+          "content-location",
+        ])
+          headers.delete(key);
       }
-      const redirectInit = dropBody ? {
-        method: "GET", signal: request.signal, credentials: request.credentials,
-        cache: request.cache, mode: request.mode, redirect, referrer: request.referrer,
-        referrerPolicy: request.referrerPolicy, integrity: request.integrity, keepalive: request.keepalive,
-      } : request;
+      const redirectInit = dropBody
+        ? {
+            method: "GET",
+            signal: request.signal,
+            credentials: request.credentials,
+            cache: request.cache,
+            mode: request.mode,
+            redirect,
+            referrer: request.referrer,
+            referrerPolicy: request.referrerPolicy,
+            integrity: request.integrity,
+            keepalive: request.keepalive,
+          }
+        : request;
       const redirected = new Request(next, redirectInit);
       request = new Request(redirected, {
         headers,

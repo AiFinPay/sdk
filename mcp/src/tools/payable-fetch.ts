@@ -28,8 +28,7 @@ export function payableFetchTool() {
         },
         body: {
           type: "string",
-          description:
-            "Request body (string). Set Content-Type via headers if non-JSON.",
+          description: "Request body (string). Set Content-Type via headers if non-JSON.",
         },
         headers: {
           type: "object",
@@ -44,8 +43,7 @@ export function payableFetchTool() {
         },
         facilitator: {
           type: "string",
-          description:
-            "Force a facilitator: 'aifinpay' | 'coinbase-x402'. Default 'auto'.",
+          description: "Force a facilitator: 'aifinpay' | 'coinbase-x402'. Default 'auto'.",
         },
       },
       required: ["url"],
@@ -56,18 +54,13 @@ export function payableFetchTool() {
   };
 }
 
-export async function runPayableFetch(
-  ctx: ToolContext,
-  args: Record<string, unknown>,
-) {
+export async function runPayableFetch(ctx: ToolContext, args: Record<string, unknown>) {
   const url = String(args.url ?? "");
   if (!url) return errorResult("missing required arg: url");
   const method = String(args.method ?? "GET").toUpperCase();
   const body = args.body ? String(args.body) : undefined;
   const headers =
-    typeof args.headers === "object" && args.headers !== null
-      ? (args.headers as Record<string, string>)
-      : undefined;
+    typeof args.headers === "object" && args.headers !== null ? (args.headers as Record<string, string>) : undefined;
 
   // The model may NARROW the operator's cap, never widen it.
   //
@@ -84,24 +77,25 @@ export async function runPayableFetch(
   // Math.min in one direction only: unset operator cap means no policy to
   // violate, so a model-supplied value stands on its own.
   const requestedMax =
-    typeof args.max_amount_usd === "number" && Number.isFinite(args.max_amount_usd)
-      ? args.max_amount_usd
-      : undefined;
+    typeof args.max_amount_usd === "number" && Number.isFinite(args.max_amount_usd) ? args.max_amount_usd : undefined;
   const operatorMax = ctx.config.maxAmountUsd;
-  if (args.max_amount_usd !== undefined
-      && (typeof args.max_amount_usd !== "number" || !Number.isFinite(args.max_amount_usd) || args.max_amount_usd <= 0)) {
+  if (
+    args.max_amount_usd !== undefined &&
+    (typeof args.max_amount_usd !== "number" || !Number.isFinite(args.max_amount_usd) || args.max_amount_usd <= 0)
+  ) {
     return errorResult("max_amount_usd must be a positive finite USD amount.");
   }
   if (operatorMax !== undefined && (!Number.isFinite(operatorMax) || operatorMax <= 0)) {
     return errorResult("AIFINPAY_MAX_USD must be a positive finite USD amount.");
   }
   const maxAmountUsd =
-    operatorMax === undefined ? requestedMax
-    : requestedMax === undefined ? operatorMax
-    : Math.min(operatorMax, requestedMax);
+    operatorMax === undefined
+      ? requestedMax
+      : requestedMax === undefined
+        ? operatorMax
+        : Math.min(operatorMax, requestedMax);
 
-  const forcedFacilitator =
-    typeof args.facilitator === "string" ? (args.facilitator as string) : undefined;
+  const forcedFacilitator = typeof args.facilitator === "string" ? (args.facilitator as string) : undefined;
   const gatewayOrigins = ctx.config.gatewayOrigins ?? ["https://gateway.aifinpay.io"];
 
   try {
@@ -125,22 +119,28 @@ export async function runPayableFetch(
     let resp: Response | null = null;
 
     let isConfiguredGateway = false;
-    try { isConfiguredGateway = gatewayOrigins.includes(new URL(url).origin); }
-    catch { /* inner.pay reports malformed URLs */ }
+    try {
+      isConfiguredGateway = gatewayOrigins.includes(new URL(url).origin);
+    } catch {
+      /* inner.pay reports malformed URLs */
+    }
 
     if (!forcedFacilitator && isConfiguredGateway) {
-      resp = await ctx.agent.fetchPaid(url, { method, body, headers }, {
-        apiBaseUrl: ctx.config.baseUrl,
-        gatewayOrigins: ctx.config.gatewayOrigins,
-        resourcePathMode: ctx.config.gatewayPathMode,
-        maxAmountUsd,
-      });
+      resp = await ctx.agent.fetchPaid(
+        url,
+        { method, body, headers },
+        {
+          apiBaseUrl: ctx.config.baseUrl,
+          gatewayOrigins: ctx.config.gatewayOrigins,
+          resourcePathMode: ctx.config.gatewayPathMode,
+          maxAmountUsd,
+        }
+      );
       if (resp === null) {
         // Budget cap hit with on_limit_exceeded="skip" — do NOT then try to pay
         // the same call via x402; that would defeat the cap the caller set.
         return errorResult(
-          "payment skipped: the per-call or daily budget cap was reached " +
-            "(on_limit_exceeded is set to skip).",
+          "payment skipped: the per-call or daily budget cap was reached " + "(on_limit_exceeded is set to skip)."
         );
       }
       if (resp.status === 402) {
@@ -174,7 +174,7 @@ export async function runPayableFetch(
               body: text,
             },
             null,
-            2,
+            2
           ),
         },
       ],
@@ -190,22 +190,29 @@ export async function runPayableFetch(
           quoteId: err.quoteId,
           recovery: err.recovery,
         }),
-        "Docs: https://aifinpay.io/docs",
+        "Docs: https://aifinpay.io/docs"
       );
     }
-    const isAifp1Gateway = gatewayOrigins.includes((() => {
-      try { return new URL(url).origin; } catch { return ""; }
-    })());
-    const originHint = !isAifp1Gateway && /AIFP-1|AIFP-402|gateway/i.test(err.message)
-      ? "This looks like an AIFP-1 gateway, but its origin is not configured; add its exact HTTPS origin to AIFINPAY_GATEWAY_ORIGINS."
-      : undefined;
+    const isAifp1Gateway = gatewayOrigins.includes(
+      (() => {
+        try {
+          return new URL(url).origin;
+        } catch {
+          return "";
+        }
+      })()
+    );
+    const originHint =
+      !isAifp1Gateway && /AIFP-1|AIFP-402|gateway/i.test(err.message)
+        ? "This looks like an AIFP-1 gateway, but its origin is not configured; add its exact HTTPS origin to AIFINPAY_GATEWAY_ORIGINS."
+        : undefined;
     return errorResult(
       `${err.name}: ${err.message}`,
       isAifp1Gateway
         ? `Tip: ensure Polygon EVM address ${ctx.agent.evmAddress} is funded for AIFP-1 settlement.`
         : `Tip: ensure agent ${ctx.agent.solanaAddress} has a funded Seat PDA, or use the unified \`agent_call\` tool (Polygon settlement).`,
       ...(originHint ? [originHint] : []),
-      "Docs: https://aifinpay.io/docs",
+      "Docs: https://aifinpay.io/docs"
     );
   }
 }

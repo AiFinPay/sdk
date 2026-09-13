@@ -31,8 +31,8 @@
     "prepublishOnly": "npm run build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\"",
-    "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,json,md}\""
+    "format": "prettier --write \"**/*.{js,mjs,cjs,jsx,ts,tsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{js,mjs,cjs,jsx,ts,tsx,json,md}\""
   },
   "keywords": [
     "aifinpay",

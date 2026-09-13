@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createGate, DETAIL_QUOTA_EXHAUSTED, DETAIL_RECEIPT_EXPIRED, DETAIL_VERIFY_FAILED, MemoryStore } from "../src/index.js";
+import {
+  createGate,
+  DETAIL_QUOTA_EXHAUSTED,
+  DETAIL_RECEIPT_EXPIRED,
+  DETAIL_VERIFY_FAILED,
+  MemoryStore,
+} from "../src/index.js";
 import { ISSUER, MERCHANT, issuer, req } from "./helpers.js";
 
 async function gateWith(overrides: Record<string, unknown> = {}) {
@@ -148,7 +154,11 @@ describe("receipts the gate must refuse", () => {
   it("does not spend a unit on a refused call", async () => {
     const store = new MemoryStore();
     const { gate, iss } = await gateWith({ store });
-    const token = await iss.sign({ resource: "/api/other", unit_quota: 5, receipt_id: "rcpt_fixed" });
+    const token = await iss.sign({
+      resource: "/api/other",
+      unit_quota: 5,
+      receipt_id: "rcpt_fixed",
+    });
 
     await gate(req("/api/search", { "AIFP-Receipt": token }));
     expect(await store.get("aifp:used:rcpt_fixed")).toBe(null);

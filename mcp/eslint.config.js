@@ -8,14 +8,7 @@ export default [
   ...tseslint.configs.recommended,
   eslintConfigPrettier,
   {
-    ignores: [
-      "node_modules",
-      "dist",
-      "coverage",
-      "*.log",
-      "**/*.mjs",
-      "**/*.d.ts",
-    ],
+    ignores: ["node_modules", "dist", "coverage", "*.log", "**/*.mjs", "**/*.d.ts"],
   },
   {
     files: ["**/*.{js,ts,tsx}"],

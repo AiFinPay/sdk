@@ -28,10 +28,7 @@ export function payWithSplitTool() {
   };
 }
 
-export async function runPayWithSplit(
-  _ctx: ToolContext,
-  _args: Record<string, unknown>,
-) {
+export async function runPayWithSplit(_ctx: ToolContext, _args: Record<string, unknown>) {
   return retiredResult();
 }
 
@@ -53,10 +50,7 @@ export function quoteSplitTool() {
   };
 }
 
-export async function runQuoteSplit(
-  _ctx: ToolContext,
-  _args: Record<string, unknown>,
-) {
+export async function runQuoteSplit(_ctx: ToolContext, _args: Record<string, unknown>) {
   return retiredResult();
 }
 

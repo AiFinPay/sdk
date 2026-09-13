@@ -22,7 +22,10 @@ describe("native x402 auth v2", () => {
       fetchImpl: async (url, init) => {
         calls.push({ url: String(url), init });
         return calls.length === 1
-          ? new Response(JSON.stringify(challenge), { status: 402, headers: { "content-type": "application/json" } })
+          ? new Response(JSON.stringify(challenge), {
+              status: 402,
+              headers: { "content-type": "application/json" },
+            })
           : new Response("ok", { status: 200 });
       },
     });
@@ -52,13 +55,15 @@ describe("native x402 auth v2", () => {
       nacl.sign.detached.verify(
         createHash("sha256").update(JSON.stringify(bound)).digest(),
         signature,
-        agent.publicKey,
+        agent.publicKey
       );
     expect(verify(fields)).toBe(true);
     expect(verify([...fields.slice(0, 5), "GET", ...fields.slice(6)])).toBe(false);
     expect(verify([...fields.slice(0, 6), "/v1/other", ...fields.slice(7)])).toBe(false);
     expect(verify([...fields.slice(0, 4), "https://evil.example", ...fields.slice(5)])).toBe(false);
-    expect(verify([...fields.slice(0, 7), createHash("sha256").update('{"action":"two"}').digest("hex"), ...fields.slice(8)])).toBe(false);
+    expect(
+      verify([...fields.slice(0, 7), createHash("sha256").update('{"action":"two"}').digest("hex"), ...fields.slice(8)])
+    ).toBe(false);
     expect(verify([...fields.slice(0, 8), Number(challenge["x-nonce-expires-at"]) + 1])).toBe(false);
   });
 
@@ -68,7 +73,13 @@ describe("native x402 auth v2", () => {
       baseUrl: "https://aifinpay.io",
       fetchImpl: async (_url, init) => {
         calls.push(init!);
-        return new Response(JSON.stringify({ ...challenge, "x-aifinpay-body-sha256": createHash("sha256").update("").digest("hex") }), { status: 402, headers: { "content-type": "application/json" } });
+        return new Response(
+          JSON.stringify({
+            ...challenge,
+            "x-aifinpay-body-sha256": createHash("sha256").update("").digest("hex"),
+          }),
+          { status: 402, headers: { "content-type": "application/json" } }
+        );
       },
     });
     await expect(agent.pay("https://evil.example/steal")).rejects.toThrow(/untrusted origin/);
@@ -91,11 +102,13 @@ describe("native x402 auth v2", () => {
             ...challenge,
             "x-aifinpay-body-sha256": createHash("sha256").update('{"action":"other"}').digest("hex"),
           }),
-          { status: 402, headers: { "content-type": "application/json" } },
+          { status: 402, headers: { "content-type": "application/json" } }
         );
       },
     });
-    await expect(agent.pay("https://aifinpay.io/v1/data", { method: "POST", body: '{"action":"one"}' })).rejects.toThrow(/in-band request-bound challenge/);
+    await expect(
+      agent.pay("https://aifinpay.io/v1/data", { method: "POST", body: '{"action":"one"}' })
+    ).rejects.toThrow(/in-band request-bound challenge/);
     expect(calls).toHaveLength(1);
     expect(new Headers(calls[0].headers).has("x-signature")).toBe(false);
   });
@@ -108,15 +121,15 @@ describe("native x402 auth v2", () => {
         baseUrl: "https://aifinpay.io",
         fetchImpl: async (_url, init) => {
           calls.push(init!);
-          return new Response(
-            JSON.stringify({ ...challenge, "x-nonce-expires-at": String(expiry) }),
-            { status: 402, headers: { "content-type": "application/json" } },
-          );
+          return new Response(JSON.stringify({ ...challenge, "x-nonce-expires-at": String(expiry) }), {
+            status: 402,
+            headers: { "content-type": "application/json" },
+          });
         },
       });
       await expect(agent.pay("https://aifinpay.io/v1/data")).rejects.toThrow(/in-band request-bound challenge/);
       expect(calls).toHaveLength(1);
       expect(new Headers(calls[0].headers).has("x-signature")).toBe(false);
-    },
+    }
   );
 });

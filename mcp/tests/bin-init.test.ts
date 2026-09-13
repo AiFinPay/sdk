@@ -27,8 +27,12 @@ import { fileURLToPath } from "node:url";
 const BIN = fileURLToPath(new URL("../bin/aifinpay-mcp.js", import.meta.url));
 
 let home: string;
-beforeEach(() => { home = mkdtempSync(join(tmpdir(), "aifp-mcp-")); });
-afterEach(() => { rmSync(home, { recursive: true, force: true }); });
+beforeEach(() => {
+  home = mkdtempSync(join(tmpdir(), "aifp-mcp-"));
+});
+afterEach(() => {
+  rmSync(home, { recursive: true, force: true });
+});
 
 /**
  * Run the bin with an isolated AIFINPAY_HOME, returning stdout AND stderr.
@@ -40,7 +44,13 @@ afterEach(() => { rmSync(home, { recursive: true, force: true }); });
  */
 function isolatedEnv(extraEnv: Record<string, string> = {}): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, AIFINPAY_HOME: home };
-  for (const key of ["SEED_HASH", "AIFINPAY_AGENTS_FILE", "AIFINPAY_AGENT_ID", "AIFINPAY_AGENT_SECRET", "AIFINPAY_WALLET_PASSPHRASE"]) {
+  for (const key of [
+    "SEED_HASH",
+    "AIFINPAY_AGENTS_FILE",
+    "AIFINPAY_AGENT_ID",
+    "AIFINPAY_AGENT_SECRET",
+    "AIFINPAY_WALLET_PASSPHRASE",
+  ]) {
     delete env[key];
   }
   return { ...env, ...extraEnv };
@@ -51,7 +61,7 @@ function run(args: string[], extraEnv: Record<string, string> = {}, nodeArgs: st
     encoding: "utf8",
     timeout: 60_000,
     cwd: home,
-    input: "",                       // stdio server would otherwise wait forever
+    input: "", // stdio server would otherwise wait forever
     env: isolatedEnv(extraEnv),
   });
   if (r.error) throw r.error;
@@ -114,9 +124,13 @@ describe("aifinpay-mcp init", () => {
     expect(config.mcpServers.aifinpay.args).toEqual(["-y", `@aifinpay/mcp@${version}`]);
   });
 
-  it.each([false, true])("concurrent init preserves one wallet (encrypted=%s)", async (encrypted) => {
-    const barrier = join(home, "init-barrier.mjs");
-    writeFileSync(barrier, `import fs from 'node:fs';
+  it.each([false, true])(
+    "concurrent init preserves one wallet (encrypted=%s)",
+    async (encrypted) => {
+      const barrier = join(home, "init-barrier.mjs");
+      writeFileSync(
+        barrier,
+        `import fs from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 const originalWrite = fs.writeFileSync, originalLink = fs.linkSync;
 function waitAtPublish(target) {
@@ -132,48 +146,60 @@ function waitAtPublish(target) {
 fs.writeFileSync = function(target, ...args) { waitAtPublish(target); return originalWrite.call(this, target, ...args); };
 fs.linkSync = function(source, target) { waitAtPublish(target); return originalLink.call(this, source, target); };
 syncBuiltinESMExports();
-`, { mode: 0o600 });
-    const children: ReturnType<typeof spawn>[] = [];
-    const launch = (writer: string) => {
-      const child = spawn(process.execPath, ["--import", barrier, BIN, "init"], {
-        cwd: home,
-        env: isolatedEnv({ AIFP_TEST_WRITER: writer,
-          ...(encrypted ? { AIFINPAY_WALLET_PASSPHRASE: "fixture-passphrase" } : {}) }),
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-      children.push(child);
-      let output = "";
-      child.stdout!.on("data", chunk => { output += chunk; });
-      child.stderr!.on("data", chunk => { output += chunk; });
-      return new Promise<{ code: number | null; output: string }>(resolve =>
-        child.on("close", code => resolve({ code, output })));
-    };
-    try {
-      const a = launch("a"), b = launch("b");
-      const deadline = Date.now() + 15000;
-      while (!existsSync(join(home, "a.ready")) || !existsSync(join(home, "b.ready"))) {
-        if (Date.now() > deadline) throw new Error("concurrent init did not reach publish barrier");
-        await new Promise(resolve => setTimeout(resolve, 10));
+`,
+        { mode: 0o600 }
+      );
+      const children: ReturnType<typeof spawn>[] = [];
+      const launch = (writer: string) => {
+        const child = spawn(process.execPath, ["--import", barrier, BIN, "init"], {
+          cwd: home,
+          env: isolatedEnv({
+            AIFP_TEST_WRITER: writer,
+            ...(encrypted ? { AIFINPAY_WALLET_PASSPHRASE: "fixture-passphrase" } : {}),
+          }),
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+        children.push(child);
+        let output = "";
+        child.stdout!.on("data", (chunk) => {
+          output += chunk;
+        });
+        child.stderr!.on("data", (chunk) => {
+          output += chunk;
+        });
+        return new Promise<{ code: number | null; output: string }>((resolve) =>
+          child.on("close", (code) => resolve({ code, output }))
+        );
+      };
+      try {
+        const a = launch("a"),
+          b = launch("b");
+        const deadline = Date.now() + 15000;
+        while (!existsSync(join(home, "a.ready")) || !existsSync(join(home, "b.ready"))) {
+          if (Date.now() > deadline) throw new Error("concurrent init did not reach publish barrier");
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        writeFileSync(join(home, "a.release"), "go");
+        const first = await a;
+        const before = readFileSync(join(home, "agent.json"), "utf8");
+        writeFileSync(join(home, "b.release"), "go");
+        const second = await b;
+        const after = readFileSync(join(home, "agent.json"), "utf8");
+        expect(first.code).toBe(0);
+        expect(second.code).toBe(0);
+        expect(after === before).toBe(true);
+        expect(first.output.match(EVM)?.[0]).toBe(second.output.match(EVM)?.[0]);
+        expect(first.output.includes("Created ")).toBe(true);
+        expect(second.output.includes("Created ")).toBe(false);
+        expect(second.output.includes("Existing wallet found")).toBe(true);
+        expect((first.output + second.output).includes("RECOVERY KEY")).toBe(false);
+        expect(readdirSync(home).some((name) => name.startsWith(".agent-init-"))).toBe(false);
+      } finally {
+        for (const child of children) if (child.exitCode === null) child.kill("SIGKILL");
       }
-      writeFileSync(join(home, "a.release"), "go");
-      const first = await a;
-      const before = readFileSync(join(home, "agent.json"), "utf8");
-      writeFileSync(join(home, "b.release"), "go");
-      const second = await b;
-      const after = readFileSync(join(home, "agent.json"), "utf8");
-      expect(first.code).toBe(0);
-      expect(second.code).toBe(0);
-      expect(after === before).toBe(true);
-      expect(first.output.match(EVM)?.[0]).toBe(second.output.match(EVM)?.[0]);
-      expect(first.output.includes("Created ")).toBe(true);
-      expect(second.output.includes("Created ")).toBe(false);
-      expect(second.output.includes("Existing wallet found")).toBe(true);
-      expect((first.output + second.output).includes("RECOVERY KEY")).toBe(false);
-      expect(readdirSync(home).some(name => name.startsWith(".agent-init-"))).toBe(false);
-    } finally {
-      for (const child of children) if (child.exitCode === null) child.kill("SIGKILL");
-    }
-  }, 25000);
+    },
+    25000
+  );
 });
 
 describe("aifinpay-mcp server", () => {
@@ -224,7 +250,9 @@ describe("aifinpay-mcp flags", () => {
 
   it("shows a fresh plaintext recovery key only when stdout reports a TTY", () => {
     const tty = join(home, "tty-fixture.mjs");
-    writeFileSync(tty, "Object.defineProperty(process.stdout, 'isTTY', { value: true });\n", { mode: 0o600 });
+    writeFileSync(tty, "Object.defineProperty(process.stdout, 'isTTY', { value: true });\n", {
+      mode: 0o600,
+    });
     const out = run(["init"], {}, ["--import", tty]);
     const secret = JSON.parse(readFileSync(join(home, "agent.json"), "utf8")).secretB58 as string;
     // Keep even a failing assertion from printing the captured recovery key.

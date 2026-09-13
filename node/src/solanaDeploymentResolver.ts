@@ -29,10 +29,7 @@
  * Program ids live in solanaV14Deployments.generated.ts, never inline here —
  * this module is selection logic only.
  */
-import {
-  DeploymentResolverError,
-  type SdkEnvironment,
-} from "./deploymentResolver.js";
+import { DeploymentResolverError, type SdkEnvironment } from "./deploymentResolver.js";
 import {
   SOLANA_DEV_NETWORKS,
   SOLANA_V14_DEPLOYMENTS,
@@ -74,7 +71,7 @@ export class UnsupportedSolanaDevNetworkError extends DeploymentResolverError {
     super(
       `Development environment supports ${SOLANA_DEV_NETWORKS.join(", ")} only; ` +
         `"${network}" is not a supported Solana development cluster. Use ` +
-        `environment "prod" for mainnet.`,
+        `environment "prod" for mainnet.`
     );
     this.name = "UnsupportedSolanaDevNetworkError";
     this.network = network;
@@ -85,15 +82,11 @@ export class UnsupportedSolanaDevNetworkError extends DeploymentResolverError {
  *  Thrown rather than downgrading. */
 export class SolanaVersionUnavailableError extends DeploymentResolverError {
   readonly requested: SolanaProtocolVersion;
-  constructor(
-    requested: SolanaProtocolVersion,
-    environment: SdkEnvironment,
-    network: string,
-  ) {
+  constructor(requested: SolanaProtocolVersion, environment: SdkEnvironment, network: string) {
     super(
       `Solana ${requested} is not deployed for ${environment}/${network}. It ` +
         `was requested explicitly, so the SDK will not substitute another ` +
-        `version.`,
+        `version.`
     );
     this.name = "SolanaVersionUnavailableError";
     this.requested = requested;
@@ -108,7 +101,7 @@ export class SolanaV12UnavailableError extends DeploymentResolverError {
     super(
       `Solana has no v1.2 deployment. The previous Solana program was closed ` +
         `and there is no v1.2-equivalent to fall back to; only v1.4 is available. ` +
-        `Use version "v1.4" or "auto".`,
+        `Use version "v1.4" or "auto".`
     );
     this.name = "SolanaV12UnavailableError";
   }
@@ -122,9 +115,7 @@ export class SolanaDeploymentDisabledError extends DeploymentResolverError {
   readonly reason: string;
 
   constructor(environment: SdkEnvironment, network: string, reason: string) {
-    super(
-      `Solana v1.4 settlement is disabled for ${environment}/${network}: ${reason}`,
-    );
+    super(`Solana v1.4 settlement is disabled for ${environment}/${network}: ${reason}`);
     this.name = "SolanaDeploymentDisabledError";
     this.environment = environment;
     this.network = network;
@@ -136,10 +127,7 @@ export class SolanaDeploymentDisabledError extends DeploymentResolverError {
  *  has no fallback version. */
 export class NoSolanaDeploymentError extends DeploymentResolverError {
   constructor(environment: SdkEnvironment, network: string) {
-    super(
-      `No Solana v1.4 deployment is known for ${environment}/${network}, and ` +
-        `Solana has no fallback version.`,
-    );
+    super(`No Solana v1.4 deployment is known for ${environment}/${network}, and ` + `Solana has no fallback version.`);
     this.name = "NoSolanaDeploymentError";
   }
 }
@@ -155,24 +143,15 @@ function normalizeNetwork(network: string): string {
 /** The v1.4 deployment for this environment+network, or undefined. A record is
  *  only valid for the environment it was deployed under: devnet is dev-only and
  *  must never resolve under "prod", and vice versa. */
-function findSolanaV14(
-  environment: SdkEnvironment,
-  network: string,
-): SolanaV14Deployment | undefined {
+function findSolanaV14(environment: SdkEnvironment, network: string): SolanaV14Deployment | undefined {
   const entry = SOLANA_V14_DEPLOYMENTS[network];
   if (!entry) return undefined;
   return entry.environment === environment ? entry : undefined;
 }
 
 /** Is a Solana v1.4 deployment available for this environment+network? */
-export function isSolanaV14Available(
-  environment: SdkEnvironment,
-  network: string,
-): boolean {
-  return (
-    findSolanaV14(environment, normalizeNetwork(network))?.settlementEnabled ===
-    true
-  );
+export function isSolanaV14Available(environment: SdkEnvironment, network: string): boolean {
+  return findSolanaV14(environment, normalizeNetwork(network))?.settlementEnabled === true;
 }
 
 // ── The resolver ─────────────────────────────────────────────────────────────
@@ -186,14 +165,10 @@ export function isSolanaV14Available(
  * @throws SolanaVersionUnavailableError     explicit v1.4 not deployed here
  * @throws NoSolanaDeploymentError           auto, but no v1.4 for this env+network
  */
-export function resolveSolanaDeployment(
-  options: ResolveSolanaDeploymentOptions,
-): ResolvedSolanaDeployment {
+export function resolveSolanaDeployment(options: ResolveSolanaDeploymentOptions): ResolvedSolanaDeployment {
   const { environment } = options;
   if (environment !== "dev" && environment !== "prod") {
-    throw new DeploymentResolverError(
-      `Unknown environment "${String(environment)}"; use "dev" or "prod".`,
-    );
+    throw new DeploymentResolverError(`Unknown environment "${String(environment)}"; use "dev" or "prod".`);
   }
 
   const network = normalizeNetwork(options.network);
@@ -201,10 +176,7 @@ export function resolveSolanaDeployment(
 
   // Development is restricted to devnet, whatever version is asked for. Reject
   // any other development cluster rather than silently resolving mainnet.
-  if (
-    environment === "dev" &&
-    !SOLANA_DEV_NETWORKS.includes(network as never)
-  ) {
+  if (environment === "dev" && !SOLANA_DEV_NETWORKS.includes(network as never)) {
     throw new UnsupportedSolanaDevNetworkError(options.network);
   }
 
@@ -222,7 +194,7 @@ export function resolveSolanaDeployment(
       throw new SolanaDeploymentDisabledError(
         environment,
         network,
-        v14.disabledReason ?? "deployment has not passed the settlement gate",
+        v14.disabledReason ?? "deployment has not passed the settlement gate"
       );
     }
     return v14;
@@ -230,12 +202,7 @@ export function resolveSolanaDeployment(
 
   switch (requested) {
     case "v1.4":
-      if (!v14)
-        throw new SolanaVersionUnavailableError(
-          "v1.4",
-          environment,
-          options.network,
-        );
+      if (!v14) throw new SolanaVersionUnavailableError("v1.4", environment, options.network);
       return asV14(enabledV14());
     case "v1.2":
       // No Solana v1.2 deployment exists — there is nothing to return.
@@ -243,8 +210,6 @@ export function resolveSolanaDeployment(
     case "auto":
       return asV14(enabledV14());
     default:
-      throw new DeploymentResolverError(
-        `Unknown version "${String(requested)}"; use "v1.2", "v1.4" or "auto".`,
-      );
+      throw new DeploymentResolverError(`Unknown version "${String(requested)}"; use "v1.2", "v1.4" or "auto".`);
   }
 }

@@ -15,8 +15,7 @@ import { secp256k1 } from "@noble/curves/secp256k1";
 
 const b58 = (bs58 as unknown as { default?: typeof bs58 }).default ?? bs58;
 
-const hex = (b: Uint8Array): string =>
-  Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+const hex = (b: Uint8Array): string => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 
 const fromHex = (s: string): Uint8Array => {
   const clean = s.startsWith("0x") ? s.slice(2) : s;
@@ -51,7 +50,7 @@ function aptosAuthKey(publicKey: Uint8Array): `0x${string}` {
   const material = new Uint8Array(publicKey.length + 1);
   material.set(publicKey, 0);
   material[publicKey.length] = 0;
-  return (`0x${hex(sha3_256(material))}`) as `0x${string}`;
+  return `0x${hex(sha3_256(material))}` as `0x${string}`;
 }
 
 export interface DerivedWallet {
@@ -130,7 +129,7 @@ export function deriveWallet(seedHex: string): DerivedWallet {
     keys: {
       seedHex: hex(seed),
       solanaSecretKeyB58: b58.encode(sol.secretKey),
-      evmPrivateKey: (`0x${hex(evmPriv)}`) as `0x${string}`,
+      evmPrivateKey: `0x${hex(evmPriv)}` as `0x${string}`,
       nearSecretSeedHex: hex(nearSeed),
       aptosSecretSeedHex: hex(aptosSeed),
       casperSecretSeedHex: hex(casperSeed),

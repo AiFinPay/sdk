@@ -70,12 +70,7 @@ export {
   UnknownSplitterRouteError,
   SplitterRouteNotSettlingError,
 } from "./splitterRoutes.js";
-export type {
-  SplitterRoute,
-  SplitterRouteChain,
-  SplitterRouteKey,
-  SplitterRouteDeployment,
-} from "./splitterRoutes.js";
+export type { SplitterRoute, SplitterRouteChain, SplitterRouteKey, SplitterRouteDeployment } from "./splitterRoutes.js";
 export { botchain, robinhood, xrplevm } from "./chains.js";
 
 // ── Environment & protocol-version resolver (AIFINP-223) ─────────────────
@@ -95,17 +90,8 @@ export type {
   ResolveDeploymentOptions,
   ResolvedDeployment,
 } from "./deploymentResolver.js";
-export {
-  V14_DEPLOYMENTS,
-  V14_DEPLOYMENTS_SOURCE,
-  V14_DEV_NETWORKS,
-} from "./v14Deployments.generated.js";
-export type {
-  V14Deployment,
-  V14Asset,
-  V14Splitter,
-  V14Safe,
-} from "./v14Deployments.generated.js";
+export { V14_DEPLOYMENTS, V14_DEPLOYMENTS_SOURCE, V14_DEV_NETWORKS } from "./v14Deployments.generated.js";
+export type { V14Deployment, V14Asset, V14Splitter, V14Safe } from "./v14Deployments.generated.js";
 
 // ── Solana environment & protocol-version resolver (AIFINP-224) ──────────
 export {
@@ -128,16 +114,9 @@ export {
   SOLANA_V14_DEPLOYMENTS_SOURCE,
   SOLANA_DEV_NETWORKS,
 } from "./solanaV14Deployments.generated.js";
-export type {
-  SolanaV14Deployment,
-  SolanaNetwork,
-} from "./solanaV14Deployments.generated.js";
+export type { SolanaV14Deployment, SolanaNetwork } from "./solanaV14Deployments.generated.js";
 
-export {
-  AiFinPayAgent,
-  SPLITTER_DEPLOYMENTS,
-  paymentIdFor,
-} from "./unifiedAgent.js";
+export { AiFinPayAgent, SPLITTER_DEPLOYMENTS, paymentIdFor } from "./unifiedAgent.js";
 export type {
   AiFinPayAgentOptions,
   CallOptions,
@@ -203,12 +182,7 @@ export {
   USDC_NATIVE,
   USDC_BRIDGED,
 } from "./crossChain.js";
-export type {
-  BridgeQuote,
-  BridgeReceipt,
-  BridgeQuoteOptions,
-  EvmChainName,
-} from "./crossChain.js";
+export type { BridgeQuote, BridgeReceipt, BridgeQuoteOptions, EvmChainName } from "./crossChain.js";
 
 // ── Legacy chain-aware public API (back-compat only) ─────────────────────
 export { Agent } from "./agent.js";
@@ -224,24 +198,10 @@ export {
   toSafeError,
 } from "./errors.js";
 export type { SafeErrorShape } from "./errors.js";
-export {
-  AiFinPayFacilitator,
-  CoinbaseX402Facilitator,
-  REGISTERED,
-  detectFacilitator,
-} from "./facilitators/index.js";
-export type {
-  AuthPayload,
-  Facilitator,
-  FacilitatorClass,
-  PayOptions,
-} from "./facilitators/index.js";
+export { AiFinPayFacilitator, CoinbaseX402Facilitator, REGISTERED, detectFacilitator } from "./facilitators/index.js";
+export type { AuthPayload, Facilitator, FacilitatorClass, PayOptions } from "./facilitators/index.js";
 
-export {
-  type SpendLedger,
-  MemorySpendLedger,
-  FileSpendLedger,
-} from "./spendLedger.js";
+export { type SpendLedger, MemorySpendLedger, FileSpendLedger } from "./spendLedger.js";
 
 export { deriveWallet, newWallet } from "./wallet.js";
 export { getAgentHistory, getQuota, AGENT_RECEIPT_FIELDS, AGENT_TRANSACTION_FIELDS } from "./agentHistory.js";

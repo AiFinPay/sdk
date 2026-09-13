@@ -40,12 +40,7 @@ export interface Facilitator {
   readonly name: string;
 
   /** Build the auth payload to merge into the retry request. */
-  buildAuth(
-    response: Response,
-    agent: Agent,
-    options: PayOptions,
-    context?: AuthRequestContext,
-  ): Promise<AuthPayload>;
+  buildAuth(response: Response, agent: Agent, options: PayOptions, context?: AuthRequestContext): Promise<AuthPayload>;
 }
 
 /** Constructor + static `detect` predicate together. */

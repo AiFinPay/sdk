@@ -48,7 +48,9 @@ describe("derivation", () => {
 });
 
 describe("backwards-compatible with @aifinpay/agent", () => {
-  let full: { fromSeed: (s: string) => Promise<{ solanaAddress: string; evmAddress: string; casperAddress: string }> } | null = null;
+  let full: {
+    fromSeed: (s: string) => Promise<{ solanaAddress: string; evmAddress: string; casperAddress: string }>;
+  } | null = null;
   it("loads the full SDK", async () => {
     try {
       const mod = await import("@aifinpay/agent");
@@ -90,7 +92,12 @@ describe("the install stays light", () => {
           if (!p.endsWith(".js")) p += ".js";
           walk(p);
         } else {
-          pkgs.add(spec.split("/").slice(0, spec.startsWith("@") ? 2 : 1).join("/"));
+          pkgs.add(
+            spec
+              .split("/")
+              .slice(0, spec.startsWith("@") ? 2 : 1)
+              .join("/")
+          );
         }
       }
     };
@@ -109,9 +116,7 @@ describe("the install stays light", () => {
 
   it("declares exactly the four light crypto deps, nothing heavier", () => {
     const pkg = JSON.parse(readFileSync(resolve(HERE, "..", "package.json"), "utf8"));
-    expect(Object.keys(pkg.dependencies).sort()).toEqual(
-      ["@noble/curves", "@noble/hashes", "bs58", "tweetnacl"],
-    );
+    expect(Object.keys(pkg.dependencies).sort()).toEqual(["@noble/curves", "@noble/hashes", "bs58", "tweetnacl"]);
   });
 });
 

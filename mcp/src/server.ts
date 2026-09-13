@@ -62,11 +62,19 @@ export async function createServer(config: McpConfig = {}) {
     return { loaded, source: identity.source };
   }
   const configured = await configuredAgent();
-  let agent = configured?.loaded ?? await AiFinPayAgent.new({
-    fetchImpl: safeFetch, baseUrl: config.baseUrl, timeoutMs: config.timeoutMs,
-  });
+  let agent =
+    configured?.loaded ??
+    (await AiFinPayAgent.new({
+      fetchImpl: safeFetch,
+      baseUrl: config.baseUrl,
+      timeoutMs: config.timeoutMs,
+    }));
   identitySource = configured?.source ?? "ephemeral";
-  if (!configured) log("warn", "[aifinpay-mcp] EPHEMERAL wallet — DO NOT FUND. Run `npx @aifinpay/mcp init`, then agent_reload in this connection.");
+  if (!configured)
+    log(
+      "warn",
+      "[aifinpay-mcp] EPHEMERAL wallet — DO NOT FUND. Run `npx @aifinpay/mcp init`, then agent_reload in this connection."
+    );
   // Keep the legacy agent budget configured even though this RC exposes no
   // signing tool. It remains an additional defence for downstream/private code
   // and for the subsequent v2 MCP executor integration.
@@ -75,27 +83,37 @@ export async function createServer(config: McpConfig = {}) {
     log("info", `[aifinpay-mcp] per-call cap: $${config.maxAmountUsd} (AIFINPAY_MAX_USD)`);
   }
 
-  log(
-    "info",
-    `[aifinpay-mcp] production RC safe surface · solana: ${agent.solanaAddress} · evm: ${agent.evmAddress}`,
-  );
+  log("info", `[aifinpay-mcp] production RC safe surface · solana: ${agent.solanaAddress} · evm: ${agent.evmAddress}`);
 
   const server = new Server(
     {
       name: "@aifinpay/mcp",
       version: JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version,
     },
-    { capabilities: { tools: {}, resources: {} } },
+    { capabilities: { tools: {}, resources: {} } }
   );
 
-  server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: [{
-    uri: "aifinpay://skill", name: "AiFinPay skill", mimeType: "text/markdown",
-    description: "Wallet source priority, payment history routes, reconnect behavior and dev testing limits",
-  }] }));
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+    resources: [
+      {
+        uri: "aifinpay://skill",
+        name: "AiFinPay skill",
+        mimeType: "text/markdown",
+        description: "Wallet source priority, payment history routes, reconnect behavior and dev testing limits",
+      },
+    ],
+  }));
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     if (request.params.uri !== "aifinpay://skill") throw new Error("Unknown resource");
-    return { contents: [{ uri: "aifinpay://skill", mimeType: "text/markdown",
-      text: readFileSync(new URL("../skills/SKILL.md", import.meta.url), "utf8") }] };
+    return {
+      contents: [
+        {
+          uri: "aifinpay://skill",
+          mimeType: "text/markdown",
+          text: readFileSync(new URL("../skills/SKILL.md", import.meta.url), "utf8"),
+        },
+      ],
+    };
   });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -103,7 +121,8 @@ export async function createServer(config: McpConfig = {}) {
       agentAddressTool(),
       {
         name: "agent_reload",
-        description: "Reload the configured local wallet files after init or a file update, without starting a new conversation. Returns public addresses only. Shell environment changes still require reconnecting the MCP process.",
+        description:
+          "Reload the configured local wallet files after init or a file update, without starting a new conversation. Returns public addresses only. Shell environment changes still require reconnecting the MCP process.",
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       },
@@ -123,18 +142,32 @@ export async function createServer(config: McpConfig = {}) {
       case "agent_reload":
         try {
           const replacement = await configuredAgent();
-          if (!replacement) throw new Error("No persistent wallet configured; run init or configure the project wallet first");
+          if (!replacement)
+            throw new Error("No persistent wallet configured; run init or configure the project wallet first");
           if (config.maxAmountUsd !== undefined && Number.isFinite(config.maxAmountUsd)) {
             replacement.loaded.setBudget({ per_call_usd: config.maxAmountUsd });
           }
           agent = replacement.loaded;
           identitySource = replacement.source;
-          return { content: [{ type: "text", text: JSON.stringify({
-            source: identitySource, solana: agent.solanaAddress, evm: agent.evmAddress,
-            casper: agent.casperAddress, reloaded: true,
-          }) }] };
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  source: identitySource,
+                  solana: agent.solanaAddress,
+                  evm: agent.evmAddress,
+                  casper: agent.casperAddress,
+                  reloaded: true,
+                }),
+              },
+            ],
+          };
         } catch (error) {
-          return { isError: true, content: [{ type: "text", text: `Wallet reload failed: ${(error as Error).message}` }] };
+          return {
+            isError: true,
+            content: [{ type: "text", text: `Wallet reload failed: ${(error as Error).message}` }],
+          };
         }
       case "agent_address":
         return runAgentAddress(ctx, args ?? {});
@@ -158,7 +191,12 @@ export async function createServer(config: McpConfig = {}) {
     }
   });
 
-  return { server, get agent() { return agent; } };
+  return {
+    server,
+    get agent() {
+      return agent;
+    },
+  };
 }
 
 export interface ToolContext {

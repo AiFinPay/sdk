@@ -54,11 +54,11 @@ export interface McpConfig {
 }
 
 export function loadConfigFromEnv(): McpConfig {
-  if (process.env.AIFINPAY_MODE && !['live', 'dev'].includes(process.env.AIFINPAY_MODE)) {
-    throw new Error('AIFINPAY_MODE must be live or dev');
+  if (process.env.AIFINPAY_MODE && !["live", "dev"].includes(process.env.AIFINPAY_MODE)) {
+    throw new Error("AIFINPAY_MODE must be live or dev");
   }
   return {
-    devMode: process.env.AIFINPAY_MODE === 'dev',
+    devMode: process.env.AIFINPAY_MODE === "dev",
     seedHash: process.env.SEED_HASH,
     agentsFile: process.env.AIFINPAY_AGENTS_FILE || undefined,
     agentId: process.env.AIFINPAY_AGENT_ID || undefined,
@@ -66,12 +66,8 @@ export function loadConfigFromEnv(): McpConfig {
     walletPassphrase: process.env.AIFINPAY_WALLET_PASSPHRASE || undefined,
     agentSecretB58: process.env.AIFINPAY_AGENT_SECRET || undefined,
     baseUrl: process.env.AIFINPAY_BASE_URL || undefined,
-    timeoutMs: process.env.AIFINPAY_TIMEOUT_MS
-      ? Number(process.env.AIFINPAY_TIMEOUT_MS)
-      : undefined,
-    maxAmountUsd: process.env.AIFINPAY_MAX_USD
-      ? Number(process.env.AIFINPAY_MAX_USD)
-      : undefined,
+    timeoutMs: process.env.AIFINPAY_TIMEOUT_MS ? Number(process.env.AIFINPAY_TIMEOUT_MS) : undefined,
+    maxAmountUsd: process.env.AIFINPAY_MAX_USD ? Number(process.env.AIFINPAY_MAX_USD) : undefined,
     gatewayOrigins: splitOrigins(process.env.AIFINPAY_GATEWAY_ORIGINS),
     gatewayPathMode: parseGatewayPathMode(process.env.AIFINPAY_GATEWAY_PATH_MODE),
     trustedHosts: splitList(process.env.AIFINPAY_TRUSTED_HOSTS),
@@ -90,7 +86,10 @@ function parseGatewayPathMode(raw: string | undefined): "gateway" | "direct" {
  *  variable to an empty string means the former. */
 function splitList(raw: string | undefined): string[] | undefined {
   if (!raw) return undefined;
-  const out = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  const out = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   return out.length ? out : undefined;
 }
 
@@ -102,12 +101,15 @@ function splitOrigins(raw: string | undefined): string[] | undefined {
   if (!list) return undefined;
   for (const entry of list) {
     let u: URL;
-    try { u = new URL(entry); }
-    catch { throw new Error(`AIFINPAY_GATEWAY_ORIGINS: "${entry}" is not a URL`); }
+    try {
+      u = new URL(entry);
+    } catch {
+      throw new Error(`AIFINPAY_GATEWAY_ORIGINS: "${entry}" is not a URL`);
+    }
     if (u.origin !== entry.replace(/\/+$/, "")) {
       throw new Error(
-        `AIFINPAY_GATEWAY_ORIGINS: "${entry}" must be a bare origin like https://dev.example.com `
-        + `(got path/query "${u.pathname}${u.search}")`,
+        `AIFINPAY_GATEWAY_ORIGINS: "${entry}" must be a bare origin like https://dev.example.com ` +
+          `(got path/query "${u.pathname}${u.search}")`
       );
     }
     // WHATWG URL accepts "*" in a hostname, so new URL("https://*.example.com")
@@ -117,8 +119,8 @@ function splitOrigins(raw: string | undefined): string[] | undefined {
     // like the feature is broken.
     if (!/^[a-z0-9.-]+$/i.test(u.hostname) || u.hostname.startsWith("-") || u.hostname.includes("..")) {
       throw new Error(
-        `AIFINPAY_GATEWAY_ORIGINS: "${entry}" is not a plain hostname. `
-        + `Wildcards are not supported — name each origin you settle against.`,
+        `AIFINPAY_GATEWAY_ORIGINS: "${entry}" is not a plain hostname. ` +
+          `Wildcards are not supported — name each origin you settle against.`
       );
     }
     if (u.protocol !== "https:" && u.hostname !== "localhost" && u.hostname !== "127.0.0.1") {

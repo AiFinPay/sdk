@@ -24,10 +24,7 @@ import {
   toFunctionSelector,
   formatEther,
 } from "viem";
-import {
-  privateKeyToAccount,
-  type PrivateKeyAccount,
-} from "viem/accounts";
+import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { polygon, base, arbitrum, optimism, bsc, mainnet, unichain, type Chain } from "viem/chains";
 import { botchain, xrplevm } from "./chains.js";
 import {
@@ -39,13 +36,17 @@ import {
   TransactionInstruction,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
-import {
-  AiFinPayError,
-  X402Error,
-} from "./errors.js";
+import { AiFinPayError, X402Error } from "./errors.js";
 import { Agent, type AgentOptions } from "./agent.js";
 import { loadLocalWalletIdentity } from "./localIdentity.js";
-import { SettlementClient, executeSettlementInvoice, type SettlementInvoice, type SettlementInvoiceInput, type SettlementRoute, type SettlementRouteClass } from "./settlement.js";
+import {
+  SettlementClient,
+  executeSettlementInvoice,
+  type SettlementInvoice,
+  type SettlementInvoiceInput,
+  type SettlementRoute,
+  type SettlementRouteClass,
+} from "./settlement.js";
 import { getQuota, type QuotaSummary } from "./agentHistory.js";
 import { type SpendLedger, MemorySpendLedger, FileSpendLedger } from "./spendLedger.js";
 import {
@@ -56,8 +57,8 @@ import {
   type Aifp1FetchOptions,
 } from "./aifp1.js";
 import {
-  bridgeQuote     as crossChainQuote,
-  bridgeExecute   as crossChainExecute,
+  bridgeQuote as crossChainQuote,
+  bridgeExecute as crossChainExecute,
   bridgeWaitForArrival,
   EVM_CHAINS,
   USDC_NATIVE,
@@ -78,46 +79,46 @@ import {
 export type ChainId = "solana" | SplitterChainName;
 
 export interface ProviderEntry {
-  name:            string;
-  display_name?:   string;
+  name: string;
+  display_name?: string;
   preferred_chain: ChainId;
   accepted_chains: ChainId[];
-  price_usd:       number;
-  mode:            "per_call" | "session" | "both";
-  bridge_url:      string;
+  price_usd: number;
+  mode: "per_call" | "session" | "both";
+  bridge_url: string;
   merchant_wallet: string;
-  service_type?:   string;
-  url?:            string;
+  service_type?: string;
+  url?: string;
 }
 
 export interface CallOptions {
-  provider:    string;
-  cost?:       number;
-  chain?:      ChainId;
-  bridgeUrl?:  string;
-  body?:       unknown;
-  method?:     string;
-  timeoutMs?:  number;
-  signal?:     AbortSignal;
+  provider: string;
+  cost?: number;
+  chain?: ChainId;
+  bridgeUrl?: string;
+  body?: unknown;
+  method?: string;
+  timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 export interface BalanceSnapshot {
   agent_balance_usd: number;
   chains: {
     solana: {
-      sol:            number;
-      usdc:           number;
+      sol: number;
+      usdc: number;
       msecco_balance: number;
     };
     polygon: {
-      matic:          number;
-      usdc:           number;
+      matic: number;
+      usdc: number;
       msecco_balance: number;
     };
   };
   spend_24h_usd: number;
   budget_caps: {
-    daily_usd?:    number;
+    daily_usd?: number;
     per_call_usd?: number;
   };
   priced_at: number;
@@ -131,15 +132,15 @@ export interface BalanceSnapshot {
 }
 
 export interface ReputationSnapshot {
-  trust_score:    number;
-  spend_score:    number;
-  tenure_days:    number;
-  verified:       boolean;
-  flags:          string[];
+  trust_score: number;
+  spend_score: number;
+  tenure_days: number;
+  verified: boolean;
+  flags: string[];
 }
 
 export interface BudgetCaps {
-  daily_usd?:    number;
+  daily_usd?: number;
   per_call_usd?: number;
   /**
    * Behaviour when a cap is hit during call():
@@ -152,33 +153,33 @@ export interface BudgetCaps {
 }
 
 export interface SessionHandle {
-  id:           string;
-  provider:     string;
-  chain:        ChainId;
-  budget_usd:   number;
-  spent_usd:    number;
+  id: string;
+  provider: string;
+  chain: ChainId;
+  budget_usd: number;
+  spent_usd: number;
   remaining_usd: number;
-  expires_at:   number;
+  expires_at: number;
   call(body: unknown): Promise<Response>;
   close(): Promise<SessionReceipt>;
   abandon(): Promise<void>;
 }
 
 export interface SessionReceipt {
-  session_id:    string;
-  spent_usd:     number;
-  refund_usd:    number;
+  session_id: string;
+  spent_usd: number;
+  refund_usd: number;
   settlement_tx: string;
-  block:         number | string;
+  block: number | string;
 }
 
 export interface AiFinPayAgentOptions extends AgentOptions {
-  registryUrl?:  string;     // default: ${baseUrl}/api/providers,
-                             // falling back to /providers
+  registryUrl?: string; // default: ${baseUrl}/api/providers,
+  // falling back to /providers
   evmPrivateKey?: `0x${string}`; // optional override; otherwise derived/generated
-  budgetCaps?:   BudgetCaps;
-  telemetry?:    boolean;    // default true
-  polygonRpc?:   string;     // default: https://polygon.drpc.org
+  budgetCaps?: BudgetCaps;
+  telemetry?: boolean; // default true
+  polygonRpc?: string; // default: https://polygon.drpc.org
   /**
    * Where the daily cap is remembered.
    *
@@ -186,13 +187,13 @@ export interface AiFinPayAgentOptions extends AgentOptions {
    * once a daily cap is set, memory otherwise. Pass your own when the agent
    * runs on more than one host — a lock file cannot answer for a fleet.
    */
-  spendLedger?:  SpendLedger;
-  solanaRpc?:    string;     // default: env AIFINPAY_SOLANA_RPC or mainnet-beta
+  spendLedger?: SpendLedger;
+  solanaRpc?: string; // default: env AIFINPAY_SOLANA_RPC or mainnet-beta
   /** RPC overrides for non-Polygon EVM chains — both bridge-flow chains
    *  and splitter-settlement chains (base, optimism, unichain, botchain,
    *  xrplevm). Splitter chains fall back to the public RPC listed in
    *  SPLITTER_DEPLOYMENTS when no override is given. */
-  evmRpcUrls?:   Partial<Record<AnyEvmChainName, string>>;
+  evmRpcUrls?: Partial<Record<AnyEvmChainName, string>>;
 }
 
 // ── 402 challenge body shape returned by AiFinPay paid-proxy bridges ─────
@@ -200,33 +201,33 @@ export interface AiFinPayAgentOptions extends AgentOptions {
 /** The native-token payment block of a bridge 402. One shape, two key names —
  *  see EvmBridgeChallenge below for why both exist. */
 interface PayNativeBlock {
-    /** EVM chain the quote is denominated for. Legacy bridges emit
-     *  "polygon"; newer bridges may emit any SplitterChainName. */
-    chain:                 string;
-    splitter:              string;
-    /** Which B2BSplitter the address above is. Absent on older bridges, which
-     *  is treated as "1.1" — the shape the entrypoint had before 2026-07-31. */
-    splitter_version?:     "1.1" | "1.2";
-    merchant_wallet:       string;
-    total_wei:             string;
-    merchant_amount_wei?:  string;
-    treasury_amount_wei?:  string;
-    ip_creator_amount_wei?: string;
-    /** Optional royalty recipient. When absent the SDK routes the slot to
-     *  the splitter's treasury (zero-address would strand the 1bp in the
-     *  contract — B2BSplitter has no sweep function). */
-    ip_creator?:           string;
-    order_id:              string;
-    function_signature?:   string;
-    ttl_seconds?:          number;
-    /** v1.2 bridges precompute keccak(order_id); the SDK derives it anyway. */
-    payment_id?:           string;
+  /** EVM chain the quote is denominated for. Legacy bridges emit
+   *  "polygon"; newer bridges may emit any SplitterChainName. */
+  chain: string;
+  splitter: string;
+  /** Which B2BSplitter the address above is. Absent on older bridges, which
+   *  is treated as "1.1" — the shape the entrypoint had before 2026-07-31. */
+  splitter_version?: "1.1" | "1.2";
+  merchant_wallet: string;
+  total_wei: string;
+  merchant_amount_wei?: string;
+  treasury_amount_wei?: string;
+  ip_creator_amount_wei?: string;
+  /** Optional royalty recipient. When absent the SDK routes the slot to
+   *  the splitter's treasury (zero-address would strand the 1bp in the
+   *  contract — B2BSplitter has no sweep function). */
+  ip_creator?: string;
+  order_id: string;
+  function_signature?: string;
+  ttl_seconds?: number;
+  /** v1.2 bridges precompute keccak(order_id); the SDK derives it anyway. */
+  payment_id?: string;
 }
 
 interface PayMaticChallenge {
-  error:    string;
+  error: string;
   protocol: string;
-  service:  string;
+  service: string;
   facilitator?: string;
   /** The production bridges renamed this block to `pay_native` on 2026-08-04
    *  when payMatic became payNative on-chain — and every SDK branch kept
@@ -234,20 +235,20 @@ interface PayMaticChallenge {
    *  bridge with an error blaming facilitator wiring (AIFINP-118). Both names
    *  are accepted; `pay_native` wins when a bridge sends both. */
   pay_native?: PayNativeBlock;
-  pay_matic?:  PayNativeBlock;
+  pay_matic?: PayNativeBlock;
   pay_solana?: {
-    chain:                       "solana";
-    program_id:                  string;
-    instruction:                 string;     // expected "b2b_pay_with_split"
-    merchant_wallet:             string;     // base58
-    treasury:                    string;     // base58
-    merchant_amount_lamports:    string;
-    treasury_amount_lamports?:   string;
+    chain: "solana";
+    program_id: string;
+    instruction: string; // expected "b2b_pay_with_split"
+    merchant_wallet: string; // base58
+    treasury: string; // base58
+    merchant_amount_lamports: string;
+    treasury_amount_lamports?: string;
     ip_creator_amount_lamports?: string;
-    total_lamports?:             string;
-    order_id:                    string;
-    asset?:                      string;
-    ttl_seconds?:                number;
+    total_lamports?: string;
+    order_id: string;
+    asset?: string;
+    ttl_seconds?: number;
   };
   retry?: unknown;
   instructions?: string[];
@@ -265,9 +266,7 @@ interface PayMaticChallenge {
  * original bug survived because the tests built their 402s in the SDK's own
  * vocabulary and never met a real one.
  */
-export function nativePayBlock(
-  challenge: PayMaticChallenge,
-): PayNativeBlock | undefined {
+export function nativePayBlock(challenge: PayMaticChallenge): PayNativeBlock | undefined {
   return challenge.pay_native ?? challenge.pay_matic;
 }
 
@@ -285,7 +284,7 @@ const SPLITTER_PAY_MATIC_ABI = [
     inputs: [
       { type: "address", name: "merchant" },
       { type: "address", name: "ipCreator" },
-      { type: "string",  name: "orderId" },
+      { type: "string", name: "orderId" },
     ],
     outputs: [],
   },
@@ -305,7 +304,7 @@ const SPLITTER_PAY_NATIVE_ABI = [
       { type: "bytes32", name: "paymentId" },
       { type: "address", name: "merchant" },
       { type: "address", name: "ipCreator" },
-      { type: "string",  name: "memo" },
+      { type: "string", name: "memo" },
     ],
     outputs: [],
   },
@@ -335,18 +334,12 @@ export function paymentIdFor(orderId: string): `0x${string}` {
 // apart on a chain id or RPC.
 
 /** EVM chains with a live, on-chain-verified B2BSplitter deployment. */
-export type SplitterChainName =
-  | "polygon"
-  | "base"
-  | "optimism"
-  | "unichain"
-  | "botchain"
-  | "xrplevm";
+export type SplitterChainName = "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm";
 
 export interface SplitterDeployment {
-  chainId:    number;
+  chainId: number;
   /** viem chain object used for tx signing on this chain. */
-  chain:      Chain;
+  chain: Chain;
   /** Public RPC used when no evmRpcUrls override is supplied. */
   defaultRpc: string;
   /**
@@ -356,14 +349,14 @@ export interface SplitterDeployment {
    */
   version: "1.1" | "1.2";
   /** B2BSplitter contract address (native-token entrypoint). */
-  splitter:   `0x${string}`;
+  splitter: `0x${string}`;
   /**
    * Circle-native USDC on this chain, when one exists. Informational for
    * now: the splitter payment path is native-token only (payMatic) — no
    * ERC-20 settlement path is implemented in the SDK or deployed splitter.
    */
-  usdc?:      `0x${string}`;
-  explorer:   string;
+  usdc?: `0x${string}`;
+  explorer: string;
   /** Env var consulted for the native-token USD price used by the
    *  pre-sign challenge guard. An operator who sets it means it, so it wins.
    *
@@ -372,74 +365,74 @@ export interface SplitterDeployment {
    *  in a blocking guard is what made this SDK reject valid payments: POL sat
    *  at 0.70 here while trading near 0.073, so every quote looked ten times
    *  its cost and BudgetCapExceededError fired before any money moved. */
-  nativeUsdEnv:     string;
+  nativeUsdEnv: string;
   nativeUsdDefault: number;
 }
 
 export const SPLITTER_DEPLOYMENTS: Record<SplitterChainName, SplitterDeployment> = {
   polygon: {
-    version:    "1.2",
-    chainId:    137,
-    chain:      polygon,
+    version: "1.2",
+    chainId: 137,
+    chain: polygon,
     defaultRpc: "https://polygon.drpc.org",
-    splitter:   "0xbD1fa5453f212F096c0213788a645eC597FB4DDe",
-    usdc:       "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
-    explorer:   "https://polygonscan.com",
+    splitter: "0xbD1fa5453f212F096c0213788a645eC597FB4DDe",
+    usdc: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+    explorer: "https://polygonscan.com",
     nativeUsdEnv: "AIFINPAY_MATIC_USD", // legacy name kept for back-compat
     nativeUsdDefault: 0.073, // reference only; ~$0.073 on 2026-08-03
   },
   base: {
-    version:    "1.1",
-    chainId:    8453,
-    chain:      base,
+    version: "1.1",
+    chainId: 8453,
+    chain: base,
     defaultRpc: "https://mainnet.base.org",
-    splitter:   "0x8Ad9830D16b1f10333866a3f38C949CbB19f4BAD",
-    usdc:       "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-    explorer:   "https://basescan.org",
+    splitter: "0x8Ad9830D16b1f10333866a3f38C949CbB19f4BAD",
+    usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    explorer: "https://basescan.org",
     nativeUsdEnv: "AIFINPAY_ETH_USD",
     nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
   },
   optimism: {
-    version:    "1.2",
-    chainId:    10,
-    chain:      optimism,
+    version: "1.2",
+    chainId: 10,
+    chain: optimism,
     defaultRpc: "https://mainnet.optimism.io",
-    splitter:   "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74",
-    usdc:       "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-    explorer:   "https://optimistic.etherscan.io",
+    splitter: "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74",
+    usdc: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+    explorer: "https://optimistic.etherscan.io",
     nativeUsdEnv: "AIFINPAY_ETH_USD",
     nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
   },
   unichain: {
-    version:    "1.1",
-    chainId:    130,
-    chain:      unichain,
+    version: "1.1",
+    chainId: 130,
+    chain: unichain,
     defaultRpc: "https://mainnet.unichain.org",
-    splitter:   "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB",
-    usdc:       "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
-    explorer:   "https://uniscan.xyz",
+    splitter: "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB",
+    usdc: "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
+    explorer: "https://uniscan.xyz",
     nativeUsdEnv: "AIFINPAY_ETH_USD",
     nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
   },
   botchain: {
-    version:    "1.2",
-    chainId:    677,
-    chain:      botchain,
+    version: "1.2",
+    chainId: 677,
+    chain: botchain,
     defaultRpc: "https://rpc.botchain.ai",
-    splitter:   "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
+    splitter: "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
     // no USDC on BOT Chain — native BOT only
-    explorer:   "https://scan.botchain.ai",
+    explorer: "https://scan.botchain.ai",
     nativeUsdEnv: "AIFINPAY_BOT_USD",
     nativeUsdDefault: 1, // no reliable public feed; set the env var
   },
   xrplevm: {
-    version:    "1.2",
-    chainId:    1440000,
-    chain:      xrplevm,
+    version: "1.2",
+    chainId: 1440000,
+    chain: xrplevm,
     defaultRpc: "https://rpc.xrplevm.org",
-    splitter:   "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
+    splitter: "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
     // no verified USDC on XRPL EVM — native XRP only
-    explorer:   "https://explorer.xrplevm.org",
+    explorer: "https://explorer.xrplevm.org",
     nativeUsdEnv: "AIFINPAY_XRP_USD",
     nativeUsdDefault: 2,
   },
@@ -465,8 +458,8 @@ export type AnyEvmChainName = EvmChainName | SplitterChainName;
 
 function evmChainObject(name: AnyEvmChainName): Chain | undefined {
   return (
-    (EVM_CHAIN_OBJECTS as Partial<Record<string, Chain>>)[name]
-    ?? (SPLITTER_DEPLOYMENTS as Partial<Record<string, SplitterDeployment>>)[name]?.chain
+    (EVM_CHAIN_OBJECTS as Partial<Record<string, Chain>>)[name] ??
+    (SPLITTER_DEPLOYMENTS as Partial<Record<string, SplitterDeployment>>)[name]?.chain
   );
 }
 
@@ -503,7 +496,11 @@ const SPLITTER_TREASURY_ABI = [
 
 export class ProviderUnknownError extends AiFinPayError {}
 export class WrongChainBalanceError extends AiFinPayError {
-  constructor(public has: ChainId[], public needed: ChainId, msg: string) {
+  constructor(
+    public has: ChainId[],
+    public needed: ChainId,
+    msg: string
+  ) {
     super(msg);
   }
 }
@@ -523,18 +520,24 @@ export class InsufficientFundsError extends AiFinPayError {
       symbol: string;
       needed_wei: string;
       available_wei: string;
-    },
+    }
   ) {
     super(msg);
   }
 }
 export class BudgetCapExceededError extends AiFinPayError {
-  constructor(public kind: "daily" | "per_call", msg: string) {
+  constructor(
+    public kind: "daily" | "per_call",
+    msg: string
+  ) {
     super(msg);
   }
 }
 export class SettlementError extends AiFinPayError {
-  constructor(public reason: string, public txHash?: string) {
+  constructor(
+    public reason: string,
+    public txHash?: string
+  ) {
     super(`Settlement failed: ${reason}${txHash ? ` (tx ${txHash})` : ""}`);
   }
 }
@@ -580,51 +583,46 @@ const DEFAULT_REGISTRY_PATH = DEFAULT_REGISTRY_PATHS[0];
  * returns and `register()` produces. Identity is the agent's EVM address.
  */
 export interface NetworkAgent {
-  address:      string;
-  name:         string | null;
-  description:  string | null;
-  endpoint:     string | null;
+  address: string;
+  name: string | null;
+  description: string | null;
+  endpoint: string | null;
   capabilities: string[];
-  pricing:      { per_call: number; currency: string } | null;
-  rating:       number | null;
+  pricing: { per_call: number; currency: string } | null;
+  rating: number | null;
   published_at: number | null;
-  created_at:   number | null;
+  created_at: number | null;
 }
 
 export class AiFinPayAgent {
-  readonly inner:        Agent;            // existing Solana-flavoured agent
-  readonly evmAccount:   PrivateKeyAccount;
-  readonly registryUrl:  string;
+  readonly inner: Agent; // existing Solana-flavoured agent
+  readonly evmAccount: PrivateKeyAccount;
+  readonly registryUrl: string;
   /** Fallback registry URLs, tried in order when `registryUrl` was defaulted. */
-  private  registryCandidates: string[];
-  readonly polygonRpc:   string;
-  readonly solanaRpc:    string;
-  private  cachedRegistry?: ProviderEntry[];
-  private  budgetCaps:     BudgetCaps;
-  private  spend24h        = new SpendTracker();  // reporting only; the cap uses the ledger
-  private  _ledger?:       SpendLedger;
-  private  ledgerOverride?: SpendLedger;
-  private  telemetry:      boolean;
-  private  _polygonPublic?: PublicClient;
-  private  _polygonWallet?: WalletClient;
+  private registryCandidates: string[];
+  readonly polygonRpc: string;
+  readonly solanaRpc: string;
+  private cachedRegistry?: ProviderEntry[];
+  private budgetCaps: BudgetCaps;
+  private spend24h = new SpendTracker(); // reporting only; the cap uses the ledger
+  private _ledger?: SpendLedger;
+  private ledgerOverride?: SpendLedger;
+  private telemetry: boolean;
+  private _polygonPublic?: PublicClient;
+  private _polygonWallet?: WalletClient;
   // Multi-chain client cache for cross-chain orchestration (bridge flows).
   // Keyed by EVM chain name (see crossChain.ts EVM_CHAINS).
-  private  _evmClients: Map<AnyEvmChainName, { publicClient: PublicClient; walletClient: WalletClient }> = new Map();
-  private  evmRpcUrls: Partial<Record<AnyEvmChainName, string>> = {};
+  private _evmClients: Map<AnyEvmChainName, { publicClient: PublicClient; walletClient: WalletClient }> = new Map();
+  private evmRpcUrls: Partial<Record<AnyEvmChainName, string>> = {};
 
-  private constructor(
-    inner:      Agent,
-    evmAccount: PrivateKeyAccount,
-    opts:       AiFinPayAgentOptions = {},
-  ) {
-    this.inner       = inner;
-    this.evmAccount  = evmAccount;
-    this.registryUrl = opts.registryUrl
-      ?? `${inner.baseUrl}${DEFAULT_REGISTRY_PATH}`;
+  private constructor(inner: Agent, evmAccount: PrivateKeyAccount, opts: AiFinPayAgentOptions = {}) {
+    this.inner = inner;
+    this.evmAccount = evmAccount;
+    this.registryUrl = opts.registryUrl ?? `${inner.baseUrl}${DEFAULT_REGISTRY_PATH}`;
     this.registryCandidates = opts.registryUrl
       ? [opts.registryUrl]
       : DEFAULT_REGISTRY_PATHS.map((path) => `${inner.baseUrl}${path}`);
-    this.budgetCaps  = opts.budgetCaps ?? {};
+    this.budgetCaps = opts.budgetCaps ?? {};
     // `spendLedger` was declared, documented ("pass your own when the agent
     // runs on more than one host") and read by the `ledger` getter, but never
     // assigned from the options — so the option was a no-op and every agent
@@ -632,11 +630,9 @@ export class AiFinPayAgent {
     // a shared ledger silently got a per-host one instead, which is exactly
     // the failure the option exists to prevent.
     if (opts.spendLedger) this.ledgerOverride = opts.spendLedger;
-    this.telemetry   = opts.telemetry !== false;
-    this.polygonRpc  = opts.polygonRpc ?? "https://polygon.drpc.org";
-    this.solanaRpc   = opts.solanaRpc
-      ?? process.env.AIFINPAY_SOLANA_RPC
-      ?? "https://api.mainnet-beta.solana.com";
+    this.telemetry = opts.telemetry !== false;
+    this.polygonRpc = opts.polygonRpc ?? "https://polygon.drpc.org";
+    this.solanaRpc = opts.solanaRpc ?? process.env.AIFINPAY_SOLANA_RPC ?? "https://api.mainnet-beta.solana.com";
     // Optional RPC overrides for non-Polygon EVM chains used in bridge flows.
     // Falls back to viem's chain.rpcUrls.default if not provided.
     if (opts.evmRpcUrls) this.evmRpcUrls = opts.evmRpcUrls;
@@ -669,7 +665,10 @@ export class AiFinPayAgent {
   // optional RPC override per chain can be supplied via opts.evmRpcUrls,
   // else splitter chains use SPLITTER_DEPLOYMENTS.defaultRpc, else viem's
   // chain default.
-  private evmClients(name: AnyEvmChainName): { publicClient: PublicClient; walletClient: WalletClient } {
+  private evmClients(name: AnyEvmChainName): {
+    publicClient: PublicClient;
+    walletClient: WalletClient;
+  } {
     const cached = this._evmClients.get(name);
     if (cached) return cached;
 
@@ -677,8 +676,8 @@ export class AiFinPayAgent {
     if (!chain) {
       throw new AiFinPayError(`evmClients: unsupported EVM chain "${name}"`);
     }
-    const rpcUrl = this.evmRpcUrls[name]
-      ?? (SPLITTER_DEPLOYMENTS as Partial<Record<string, SplitterDeployment>>)[name]?.defaultRpc;
+    const rpcUrl =
+      this.evmRpcUrls[name] ?? (SPLITTER_DEPLOYMENTS as Partial<Record<string, SplitterDeployment>>)[name]?.defaultRpc;
     const transport = rpcUrl ? http(rpcUrl) : http();
 
     const publicClient = createPublicClient({ chain, transport });
@@ -691,7 +690,10 @@ export class AiFinPayAgent {
   // Clients for a splitter-settlement chain. Polygon keeps its dedicated
   // client pair (honours the polygonRpc option byte-for-byte); every other
   // registry chain goes through the generic evmClients cache.
-  private splitterClients(name: SplitterChainName): { publicClient: PublicClient; walletClient: WalletClient } {
+  private splitterClients(name: SplitterChainName): {
+    publicClient: PublicClient;
+    walletClient: WalletClient;
+  } {
     if (name === "polygon") return this.polygonClients();
     return this.evmClients(name);
   }
@@ -714,7 +716,9 @@ export class AiFinPayAgent {
         : await AiFinPayAgent.fromSolanaSecret(identity.secretB58, opts);
     } catch {
       // Decoder/library errors can include input. Never echo local key material.
-      throw new AiFinPayError(`Invalid wallet selected from ${identity.source}; refusing to generate a replacement wallet`);
+      throw new AiFinPayError(
+        `Invalid wallet selected from ${identity.source}; refusing to generate a replacement wallet`
+      );
     }
   }
 
@@ -763,22 +767,19 @@ export class AiFinPayAgent {
    * An explicit opts.evmPrivateKey imports an existing EVM wallet instead;
    * keep that key as well as the seed to restore the same EVM address.
    */
-  static async fromSeed(
-    seedHex: string,
-    opts: AiFinPayAgentOptions = {},
-  ): Promise<AiFinPayAgent> {
+  static async fromSeed(seedHex: string, opts: AiFinPayAgentOptions = {}): Promise<AiFinPayAgent> {
     const normalizedSeed = seedHex.replace(/^0x/, "");
     if (!/^[0-9a-fA-F]{64}$/.test(normalizedSeed)) {
       throw new AiFinPayError(`fromSeed: seed must be 32 bytes (64 hex chars)`);
     }
     const seed = hexToBytes(normalizedSeed);
     const kp = nacl.sign.keyPair.fromSeed(seed);
-    const inner = (Agent as unknown as { _ofKeyPair(kp: nacl.SignKeyPair, opts?: AgentOptions): Agent })
-      ._ofKeyPair?.(kp, opts) ?? Agent.fromSecretB58(bs58.encode(kp.secretKey), opts);
+    const inner =
+      (Agent as unknown as { _ofKeyPair(kp: nacl.SignKeyPair, opts?: AgentOptions): Agent })._ofKeyPair?.(kp, opts) ??
+      Agent.fromSecretB58(bs58.encode(kp.secretKey), opts);
 
     // Derive EVM key from seed (independent, not BIP-44 — see TODO above)
-    const evmHex = opts.evmPrivateKey
-      ?? (("0x" + bytesToHex(crypto32(seed))) as `0x${string}`);
+    const evmHex = opts.evmPrivateKey ?? (("0x" + bytesToHex(crypto32(seed))) as `0x${string}`);
     const evmAccount = privateKeyToAccount(evmHex);
     return new AiFinPayAgent(inner, evmAccount, opts);
   }
@@ -795,13 +796,10 @@ export class AiFinPayAgent {
    * derivation, the same AIFINPAY_AGENT_SECRET always reproduces the same
    * EVM address (this is what the MCP server relies on).
    */
-  static async fromSolanaSecret(
-    secretB58: string,
-    opts: AiFinPayAgentOptions = {},
-  ): Promise<AiFinPayAgent> {
+  static async fromSolanaSecret(secretB58: string, opts: AiFinPayAgentOptions = {}): Promise<AiFinPayAgent> {
     const inner = Agent.fromSecretB58(secretB58, opts);
-    const evmKey = opts.evmPrivateKey
-      ?? (("0x" + bytesToHex(crypto32(inner.secretKey.subarray(0, 32)))) as `0x${string}`);
+    const evmKey =
+      opts.evmPrivateKey ?? (("0x" + bytesToHex(crypto32(inner.secretKey.subarray(0, 32)))) as `0x${string}`);
     const evmAccount = privateKeyToAccount(evmKey);
     return new AiFinPayAgent(inner, evmAccount, opts);
   }
@@ -812,8 +810,12 @@ export class AiFinPayAgent {
     // Canonical: Solana pubkey for back-compat with the leaderboard / Seat PDA.
     return this.inner.address;
   }
-  get solanaAddress(): string { return this.inner.address; }
-  get evmAddress():    string { return this.evmAccount.address; }
+  get solanaAddress(): string {
+    return this.inner.address;
+  }
+  get evmAddress(): string {
+    return this.evmAccount.address;
+  }
 
   /**
    * Casper identity, derived from the same seed as the other two.
@@ -831,7 +833,9 @@ export class AiFinPayAgent {
   }
 
   /** Convenience: the account hash, which is what a Casper explorer wants. */
-  get casperAddress(): string { return this.casper.accountHash; }
+  get casperAddress(): string {
+    return this.casper.accountHash;
+  }
 
   // ── Registry ────────────────────────────────────────────────────────────
 
@@ -874,9 +878,7 @@ export class AiFinPayAgent {
       this.cachedRegistry = j.providers;
       return this.cachedRegistry;
     }
-    throw new AiFinPayError(
-      `provider registry unreachable (tried ${attempts.join(", ")})`,
-    );
+    throw new AiFinPayError(`provider registry unreachable (tried ${attempts.join(", ")})`);
   }
 
   async resolveProvider(name: string): Promise<ProviderEntry> {
@@ -897,11 +899,11 @@ export class AiFinPayAgent {
    * account needed.
    */
   async register(opts: {
-    name:          string;
-    endpoint:      string;
-    description?:  string;
+    name: string;
+    endpoint: string;
+    description?: string;
     capabilities?: string[];
-    pricing?:      { perCall: number; currency?: string };
+    pricing?: { perCall: number; currency?: string };
   }): Promise<NetworkAgent> {
     const base = this.inner.baseUrl;
     const addr = this.evmAddress.toLowerCase();
@@ -911,21 +913,23 @@ export class AiFinPayAgent {
     const signature = await this.evmAccount.signMessage({ message });
 
     const r = await fetch(`${base}/api/network/agents/${addr}/publish`, {
-      method:  "POST",
+      method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        name:         opts.name,
-        description:  opts.description ?? null,
-        endpoint:     opts.endpoint,
+        name: opts.name,
+        description: opts.description ?? null,
+        endpoint: opts.endpoint,
         capabilities: opts.capabilities ?? [],
-        pricing:      opts.pricing
-          ? { per_call: opts.pricing.perCall, currency: opts.pricing.currency ?? "USDC" }
-          : null,
+        pricing: opts.pricing ? { per_call: opts.pricing.perCall, currency: opts.pricing.currency ?? "USDC" } : null,
         nonce,
         signature,
       }),
     });
-    const j = (await r.json().catch(() => ({}))) as { ok?: boolean; agent?: NetworkAgent; error?: string };
+    const j = (await r.json().catch(() => ({}))) as {
+      ok?: boolean;
+      agent?: NetworkAgent;
+      error?: string;
+    };
     if (!r.ok || !j.ok || !j.agent) {
       throw new AiFinPayError(`network publish failed: ${j.error ?? r.status}`);
     }
@@ -940,9 +944,9 @@ export class AiFinPayAgent {
     const message = `AiFinPay-network-unpublish:polygon:${addr}:${nonce}`;
     const signature = await this.evmAccount.signMessage({ message });
     const r = await fetch(`${base}/api/network/agents/${addr}/unpublish`, {
-      method:  "POST",
+      method: "POST",
       headers: { "content-type": "application/json" },
-      body:    JSON.stringify({ nonce, signature }),
+      body: JSON.stringify({ nonce, signature }),
     });
     if (!r.ok) {
       const j = (await r.json().catch(() => ({}))) as { error?: string };
@@ -956,17 +960,15 @@ export class AiFinPayAgent {
    * (`agent.search("weather")`) or an object for finer control. Returns the
    * directory entries; invoking one (pay + call) lands in a later release.
    */
-  async search(
-    query: string | { capability?: string; q?: string; limit?: number },
-  ): Promise<NetworkAgent[]> {
+  async search(query: string | { capability?: string; q?: string; limit?: number }): Promise<NetworkAgent[]> {
     const base = this.inner.baseUrl;
     const params = new URLSearchParams();
     if (typeof query === "string") {
       params.set("capability", query);
     } else {
       if (query.capability) params.set("capability", query.capability);
-      if (query.q)          params.set("q", query.q);
-      if (query.limit)      params.set("limit", String(query.limit));
+      if (query.q) params.set("q", query.q);
+      if (query.limit) params.set("limit", String(query.limit));
     }
     const r = await fetch(`${base}/api/network/agents?${params.toString()}`);
     if (!r.ok) throw new AiFinPayError(`network search ${base} → ${r.status}`);
@@ -1006,9 +1008,8 @@ export class AiFinPayAgent {
   private get ledger(): SpendLedger {
     if (this.ledgerOverride) return this.ledgerOverride;
     if (!this._ledger) {
-      this._ledger = this.budgetCaps.daily_usd !== undefined
-        ? FileSpendLedger.forAgent(this.evmAddress)
-        : new MemorySpendLedger();
+      this._ledger =
+        this.budgetCaps.daily_usd !== undefined ? FileSpendLedger.forAgent(this.evmAddress) : new MemorySpendLedger();
     }
     return this._ledger;
   }
@@ -1023,13 +1024,10 @@ export class AiFinPayAgent {
    */
   private async reserveDaily(costUsd: number): Promise<string | null | "skip"> {
     const cap = this.budgetCaps.daily_usd;
-    if (cap === undefined) return null;              // no daily cap to enforce
+    if (cap === undefined) return null; // no daily cap to enforce
     const id = await this.ledger.reserve(costUsd, cap, 24 * 3600 * 1000);
     if (id) return id;
-    const err = new BudgetCapExceededError(
-      "daily",
-      `this call would take daily spend past the $${cap} cap`,
-    );
+    const err = new BudgetCapExceededError("daily", `this call would take daily spend past the $${cap} cap`);
     if ((this.budgetCaps.on_limit_exceeded ?? "throw") === "skip") return "skip";
     throw err;
   }
@@ -1044,10 +1042,7 @@ export class AiFinPayAgent {
   private checkPerCall(costUsd: number): boolean {
     const cap = this.budgetCaps.per_call_usd;
     if (cap === undefined || costUsd <= cap) return true;
-    const err = new BudgetCapExceededError(
-      "per_call",
-      `cost $${costUsd} exceeds per-call cap $${cap}`,
-    );
+    const err = new BudgetCapExceededError("per_call", `cost $${costUsd} exceeds per-call cap $${cap}`);
     if ((this.budgetCaps.on_limit_exceeded ?? "throw") === "skip") return false;
     throw err;
   }
@@ -1101,13 +1096,8 @@ export class AiFinPayAgent {
    */
   private priceCache?: { at: number; usd: Record<string, number> };
 
-  private async nativeUsdFor(
-    deployment: SplitterDeployment,
-  ): Promise<{ usd: number; source: string }> {
-    return this.tokenUsd(
-      deployment.chain.nativeCurrency.symbol.toUpperCase(),
-      deployment.nativeUsdEnv,
-    );
+  private async nativeUsdFor(deployment: SplitterDeployment): Promise<{ usd: number; source: string }> {
+    return this.tokenUsd(deployment.chain.nativeCurrency.symbol.toUpperCase(), deployment.nativeUsdEnv);
   }
 
   /**
@@ -1159,16 +1149,13 @@ export class AiFinPayAgent {
   private async assertCanAffordNative(
     publicClient: PublicClient,
     deployment: SplitterDeployment,
-    valueWei: bigint,
+    valueWei: bigint
   ): Promise<void> {
     const address = this.evmAccount.address;
     let balance: bigint;
     let gasPrice: bigint;
     try {
-      [balance, gasPrice] = await Promise.all([
-        publicClient.getBalance({ address }),
-        publicClient.getGasPrice(),
-      ]);
+      [balance, gasPrice] = await Promise.all([publicClient.getBalance({ address }), publicClient.getGasPrice()]);
     } catch {
       // An RPC that will not answer must not turn into a funding error; let
       // the actual send produce the actual failure.
@@ -1189,8 +1176,7 @@ export class AiFinPayAgent {
       return s.includes(".") ? s.replace(/(\.\d{6})\d+$/, "$1").replace(/\.?0+$/, "") || "0" : s;
     };
     const { usd } = await this.nativeUsdFor(deployment);
-    const toUsd = (wei: bigint) =>
-      Number.isFinite(usd) ? (Number(wei) / 1e18) * usd : Number.NaN;
+    const toUsd = (wei: bigint) => (Number.isFinite(usd) ? (Number(wei) / 1e18) * usd : Number.NaN);
 
     throw new InsufficientFundsError(
       toUsd(needed),
@@ -1206,7 +1192,7 @@ export class AiFinPayAgent {
         symbol,
         needed_wei: needed.toString(),
         available_wei: balance.toString(),
-      },
+      }
     );
   }
 
@@ -1222,7 +1208,7 @@ export class AiFinPayAgent {
       "per_call",
       `bridge ${providerName} challenge demands ≈$${estUsd.toFixed(4)} on-chain, ` +
         `above the allowed $${limit.toFixed(4)} (declared cost/per-call cap). ` +
-        `Set AIFINPAY_MATIC_USD / AIFINPAY_SOL_USD for a tighter estimate.`,
+        `Set AIFINPAY_MATIC_USD / AIFINPAY_SOL_USD for a tighter estimate.`
     );
     if ((this.budgetCaps.on_limit_exceeded ?? "throw") === "skip") return false;
     throw err;
@@ -1251,7 +1237,7 @@ export class AiFinPayAgent {
     if (opts.chain) {
       if (!accepted.has(opts.chain)) {
         throw new AiFinPayError(
-          `Provider ${provider.name} does not accept ${opts.chain}; accepted: ${provider.accepted_chains.join(", ")}`,
+          `Provider ${provider.name} does not accept ${opts.chain}; accepted: ${provider.accepted_chains.join(", ")}`
         );
       }
       return opts.chain;
@@ -1274,9 +1260,7 @@ export class AiFinPayAgent {
     }
     // 5. Fallback.
     if (provider.accepted_chains[0]) return provider.accepted_chains[0];
-    throw new AiFinPayError(
-      `Provider ${provider.name} declares no accepted_chains`,
-    );
+    throw new AiFinPayError(`Provider ${provider.name} declares no accepted_chains`);
   }
 
   // ── Verify (one-time on-chain registration) ─────────────────────────────
@@ -1296,7 +1280,10 @@ export class AiFinPayAgent {
    * TODO(phase-1): pick a chain (preferred USDC on Polygon for stability;
    * fallback Solana SOL). Return signed-tx instructions for the wallet.
    */
-  async deposit(_usd: number, _opts?: { asset?: "USDC" | "USDT" | "SOL" | "MATIC"; chain?: ChainId }): Promise<unknown> {
+  async deposit(
+    _usd: number,
+    _opts?: { asset?: "USDC" | "USDT" | "SOL" | "MATIC"; chain?: ChainId }
+  ): Promise<unknown> {
     throw new AiFinPayError("deposit() not implemented yet — see migration phase 1.5");
   }
 
@@ -1319,41 +1306,38 @@ export class AiFinPayAgent {
    * The agent's EVM address is used as both `fromAddress` and `toAddress`
    * unless overridden — bridging to a different recipient is rare for agents.
    */
-  async bridgeQuote(
-    opts: {
-      fromChain: EvmChainName;
-      toChain:   EvmChainName;
-      // EITHER: USDC convenience — pass amount_usdc, defaults to native USDC on both chains.
-      amount_usdc?: number;
-      // OR: arbitrary token corridor — pass tokens + raw amount (base units).
-      fromToken?: `0x${string}`;
-      toToken?:   `0x${string}`;
-      fromAmount?: string;
-      // Common
-      toAddress?: `0x${string}`;
-      slippage?:  number;
-    },
-  ): Promise<BridgeQuote> {
+  async bridgeQuote(opts: {
+    fromChain: EvmChainName;
+    toChain: EvmChainName;
+    // EITHER: USDC convenience — pass amount_usdc, defaults to native USDC on both chains.
+    amount_usdc?: number;
+    // OR: arbitrary token corridor — pass tokens + raw amount (base units).
+    fromToken?: `0x${string}`;
+    toToken?: `0x${string}`;
+    fromAmount?: string;
+    // Common
+    toAddress?: `0x${string}`;
+    slippage?: number;
+  }): Promise<BridgeQuote> {
     const fromToken = opts.fromToken ?? USDC_NATIVE[opts.fromChain];
-    const toToken   = opts.toToken   ?? USDC_NATIVE[opts.toChain];
-    const fromAmount = opts.fromAmount
-      ?? (opts.amount_usdc !== undefined
-            ? Math.round(opts.amount_usdc * 1e6).toString() // USDC has 6 decimals
-            : undefined);
+    const toToken = opts.toToken ?? USDC_NATIVE[opts.toChain];
+    const fromAmount =
+      opts.fromAmount ??
+      (opts.amount_usdc !== undefined
+        ? Math.round(opts.amount_usdc * 1e6).toString() // USDC has 6 decimals
+        : undefined);
     if (!fromAmount) {
-      throw new AiFinPayError(
-        `bridgeQuote: provide either amount_usdc OR fromAmount (in base units)`,
-      );
+      throw new AiFinPayError(`bridgeQuote: provide either amount_usdc OR fromAmount (in base units)`);
     }
     const quoteOpts: BridgeQuoteOptions = {
-      fromChain:   opts.fromChain,
-      toChain:     opts.toChain,
+      fromChain: opts.fromChain,
+      toChain: opts.toChain,
       fromToken,
       toToken,
       fromAmount,
       fromAddress: this.evmAccount.address as `0x${string}`,
-      toAddress:   opts.toAddress ?? (this.evmAccount.address as `0x${string}`),
-      slippage:    opts.slippage,
+      toAddress: opts.toAddress ?? (this.evmAccount.address as `0x${string}`),
+      slippage: opts.slippage,
     };
     return crossChainQuote(quoteOpts);
   }
@@ -1376,7 +1360,7 @@ export class AiFinPayAgent {
    */
   async bridgeWaitForArrival(
     sourceTxHash: `0x${string}`,
-    opts:         { pollIntervalMs?: number; timeoutMs?: number } = {},
+    opts: { pollIntervalMs?: number; timeoutMs?: number } = {}
   ): Promise<{ status: "done" | "failed"; dest_tx?: string; raw: unknown }> {
     return bridgeWaitForArrival(sourceTxHash, opts);
   }
@@ -1395,11 +1379,11 @@ export class AiFinPayAgent {
    */
   async call(opts: CallOptions): Promise<Response | null> {
     const provider = await this.resolveProvider(opts.provider);
-    const chain    = this.pickChain(provider, opts);
+    const chain = this.pickChain(provider, opts);
     // Registry may carry price_usd: null — normalise to a finite number so a
     // null/NaN cost can't poison the SpendTracker and silently disable caps.
-    const rawCost  = opts.cost ?? provider.price_usd;
-    const cost     = typeof rawCost === "number" && Number.isFinite(rawCost) ? rawCost : 0;
+    const rawCost = opts.cost ?? provider.price_usd;
+    const cost = typeof rawCost === "number" && Number.isFinite(rawCost) ? rawCost : 0;
 
     // The per-call cap still refuses outright; the daily one is reserved, so
     // that two calls in flight cannot both be told there is room.
@@ -1409,10 +1393,9 @@ export class AiFinPayAgent {
     const settled = false;
 
     try {
-
       if (provider.mode === "session") {
         throw new AiFinPayError(
-          `Provider ${provider.name} requires session mode — use openSession() (phase-3 feature)`,
+          `Provider ${provider.name} requires session mode — use openSession() (phase-3 feature)`
         );
       }
 
@@ -1422,20 +1405,19 @@ export class AiFinPayAgent {
       }
 
       const path = (() => {
-        if (provider.service_type === "search")    return "/search";
+        if (provider.service_type === "search") return "/search";
         if (provider.service_type === "inference") return "/chat/completions";
-        if (provider.service_type === "compute")   return "/run";
+        if (provider.service_type === "compute") return "/run";
         if (provider.service_type === "analytics") return "/query";
         return "/";
       })();
 
       const buildInit = (extraHeaders: Record<string, string> = {}): RequestInit => ({
-        method:  opts.method ?? "POST",
+        method: opts.method ?? "POST",
         headers: { "content-type": "application/json", ...extraHeaders },
-        body:    opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+        body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
         // CallOptions.timeoutMs was previously declared but never applied.
-        signal:  opts.signal
-          ?? (opts.timeoutMs ? AbortSignal.timeout(opts.timeoutMs) : undefined),
+        signal: opts.signal ?? (opts.timeoutMs ? AbortSignal.timeout(opts.timeoutMs) : undefined),
       });
 
       // 1. Initial unauthenticated POST → expect 402 challenge from the bridge.
@@ -1467,19 +1449,19 @@ export class AiFinPayAgent {
       ) {
         throw new AiFinPayError(
           `legacy call() refused ${provider.name}: the provider has no trusted positive USD price; ` +
-          `use the reviewed fetchPaid v1.3 route with fresh trusted FX instead`,
+            `use the reviewed fetchPaid v1.3 route with fresh trusted FX instead`
         );
       }
       if (!legacySettlementIsReviewed()) {
         throw new AiFinPayError(
           `legacy call() settlement is disabled: challenge targets are not trusted for mainnet payment; ` +
-          `use fetchPaid with a reviewed v1.3 settlement pin and fresh trusted FX`,
+            `use fetchPaid with a reviewed v1.3 settlement pin and fresh trusted FX`
         );
       }
 
       throw new AiFinPayError(
         `legacy call() settlement is disabled: challenge targets are not trusted for mainnet payment; ` +
-        `use fetchPaid with a reviewed v1.3 settlement pin and fresh trusted FX`,
+          `use fetchPaid with a reviewed v1.3 settlement pin and fresh trusted FX`
       );
     } finally {
       // Every path that did not move money gives the budget back now rather
@@ -1504,29 +1486,25 @@ export class AiFinPayAgent {
   // a reverted transaction would otherwise be handed to a merchant as proof of
   // a payment that never moved.
   private async settleSplitterNative(p: {
-    chain:            SplitterChainName;
-    splitter:         `0x${string}`;
+    chain: SplitterChainName;
+    splitter: `0x${string}`;
     splitterVersion?: "1.1" | "1.2";
-    merchantWallet:   `0x${string}`;
-    totalWei:         bigint;
-    orderId:          string;
-    ipCreator?:       `0x${string}`;
+    merchantWallet: `0x${string}`;
+    totalWei: bigint;
+    orderId: string;
+    ipCreator?: `0x${string}`;
   }): Promise<`0x${string}`> {
     void p;
     throw new AiFinPayError(
-      "legacy splitter settlement is disabled; use fetchPaid with a reviewed v1.3 settlement pin",
+      "legacy splitter settlement is disabled; use fetchPaid with a reviewed v1.3 settlement pin"
     );
   }
 
   // Legacy Solana settlement remains a named private surface only so older
   // callers fail with a clear migration error instead of reaching a signer.
-  private async submitSolanaB2BPayWithSplit(
-    ps: NonNullable<PayMaticChallenge["pay_solana"]>,
-  ): Promise<string> {
+  private async submitSolanaB2BPayWithSplit(ps: NonNullable<PayMaticChallenge["pay_solana"]>): Promise<string> {
     void ps;
-    throw new AiFinPayError(
-      "legacy Solana settlement is disabled; use fetchPaid with a reviewed v1.3 settlement pin",
-    );
+    throw new AiFinPayError("legacy Solana settlement is disabled; use fetchPaid with a reviewed v1.3 settlement pin");
   }
 
   // ── AIFP-1 merchant paywall (gateway.aifinpay.io) ───────────────────────
@@ -1545,7 +1523,9 @@ export class AiFinPayAgent {
    * test asserting that a receipt was reused, both need to see it. The entries
    * contain bearer JWTs — treat them like keys, and do not log them.
    */
-  get aifp1Receipts(): Aifp1ReceiptCache { return this._aifp1Cache; }
+  get aifp1Receipts(): Aifp1ReceiptCache {
+    return this._aifp1Cache;
+  }
 
   /**
    * Redacted receipt-cache view (no bearer JWTs): what batches this instance
@@ -1560,23 +1540,37 @@ export class AiFinPayAgent {
    * Use the canonical invoice executor only with a caller-supplied deployment
    * pin. An unauthenticated quote cannot establish its own signing authority.
    */
-  private async settleAifp1NativeV13(p: {
-    merchantWallet: `0x${string}`;
-    grossWei: bigint;
-    merchantWei: bigint;
-    treasuryWei: bigint;
-    creatorWei: bigint;
-    validUntil: bigint;
-    orderId: string;
-  }, opts: Aifp1FetchOptions): Promise<`0x${string}`> {
+  private async settleAifp1NativeV13(
+    p: {
+      merchantWallet: `0x${string}`;
+      grossWei: bigint;
+      merchantWei: bigint;
+      treasuryWei: bigint;
+      creatorWei: bigint;
+      validUntil: bigint;
+      orderId: string;
+    },
+    opts: Aifp1FetchOptions
+  ): Promise<`0x${string}`> {
     const pin = opts.settlementPin;
     if (!pin || pin.route_class !== "AIFP-1" || pin.chain !== "polygon" || pin.testnet) {
-      throw new AiFinPayError("AIFP-1 fetchPaid requires an independent trusted Polygon v1.3 settlement pin; other receipt networks are not supported");
+      throw new AiFinPayError(
+        "AIFP-1 fetchPaid requires an independent trusted Polygon v1.3 settlement pin; other receipt networks are not supported"
+      );
     }
-    const client = new SettlementClient({ baseUrl: opts.apiBaseUrl ?? "https://api.aifinpay.io", fetchImpl: this.inner.fetchImpl, timeoutMs: this.inner.timeoutMs });
+    const client = new SettlementClient({
+      baseUrl: opts.apiBaseUrl ?? "https://api.aifinpay.io",
+      fetchImpl: this.inner.fetchImpl,
+      timeoutMs: this.inner.timeoutMs,
+    });
     const invoice = await client.invoice({
-      route_class: "AIFP-1", chain: "polygon", asset: "POL", gross_amount: p.grossWei,
-      merchant_wallet: p.merchantWallet, order_id: p.orderId, valid_until: Number(p.validUntil),
+      route_class: "AIFP-1",
+      chain: "polygon",
+      asset: "POL",
+      gross_amount: p.grossWei,
+      merchant_wallet: p.merchantWallet,
+      order_id: p.orderId,
+      valid_until: Number(p.validUntil),
     });
     const { publicClient, walletClient } = this.polygonClients();
     const execution = await executeSettlementInvoice(invoice, walletClient, publicClient, pin);
@@ -1597,31 +1591,30 @@ export class AiFinPayAgent {
    * Returns `null` on the same terms as call(): a budget cap was hit and
    * `budgetCaps.on_limit_exceeded` is "skip".
    */
-  async fetchPaid(
-    url:  string,
-    init: RequestInit = {},
-    opts: Aifp1FetchOptions = {},
-  ): Promise<Response | null> {
+  async fetchPaid(url: string, init: RequestInit = {}, opts: Aifp1FetchOptions = {}): Promise<Response | null> {
     const deps: Aifp1Deps = {
       fetchImpl: this.inner.fetchImpl,
-      cache:     this._aifp1Cache,
+      cache: this._aifp1Cache,
       // A 0x address, because AIFP agent policies are address-keyed
       // (backend/aifp/agent-policy.js normalizeAddress) — a Solana pubkey here
       // would silently opt the agent out of its owner's own limits.
-      agentId:   opts.agentId ?? this.evmAddress,
+      agentId: opts.agentId ?? this.evmAddress,
       payerAddress: this.evmAddress,
       signPaymentAuthorization: (message) => this.evmAccount.signMessage({ message }),
       settle: (p) => this.settleAifp1NativeV13(p, opts),
       checkPerCall: (usd) => this.checkPerCall(usd),
       reserveDaily: (usd) => this.reserveDaily(usd),
-      commit:  (id, usd) => this.ledger.commit(id, usd),
-      release: (id)      => this.ledger.release(id),
+      commit: (id, usd) => this.ledger.commit(id, usd),
+      release: (id) => this.ledger.release(id),
       onPaid: ({ merchantId, amountUsd, txRef }) => {
         this.spend24h.add(amountUsd);
         if (this.telemetry) {
           this.reportTelemetry({
-            kind: "aifp1", merchant: merchantId, chain: "polygon",
-            cost: amountUsd, tx: txRef,
+            kind: "aifp1",
+            merchant: merchantId,
+            chain: "polygon",
+            cost: amountUsd,
+            tx: txRef,
           });
         }
       },
@@ -1659,7 +1652,9 @@ export class AiFinPayAgent {
    * Prepaid quota batches for this agent's address, most room first with a
    * per-merchant rollup. Non-signing read of retained receipts metadata.
    */
-  async getQuota(opts: { merchantId?: string; includeExhausted?: boolean; baseUrl?: string } = {}): Promise<QuotaSummary> {
+  async getQuota(
+    opts: { merchantId?: string; includeExhausted?: boolean; baseUrl?: string } = {}
+  ): Promise<QuotaSummary> {
     return getQuota({
       address: this.evmAddress,
       merchantId: opts.merchantId,
@@ -1675,11 +1670,7 @@ export class AiFinPayAgent {
    * TODO(phase-3): open a metered budget session.
    * @deprecated Not implemented — always throws. Tracked for phase 3; do not call.
    */
-  async openSession(_args: {
-    provider:    string;
-    budget_usd:  number;
-    ttl_seconds?: number;
-  }): Promise<SessionHandle> {
+  async openSession(_args: { provider: string; budget_usd: number; ttl_seconds?: number }): Promise<SessionHandle> {
     throw new AiFinPayError("openSession() not implemented yet — see migration phase 3");
   }
 
@@ -1699,8 +1690,8 @@ export class AiFinPayAgent {
       this.tokenUsd("SOL", "AIFINPAY_SOL_USD"),
     ]);
 
-    const polygon     = await this.fetchPolygonNative().catch(() => 0);
-    const solana      = await this.fetchSolanaNative().catch(() => 0);
+    const polygon = await this.fetchPolygonNative().catch(() => 0);
+    const solana = await this.fetchSolanaNative().catch(() => 0);
     const solana_usdc = await this.fetchSolanaUsdc().catch(() => 0);
     const polygon_usdc = await this.fetchPolygonUsdc().catch(() => 0);
 
@@ -1714,7 +1705,7 @@ export class AiFinPayAgent {
     return {
       agent_balance_usd,
       chains: {
-        solana:  { sol: solana,   usdc: solana_usdc,  msecco_balance: 0 },
+        solana: { sol: solana, usdc: solana_usdc, msecco_balance: 0 },
         polygon: { matic: polygon, usdc: polygon_usdc, msecco_balance: 0 },
       },
       spend_24h_usd: this.spend24h.total24h(),
@@ -1770,16 +1761,16 @@ export class AiFinPayAgent {
           jsonrpc: "2.0",
           id: 1,
           method: "getTokenAccountsByOwner",
-          params: [
-            this.solanaAddress,
-            { mint: USDC_SOLANA_MINT },
-            { encoding: "jsonParsed" },
-          ],
+          params: [this.solanaAddress, { mint: USDC_SOLANA_MINT }, { encoding: "jsonParsed" }],
         }),
       });
       if (!r.ok) return 0;
       const j = (await r.json()) as {
-        result?: { value?: Array<{ account?: { data?: { parsed?: { info?: { tokenAmount?: { uiAmount?: number } } } } } }> };
+        result?: {
+          value?: Array<{
+            account?: { data?: { parsed?: { info?: { tokenAmount?: { uiAmount?: number } } } } };
+          }>;
+        };
       };
       // Sum all USDC token accounts (usually just one, but be safe)
       const accounts = j.result?.value ?? [];
@@ -1820,7 +1811,7 @@ export class AiFinPayAgent {
   private async detectSplitterVersion(
     splitter: `0x${string}`,
     chainName: SplitterChainName,
-    fallback: "1.1" | "1.2",
+    fallback: "1.1" | "1.2"
   ): Promise<"1.1" | "1.2"> {
     const key = `${chainName}:${splitter.toLowerCase()}`;
     const cached = this.splitterVersionCache.get(key);
@@ -1829,9 +1820,7 @@ export class AiFinPayAgent {
       const { publicClient } = this.splitterClients(chainName);
       const code = await publicClient.getBytecode({ address: splitter });
       if (!code || code === "0x") return fallback;
-      const sel = toFunctionSelector(
-        "function payNative(bytes32,address,address,string)",
-      ).slice(2);
+      const sel = toFunctionSelector("function payNative(bytes32,address,address,string)").slice(2);
       const version: "1.1" | "1.2" = code.includes(sel) ? "1.2" : "1.1";
       this.splitterVersionCache.set(key, version);
       return version;
@@ -1839,7 +1828,6 @@ export class AiFinPayAgent {
       return fallback;
     }
   }
-
 
   /**
    * Read the native Polygon USDC (Circle-issued, 6 decimals) balance for the
@@ -1850,10 +1838,10 @@ export class AiFinPayAgent {
     try {
       const { publicClient } = this.polygonClients();
       const raw = await publicClient.readContract({
-        address:      USDC_POLYGON_ERC20,
-        abi:          ERC20_BALANCE_OF_ABI,
+        address: USDC_POLYGON_ERC20,
+        abi: ERC20_BALANCE_OF_ABI,
         functionName: "balanceOf",
-        args:         [this.evmAccount.address],
+        args: [this.evmAccount.address],
       });
       // USDC has 6 decimals on Polygon
       return Number(raw) / 1e6;
@@ -1873,8 +1861,8 @@ export class AiFinPayAgent {
       trust_score: 0,
       spend_score: 0,
       tenure_days: 0,
-      verified:    false,
-      flags:       [],
+      verified: false,
+      flags: [],
     };
   }
 
@@ -1882,16 +1870,20 @@ export class AiFinPayAgent {
 
   private reportTelemetry(payload: Record<string, unknown>): void {
     // Fire-and-forget. No body content, only metadata.
-    void this.inner.fetchImpl(`${this.inner.baseUrl}/api/telemetry`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ agent_id: this.id, ...payload, ts: Date.now() }),
-    }).catch(() => {});
+    void this.inner
+      .fetchImpl(`${this.inner.baseUrl}/api/telemetry`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ agent_id: this.id, ...payload, ts: Date.now() }),
+      })
+      .catch(() => {});
   }
 }
 
 /** Legacy bridge settlement has no reviewed mainnet route; keep this closed. */
-function legacySettlementIsReviewed(): boolean { return false; }
+function legacySettlementIsReviewed(): boolean {
+  return false;
+}
 
 // ── Internal hex helpers (small, no extra deps) ────────────────────────────
 

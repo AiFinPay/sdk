@@ -23,13 +23,17 @@ For a direct merchant endpoint such as `/api/agent/genres`, explicitly select
 the full-path format as well as the trusted origin:
 
 ```ts
-await agent.fetchPaid('https://merchant.example/api/agent/genres', {}, {
-  settlementPin: reviewedDeploymentPin,
-  nativeUsdPrice: { usd: trustedPolUsd, observedAtMs: priceObservedAtMs },
-  gatewayOrigins: ['https://merchant.example'],
-  resourcePathMode: 'direct',
-  maxAmountUsd: 0.10,
-});
+await agent.fetchPaid(
+  "https://merchant.example/api/agent/genres",
+  {},
+  {
+    settlementPin: reviewedDeploymentPin,
+    nativeUsdPrice: { usd: trustedPolUsd, observedAtMs: priceObservedAtMs },
+    gatewayOrigins: ["https://merchant.example"],
+    resourcePathMode: "direct",
+    maxAmountUsd: 0.1,
+  }
+);
 ```
 
 The pin and price variables above come from your independently reviewed
@@ -62,18 +66,18 @@ context instead of calling `fetchPaid` again: a new `fetchPaid` request can
 buy another batch when no receipt has been cached.
 
 ```ts
-import { recoverAifp1Payment } from '@aifinpay/agent';
+import { recoverAifp1Payment } from "@aifinpay/agent";
 
 // savedRecovery is Aifp1PayError.recovery from the earlier payment.
 // account is the same local viem account that sent that payment.
 const paid = await recoverAifp1Payment(savedRecovery, {
   payerAddress: account.address,
-  signPaymentAuthorization: message => account.signMessage({ message }),
+  signPaymentAuthorization: (message) => account.signMessage({ message }),
 });
 
 // Reuse this receipt for the resource/scope it covers.
 const response = await fetch(resourceUrl, {
-  headers: { 'AIFP-Receipt': paid.receipt },
+  headers: { "AIFP-Receipt": paid.receipt },
 });
 ```
 

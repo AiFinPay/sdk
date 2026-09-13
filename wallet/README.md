@@ -28,9 +28,9 @@ in a couple of seconds and derives the **exact same addresses** the full SDK
 would — checked byte-for-byte against `@aifinpay/agent` in CI. The division of
 labour:
 
-| | install | use for |
-|---|---|---|
-| `@aifinpay/wallet` | ~4.5 MB | **create** a wallet, anywhere |
+|                                     | install | use for                                          |
+| ----------------------------------- | ------- | ------------------------------------------------ |
+| `@aifinpay/wallet`                  | ~4.5 MB | **create** a wallet, anywhere                    |
 | `@aifinpay/agent` / `@aifinpay/mcp` | ~157 MB | **pay** — only when you actually settle on-chain |
 
 The keystore this writes (`~/.aifinpay/agent.json`) is the one `@aifinpay/mcp`
@@ -51,14 +51,14 @@ npx @aifinpay/wallet export   print the seed to back up
 import { deriveWallet, newWallet } from "@aifinpay/wallet";
 
 const w = await newWallet();
-w.evmAddress;              // 0x… (same on every EVM chain)
-w.solanaAddress;           // base58
-w.casperAddress;           // account-hash-…
-w.keys.seedHex;            // 32-byte seed — THE thing to back up
-w.keys.evmPrivateKey;      // for building your own transactions
+w.evmAddress; // 0x… (same on every EVM chain)
+w.solanaAddress; // base58
+w.casperAddress; // account-hash-…
+w.keys.seedHex; // 32-byte seed — THE thing to back up
+w.keys.evmPrivateKey; // for building your own transactions
 w.keys.solanaSecretKeyB58; // tweetnacl 64-byte secret, base58
 
-deriveWallet(w.keys.seedHex);  // same seed → same wallet, deterministic
+deriveWallet(w.keys.seedHex); // same seed → same wallet, deterministic
 ```
 
 ## Recovery

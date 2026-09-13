@@ -17,15 +17,7 @@
   "$defs": {
     "deployment": {
       "type": "object",
-      "required": [
-        "ecosystem",
-        "network",
-        "environment",
-        "protocolVersion",
-        "status",
-        "settlementEnabled",
-        "sourceArtifact"
-      ],
+      "required": ["ecosystem", "network", "environment", "protocolVersion", "status", "settlementEnabled", "sourceArtifact"],
       "properties": {
         "ecosystem": { "enum": ["evm", "solana"] },
         "network": { "type": "string", "minLength": 1 },
