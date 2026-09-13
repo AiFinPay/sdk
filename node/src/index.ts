@@ -214,7 +214,9 @@ export {
   SeatNotFoundError,
   UnsupportedFacilitatorError,
   X402Error,
+  toSafeError,
 } from "./errors.js";
+export type { SafeErrorShape } from "./errors.js";
 export {
   AiFinPayFacilitator,
   CoinbaseX402Facilitator,
@@ -235,6 +237,6 @@ export {
 } from "./spendLedger.js";
 
 export { deriveWallet, newWallet } from "./wallet.js";
-export { getAgentHistory } from "./agentHistory.js";
-export type { AgentHistoryOptions } from "./agentHistory.js";
+export { getAgentHistory, getQuota, AGENT_RECEIPT_FIELDS, AGENT_TRANSACTION_FIELDS } from "./agentHistory.js";
+export type { AgentHistoryOptions, QuotaOptions, QuotaBatch, QuotaSummary } from "./agentHistory.js";
 export type { DerivedWallet } from "./wallet.js";

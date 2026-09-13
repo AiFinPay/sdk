@@ -4,6 +4,33 @@ All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
 `1.0.0` onward the public API is stable and changes follow semver.
 
+## Unreleased — Node 2.0.0-rc.14 — 2026-09-13
+
+Round 2 (medium/low, node-side):
+
+- `getQuota()` / `agent.getQuota()` — typed prepaid-batch reads (filter,
+  sort, per-merchant rollup) ported from the MCP `agent_quota` tool logic.
+- `balance()` is feed-first (env → `/api/price/native` → unknown leg
+  excluded, never fabricated); new additive `prices` / `unknown_legs`
+  fields. Shared `tokenUsd()` helper backs `nativeUsdFor()`.
+- `Aifp1ReceiptCache.summary()` + `agent.getReceiptCacheSummary()` —
+  JWT-free cache inspection for dashboards/MCP.
+- `@deprecated` on the `openSession()` / `reputation()` stubs.
+
+## Unreleased — Node 2.0.0-rc.13 — 2026-09-13
+
+Node↔MCP alignment (non-signing; no settlement semantics change):
+
+- `AiFinPayAgent.settlementRoutes()` / `requestSettlementInvoice()` — validated
+  route/invoice reads over the caller's fetch (MCP `safeFetch`), for the MCP
+  `settlement_routes` / `settlement_invoice` tools to call instead of raw fetch.
+- `toSafeError()` + `SafeErrorShape` — boundary-safe error serialization
+  (name/message + allowlisted public fields only; never secrets).
+- Exported `AGENT_RECEIPT_FIELDS` / `AGENT_TRANSACTION_FIELDS` history
+  allowlists as single source of truth.
+- `AiFinPayAgent.getDailySpendUsd()` — durable ledger read for long-lived
+  hosts; removed dead `checkBudget()` superseded by `checkPerCall`+`reserveDaily`.
+
 ## Unreleased — Node/MCP 2.0.0-rc.12 · Python 2.0.0rc1 — 2026-09-12
 
 Security RC; these versions have not been published by this change.

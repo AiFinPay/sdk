@@ -528,6 +528,14 @@ export class Aifp1ReceiptCache {
     return this.entries.filter((e) => e.expiresAt > now);
   }
 
+  /**
+   * Redacted view for dashboards and MCP tools: everything except the bearer
+   * `jwt` (a credential — only the paying agent holds it). Safe to log.
+   */
+  summary(): Omit<Aifp1CachedReceipt, "jwt">[] {
+    return this.list().map(({ jwt: _jwt, ...rest }) => rest);
+  }
+
   get size(): number { return this.entries.length; }
 }
 

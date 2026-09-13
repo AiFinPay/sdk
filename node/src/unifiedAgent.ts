@@ -45,11 +45,13 @@ import {
 } from "./errors.js";
 import { Agent, type AgentOptions } from "./agent.js";
 import { loadLocalWalletIdentity } from "./localIdentity.js";
-import { SettlementClient, executeSettlementInvoice } from "./settlement.js";
+import { SettlementClient, executeSettlementInvoice, type SettlementInvoice, type SettlementInvoiceInput, type SettlementRoute, type SettlementRouteClass } from "./settlement.js";
+import { getQuota, type QuotaSummary } from "./agentHistory.js";
 import { type SpendLedger, MemorySpendLedger, FileSpendLedger } from "./spendLedger.js";
 import {
   aifp1Fetch,
   Aifp1ReceiptCache,
+  type Aifp1CachedReceipt,
   type Aifp1Deps,
   type Aifp1FetchOptions,
 } from "./aifp1.js";
@@ -119,6 +121,13 @@ export interface BalanceSnapshot {
     per_call_usd?: number;
   };
   priced_at: number;
+  /** Native price observations behind the total (env var or price feed). */
+  prices: {
+    pol: { usd: number; source: string };
+    sol: { usd: number; source: string };
+  };
+  /** Native legs excluded from the total for lack of a price. Absent when empty. */
+  unknown_legs?: ("pol" | "sol")[];
 }
 
 export interface ReputationSnapshot {
@@ -1043,35 +1052,23 @@ export class AiFinPayAgent {
     throw err;
   }
 
-  private checkBudget(costUsd: number): boolean {
-    const mode = this.budgetCaps.on_limit_exceeded ?? "throw";
-
-    if (this.budgetCaps.per_call_usd !== undefined && costUsd > this.budgetCaps.per_call_usd) {
-      const err = new BudgetCapExceededError(
-        "per_call",
-        `cost $${costUsd} exceeds per-call cap $${this.budgetCaps.per_call_usd}`,
-      );
-      if (mode === "skip") return false;
-      throw err;
-    }
-    const after = this.spend24h.total24h() + costUsd;
-    if (this.budgetCaps.daily_usd !== undefined && after > this.budgetCaps.daily_usd) {
-      const err = new BudgetCapExceededError(
-        "daily",
-        `daily spend ${after.toFixed(4)} would exceed cap $${this.budgetCaps.daily_usd}`,
-      );
-      if (mode === "skip") return false;
-      throw err;
-    }
-    return true;
-  }
-
   /**
    * Current 24-hour rolling spend across all paid calls made by this
    * agent instance. Useful for budget dashboards on the consumer side.
    */
   getSpend24h(): number {
     return this.spend24h.total24h();
+  }
+
+  /**
+   * Durable daily spend from the budget ledger (settled + outstanding, 24h
+   * window). Unlike getSpend24h()'s in-memory ring, this survives reload and
+   * reflects reserve/commit accounting even with no signing tool attached —
+   * the number a long-lived host (e.g. MCP) should display. 0 when no
+   * daily_usd cap is set and nothing was reserved.
+   */
+  async getDailySpendUsd(): Promise<number> {
+    return this.ledger.total(24 * 3600 * 1000);
   }
 
   /**
@@ -1107,13 +1104,25 @@ export class AiFinPayAgent {
   private async nativeUsdFor(
     deployment: SplitterDeployment,
   ): Promise<{ usd: number; source: string }> {
-    const env = process.env[deployment.nativeUsdEnv];
+    return this.tokenUsd(
+      deployment.chain.nativeCurrency.symbol.toUpperCase(),
+      deployment.nativeUsdEnv,
+    );
+  }
+
+  /**
+   * Native-token USD price: explicit env var, then the protocol price feed,
+   * then NaN ("unknown") — never a stale constant. Callers decide what an
+   * unknown price means for their flow (balance() excludes the leg;
+   * guardChallengeAmount declines to block).
+   */
+  private async tokenUsd(symbol: string, envVar: string): Promise<{ usd: number; source: string }> {
+    const env = process.env[envVar];
     if (env !== undefined) {
       const v = parseFloat(env);
-      if (Number.isFinite(v) && v > 0) return { usd: v, source: deployment.nativeUsdEnv };
+      if (Number.isFinite(v) && v > 0) return { usd: v, source: envVar };
     }
 
-    const symbol = deployment.chain.nativeCurrency.symbol.toUpperCase();
     const fresh = this.priceCache && Date.now() - this.priceCache.at < 60_000;
     if (!fresh) {
       try {
@@ -1539,6 +1548,15 @@ export class AiFinPayAgent {
   get aifp1Receipts(): Aifp1ReceiptCache { return this._aifp1Cache; }
 
   /**
+   * Redacted receipt-cache view (no bearer JWTs): what batches this instance
+   * holds, for shutdown decisions and dashboards. Safe to log and to expose
+   * over MCP — use this, never `aifp1Receipts.list()`.
+   */
+  getReceiptCacheSummary(): Omit<Aifp1CachedReceipt, "jwt">[] {
+    return this._aifp1Cache.summary();
+  }
+
+  /**
    * Use the canonical invoice executor only with a caller-supplied deployment
    * pin. An unauthenticated quote cannot establish its own signing authority.
    */
@@ -1611,10 +1629,51 @@ export class AiFinPayAgent {
     return aifp1Fetch(deps, url, init, opts);
   }
 
+  /**
+   * List verified settlement routes. Non-signing: fetches + returns the
+   * backend route table (same client the MCP `settlement_routes` tool should
+   * use instead of its own inline HTTP). Never signs or broadcasts.
+   */
+  async settlementRoutes(routeClass?: SettlementRouteClass, baseUrl?: string): Promise<SettlementRoute[]> {
+    return this.settlementClient(baseUrl).routes(routeClass);
+  }
+
+  /**
+   * Request a settlement invoice and validate it (canonical split,
+   * chain binding, request match). Non-signing: returns the invoice for
+   * display/approval. Never signs or broadcasts.
+   */
+  async requestSettlementInvoice(input: SettlementInvoiceInput, baseUrl?: string): Promise<SettlementInvoice> {
+    return this.settlementClient(baseUrl).invoice(input);
+  }
+
+  private settlementClient(baseUrl?: string): SettlementClient {
+    return new SettlementClient({
+      baseUrl: baseUrl ?? "https://api.aifinpay.io",
+      fetchImpl: this.inner.fetchImpl,
+      timeoutMs: this.inner.timeoutMs,
+    });
+  }
+
+  /**
+   * Prepaid quota batches for this agent's address, most room first with a
+   * per-merchant rollup. Non-signing read of retained receipts metadata.
+   */
+  async getQuota(opts: { merchantId?: string; includeExhausted?: boolean; baseUrl?: string } = {}): Promise<QuotaSummary> {
+    return getQuota({
+      address: this.evmAddress,
+      merchantId: opts.merchantId,
+      includeExhausted: opts.includeExhausted,
+      baseUrl: opts.baseUrl,
+      fetchImpl: this.inner.fetchImpl,
+    });
+  }
+
   // ── Sessions ────────────────────────────────────────────────────────────
 
   /**
    * TODO(phase-3): open a metered budget session.
+   * @deprecated Not implemented — always throws. Tracked for phase 3; do not call.
    */
   async openSession(_args: {
     provider:    string;
@@ -1629,27 +1688,31 @@ export class AiFinPayAgent {
   /**
    * Snapshot the agent's funds across both chains, USD-normalised.
    *
-   * Phase 1.4: native MATIC + native SOL via RPC; ERC-20 / SPL token balances
-   * deferred (we don't yet need them for the unified `call()` flow which
-   * settles in MATIC). Pyth feeds are TODO; for now uses
-   * `AIFINPAY_MATIC_USD` and `AIFINPAY_SOL_USD` env, defaulting to 0.7 and 200.
+   * Native prices are env-first (`AIFINPAY_MATIC_USD` / `AIFINPAY_SOL_USD`),
+   * then the protocol price feed — never a stale compiled-in constant. A leg
+   * with no known price is excluded from the total and listed in
+   * `unknown_legs` instead of being fabricated.
    */
   async balance(): Promise<BalanceSnapshot> {
-    const maticUsd = parseFloat(process.env.AIFINPAY_MATIC_USD ?? "0.70");
-    const solUsd   = parseFloat(process.env.AIFINPAY_SOL_USD   ?? "200");
+    const [pol, sol] = await Promise.all([
+      this.tokenUsd("POL", SPLITTER_DEPLOYMENTS.polygon.nativeUsdEnv),
+      this.tokenUsd("SOL", "AIFINPAY_SOL_USD"),
+    ]);
 
     const polygon     = await this.fetchPolygonNative().catch(() => 0);
     const solana      = await this.fetchSolanaNative().catch(() => 0);
     const solana_usdc = await this.fetchSolanaUsdc().catch(() => 0);
     const polygon_usdc = await this.fetchPolygonUsdc().catch(() => 0);
 
-    const polygonUsd     = polygon * maticUsd;
-    const solanaUsd      = solana * solUsd;
-    const solanaUsdcUsd  = solana_usdc;   // USDC ≈ $1
-    const polygonUsdcUsd = polygon_usdc;  // USDC ≈ $1
+    const unknown_legs: ("pol" | "sol")[] = [];
+    let agent_balance_usd = solana_usdc + polygon_usdc; // USDC ≈ $1
+    if (Number.isFinite(pol.usd)) agent_balance_usd += polygon * pol.usd;
+    else unknown_legs.push("pol");
+    if (Number.isFinite(sol.usd)) agent_balance_usd += solana * sol.usd;
+    else unknown_legs.push("sol");
 
     return {
-      agent_balance_usd: polygonUsd + solanaUsd + solanaUsdcUsd + polygonUsdcUsd,
+      agent_balance_usd,
       chains: {
         solana:  { sol: solana,   usdc: solana_usdc,  msecco_balance: 0 },
         polygon: { matic: polygon, usdc: polygon_usdc, msecco_balance: 0 },
@@ -1657,6 +1720,8 @@ export class AiFinPayAgent {
       spend_24h_usd: this.spend24h.total24h(),
       budget_caps: this.budgetCaps,
       priced_at: Math.floor(Date.now() / 1000),
+      prices: { pol, sol },
+      ...(unknown_legs.length ? { unknown_legs } : {}),
     };
   }
 
@@ -1801,6 +1866,7 @@ export class AiFinPayAgent {
 
   /**
    * TODO(phase-4 / phase-5): query operator backend reputation engine.
+   * @deprecated Zero-stub — returns unverified zeros until the engine lands; do not treat as signal.
    */
   async reputation(): Promise<ReputationSnapshot> {
     return {
