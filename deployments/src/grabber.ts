@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 import type { DeploymentRegistry, EvmDeployment, SolanaDeployment } from "./types.js";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
-export const ABI_DIR = join(ROOT, "../abi");
-export const IDL_DIR = join(ROOT, "../idl");
+export const ABI_DIR = join(ROOT, "../registry/abi");
+export const IDL_DIR = join(ROOT, "../registry/idl");
 
 const EVM_VERSIONS = new Set(["1.2", "1.4"]);
 const SOLANA_VERSIONS = new Set(["1.4", "1.4.1"]);
@@ -175,15 +175,18 @@ export async function grabEvmDeployments(): Promise<Record<string, EvmDeployment
       status: data.status,
       deployedAt: data.timestamp,
       sourceUrl: url,
-      abiPath: null,
+      abiPath: evmAbiPath(data.network),
     };
   }
 
   return registry;
 }
 
-function evmAbiPath(): string | null {
-  // EVM ABI bundle is not yet published automatically; keep null until manually added.
+function evmAbiPath(network: string): string | null {
+  const candidate = join(ABI_DIR, "evm", `B2BSplitterV14`, `B2BSplitterV14.json`);
+  if (existsSync(candidate)) {
+    return candidate.replace(join(ROOT, "../registry/"), "registry/");
+  }
   return null;
 }
 
@@ -244,7 +247,7 @@ export async function grabSolanaDeployments(): Promise<Record<string, SolanaDepl
       programAddress: data.address,
       deployedAt: new Date().toISOString(),
       sourceUrl: url,
-      idlPath: `idl/splitter.${cluster}.json`,
+      idlPath: `registry/idl/splitter.${cluster}.json`,
     };
   }
 

@@ -73,6 +73,9 @@ Cline) lives in [`MCP_CONFIG.md`](./MCP_CONFIG.md).
 | **`aifinpay-agent`** (Python) | [`./python`](./python) | `pip install aifinpay-agent` | `1.1.1` |
 | **`@aifinpay/agent`** (Node / TypeScript) | [`./node`](./node) | `npm install @aifinpay/agent` | `1.2.1` |
 | **`@aifinpay/mcp`** (MCP server) | [`./mcp`](./mcp) | `npx @aifinpay/mcp` | `1.1.1` |
+| **`@aifinpay/deployments`** (registry grabber) | [`./deployments`](./deployments) | internal | `1.0.0-rc1` |
+| **`@aifinpay/gate`** (merchant paywall) | [`./gate`](./gate) | `npm install @aifinpay/gate` | — |
+| **`@aifinpay/wallet`** (light wallet / keystore) | [`./wallet`](./wallet) | `npm install @aifinpay/wallet` | — |
 | Go SDK | — | `go get github.com/AiFinPay/sdk/go` | **soon** |
 | Rust SDK | — | `cargo add aifinpay-sdk` | **soon** |
 
@@ -210,6 +213,9 @@ sdk/
 ├── python/                  aifinpay-agent (PyPI)
 ├── node/                    @aifinpay/agent (npm)
 ├── mcp/                     @aifinpay/mcp (npm)
+├── wallet/                  @aifinpay/wallet (keystore + CLI)
+├── gate/                    @aifinpay/gate (merchant paywall)
+├── deployments/             @aifinpay/deployments (registry grabber, private)
 ├── docs/                    QUICKSTART.md, MCP_CONFIG.md, integrations
 └── examples/
     ├── openai-agent/        OpenAI Agents SDK tool
