@@ -11,10 +11,9 @@
  *   environment — "dev" | "prod". Development supports Amoy only and uses the
  *     v1.4 artifacts sourced from evm-contract's dev branch. Production uses the
  *     configured production networks.
- *   version     — "v1.2" | "v1.4" | "auto". "auto" prefers v1.4 where it is
- *     deployed for the environment+network and otherwise falls back to v1.2.
- *     An explicit "v1.4" never silently downgrades: if it is not deployed there
- *     the call throws, so a caller that asked for v1.4 knows it did not get it.
+ *   version     — "v1.2" | "v1.4" | "auto". "auto" uses an enabled v1.4
+ *     deployment for the exact environment+network and otherwise falls back
+ *     to a valid legacy v1.2 deployment. An explicit version never changes.
  *
  * Addresses live in data files (v14Deployments.generated.ts and the legacy
  * SPLITTER_DEPLOYMENTS table), never inline here — this module is selection
@@ -38,8 +37,8 @@ export type SdkEnvironment = "dev" | "prod";
  *  (`SplitterDeployment.version`, which is "1.1" or "1.2" depending on chain). */
 export type ProtocolVersion = "v1.2" | "v1.4";
 
-/** What a caller may ask for. "auto" (the default) resolves v1.4 when present,
- *  else v1.2. */
+/** What a caller may ask for. "auto" (the default) prefers enabled v1.4 and
+ *  falls back to a valid production v1.2 deployment. */
 export type RequestedVersion = ProtocolVersion | "auto";
 
 export interface ResolveDeploymentOptions {
@@ -105,19 +104,36 @@ export class VersionUnavailableError extends DeploymentResolverError {
   ) {
     super(
       `${requested} is not deployed for ${environment}/${network}. It was ` +
-        `requested explicitly, so the SDK will not substitute another version. ` +
-        `Pass version "auto" to allow a documented fallback.`,
+        `requested explicitly, so the SDK will not substitute another version.`,
     );
     this.name = "VersionUnavailableError";
     this.requested = requested;
   }
 }
 
-/** No deployment of any supported version exists for this environment+network. */
+/** A deployment record exists, but is quarantined and must not receive money. */
+export class DeploymentDisabledError extends DeploymentResolverError {
+  readonly environment: SdkEnvironment;
+  readonly network: string;
+  readonly reason: string;
+
+  constructor(environment: SdkEnvironment, network: string, reason: string) {
+    super(
+      `v1.4 settlement is disabled for ${environment}/${network}: ${reason}`,
+    );
+    this.name = "DeploymentDisabledError";
+    this.environment = environment;
+    this.network = network;
+    this.reason = reason;
+  }
+}
+
+/** No usable deployment of either supported version exists here. */
 export class NoDeploymentError extends DeploymentResolverError {
   constructor(environment: SdkEnvironment, network: string) {
     super(
-      `No v1.4 or v1.2 deployment is known for ${environment}/${network}.`,
+      `No enabled v1.4 or valid v1.2 deployment is known for ` +
+        `${environment}/${network}.`,
     );
     this.name = "NoDeploymentError";
   }
@@ -158,7 +174,7 @@ export function isV14Available(
   environment: SdkEnvironment,
   network: string,
 ): boolean {
-  return findV14(environment, normalize(network)) !== undefined;
+  return findV14(environment, normalize(network))?.settlementEnabled === true;
 }
 
 // ── The resolver ─────────────────────────────────────────────────────────────
@@ -169,7 +185,9 @@ export function isV14Available(
  *
  * @throws UnsupportedDevNetworkError  dev asked for a non-Amoy network
  * @throws VersionUnavailableError     an explicit version is not deployed here
- * @throws NoDeploymentError           neither version is deployed here
+ * @throws DeploymentDisabledError     explicit v1.4 is quarantined, or auto
+ *                                     has no valid v1.2 fallback
+ * @throws NoDeploymentError           neither version is known here
  */
 export function resolveDeployment(
   options: ResolveDeploymentOptions,
@@ -208,17 +226,36 @@ export function resolveDeployment(
     chainId: d.chainId,
     deployment: d,
   });
+  const enabledV14 = (): V14Deployment => {
+    if (!v14) throw new NoDeploymentError(environment, options.network);
+    if (!v14.settlementEnabled) {
+      throw new DeploymentDisabledError(
+        environment,
+        network,
+        v14.disabledReason ?? "deployment has not passed the settlement gate",
+      );
+    }
+    return v14;
+  };
 
   switch (requested) {
     case "v1.4":
-      if (v14) return asV14(v14);
-      throw new VersionUnavailableError("v1.4", environment, options.network);
+      if (!v14)
+        throw new VersionUnavailableError("v1.4", environment, options.network);
+      return asV14(enabledV14());
     case "v1.2":
       if (v12) return asV12(v12);
       throw new VersionUnavailableError("v1.2", environment, options.network);
     case "auto":
-      if (v14) return asV14(v14);
+      if (v14?.settlementEnabled) return asV14(v14);
       if (v12) return asV12(v12);
+      if (v14) {
+        throw new DeploymentDisabledError(
+          environment,
+          network,
+          v14.disabledReason ?? "deployment has not passed the settlement gate",
+        );
+      }
       throw new NoDeploymentError(environment, options.network);
     default:
       throw new DeploymentResolverError(

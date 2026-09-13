@@ -8,11 +8,11 @@ import {
   isV14Available,
   UnsupportedDevNetworkError,
   VersionUnavailableError,
+  DeploymentDisabledError,
   NoDeploymentError,
   DeploymentResolverError,
   SPLITTER_DEPLOYMENTS,
   resolveSplitterRoute,
-  V14_DEPLOYMENTS,
   type ResolvedDeployment,
 } from "../src/index.js";
 
@@ -32,8 +32,12 @@ describe("resolveDeployment — environment switch", () => {
     ).toThrow(UnsupportedDevNetworkError);
   });
 
-  it("prod resolves a production network", () => {
-    const r = resolveDeployment({ environment: "prod", network: "polygon" });
+  it("prod resolves an explicitly requested legacy production network", () => {
+    const r = resolveDeployment({
+      environment: "prod",
+      network: "polygon",
+      version: "v1.2",
+    });
     expect(r.environment).toBe("prod");
     expect(r.chainId).toBe(137);
   });
@@ -48,25 +52,24 @@ describe("resolveDeployment — environment switch", () => {
   it("does not leak the dev-only amoy deployment into prod", () => {
     // amoy is a dev deployment; asking for it under prod must not resolve it.
     expect(() =>
-      resolveDeployment({ environment: "prod", network: "amoy", version: "v1.4" }),
+      resolveDeployment({
+        environment: "prod",
+        network: "amoy",
+        version: "v1.4",
+      }),
     ).toThrow(VersionUnavailableError);
   });
 });
 
 describe("resolveDeployment — explicit version selection", () => {
-  it("explicit v1.4 returns v1.4 where deployed (polygon)", () => {
-    const r = resolveDeployment({
-      environment: "prod",
-      network: "polygon",
-      version: "v1.4",
-    });
-    expect(r.version).toBe("v1.4");
-    if (r.version === "v1.4") {
-      expect(r.deployment.splitter.address).toBe(
-        V14_DEPLOYMENTS.polygon.splitter.address,
-      );
-      expect(r.deployment.splitterVersion).toBe("1.4");
-    }
+  it("explicit v1.4 refuses a quarantined Polygon deployment", () => {
+    expect(() =>
+      resolveDeployment({
+        environment: "prod",
+        network: "polygon",
+        version: "v1.4",
+      }),
+    ).toThrow(DeploymentDisabledError);
   });
 
   it("explicit v1.2 returns the legacy deployment (polygon)", () => {
@@ -120,18 +123,22 @@ describe("resolveDeployment — explicit version selection", () => {
         network: "botchain",
         version: "v1.4",
       }),
-    ).toThrow(VersionUnavailableError);
+    ).toThrow(DeploymentDisabledError);
   });
 
   it("explicit v1.2 on amoy throws (no legacy deployment on the dev network)", () => {
     expect(() =>
-      resolveDeployment({ environment: "dev", network: "amoy", version: "v1.2" }),
+      resolveDeployment({
+        environment: "dev",
+        network: "amoy",
+        version: "v1.2",
+      }),
     ).toThrow(VersionUnavailableError);
   });
 });
 
 describe("resolveDeployment — automatic version selection", () => {
-  it("auto uses v1.4 when available (polygon)", () => {
+  it("auto falls back to v1.2 when v1.4 is quarantined", () => {
     const r = resolveDeployment({ environment: "prod", network: "polygon" });
     expect(r.version).toBe("v1.4");
   });
@@ -139,6 +146,9 @@ describe("resolveDeployment — automatic version selection", () => {
   it("auto falls back to v1.2 when v1.4 is unavailable (botchain)", () => {
     const r = resolveDeployment({ environment: "prod", network: "botchain" });
     expect(r.version).toBe("v1.2");
+    if (r.version === "v1.2") {
+      expect(r.deployment.splitter).toBe(SPLITTER_DEPLOYMENTS.polygon.splitter);
+    }
   });
 
   it("auto uses v1.4 on the dev network (amoy)", () => {
@@ -153,6 +163,7 @@ describe("resolveDeployment — automatic version selection", () => {
       version: "auto",
     });
     const noVersion = resolveDeployment({ environment: "prod", network: "botchain" });
+    expect(noVersion.version).toBe("v1.2");
     expect(noVersion.version).toBe(withAuto.version);
   });
 
@@ -177,8 +188,8 @@ describe("resolveDeployment — automatic version selection", () => {
 });
 
 describe("isV14Available", () => {
-  it("is true for every deployed prod network and amoy dev, false elsewhere", () => {
-    expect(isV14Available("prod", "polygon")).toBe(true);
+  it("means settlement-enabled, not merely present in the registry", () => {
+    expect(isV14Available("prod", "polygon")).toBe(false);
     expect(isV14Available("dev", "amoy")).toBe(true);
     for (const network of [
       "arbitrum",
@@ -200,18 +211,31 @@ describe("isV14Available", () => {
 
 describe("resolveDeployment — input handling", () => {
   it("is case-insensitive on the network name", () => {
-    const r = resolveDeployment({ environment: "prod", network: "PoLyGoN" });
+    const r = resolveDeployment({
+      environment: "prod",
+      network: "PoLyGoN",
+      version: "v1.2",
+    });
     expect(r.chainId).toBe(137);
     expect(r.network).toBe("polygon");
   });
 
   it("returns a discriminated union whose payload matches its version", () => {
     const results: ResolvedDeployment[] = [
-      resolveDeployment({ environment: "prod", network: "polygon", version: "v1.4" }),
-      resolveDeployment({ environment: "prod", network: "base", version: "v1.2" }),
+      resolveDeployment({
+        environment: "dev",
+        network: "amoy",
+        version: "v1.4",
+      }),
+      resolveDeployment({
+        environment: "prod",
+        network: "base",
+        version: "v1.2",
+      }),
     ];
     for (const r of results) {
-      if (r.version === "v1.4") expect(r.deployment.splitterVersion).toBe("1.4");
+      if (r.version === "v1.4")
+        expect(r.deployment.splitterVersion).toBe("1.4");
       else expect(["1.1", "1.2"]).toContain(r.deployment.version);
     }
   });

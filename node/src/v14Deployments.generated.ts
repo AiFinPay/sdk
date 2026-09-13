@@ -8,27 +8,28 @@
 //   npm run registry:sync:v14 -- --from <path-to-evm-contract>
 import type { SdkEnvironment } from "./deploymentResolver.js";
 
-/** The v1.4 splitter's role holders and linked contracts, exactly as the
- *  deploy artifact records them. address(0) in a token slot means the token is
- *  not configured on that network (native settlement only for it). */
+export interface V14Asset {
+  symbol: string;
+  address: `0x${string}`;
+  name?: string;
+  source?: string | null;
+}
+
 export interface V14Splitter {
   address: `0x${string}`;
-  /** DEFAULT_ADMIN_ROLE holder (governance). */
   admin: `0x${string}`;
-  /** SIGN_OPERATOR_ROLE holder — the only key that can sign a v1.4 quote. */
   signer: `0x${string}`;
-  /** PAUSER_ROLE holder. */
   pauser: `0x${string}`;
   treasury: `0x${string}`;
-  /** External TokenList contract (owner-mutable stablecoin allowlist). */
   tokenList: `0x${string}`;
-  /** External Profiles contract (route fee profiles). */
   profiles: `0x${string}`;
+  assets: readonly V14Asset[];
+  /** @deprecated Use assets; retained for one compatibility release. */
   usdc: `0x${string}`;
+  /** @deprecated Use assets; retained for one compatibility release. */
   usdt: `0x${string}`;
 }
 
-/** The Gnosis Safe that holds admin authority over the v1.4 splitter. */
 export interface V14Safe {
   address: `0x${string}`;
   version: string;
@@ -39,17 +40,17 @@ export interface V14Safe {
 export interface V14Deployment {
   network: string;
   chainId: number;
-  /** Which SDK environment this deployment belongs to. Amoy is the dev target;
-   *  the production networks carry env "prod". */
   environment: SdkEnvironment;
   splitterVersion: "1.4";
+  status: "enabled" | "disabled" | "invalid" | "retired";
+  settlementEnabled: boolean;
+  disabledReason?: string;
+  sourceArtifact: string;
   splitter: V14Splitter;
-  /** keccak-256 of the deployed runtime bytecode, from the deploy artifact. */
   runtimeCodeHash: `0x${string}`;
   safe: V14Safe;
 }
 
-/** Where this table came from, so a build can be traced to a commit. */
 export const V14_DEPLOYMENTS_SOURCE = {
   repo: "AiFinPay/evm-contract",
   branch: "dev",
@@ -57,301 +58,401 @@ export const V14_DEPLOYMENTS_SOURCE = {
   path: "deployments/",
 } as const;
 
-/** v1.4 EVM deployments, keyed by network name. Amoy is dev-only; the rest are
- *  production networks. Chains absent here have no v1.4 deployment yet, which
- *  is what makes `version: "auto"` fall back to v1.2 for them. */
 export const V14_DEPLOYMENTS: Record<string, V14Deployment> = {
-  amoy: {
-    network: "amoy",
-    chainId: 80002,
-    environment: "dev",
-    splitterVersion: "1.4",
-    splitter: {
-      address: "0xBdC126193FADf38A86Cd509e56018a95d5B6eeFA",
-      admin: "0x00009352dc8a1041A724c01632dc549935e05B98",
-      signer: "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
-      pauser: "0x00008a55086A450Dc8D7789312D21ACEa142F45e",
-      treasury: "0x0000DA1886e173C09A4e04723d8226D84d9c5122",
-      tokenList: "0xe67E48966a67AaaaDE5A97F6196E66cd5B16Ac3F",
-      profiles: "0x632082e6b99E567005FA4e87774AC199Df9a81a6",
-      usdc: "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582",
-      usdt: "0x0000000000000000000000000000000000000000",
+  "amoy": {
+    "network": "amoy",
+    "chainId": 80002,
+    "environment": "dev",
+    "splitterVersion": "1.4",
+    "status": "enabled",
+    "settlementEnabled": true,
+    "sourceArtifact": "deployments/amoy-v14-amoy-latest.json",
+    "splitter": {
+      "address": "0xBdC126193FADf38A86Cd509e56018a95d5B6eeFA",
+      "admin": "0x00009352dc8a1041A724c01632dc549935e05B98",
+      "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+      "pauser": "0x00008a55086A450Dc8D7789312D21ACEa142F45e",
+      "treasury": "0x0000DA1886e173C09A4e04723d8226D84d9c5122",
+      "tokenList": "0xe67E48966a67AaaaDE5A97F6196E66cd5B16Ac3F",
+      "profiles": "0x632082e6b99E567005FA4e87774AC199Df9a81a6",
+      "assets": [
+        {
+          "symbol": "USDC",
+          "address": "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582"
+        }
+      ],
+      "usdc": "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582",
+      "usdt": "0x0000000000000000000000000000000000000000"
     },
-    runtimeCodeHash: "0xd4990487312c00916aa218bdcd697bbf1a2729335b6a4fda903517b9d3153a27",
-    safe: {
-      address: "0xc9ab36c2af2888414c7ea9160d9e33b773c2b388",
-      version: "1.4.1",
-      threshold: 3,
-      owners: [
+    "runtimeCodeHash": "0xd4990487312c00916aa218bdcd697bbf1a2729335b6a4fda903517b9d3153a27",
+    "safe": {
+      "address": "0xc9ab36c2af2888414c7ea9160d9e33b773c2b388",
+      "version": "1.4.1",
+      "threshold": 3,
+      "owners": [
         "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
         "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
         "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
-        "0x588A80e94a762C670711ff77CC60a2e65E64F53A",
-      ],
-    },
+        "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+      ]
+    }
   },
-  arbitrum: {
-    network: "arbitrum",
-    chainId: 42161,
-    environment: "prod",
-    splitterVersion: "1.4",
-    splitter: {
-      address: "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
-      admin: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      signer: "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
-      pauser: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      treasury: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      tokenList: "0xbA98C0797707611787B04680E260036573D9D7a1",
-      profiles: "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
-      usdc: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
-      usdt: "0x0000000000000000000000000000000000000000",
+  "polygon": {
+    "network": "polygon",
+    "chainId": 137,
+    "environment": "prod",
+    "splitterVersion": "1.4",
+    "status": "disabled",
+    "settlementEnabled": false,
+    "disabledReason": "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
+    "sourceArtifact": "deployments/polygon-v14-polygon-latest.json",
+    "splitter": {
+      "address": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+      "admin": "0x01b80329ff81ce1d22a9e2e8807df5f92414c3c3",
+      "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+      "pauser": "0x01b80329ff81ce1d22a9e2e8807df5f92414c3c3",
+      "treasury": "0x01b80329ff81ce1d22a9e2e8807df5f92414c3c3",
+      "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+      "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+      "assets": [
+        {
+          "symbol": "USDC",
+          "name": "USDC",
+          "address": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
+        },
+        {
+          "symbol": "USDC.e",
+          "name": "Bridged USDC",
+          "address": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+        }
+      ],
+      "usdc": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+      "usdt": "0x0000000000000000000000000000000000000000"
     },
-    runtimeCodeHash: "0xc15837e6f438d0fd2f23e0c5eb7a2f655b2af7dc717bd2861365819de45757f7",
-    safe: {
-      address: "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
-      version: "1.5.0",
-      threshold: 3,
-      owners: [
+    "runtimeCodeHash": "0x974b871ac79082d92a7e3bba89ba52794f7906f99119dfad7959017e5b0bf038",
+    "safe": {
+      "address": "0x01b80329ff81ce1d22a9e2e8807df5f92414c3c3",
+      "version": "1.5.0",
+      "threshold": 3,
+      "owners": [
         "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
         "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
         "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
-        "0x588A80e94a762C670711ff77CC60a2e65E64F53A",
-      ],
-    },
+        "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+      ]
+    }
   },
-  avalanche: {
-    network: "avalanche",
-    chainId: 43114,
-    environment: "prod",
-    splitterVersion: "1.4",
-    splitter: {
-      address: "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
-      admin: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      signer: "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
-      pauser: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      treasury: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      tokenList: "0xbA98C0797707611787B04680E260036573D9D7a1",
-      profiles: "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
-      usdc: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
-      usdt: "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7",
+  "arbitrum": {
+    "network": "arbitrum",
+    "chainId": 42161,
+    "environment": "prod",
+    "splitterVersion": "1.4",
+    "status": "disabled",
+    "settlementEnabled": false,
+    "disabledReason": "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
+    "sourceArtifact": "deployments/arbitrum-v14-arbitrum-latest.json",
+    "splitter": {
+      "address": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+      "admin": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+      "pauser": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "treasury": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+      "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+      "assets": [
+        {
+          "symbol": "USDC",
+          "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+        }
+      ],
+      "usdc": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+      "usdt": "0x0000000000000000000000000000000000000000"
     },
-    runtimeCodeHash: "0x65db1830b1d15400cba35b4ef54dd6c5852d5baa077a732bdc84f7c2218952ef",
-    safe: {
-      address: "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
-      version: "1.5.0",
-      threshold: 3,
-      owners: [
+    "runtimeCodeHash": "0xc15837e6f438d0fd2f23e0c5eb7a2f655b2af7dc717bd2861365819de45757f7",
+    "safe": {
+      "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+      "version": "1.5.0",
+      "threshold": 3,
+      "owners": [
         "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
         "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
         "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
-        "0x588A80e94a762C670711ff77CC60a2e65E64F53A",
-      ],
-    },
+        "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+      ]
+    }
   },
-  base: {
-    network: "base",
-    chainId: 8453,
-    environment: "prod",
-    splitterVersion: "1.4",
-    splitter: {
-      address: "0xbA98C0797707611787B04680E260036573D9D7a1",
-      admin: "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
-      signer: "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
-      pauser: "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
-      treasury: "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
-      tokenList: "0xbA98C0797707611787B04680E260036573D9D7a1",
-      profiles: "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
-      usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-      usdt: "0x0000000000000000000000000000000000000000",
+  "avalanche": {
+    "network": "avalanche",
+    "chainId": 43114,
+    "environment": "prod",
+    "splitterVersion": "1.4",
+    "status": "disabled",
+    "settlementEnabled": false,
+    "disabledReason": "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
+    "sourceArtifact": "deployments/avalanche-v14-avalanche-latest.json",
+    "splitter": {
+      "address": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+      "admin": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+      "pauser": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "treasury": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+      "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+      "assets": [
+        {
+          "symbol": "USDC",
+          "address": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E"
+        },
+        {
+          "symbol": "USDT",
+          "address": "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7"
+        }
+      ],
+      "usdc": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+      "usdt": "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7"
     },
-    runtimeCodeHash: "0xc724e02657817177d1394e8d41189dd7f8299bb5cf2da04946572378c935883c",
-    safe: {
-      address: "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
-      version: "1.5.0",
-      threshold: 3,
-      owners: [
+    "runtimeCodeHash": "0x65db1830b1d15400cba35b4ef54dd6c5852d5baa077a732bdc84f7c2218952ef",
+    "safe": {
+      "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+      "version": "1.5.0",
+      "threshold": 3,
+      "owners": [
         "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
         "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
         "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
-        "0x588A80e94a762C670711ff77CC60a2e65E64F53A",
-      ],
-    },
+        "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+      ]
+    }
   },
-  bnb: {
-    network: "bnb",
-    chainId: 56,
-    environment: "prod",
-    splitterVersion: "1.4",
-    splitter: {
-      address: "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
-      admin: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      signer: "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
-      pauser: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      treasury: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      tokenList: "0xbA98C0797707611787B04680E260036573D9D7a1",
-      profiles: "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
-      usdc: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
-      usdt: "0x55d398326f99059fF775485246999027B3197955",
+  "bnb": {
+    "network": "bnb",
+    "chainId": 56,
+    "environment": "prod",
+    "splitterVersion": "1.4",
+    "status": "disabled",
+    "settlementEnabled": false,
+    "disabledReason": "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
+    "sourceArtifact": "deployments/bnb-v14-bnb-latest.json",
+    "splitter": {
+      "address": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+      "admin": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+      "pauser": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "treasury": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+      "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+      "assets": [
+        {
+          "symbol": "USDC",
+          "address": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d"
+        },
+        {
+          "symbol": "USDT",
+          "address": "0x55d398326f99059fF775485246999027B3197955"
+        }
+      ],
+      "usdc": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+      "usdt": "0x55d398326f99059fF775485246999027B3197955"
     },
-    runtimeCodeHash: "0x8aa8c5999a1a0ee87198e380188faaa9d6df88819b47d68682096cc33db81638",
-    safe: {
-      address: "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
-      version: "1.5.0",
-      threshold: 3,
-      owners: [
+    "runtimeCodeHash": "0x8aa8c5999a1a0ee87198e380188faaa9d6df88819b47d68682096cc33db81638",
+    "safe": {
+      "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+      "version": "1.5.0",
+      "threshold": 3,
+      "owners": [
         "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
         "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
         "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
-        "0x588A80e94a762C670711ff77CC60a2e65E64F53A",
-      ],
-    },
+        "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+      ]
+    }
   },
-  optimism: {
-    network: "optimism",
-    chainId: 10,
-    environment: "prod",
-    splitterVersion: "1.4",
-    splitter: {
-      address: "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
-      admin: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      signer: "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
-      pauser: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      treasury: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      tokenList: "0xbA98C0797707611787B04680E260036573D9D7a1",
-      profiles: "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
-      usdc: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-      usdt: "0x0000000000000000000000000000000000000000",
+  "base": {
+    "network": "base",
+    "chainId": 8453,
+    "environment": "prod",
+    "splitterVersion": "1.4",
+    "status": "invalid",
+    "settlementEnabled": false,
+    "disabledReason": "INVALID: splitter address equals TokenList and Profiles has no runtime code; redeploy required",
+    "sourceArtifact": "deployments/base-v14-base-latest.json",
+    "splitter": {
+      "address": "0xbA98C0797707611787B04680E260036573D9D7a1",
+      "admin": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+      "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+      "pauser": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+      "treasury": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+      "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+      "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+      "assets": [
+        {
+          "symbol": "USDC",
+          "name": "USDC",
+          "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+        }
+      ],
+      "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "usdt": "0x0000000000000000000000000000000000000000"
     },
-    runtimeCodeHash: "0x5a2d0ffb996d5655fa483e41d3e5870c6a032fd00bea71c3107f95a4b405e152",
-    safe: {
-      address: "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
-      version: "1.5.0",
-      threshold: 3,
-      owners: [
+    "runtimeCodeHash": "0xc724e02657817177d1394e8d41189dd7f8299bb5cf2da04946572378c935883c",
+    "safe": {
+      "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+      "version": "1.5.0",
+      "threshold": 3,
+      "owners": [
         "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
         "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
         "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
-        "0x588A80e94a762C670711ff77CC60a2e65E64F53A",
-      ],
-    },
+        "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+      ]
+    }
   },
-  polygon: {
-    network: "polygon",
-    chainId: 137,
-    environment: "prod",
-    splitterVersion: "1.4",
-    splitter: {
-      address: "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
-      admin: "0x01b80329ff81ce1d22a9e2e8807df5f92414c3c3",
-      signer: "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
-      pauser: "0x01b80329ff81ce1d22a9e2e8807df5f92414c3c3",
-      treasury: "0x01b80329ff81ce1d22a9e2e8807df5f92414c3c3",
-      tokenList: "0xbA98C0797707611787B04680E260036573D9D7a1",
-      profiles: "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
-      usdc: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
-      usdt: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+  "optimism": {
+    "network": "optimism",
+    "chainId": 10,
+    "environment": "prod",
+    "splitterVersion": "1.4",
+    "status": "disabled",
+    "settlementEnabled": false,
+    "disabledReason": "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
+    "sourceArtifact": "deployments/optimism-v14-optimism-latest.json",
+    "splitter": {
+      "address": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+      "admin": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+      "pauser": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "treasury": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+      "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+      "assets": [
+        {
+          "symbol": "USDC",
+          "address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85"
+        }
+      ],
+      "usdc": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+      "usdt": "0x0000000000000000000000000000000000000000"
     },
-    runtimeCodeHash: "0x974b871ac79082d92a7e3bba89ba52794f7906f99119dfad7959017e5b0bf038",
-    safe: {
-      address: "0x01b80329ff81ce1d22a9e2e8807df5f92414c3c3",
-      version: "1.5.0",
-      threshold: 3,
-      owners: [
+    "runtimeCodeHash": "0x5a2d0ffb996d5655fa483e41d3e5870c6a032fd00bea71c3107f95a4b405e152",
+    "safe": {
+      "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+      "version": "1.5.0",
+      "threshold": 3,
+      "owners": [
         "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
         "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
         "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
-        "0x588A80e94a762C670711ff77CC60a2e65E64F53A",
-      ],
-    },
+        "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+      ]
+    }
   },
-  robinhood: {
-    network: "robinhood",
-    chainId: 4663,
-    environment: "prod",
-    splitterVersion: "1.4",
-    splitter: {
-      address: "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
-      admin: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      signer: "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
-      pauser: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      treasury: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      tokenList: "0xbA98C0797707611787B04680E260036573D9D7a1",
-      profiles: "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
-      usdc: "0x0000000000000000000000000000000000000000",
-      usdt: "0x0000000000000000000000000000000000000000",
+  "unichain": {
+    "network": "unichain",
+    "chainId": 130,
+    "environment": "prod",
+    "splitterVersion": "1.4",
+    "status": "disabled",
+    "settlementEnabled": false,
+    "disabledReason": "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
+    "sourceArtifact": "deployments/unichain-v14-unichain-latest.json",
+    "splitter": {
+      "address": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+      "admin": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+      "pauser": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "treasury": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+      "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+      "assets": [
+        {
+          "symbol": "USDC",
+          "address": "0x078D782b760474a361dDA0AF3839290b0EF57AD6"
+        }
+      ],
+      "usdc": "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
+      "usdt": "0x0000000000000000000000000000000000000000"
     },
-    runtimeCodeHash: "0x96812eb70224f48c095b240bc0e1d739a7fcb878c3237b5f795629c239d7ef72",
-    safe: {
-      address: "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
-      version: "1.5.0",
-      threshold: 3,
-      owners: [
+    "runtimeCodeHash": "0xcb4f1c15a87720c326daa574a7ab52c116c208805167b46dd055f47c9c8695ca",
+    "safe": {
+      "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+      "version": "1.5.0",
+      "threshold": 3,
+      "owners": [
         "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
         "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
         "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
-        "0x588A80e94a762C670711ff77CC60a2e65E64F53A",
-      ],
-    },
+        "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+      ]
+    }
   },
-  unichain: {
-    network: "unichain",
-    chainId: 130,
-    environment: "prod",
-    splitterVersion: "1.4",
-    splitter: {
-      address: "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
-      admin: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      signer: "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
-      pauser: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      treasury: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      tokenList: "0xbA98C0797707611787B04680E260036573D9D7a1",
-      profiles: "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
-      usdc: "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
-      usdt: "0x0000000000000000000000000000000000000000",
+  "xrplevm": {
+    "network": "xrplevm",
+    "chainId": 1440000,
+    "environment": "prod",
+    "splitterVersion": "1.4",
+    "status": "disabled",
+    "settlementEnabled": false,
+    "disabledReason": "No stablecoin is configured and backend verification is incomplete",
+    "sourceArtifact": "deployments/xrplevm-v14-xrplevm-latest.json",
+    "splitter": {
+      "address": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+      "admin": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+      "pauser": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "treasury": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+      "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+      "assets": [],
+      "usdc": "0x0000000000000000000000000000000000000000",
+      "usdt": "0x0000000000000000000000000000000000000000"
     },
-    runtimeCodeHash: "0xcb4f1c15a87720c326daa574a7ab52c116c208805167b46dd055f47c9c8695ca",
-    safe: {
-      address: "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
-      version: "1.5.0",
-      threshold: 3,
-      owners: [
+    "runtimeCodeHash": "0xd26862dbc501481675f50924ca013acd5c20aca339f2a1aca818becedf7b5aa0",
+    "safe": {
+      "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+      "version": "1.5.0",
+      "threshold": 3,
+      "owners": [
         "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
         "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
         "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
-        "0x588A80e94a762C670711ff77CC60a2e65E64F53A",
-      ],
-    },
+        "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+      ]
+    }
   },
-  xrplevm: {
-    network: "xrplevm",
-    chainId: 1440000,
-    environment: "prod",
-    splitterVersion: "1.4",
-    splitter: {
-      address: "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
-      admin: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      signer: "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
-      pauser: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      treasury: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
-      tokenList: "0xbA98C0797707611787B04680E260036573D9D7a1",
-      profiles: "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
-      usdc: "0x0000000000000000000000000000000000000000",
-      usdt: "0x0000000000000000000000000000000000000000",
+  "robinhood": {
+    "network": "robinhood",
+    "chainId": 4663,
+    "environment": "prod",
+    "splitterVersion": "1.4",
+    "status": "disabled",
+    "settlementEnabled": false,
+    "disabledReason": "TokenList is empty; USDe/USDG require Safe allowlisting and backend verification",
+    "sourceArtifact": "deployments/robinhood-v14-robinhood-latest.json",
+    "splitter": {
+      "address": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+      "admin": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+      "pauser": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "treasury": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+      "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+      "assets": [],
+      "usdc": "0x0000000000000000000000000000000000000000",
+      "usdt": "0x0000000000000000000000000000000000000000"
     },
-    runtimeCodeHash: "0xd26862dbc501481675f50924ca013acd5c20aca339f2a1aca818becedf7b5aa0",
-    safe: {
-      address: "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
-      version: "1.5.0",
-      threshold: 3,
-      owners: [
+    "runtimeCodeHash": "0x96812eb70224f48c095b240bc0e1d739a7fcb878c3237b5f795629c239d7ef72",
+    "safe": {
+      "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+      "version": "1.5.0",
+      "threshold": 3,
+      "owners": [
         "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
         "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
         "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
-        "0x588A80e94a762C670711ff77CC60a2e65E64F53A",
-      ],
-    },
-  },
+        "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+      ]
+    }
+  }
 };
 
-/** The single development network v1.4 supports today. */
 export const V14_DEV_NETWORKS = ["amoy"] as const;

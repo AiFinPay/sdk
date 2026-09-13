@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aifinpay.io/schemas/payment-deployments.schema.json",
+  "title": "AiFinPay payment deployment registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "generatedAt", "sources", "deployments"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "sources": { "type": "object" },
+    "deployments": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/deployment" }
+    }
+  },
+  "$defs": {
+    "deployment": {
+      "type": "object",
+      "required": [
+        "ecosystem",
+        "network",
+        "environment",
+        "protocolVersion",
+        "status",
+        "settlementEnabled",
+        "sourceArtifact"
+      ],
+      "properties": {
+        "ecosystem": { "enum": ["evm", "solana"] },
+        "network": { "type": "string", "minLength": 1 },
+        "environment": { "enum": ["dev", "prod"] },
+        "protocolVersion": { "const": "v1.4" },
+        "status": { "enum": ["enabled", "disabled", "invalid", "retired"] },
+        "settlementEnabled": { "type": "boolean" },
+        "disabledReason": { "type": "string", "minLength": 1 },
+        "sourceArtifact": { "type": "string", "minLength": 1 },
+        "chainId": { "type": "integer", "minimum": 1 },
+        "contracts": { "type": "object" },
+        "assets": { "type": "array" },
+        "runtimeCodeHash": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{64}$"
+        },
+        "safe": { "type": "object" },
+        "programId": { "type": "string", "minLength": 32 },
+        "idl": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "settlementEnabled": { "const": false } } },
+          "then": { "required": ["disabledReason"] }
+        },
+        {
+          "if": { "properties": { "ecosystem": { "const": "evm" } } },
+          "then": {
+            "required": ["chainId", "contracts", "assets", "runtimeCodeHash"]
+          }
+        },
+        {
+          "if": { "properties": { "ecosystem": { "const": "solana" } } },
+          "then": { "required": ["programId", "idl"] }
+        }
+      ]
+    }
+  }
+}

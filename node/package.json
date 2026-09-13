@@ -23,9 +23,10 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "registry:sync": "node scripts/generate-splitter-routes.mjs",
-    "registry:sync:v14": "node scripts/generate-v14-deployments.mjs",
-    "registry:check": "node scripts/generate-splitter-routes.mjs --check && node scripts/generate-v14-deployments.mjs --check",
+    "registry:sync": "node scripts/generate-splitter-routes.mjs && node scripts/generate-payment-deployments.mjs",
+    "registry:check": "node scripts/generate-splitter-routes.mjs --check && node scripts/generate-payment-deployments.mjs --check",
+    "registry:payment:sync": "node scripts/generate-payment-deployments.mjs",
+    "registry:payment:check": "node scripts/generate-payment-deployments.mjs --check",
     "test": "vitest run",
     "prepublishOnly": "npm run build"
   },
