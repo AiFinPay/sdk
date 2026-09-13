@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/skill",
-  "version": "2.0.8",
+  "version": "2.0.9",
   "description": "AiFinPay agent skills: pay for x402-gated APIs as an agent (aifinpay) and charge agents for your API as a merchant (aifinpay-merchant).",
   "type": "module",
   "files": [
@@ -38,7 +38,7 @@
   },
   "bugs": "https://github.com/AiFinPay/sdk/issues",
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "publishConfig": {
     "access": "public"

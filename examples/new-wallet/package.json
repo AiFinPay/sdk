@@ -11,6 +11,6 @@
   "dependencies": {
     "viem": "^2.21.0"
   },
-  "engines": { "node": ">=18" },
+  "engines": { "node": ">=22" },
   "license": "MIT"
 }

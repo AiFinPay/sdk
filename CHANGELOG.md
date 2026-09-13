@@ -4,6 +4,13 @@ All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
 `1.0.0` onward the public API is stable and changes follow semver.
 
+## Unreleased — Node 2.0.0-rc.16 / MCP 2.0.0-rc.14 — 2026-09-13
+
+Minimum Node engine is now 22 (`engines: >=22` in `@aifinpay/agent`,
+`@aifinpay/mcp`, `@aifinpay/wallet`, `@aifinpay/gate`, `@aifinpay/skill`,
+and the example bridges). Node 18/20 are no longer supported. CI now
+builds and tests on 22, 24 and 26. No runtime or API changes.
+
 ## Unreleased — Node 2.0.0-rc.15 — 2026-09-13
 
 v1.4 deployments for all supported EVM networks (from `AiFinPay/evm-contract@78240ec`):

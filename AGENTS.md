@@ -10,7 +10,7 @@ Payment rail for AI agents (AIFP-1 gross-inclusive settlement, AIFP-2/x402 negot
 
 ## Commands
 
-- Node 20, Python 3.13. Use `npm ci --no-audit --no-fund` (never `npm install`) so lockfiles stay authoritative.
+- Node 22, Python 3.13. Use `npm ci --no-audit --no-fund` (never `npm install`) so lockfiles stay authoritative.
 - Per package: `npm run build` (`tsc`) then `npm test` (`vitest run`) from `node/`, `wallet/`, `mcp/`, `gate/`; `python -m pytest tests -q` from `python/` (install with `python -m pip install -e . pytest`).
 - `node/`: run `npm run registry:check` before build — it verifies `*.generated.ts` against the vendored registry artifact + provenance. Never hand-edit `*.generated.ts`; change `registry/` inputs or `scripts/generate-splitter-routes.mjs`, then `registry:sync`.
 - Version gate: changing published files without a version bump fails CI (`scripts/check-version-bump.mjs`). Bump version + CHANGELOG together.

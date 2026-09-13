@@ -12,7 +12,7 @@ verifies that receipt locally and counts the prepaid units down.
 npm install @aifinpay/gate
 ```
 
-Requires Node 18+. Express is an optional peer (4 or 5); the core has no
+Requires Node 22+. Express is an optional peer (4 or 5); the core has no
 framework dependency at all.
 
 ---

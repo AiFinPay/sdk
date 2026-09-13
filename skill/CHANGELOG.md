@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.9
+
+- Minimum Node engine is now 22 (`engines: >=22`). Node 18/20 are no
+  longer supported. No skill content changes.
+
 ## 2.0.8
 
 - Payer skill points Ready snippets at runnable `examples/agent-snippets/`

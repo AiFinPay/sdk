@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2
+
+- Minimum Node engine is now 22 (`engines: >=22`). Node 18/20 are no
+  longer supported. No API or behaviour change.
+
 ## 0.2.2
 
 Documentation only; no API or behaviour change.
