@@ -4,11 +4,32 @@ description: Discover an agent wallet, retrieve payment history and prepaid quot
 license: MIT
 ---
 
-The current source and compatible package line is **2.0.0-rc.12**. Until that
-RC is published, use the checked-out source build or an explicitly pinned
-compatible package; never install `latest` for a payment test. The production
+The current source and compatible package line is **2.0.0-rc.12**. Install
+the latest published release (`latest` tag). The production
 RC tool inventory below is read-only; do not claim MCP signing or AIFP-2
 settlement is active.
+
+## Prerequisites — required packages
+
+This skill is instructions only. To act on it, one of these must be
+installed — always use the `latest` release:
+
+- **MCP client (Claude Desktop / Cursor / Windsurf):**
+  `npx @aifinpay/mcp`. The server depends on `@aifinpay/agent`
+  and pulls it in automatically — do not install the agent package yourself.
+- **Agent code in Node/TS:**
+  `npm install @aifinpay/agent`. Do NOT install the MCP server.
+- **Agent code in Python:** `pip install aifinpay-agent` (latest).
+
+- **MCP client (Claude Desktop / Cursor / Windsurf):**
+  `npx @aifinpay/mcp`. The server depends on `@aifinpay/agent`
+  and pulls it in automatically — do not install the agent package yourself.
+- **Agent code in Node/TS:**
+  `npm install @aifinpay/agent`. Do NOT install the MCP server.
+- **Agent code in Python:** `pip install aifinpay-agent` (latest).
+
+One surface, one package: MCP client → `@aifinpay/mcp`; code → the SDK for
+your language. There is no "install together" scenario.
 
 # AiFinPay agent workflow
 
@@ -51,7 +72,7 @@ For a funded crawler or balance check, load the existing persistent identity
 first through the configured MCP identity sources or
 `AiFinPayAgent.fromEnvironment()`. If none exists, stop and ask the operator
 to configure one; never call `Agent.new()` to create a wallet that will be
-funded. `npx @aifinpay/mcp@2.0.0-rc.12 init` creates the legacy keystore only when no
+funded. `npx @aifinpay/mcp init` creates the legacy keystore only when no
 configured wallet exists. It preserves existing wallets. After init or a local
 wallet-file update, call agent_reload in the existing MCP connection, then agent_address.
 The reload returns only public addresses and preserves the old identity if

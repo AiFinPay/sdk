@@ -18,11 +18,25 @@ quotes; it does not automatically settle HTTP 402 challenges. Settlement is
 non-custodial when an approved executor is enabled: the agent's private key
 signs locally and no AiFinPay-controlled custodian touches funds.
 
+## Prerequisites — required packages
+
+This skill is instructions only. To act on it, one of these must be
+installed — always use the `latest` release:
+
+- **MCP client (Claude Desktop / Cursor / Windsurf):**
+  `npx @aifinpay/mcp`. The server depends on `@aifinpay/agent`
+  and pulls it in automatically — do not install the agent package yourself.
+- **Agent code in Node/TS:**
+  `npm install @aifinpay/agent`. Do NOT install the MCP server.
+- **Agent code in Python:** `pip install aifinpay-agent` (latest).
+
+One surface, one package: MCP client → `@aifinpay/mcp`; code → the SDK for
+your language. There is no "install together" scenario.
+
 ## Version and release status
 
-The current source and compatible package line is **2.0.0-rc.11**. Until that
-RC is published, use the checked-out source build or an explicitly pinned
-compatible package; never install `latest` for a payment test. Do not claim
+The current source and compatible package line is **2.0.0-rc.12**. Install
+the latest published release (`latest` tag). Do not claim
 that AIFP-2 or MCP signing is active while the tool inventory below remains
 read-only.
 # AiFinPay agent workflow
@@ -62,7 +76,7 @@ uses an ephemeral wallet: do not fund it.
 
 ## Init and reconnect
 
-`npx @aifinpay/mcp@2.0.0-rc.11 init` creates the legacy keystore only when no configured
+`npx @aifinpay/mcp init` creates the legacy keystore only when no configured
 wallet exists. It preserves existing wallets. After init or a local wallet-file
 update, call agent_reload in the existing MCP connection, then agent_address.
 The reload returns only public addresses and preserves the old identity if
@@ -111,7 +125,7 @@ first with `AiFinPayAgent.fromEnvironment()` (or the MCP identity priority
 above). If no persistent identity is configured, stop and ask the operator to
 configure one; never use `Agent.new()` or create a replacement wallet and then
 fund it. An ephemeral agent is for inspection only and must never be funded.
-`npx @aifinpay/mcp@2.0.0-rc.11 init` creates the wallet only when no configured wallet
+`npx @aifinpay/mcp init` creates the wallet only when no configured wallet
 exists. On an interactive TTY it may print a one-time private-key recovery line
 for the operator to back up offline; automated agents must never request,
 capture, log or repeat that line. Non-interactive runs suppress it.
@@ -119,7 +133,7 @@ capture, log or repeat that line. Non-interactive runs suppress it.
 Encrypt the on-disk keystore by setting a passphrase before creating it:
 
 ```bash
-AIFINPAY_WALLET_PASSPHRASE="…" npx @aifinpay/mcp@2.0.0-rc.11 init
+AIFINPAY_WALLET_PASSPHRASE="…" npx @aifinpay/mcp init
 ```
 
 Then `~/.aifinpay/agent.json` is scrypt + AES-256-GCM ciphertext instead of

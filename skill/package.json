@@ -1,14 +1,12 @@
 {
   "name": "@aifinpay/skill",
-  "version": "2.0.0",
+  "version": "2.0.3",
   "description": "AiFinPay agent skills: pay for x402-gated APIs as an agent (aifinpay) and charge agents for your API as a merchant (aifinpay-merchant).",
   "type": "module",
   "files": [
     "skills",
-    "SKILL.md",
     "README.md",
-    "LICENSE",
-    ".claude-plugin"
+    "LICENSE"
   ],
   "scripts": {
     "test": "node scripts/validate.mjs",
