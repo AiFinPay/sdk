@@ -26,26 +26,26 @@ This plan covers the SDK changes that consume:
 - the EVM and Solana deployment resolvers;
 - the generated deployment data bundled into `@aifinpay/agent`;
 - the MCP production settlement-chain allowlist and schema;
-- the rule from ADR-0001 that BOT Chain is not a production settlement network;
+- the rule from ADR-0001 that BOT Chain has no production v1.4 deployment;
 - Robinhood Chain as a production configuration target.
 
 Risk class: **critical payment-routing change**. A wrong chain, program, splitter, token, role, or fallback can send funds to an unintended destination or produce an on-chain payment that the backend cannot verify. Suggested AI autonomy cap: **20%**. Human approval is required at architecture, security, code-review, and production-deployment gates.
 
 No mainnet transaction is part of this QA plan. Enabling any production route requires a separate authorized deployment decision and a funded end-to-end test.
 
-## Requirement clarification that blocks final sign-off
+## Requirement clarification
 
-The current AIFINP-223 implementation and tests define `auto` as `v1.4 -> v1.2`. That is unsafe for payment selection: a missing, disabled, stale, or invalid v1.4 record silently changes the settlement contract and protocol semantics.
+AIFINP-223 defines EVM `auto` as `v1.4 -> v1.2`. The fallback is allowed only in `auto`; an explicit version request remains exact.
 
 The test oracle for this change must be:
 
 1. `auto` selects an eligible v1.4 deployment.
-2. `auto` fails closed with a typed error when an eligible v1.4 deployment is unavailable.
-3. `auto` never selects v1.2.
-4. Explicit v1.2 may remain only as an intentionally deprecated compatibility path if product/security explicitly approve it; it must never be reached by fallback.
+2. `auto` selects a known production v1.2 deployment when v1.4 is absent, disabled or invalid.
+3. `auto` fails with a typed error when neither version is usable.
+4. Explicit v1.4 never falls back; explicit v1.2 always selects v1.2 when present.
 5. The existence of a deployment record does not make a route settlement-enabled. Availability and settlement eligibility must be represented separately.
 
-If Jira continues to require automatic fallback to v1.2, the Requirement Gate remains failed. The ticket acceptance criteria and the security decision must agree before tests are treated as authoritative.
+Solana remains v1.4-only because no Solana v1.2 deployment exists.
 
 ## Evidence reviewed
 
@@ -53,7 +53,7 @@ If Jira continues to require automatic fallback to v1.2, the Requirement Gate re
 
 - `node/src/v14Deployments.generated.ts` pins the old EVM source commit `67b3f518...` and contains only Amoy and Polygon.
 - `node/src/solanaV14Deployments.generated.ts` pins the old Solana source commit `8a13d10...` and old program IDs.
-- `node/src/deploymentResolver.ts` silently falls back to v1.2 in `auto` mode.
+- `node/src/deploymentResolver.ts` implements the documented v1.4-to-v1.2 `auto` fallback.
 - `node/tests/deploymentResolver.test.ts` explicitly requires fallback for Base, Optimism, Unichain, BOT Chain, and XRPL EVM.
 - `mcp/src/tools/production-control.ts` advertises BOT Chain and does not advertise Robinhood.
 - No SDK test directly exercises `settlementInvoiceTool()` or `runSettlementInvoice()` against the chain allowlist.
@@ -91,7 +91,7 @@ Use the test pyramid for this change:
 
 - unit: pure resolver selection, validation, normalization, and schema tests;
 - integration: generated data against immutable source artifacts and MCP handler/schema behavior;
-- regression: previously observed unsafe fallback, stale identifiers, BOT Chain exposure, token confusion, and environment leakage;
+- regression: incorrect explicit-version fallback, stale identifiers, BOT Chain v1.4 exposure, token confusion, and environment leakage;
 - staging E2E: read-only on-chain identity checks followed by one separately authorized funded payment per enabled route.
 
 All PR tests must be deterministic and isolated. DNS, public RPC, GitHub availability, and wall-clock timing must not be dependencies of unit tests.
@@ -100,7 +100,7 @@ All PR tests must be deterministic and isolated. DNS, public RPC, GitHub availab
 
 ### EVM resolver — `node/tests/deploymentResolver.test.ts`
 
-Replace tests that encode fallback with the following behavior tests:
+Cover the Jira fallback matrix with the following behavior tests:
 
 - dev/Amoy resolves only the dev v1.4 record.
 - dev rejects Polygon and every production chain with `UnsupportedDevNetworkError`.
@@ -108,10 +108,10 @@ Replace tests that encode fallback with the following behavior tests:
 - explicit v1.4 resolves each eligible production network and returns the exact chain ID and deployment object.
 - explicit v1.4 on an absent, disabled, or quarantined network throws a typed unavailable/disabled error.
 - `auto` returns v1.4 on an eligible network.
-- `auto` on a network with only a legacy v1.2 record throws; it never returns v1.2.
-- no version argument has the same fail-closed behavior as `version: "auto"`.
-- explicit v1.2 behavior is tested separately and labelled deprecated if retained.
-- BOT Chain fails under explicit v1.4 and `auto` in prod.
+- `auto` falls back to a known v1.2 deployment when v1.4 is unavailable or quarantined.
+- no version argument has the same behavior as `version: "auto"`.
+- explicit v1.2 behavior is tested separately.
+- BOT Chain has no v1.4 record; explicit v1.4 fails without downgrade.
 - Robinhood normalizes and resolves with chain ID 4663 only when eligible.
 - `isV14Available` distinguishes record presence from settlement eligibility; if a second helper is introduced, test both meanings explicitly.
 - unknown environment, unknown version, empty network, whitespace-only network, and unknown network return typed errors.
@@ -234,8 +234,8 @@ Before a Solana entry becomes eligible:
 
 | Regression | Expected result |
 |---|---|
-| Missing v1.4 record while a v1.2 record exists | typed failure; no automatic downgrade |
-| BOT Chain requested in production | rejected before network/signing work |
+| Missing/disabled v1.4 while a v1.2 record exists | `auto` returns v1.2; explicit v1.4 fails |
+| BOT Chain requested as v1.4 | typed unavailable error; no v1.4 deployment |
 | Robinhood requested | recognized only when registry and backend eligibility agree |
 | Dev record requested under prod, or prod under dev | typed environment error |
 | Stale Solana IDs from the previous table | absent and rejected by data assertions |
@@ -332,7 +332,7 @@ node scripts/verify-governance-docs.mjs
 
 ### Testing Gate
 
-- [ ] Revised no-silent-downgrade acceptance criterion approved.
+- [x] AIFINP-223 automatic-fallback acceptance criterion implemented.
 - [ ] EVM unit tests written and passing.
 - [ ] Solana unit tests written and passing.
 - [ ] Generated-data schema/provenance tests written and passing.
@@ -343,7 +343,7 @@ node scripts/verify-governance-docs.mjs
 
 ### Security/release gate
 
-- [ ] No BOT Chain production settlement exposure.
+- [x] No BOT Chain v1.4 deployment exposure.
 - [ ] Robinhood configuration and backend support agree.
 - [ ] Polygon token confusion fixed.
 - [ ] Base invalid/conflicting deployment is quarantined or replaced.
@@ -353,11 +353,11 @@ node scripts/verify-governance-docs.mjs
 - [ ] Human security/code review completed.
 - [ ] One authorized funded E2E succeeds per newly enabled route.
 - [ ] Duplicate/replay attempt does not move funds twice.
-- [ ] Rollback disables the route without falling back to legacy v1.2.
+- [ ] Rollback behavior is verified for both explicit v1.4 and documented `auto` fallback.
 - [ ] Production monitoring and route kill-switch are confirmed.
 
 ## Testing Gate conclusion
 
-**TARGETED GATE PASS; PRODUCTION ACTIVATION BLOCKED.** The resolver and provenance tests now enforce fail-closed routing and the CTO-provided Solana IDs. The remaining blockers are operational/on-chain: backend verification, Safe actions, independent RPC verification, funded E2E and the existing flaky live-path tests.
+**TARGETED GATE PASS; PRODUCTION v1.4 ACTIVATION BLOCKED.** The resolver tests now enforce the AIFINP-223 `auto` fallback, exact explicit versions, and the CTO-provided Solana IDs. The remaining v1.4 blockers are operational/on-chain: backend verification, Safe actions, independent RPC verification and funded E2E.
 
 HANDOFF: CONDITIONAL PASS | restriction: do not enable production v1.4 settlement | return_to: release owner

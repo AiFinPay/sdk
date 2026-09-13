@@ -11,10 +11,9 @@
  *   environment — "dev" | "prod". Development supports Amoy only and uses the
  *     v1.4 artifacts sourced from evm-contract's dev branch. Production uses the
  *     configured production networks.
- *   version     — "v1.2" | "v1.4" | "auto". "auto" means the current v1.4
- *     deployment for that exact environment+network. It never downgrades to a
- *     legacy contract. Legacy v1.2 remains available only when requested
- *     explicitly.
+ *   version     — "v1.2" | "v1.4" | "auto". "auto" uses an enabled v1.4
+ *     deployment for the exact environment+network and otherwise falls back
+ *     to a valid legacy v1.2 deployment. An explicit version never changes.
  *
  * Addresses live in data files (v14Deployments.generated.ts and the legacy
  * SPLITTER_DEPLOYMENTS table), never inline here — this module is selection
@@ -38,8 +37,8 @@ export type SdkEnvironment = "dev" | "prod";
  *  (`SplitterDeployment.version`, which is "1.1" or "1.2" depending on chain). */
 export type ProtocolVersion = "v1.2" | "v1.4";
 
-/** What a caller may ask for. "auto" (the default) resolves only an enabled
- *  v1.4 deployment and never silently downgrades. */
+/** What a caller may ask for. "auto" (the default) prefers enabled v1.4 and
+ *  falls back to a valid production v1.2 deployment. */
 export type RequestedVersion = ProtocolVersion | "auto";
 
 export interface ResolveDeploymentOptions {
@@ -129,10 +128,13 @@ export class DeploymentDisabledError extends DeploymentResolverError {
   }
 }
 
-/** No current v1.4 deployment exists for this environment+network. */
+/** No usable deployment of either supported version exists here. */
 export class NoDeploymentError extends DeploymentResolverError {
   constructor(environment: SdkEnvironment, network: string) {
-    super(`No v1.4 deployment is known for ${environment}/${network}.`);
+    super(
+      `No enabled v1.4 or valid v1.2 deployment is known for ` +
+        `${environment}/${network}.`,
+    );
     this.name = "NoDeploymentError";
   }
 }
@@ -183,8 +185,9 @@ export function isV14Available(
  *
  * @throws UnsupportedDevNetworkError  dev asked for a non-Amoy network
  * @throws VersionUnavailableError     an explicit version is not deployed here
- * @throws DeploymentDisabledError     a v1.4 record exists but is quarantined
- * @throws NoDeploymentError           no v1.4 deployment is known here
+ * @throws DeploymentDisabledError     explicit v1.4 is quarantined, or auto
+ *                                     has no valid v1.2 fallback
+ * @throws NoDeploymentError           neither version is known here
  */
 export function resolveDeployment(
   options: ResolveDeploymentOptions,
@@ -244,7 +247,16 @@ export function resolveDeployment(
       if (v12) return asV12(v12);
       throw new VersionUnavailableError("v1.2", environment, options.network);
     case "auto":
-      return asV14(enabledV14());
+      if (v14?.settlementEnabled) return asV14(v14);
+      if (v12) return asV12(v12);
+      if (v14) {
+        throw new DeploymentDisabledError(
+          environment,
+          network,
+          v14.disabledReason ?? "deployment has not passed the settlement gate",
+        );
+      }
+      throw new NoDeploymentError(environment, options.network);
     default:
       throw new DeploymentResolverError(
         `Unknown version "${String(requested)}"; use "v1.2", "v1.4" or "auto".`,

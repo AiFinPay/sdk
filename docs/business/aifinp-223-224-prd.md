@@ -22,9 +22,9 @@ Success means the SDK can identify known deployments, but only returns a deploym
 
 As an SDK integrator, I want to request an EVM environment, network, and protocol version and receive the exact eligible deployment or a typed error, so that the SDK cannot silently change the payment contract.
 
-### US-2 — Fail-closed automatic mode
+### US-2 — Controlled automatic fallback
 
-As a payer, I want automatic selection to fail when v1.4 is unavailable or quarantined, so that my payment is not silently redirected to legacy v1.2.
+As an SDK integrator, I want automatic selection to prefer enabled v1.4 and fall back to a known v1.2 deployment, while explicit v1.4 never downgrades.
 
 ### US-3 — Deterministic Solana selection
 
@@ -32,7 +32,7 @@ As an SDK integrator, I want devnet and mainnet to resolve to the redeployed Sol
 
 ### US-4 — Network-policy enforcement
 
-As a protocol operator, I want BOT Chain disabled and Robinhood quarantined until its assets are verified, so that a known network cannot become a settlement route merely by appearing in a configuration file.
+As a protocol operator, I want BOT Chain excluded from v1.4 and Robinhood quarantined until its assets are verified, while the existing v1.2 compatibility record remains isolated.
 
 ### US-5 — Deployment provenance and quarantine
 
@@ -54,10 +54,10 @@ As a release reviewer, I want every bundled record to identify its immutable sou
 - EVM request values remain `v1.2`, `v1.4`, and `auto` for compatibility.
 - Explicit `v1.4` returns only an eligible v1.4 record; otherwise it fails.
 - Explicit `v1.2` may resolve only an explicitly known legacy record and must never be substituted for another version. Resolution alone does not authorize execution.
-- `auto` returns an eligible v1.4 record or fails with a typed unavailable/quarantined error.
-- `auto` never returns v1.2.
+- `auto` returns an enabled v1.4 record when available; otherwise it returns a known production v1.2 deployment.
+- `auto` fails when neither an enabled v1.4 nor a known v1.2 deployment exists.
 - Solana supports v1.4 only. Explicit v1.2 always fails, and `auto` never invents a fallback.
-- Error messages must not instruct callers to enable a money-path downgrade.
+- Explicit-version errors must not trigger a fallback.
 
 ### FR-3 — Immutable deployment provenance
 
@@ -74,9 +74,9 @@ Every known deployment has an explicit state with these product semantics:
 | State | Resolver behavior | Settlement behavior |
 |---|---|---|
 | `eligible` | May resolve for its exact environment/network/version | May proceed only if route/asset/backend gates also pass |
-| `quarantined` | Typed quarantine error | Forbidden |
-| `disabled` | Typed policy-disabled error | Forbidden |
-| `invalid` | Validation error; excluded from normal output | Forbidden |
+| `quarantined` | Explicit v1.4: typed error; EVM `auto`: try known v1.2 | Forbidden as v1.4 |
+| `disabled` | Explicit v1.4: typed error; EVM `auto`: try known v1.2 | Forbidden as v1.4 |
+| `invalid` | Explicit v1.4: validation error; EVM `auto`: try known v1.2 | Forbidden as v1.4 |
 
 Absence of a state is treated as `quarantined`, never `eligible`.
 
@@ -96,14 +96,14 @@ The initial generated inventory must include the following records without imply
 | Unichain | 130 | `quarantined` until independent on-chain and backend validation passes |
 | XRPL EVM | 1440000 | `quarantined` until a supported asset and backend verifier are proven |
 | Robinhood | 4663 | `quarantined` until generalized asset-list deployment and verification passes |
-| BOT Chain | 677 | `disabled` by ADR-0001; never settlement-enabled |
+| BOT Chain | 677 | no v1.4 record under ADR-0001; legacy v1.2 retained |
 
-### FR-6 — BOT Chain enforcement
+### FR-6 — BOT Chain v1.4 enforcement
 
 - BOT Chain may remain as historical or monitoring metadata.
-- It is removed from all advertised/selectable production settlement enums, MCP schemas, automatic resolver candidates, and executable chain maps.
-- Any attempt to construct a BOT Chain settlement invoice or execute a payment fails with a typed policy-disabled error before quote or signing.
-- Tests must prove that v1.2, v1.4, and `auto` cannot make BOT Chain executable.
+- It is excluded from v1.4 deployment records and can never resolve as v1.4.
+- The existing v1.2 record remains available for backward compatibility under the AIFINP-223 resolver contract.
+- Tests must prove that explicit v1.4 cannot downgrade to the legacy BOT Chain record.
 
 ### FR-7 — Robinhood generalized asset handling
 
@@ -165,18 +165,18 @@ A Solana record cannot become `eligible` for executable settlement unless automa
 
 - Existing public types and direct legacy tables remain available where possible.
 - Direct legacy metadata does not bypass policy/eligibility checks in payment APIs.
-- Integrations that relied on omitted `version` silently falling back to v1.2 will now receive a typed error. This is an intentional safety behavior change and requires a changelog entry and an appropriate semver/RC decision by the release owner.
+- Integrations that omit `version` keep the documented v1.4-to-v1.2 fallback. Integrations that require v1.4 must pass `version: "v1.4"`.
 - Existing AIFP-1 v1.3 route selection and economics must pass regression tests.
 
 ## Acceptance criteria
 
-### AC-1 — EVM fail-closed `auto`
+### AC-1 — EVM automatic fallback
 
 **Given** a production network with no eligible v1.4 deployment but with a legacy v1.2 record
 
 **When** the caller requests `auto` or omits the version
 
-**Then** resolution throws a typed unavailable/quarantined error and never returns v1.2.
+**Then** resolution returns that v1.2 deployment and reports `version: "v1.2"`.
 
 ### AC-2 — Exact explicit selection
 
@@ -190,9 +190,9 @@ A Solana record cannot become `eligible` for executable settlement unless automa
 
 Automated tests prove that only Amoy resolves under EVM `dev`, only devnet resolves under Solana `dev`, and no development record resolves under `prod` or vice versa.
 
-### AC-4 — BOT Chain disabled
+### AC-4 — BOT Chain excluded from v1.4
 
-Automated tests prove that BOT Chain is absent from advertised settlement enums and that all invoice, resolver, and execution entry points reject it before quote construction/signing for every requested version.
+Automated tests prove that BOT Chain is absent from v1.4 deployment metadata, explicit v1.4 fails, and legacy v1.2 compatibility remains isolated from v1.4.
 
 ### AC-5 — Robinhood representation
 
@@ -241,7 +241,7 @@ Build, typecheck, lint, unit, integration, regression, edge-case, SAST, dependen
 | Empty/whitespace/mixed-case network | Normalize only recognized aliases; otherwise typed error |
 | `staging`, unknown environment, or environment/network mismatch | Typed configuration error |
 | Unknown version string | Typed version error |
-| `auto` with only v1.2 known | Fail closed; no fallback |
+| `auto` with only v1.2 known | Return the known v1.2 deployment |
 | Explicit v1.4 is quarantined | Quarantine error, no fallback |
 | Explicit v1.2 on Solana | Typed `v1.2 unavailable` error |
 | Mutable source branch or missing commit SHA | Generation/CI failure |
@@ -252,7 +252,7 @@ Build, typecheck, lint, unit, integration, regression, edge-case, SAST, dependen
 | Token symbol matches but decimals/issuer/address do not | Quarantine/failure |
 | Two symbols share one address without an explicit alias model | Validation failure |
 | Robinhood record has only zero USDC/USDT fields | Quarantine; do not infer USDe/USDG were configured |
-| BOT Chain appears in a legacy table/cache | Payment boundary still rejects it |
+| BOT Chain requested as v1.4 | Typed unavailable error; no v1.4 record is returned |
 | SDK cache contains a formerly eligible record | Re-evaluate policy/eligibility; stale cache cannot override disabled/quarantined status |
 | Backend verifier missing after SDK resolution | Fail before signing/broadcast |
 | Route profile changes after quote | Fail contract/verification binding; never settle under unquoted economics |
@@ -275,7 +275,7 @@ Build, typecheck, lint, unit, integration, regression, edge-case, SAST, dependen
 
 | Blocker | Required human action/evidence |
 |---|---|
-| Corrected no-fallback product behavior | Product/CTO approval because it intentionally changes current backward behavior |
+| Automatic fallback behavior | Covered by AIFINP-223; explicit v1.4 remains fail-closed |
 | Missing SDK `AGENTS.md` and `ARCHITECTURE.md` | Bootstrap/approve the AI-readable repository baseline before Architecture Gate |
 | Base invalid deployment record | CTO/security decision and human-authorized redeploy or replacement record |
 | Polygon asset misclassification | Security review, canonical asset decision, and any required Safe allowlist transaction |
@@ -288,7 +288,7 @@ Build, typecheck, lint, unit, integration, regression, edge-case, SAST, dependen
 
 ## Priority and sequencing
 
-1. **P0 — Safety policy:** remove silent fallback, enforce BOT Chain disablement, introduce quarantine semantics.
+1. **P0 — Resolver policy:** implement the AIFINP-223 `auto` fallback while keeping explicit versions exact and v1.4 quarantine semantics intact.
 2. **P0 — Data correction:** refresh Solana IDs; import EVM records as known but quarantined; reject Base; fix Polygon classification; generalize Robinhood assets.
 3. **P0 — Validation:** add static/on-chain provenance and eligibility checks plus negative-path tests.
 4. **P0 — Compatibility:** confirm backend verifier support and receipt/idempotency behavior before any executable route is advertised.
@@ -304,6 +304,6 @@ Build, typecheck, lint, unit, integration, regression, edge-case, SAST, dependen
 
 **Requirement Gate: PASS**
 
-Implementation must not start under the SDLC framework until the missing AI-readable codebase precondition is repaired and a human approves the corrected payment policy.
+Implementation is covered by the Jira acceptance criteria; production v1.4 activation remains a separate human-controlled gate.
 
 **HANDOFF: sdlc-architect | artifact: `docs/business/aifinp-223-224-prd.md` | gate: pass; Architecture Gate: BLOCKED pending root `AGENTS.md`/`ARCHITECTURE.md` and human approval**

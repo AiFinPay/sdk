@@ -18,8 +18,8 @@ The SDK contains environment/version resolvers for EVM and Solana, but the bundl
 
 - The EVM SDK table is pinned to an old `evm-contract` commit and contains only Amoy and Polygon v1.4.
 - The Solana SDK table is pinned to an old `solana-contract` commit and contains superseded program IDs.
-- The EVM `auto` selector silently falls back from v1.4 to legacy v1.2. This can change the settlement contract and payment semantics without the caller explicitly accepting the change.
-- BOT Chain remains selectable in SDK and MCP payment surfaces despite accepted ADR-0001 prohibiting production settlement there.
+- The EVM `auto` selector is required by AIFINP-223 to fall back from unavailable v1.4 to an existing legacy v1.2 deployment. Explicit v1.4 must remain exact and fail when unavailable or quarantined.
+- BOT Chain must not be added to the v1.4 registry or new MCP production surface; the existing legacy v1.2 resolver record is retained for backward compatibility.
 - Robinhood Chain was added upstream, but the current EVM deployment artifact can only represent `usdc` and `usdt`; Robinhood is configured upstream with USDe and USDG. The produced deployment record therefore contains two zero token addresses and cannot prove that either configured Robinhood stablecoin is allowed.
 - Some upstream records are unsafe to consume as valid deployments without quarantine and independent on-chain verification.
 
@@ -38,7 +38,7 @@ Jira currently requests:
 - a centralized resolver using deployment records from `evm-contract`;
 - an SDK refresh from `evm-contract` commit `78240eccf96dd078c9b40be068d635b14876364c`.
 
-The automatic downgrade requirement conflicts with fail-closed payment behavior and must be corrected before implementation approval.
+The fallback is a stated acceptance criterion. It must remain centralized, apply only to `auto`, and return the concrete selected version to the caller.
 
 Jira: <https://aifinpay-team.atlassian.net/browse/AIFINP-223>
 
@@ -69,13 +69,13 @@ Deployment source: <https://github.com/AiFinPay/solana-contract/commit/e5df8f543
 
 | Surface | Current state | Consequence |
 |---|---|---|
-| `node/src/deploymentResolver.ts` | `auto` returns v1.2 when v1.4 is absent | Silent money-path downgrade |
+| `node/src/deploymentResolver.ts` | `auto` returns v1.2 when v1.4 is absent | Required compatibility behavior; must stay limited to `auto` |
 | `node/src/v14Deployments.generated.ts` | Source commit `67b3f518...`; Amoy and Polygon only | New EVM production records are absent |
 | `node/src/solanaV14Deployments.generated.ts` | Source commit `8a13d10...`; devnet `Dg9v...`, mainnet `8dty...` | Both entries are stale after the redeploy |
-| `mcp/src/tools/production-control.ts` | BOT Chain is accepted; Robinhood is absent | Policy conflict and incomplete network support |
-| legacy chain/route tables | BOT Chain remains resolvable | ADR-0001 is not enforced at the settlement boundary |
+| `mcp/src/tools/production-control.ts` | BOT Chain is accepted; Robinhood is absent | New v1.4-facing production surface conflicts with ADR-0001 |
+| legacy chain/route tables | BOT Chain remains resolvable | Retained compatibility path; not a v1.4 deployment |
 
-The current tests explicitly require v1.4-to-v1.2 fallback on Base and include BOT Chain among fallback networks. Those tests encode the unsafe behavior and must be replaced rather than preserved.
+The current tests require v1.4-to-v1.2 fallback on Base and include BOT Chain among legacy fallback networks. This matches AIFINP-223; tests must additionally prove that explicit v1.4 never downgrades.
 
 ### EVM upstream records at commit `78240ec`
 
@@ -113,8 +113,8 @@ Solana has no supported v1.2 splitter deployment. `auto` therefore either resolv
 1. Deployment data must be bundled from immutable commit SHAs. The shipped SDK must not fetch a mutable GitHub branch at payment time.
 2. Record presence means `known`, not `settlement enabled`.
 3. Environment, network, version, asset, route economics, verifier support, and deployment eligibility must all agree before a payment route is returned as executable.
-4. No version fallback may change a payment contract or economic behavior silently.
-5. Existing direct legacy exports may remain for compatibility, but their presence must not authorize settlement and BOT Chain must not be selectable through payment APIs.
+4. The only automatic version change is the documented EVM `auto` fallback from unavailable v1.4 to a known v1.2 deployment.
+5. Existing direct legacy exports and v1.2 resolver records remain for compatibility. BOT Chain must stay absent from v1.4 and new MCP production controls.
 6. `dev` EVM is Amoy only; `dev` Solana is devnet only. Production records must never resolve under `dev`, and development records must never resolve under `prod`.
 7. Mainnet writes, Safe transactions, contract redeployments, key/authority changes, and route activation require humans. This documentation work authorizes none of them.
 8. AIFP-1's separate v1.3 production route behavior must not regress. Adding v1.3 to this version selector is outside these two tickets.
@@ -122,7 +122,7 @@ Solana has no supported v1.2 splitter deployment. `auto` therefore either resolv
 ## Assumptions
 
 - The two immutable commits named in Jira are the requested provenance anchors for this work.
-- `v1.2` remains a request-side compatibility value, but it is only selected explicitly and never through `auto`.
+- `v1.2` remains a compatibility value and may be selected explicitly or by the EVM-only `auto` fallback.
 - A resolved deployment is metadata. Executability requires an independent settlement-eligibility gate.
 - Network aliases are normalized deterministically; Solana `mainnet-beta` maps to `mainnet`.
 - Robinhood needs an asset-list representation rather than hard-coded USDC/USDT slots.
@@ -141,7 +141,7 @@ Solana has no supported v1.2 splitter deployment. `auto` therefore either resolv
 
 ## Corrected, testable requirement
 
-Update the SDK's centralized EVM and Solana deployment resolution so it consumes immutable, validated deployment metadata from the Jira-specified commits, returns only environment/network/version combinations that are explicitly eligible, and fails closed otherwise. `auto` may select an eligible v1.4 deployment but must never silently downgrade to v1.2. BOT Chain must be disabled at every production settlement boundary. Robinhood must use a generalized stablecoin list and remain quarantined until its supported assets are on-chain verified. Solana must use the redeployed devnet and mainnet program IDs and remain non-executable until its artifacts and on-chain configuration pass the activation gate. Invalid or incomplete records, including Base and the current Robinhood record, must be quarantined rather than exposed as usable payment routes.
+Update the SDK's centralized EVM and Solana deployment resolution so it consumes immutable deployment metadata from the Jira-specified commits. EVM `auto` selects enabled v1.4 first and falls back to an existing v1.2 record when v1.4 is absent, disabled or invalid; explicit versions never downgrade. Development remains Amoy-only. BOT Chain is excluded from v1.4 under ADR-0001 while its legacy v1.2 record remains for backward compatibility. Robinhood uses a generalized stablecoin list and remains quarantined until its assets are on-chain verified. Solana uses the redeployed devnet and mainnet program IDs and has no invented v1.2 fallback.
 
 ## Requirement Gate self-check
 

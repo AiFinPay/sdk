@@ -4,8 +4,8 @@
 **Date:** 2026-09-13
 **Tickets:** AIFINP-223 (EVM), AIFINP-224 (Solana)
 **Risk:** high — payment routing; AI autonomy cap 10–30%
-**Decision:** one static registry, generated SDK artifacts, exact fail-closed
-resolution, no runtime GitHub fetch, and no silent protocol-version fallback.
+**Decision:** one static registry, generated SDK artifacts, no runtime GitHub
+fetch, exact explicit-version selection, and the AIFINP-223 EVM `auto` fallback.
 
 ## 1. Scope
 
@@ -33,9 +33,9 @@ The SDK currently has three payment-routing sources:
 | `node/src/solanaV14Deployments.generated.ts` | Solana v1.4 | Contains the superseded devnet/mainnet program IDs from `8a13d10...`. |
 | `SPLITTER_DEPLOYMENTS` / `splitterRoutes.generated.ts` | legacy EVM | Separate model and selection path; includes BOT Chain. |
 
-`node/src/deploymentResolver.ts` implements `auto` as “v1.4, otherwise v1.2”.
-That is a change in payment semantics without payer consent. A missing or
-disabled v1.4 record can therefore route money through a legacy contract.
+`node/src/deploymentResolver.ts` implements the AIFINP-223 rule: `auto` prefers
+v1.4 and otherwise uses v1.2. Explicit v1.4 must stay exact so callers that
+require the new protocol cannot be downgraded.
 
 Other observed mismatches:
 
@@ -184,13 +184,14 @@ Resolution is deterministic:
 
 1. Normalize only documented aliases.
 2. If the caller requests a version, find that exact record.
-3. If the version is omitted or `auto`, read the single exact version from
-   `networkDefaults`.
-4. Never search another protocol version, environment, network, or rail.
-5. Reject records whose state is not `enabled`.
-6. If an asset is requested, require its exact `assetId` and identifier to be
+3. For EVM omitted version/`auto`, use enabled v1.4 first, then a known
+   production v1.2 deployment.
+4. For Solana omitted version/`auto`, use v1.4 only; no v1.2 exists.
+5. Never switch environment, network, rail, route or asset.
+6. Never return a disabled or invalid record as v1.4.
+7. If an asset is requested, require its exact `assetId` and identifier to be
    enabled for the selected deployment.
-7. Return an immutable deployment object or a typed error.
+8. Return an immutable deployment object or a typed error.
 
 Required errors:
 
@@ -201,8 +202,8 @@ Required errors:
 - `AssetUnavailableError`
 - `RegistryInvariantError` for an impossible generated state
 
-`auto` is retained only for API compatibility. It means “use the reviewed
-default for this exact network”, not “try versions until one works”.
+EVM `auto` is the only version-searching mode. Explicit `v1.4` and `v1.2` never
+substitute another version.
 
 ## 7. Network-specific decisions
 
@@ -213,7 +214,7 @@ default for this exact network”, not “try versions until one works”.
 | Base | disabled | Reject the current internally inconsistent deployment artifact. Re-enable only after a distinct verified splitter deployment and new artifact. |
 | Arbitrum, Avalanche, BNB, Optimism, Unichain, XRPL EVM | imported disabled | Addresses may be shipped as metadata, but payment resolution remains off until contract-state, asset and backend-verifier gates pass. |
 | Robinhood | imported disabled | Add chain ID 4663. Represent USDe and USDG through `assets[]`. Current zero USDC/USDT slots do not authorize stable settlement. |
-| BOT Chain | excluded from payment defaults | Preserve a non-payment chain descriptor only if another SDK feature needs it. Resolver always throws `DeploymentDisabledError`; no production payment advertisement. |
+| BOT Chain | excluded from v1.4 | No v1.4 deployment under ADR-0001. Preserve the existing v1.2 resolver record for backward compatibility; explicit v1.4 fails. |
 | Solana devnet | disabled until full evidence | Use program ID `8dty5bD738Z9TzEkDu8vLSnhpJNWtEGMUEcYaKCUTY6y`; require executable hash, initialized state and IDL hash before enablement. |
 | Solana mainnet | disabled until full evidence | Use program ID `724Ut31i4ecY4dJ25z8HuZetu3A43xtNkPdk4JdbsfdD`; require the same evidence plus backend settlement verification. |
 
@@ -274,21 +275,19 @@ The backend is a cross-repository dependency. A deployment cannot become
    their results from the new table so existing callers keep their shapes.
 4. Retain `V14_DEPLOYMENTS`, `SOLANA_V14_DEPLOYMENTS` and source metadata as
    deprecated generated views for one release cycle.
-5. Change `auto` to exact default selection. Emit a development warning for
-   callers relying on `auto`; never emit a warning instead of blocking a
-   payment.
-6. Legacy v1.2/v1.3 is reachable only by an explicit version and only while its
-   registry record is enabled. No new caller should default to it.
-7. BOT Chain payment requests fail with a typed disabled error. Removing it
-   from all public TypeScript unions can wait for the next breaking release if
-   non-payment consumers still compile against the name.
+5. Keep the EVM `auto` fallback centralized: enabled v1.4 first, then an
+   existing v1.2 deployment.
+6. Explicit v1.2/v1.4 requests remain exact. Solana never invents a v1.2
+   fallback.
+7. BOT Chain remains absent from v1.4 data. Its legacy v1.2 record can be
+   removed only through a separate compatibility/deprecation decision.
 8. Enable one deployment at a time after contract verification, backend
    support, funded end-to-end testing, security review and human approval.
 
 Because the current SDK line is a release candidate, the resolver semantic
 change should ship in the next RC. If published in a stable line, treat the
 change as security-significant and document the behavior change prominently;
-do not preserve unsafe fallback for semantic-version convenience.
+document the `auto` behavior prominently because it can select v1.2.
 
 ## 11. Required validation
 
@@ -304,10 +303,11 @@ do not preserve unsafe fallback for semantic-version convenience.
 
 ### Resolver
 
-- no v1.4 → v1.2 fallback;
+- EVM `auto` falls back v1.4 → v1.2 only when a known v1.2 deployment exists;
+- explicit v1.4 never falls back;
 - no dev → prod or prod → dev crossover;
-- missing/disabled Base fails closed;
-- BOT Chain always fails closed for payment;
+- invalid Base v1.4 is never returned; `auto` uses the existing Base v1.2 record;
+- BOT Chain never resolves as v1.4;
 - Robinhood cannot select zero USDC/USDT;
 - Polygon cannot resolve `0x2791...` as USDT;
 - Solana aliases resolve only to the exact cluster;
@@ -326,10 +326,10 @@ Rollout is registry-first and network-by-network. Disabled metadata can ship
 without making a route payable. Enabling a route requires a reviewed registry
 diff and a new SDK/backend release.
 
-Rollback never changes protocol version automatically. Publish a new registry
-with the affected record `disabled`, pause the contract where appropriate, and
-release the SDK/backend change. A caller receives `DeploymentDisabledError` and
-does not submit funds.
+When a v1.4 record is disabled, EVM callers using `auto` may resolve a known
+v1.2 deployment as required by AIFINP-223. Callers that must stop instead use
+explicit `version: "v1.4"`. Solana and networks without v1.2 fail with a typed
+error.
 
 ## 13. Architecture gate
 
@@ -337,7 +337,7 @@ does not submit funds.
   artifacts analyzed.
 - [x] Impacted SDK modules and cross-repository backend dependency identified.
 - [x] Data generation, runtime selection and trust dependencies documented.
-- [x] ADR created for the non-trivial fail-closed decision.
+- [x] ADR created for the controlled automatic-fallback decision.
 - [ ] Repository bootstrap requirement satisfied: root `AGENTS.md` and
   `ARCHITECTURE.md` are absent.
 - [ ] CTO/human reviewer approves the detailed schema and migration plan.

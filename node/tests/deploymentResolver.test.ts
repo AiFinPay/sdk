@@ -115,16 +115,12 @@ describe("resolveDeployment — explicit version selection", () => {
 });
 
 describe("resolveDeployment — automatic version selection", () => {
-  it("auto refuses a quarantined production deployment", () => {
-    expect(() =>
-      resolveDeployment({ environment: "prod", network: "polygon" }),
-    ).toThrow(DeploymentDisabledError);
-  });
-
-  it("auto never falls back to v1.2", () => {
-    expect(() =>
-      resolveDeployment({ environment: "prod", network: "botchain" }),
-    ).toThrow(NoDeploymentError);
+  it("auto falls back to v1.2 when v1.4 is quarantined", () => {
+    const r = resolveDeployment({ environment: "prod", network: "polygon" });
+    expect(r.version).toBe("v1.2");
+    if (r.version === "v1.2") {
+      expect(r.deployment.splitter).toBe(SPLITTER_DEPLOYMENTS.polygon.splitter);
+    }
   });
 
   it("auto uses v1.4 on the dev network (amoy)", () => {
@@ -132,10 +128,15 @@ describe("resolveDeployment — automatic version selection", () => {
     expect(r.version).toBe("v1.4");
   });
 
-  it("auto is the fail-closed default when no version is given", () => {
-    expect(() =>
-      resolveDeployment({ environment: "prod", network: "base" }),
-    ).toThrow(DeploymentDisabledError);
+  it("auto is the default when no version is given", () => {
+    const withAuto = resolveDeployment({
+      environment: "prod",
+      network: "base",
+      version: "auto",
+    });
+    const noVersion = resolveDeployment({ environment: "prod", network: "base" });
+    expect(noVersion.version).toBe("v1.2");
+    expect(noVersion.version).toBe(withAuto.version);
   });
 
   it("auto throws when neither version exists for the network", () => {
@@ -144,15 +145,23 @@ describe("resolveDeployment — automatic version selection", () => {
     ).toThrow(NoDeploymentError);
   });
 
-  it("all imported production v1.4 deployments remain quarantined", () => {
+  it("falls back on every production network with a valid legacy deployment", () => {
     for (const network of [
       "polygon",
       "base",
       "optimism",
       "unichain",
+      "botchain",
       "xrplevm",
-      "robinhood",
     ]) {
+      expect(resolveDeployment({ environment: "prod", network }).version).toBe(
+        "v1.2",
+      );
+    }
+  });
+
+  it("fails when quarantined v1.4 has no valid v1.2 fallback", () => {
+    for (const network of ["arbitrum", "avalanche", "bnb", "robinhood"]) {
       expect(() => resolveDeployment({ environment: "prod", network })).toThrow(
         DeploymentDisabledError,
       );

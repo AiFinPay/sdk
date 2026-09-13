@@ -13,7 +13,7 @@
   - `node/registry/payment-deployments.schema.json`;
   - детерминированный генератор `node/scripts/generate-payment-deployments.mjs`;
   - CI drift-check через `registry:check`.
-- `auto` больше не делает скрытый downgrade `v1.4 → v1.2`. Legacy v1.2 доступен только при явном `version: "v1.2"`.
+- `auto` выполняет требование AIFINP-223: выбирает доступный v1.4, а если v1.4 отсутствует или quarantined — использует существующий production v1.2. Явный `version: "v1.4"` не делает downgrade и возвращает типизированную ошибку.
 - Добавлена типизированная ошибка `DeploymentDisabledError` для quarantined deployment.
 - В SDK добавлены v1.4 records: Polygon, Arbitrum, Avalanche, BNB, Base, Optimism, Unichain, XRPL EVM и Robinhood. Все production records выключены.
 - Botchain исключён из v1.4 registry и из production deploy-конфига по ADR-0001. Legacy v1.3 таблицы не менялись.
@@ -56,7 +56,7 @@
 | Base record указывал TokenList как splitter | P0 | Quarantine; нужен redeploy |
 | Polygon USDC.e был подписан как USDT | P0 | Исправлено в config/SDK; on-chain allowlist требует решения Safe |
 | Robinhood TokenList пустой из-за USDC/USDT-only deploy-кода | P0 | Код исправлен; сеть выключена; нужна Safe-транзакция |
-| `auto` silently fallback на v1.2 | P0 | Исправлено: fail-closed |
+| `auto` не соответствовал Jira fallback-матрице | P0 | Исправлено: v1.4 → v1.2 только в режиме `auto` и только при наличии legacy deployment |
 | Старые Solana program ID в SDK | P0 | Исправлено |
 | Botchain оставался доступен для v1.4 deploy | P1 | Заблокирован кодом |
 | Checker не сверял runtime hash и точную экономику routes | P1 | Исправлено для splitter/routes |
@@ -95,7 +95,7 @@ Production v1.4 нельзя активировать одним изменен�
 2. Две независимые RPC-проверки runtime code, roles, Safe, TokenList и Profiles.
 3. Проверка Safe modules, guard, fallback handler и singleton.
 4. Один funded E2E для AIFP-1 и один для AIFP-2; затем replay/duplicate test.
-5. Kill-switch и rollback test без перехода на v1.2.
+5. Kill-switch и rollback test с проверкой документированного поведения `auto`; явный v1.4 обязан остановиться без fallback.
 6. Отдельный контрактный фикс fee-profile TOCTOU или письменное принятие риска CTO/security owner.
 
 Отдельные on-chain действия:

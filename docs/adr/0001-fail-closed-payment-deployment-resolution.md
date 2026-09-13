@@ -1,4 +1,4 @@
-# ADR-0001: Fail-closed payment deployment resolution
+# ADR-0001: Controlled EVM automatic fallback
 
 **Date:** 2026-09-13
 **Status:** proposed
@@ -7,14 +7,14 @@
 
 ## Context
 
-The SDK currently resolves EVM and Solana deployments from separate generated
-tables. EVM `auto` selection prefers v1.4 but silently falls back to v1.2 when
-v1.4 is unavailable. Solana already fails when v1.4 is absent because it has no
-valid v1.2 fallback.
+The SDK resolves EVM and Solana deployments from separate generated tables.
+AIFINP-223 requires EVM `auto` selection to prefer v1.4 and fall back to v1.2
+when v1.4 is unavailable. Explicit v1.4 must never downgrade. Solana has no
+valid v1.2 fallback and therefore fails when v1.4 is unavailable.
 
-Payment versions are not interchangeable. They may use different contracts,
-quote formats, payout economics, governance, token allow-lists and backend
-verification logic. Availability cannot safely choose those semantics.
+Payment versions may use different contracts and verification logic. The
+automatic fallback is therefore limited to the documented `auto` mode and the
+resolved result always reports the concrete selected version.
 
 The reviewed deployment commits also contain networks that are deployed but
 not yet safe to advertise as payable. Examples include an internally
@@ -32,19 +32,21 @@ Solana.
 - Contract-repository artifacts are imported offline from pinned commits and
   recorded with hashes.
 - Runtime code never fetches configuration from GitHub, Jira, or a mutable URL.
-- Resolution uses an exact rail, environment, network and version tuple.
-- Omitted version/`auto` means the single reviewed default for that exact
-  network. It does not mean a version search.
-- Missing, disabled, mismatched or unverifiable entries return a typed error
-  before a wallet transaction is constructed.
+- Resolution uses an exact rail, environment, network and requested version.
+- EVM omitted version/`auto` selects enabled v1.4 first, then a known production
+  v1.2 deployment. If neither is usable, it returns a typed error.
+- Explicit EVM v1.4 and v1.2 never substitute another version.
+- Solana `auto` selects only v1.4 because no v1.2 deployment exists.
+- Disabled or invalid v1.4 records are never returned as v1.4 payment targets.
 - Assets are an explicitly identified array. A token symbol alone is never a
   payment identity.
 - Deployment existence and settlement readiness are separate registry states.
-- BOT Chain has no production payment default and remains disabled in payment
-  resolution under contract ADR-0001.
+- BOT Chain has no v1.4 record under contract ADR-0001. Its existing legacy
+  v1.2 record remains available for backward compatibility until a separate
+  deprecation decision removes it.
 
-No resolver may silently downgrade or switch protocol version, environment,
-network, rail, route or asset.
+No explicit version request may downgrade or switch environment, network, rail,
+route or asset. The only version fallback is the AIFINP-223 EVM `auto` rule.
 
 ## Consequences
 
@@ -56,12 +58,13 @@ network, rail, route or asset.
 - Robinhood can represent USDe/USDG without inventing USDC/USDT fields.
 - Networks can be distributed as disabled metadata and enabled independently
   after full verification.
-- Rollback disables the affected target instead of redirecting money through a
-  legacy contract.
+- A quarantined v1.4 deployment can fall back only where a reviewed legacy
+  deployment already exists.
 
 ### Negative
 
-- Clients that relied on EVM `auto` fallback will receive a typed error.
+- EVM callers that omit the version may receive v1.2 while v1.4 is quarantined;
+  callers that require v1.4 must request it explicitly.
 - Every deployment/configuration update requires registry regeneration and an
   SDK release.
 - Deprecated table exports must be maintained temporarily.
@@ -70,11 +73,11 @@ network, rail, route or asset.
 
 ## Alternatives considered
 
-### Keep automatic v1.4 → v1.2 fallback
+### Remove automatic v1.4 → v1.2 fallback
 
-Rejected. It changes payment semantics because a preferred deployment is
-unavailable. A warning is not enough once an autonomous client can submit
-funds.
+Rejected because it contradicts AIFINP-223 and breaks existing integrations.
+The safety boundary is explicit selection: `version: "v1.4"` always fails when
+v1.4 is absent, disabled or invalid.
 
 ### Fetch the latest deployment files from GitHub at runtime
 
@@ -98,8 +101,8 @@ starts disabled.
 1. Add the canonical registry and schema.
 2. Import EVM `78240ec...` and Solana `e5df8f5...` as disabled records.
 3. Generate the unified TypeScript artifact and deprecated compatibility views.
-4. Move both resolvers to exact registry lookup and remove version fallback.
-5. Remove BOT Chain from payment allow-lists and add Robinhood as disabled.
+4. Keep EVM `auto` fallback centralized in the resolver; keep explicit versions exact.
+5. Exclude BOT Chain from v1.4 and add Robinhood as disabled v1.4 metadata.
 6. Correct Polygon asset identity and reject the current Base record.
 7. Enable deployments individually only after verification, funded E2E,
    security review and human approval.
