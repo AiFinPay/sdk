@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.5
+
+- Payer skill adds Transaction display rules: never leak private keys/seeds
+  in logs, pre-send payload summary (sender, recipient, rounded + exact
+  base-unit amounts, currency) with invoice table, post-send payment id /
+  tx hash / status / explorer link.
+
+## 2.0.4
+
+- Payer skill adds a Payment guideline: `.well-known/x402.json` discovery,
+  AIFP-1 protocol, budget rules, wallet/balance/deposit flow, and the 1000
+  USD per-account per-transaction limit (KYC above it).
+
 ## 2.0.3
 
 - Install instructions use the `latest` release (unpinned `npx

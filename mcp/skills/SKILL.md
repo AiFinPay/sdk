@@ -130,6 +130,44 @@ Node SDK: getAgentHistory({address, passport, source, network, limit, offset,
 baseUrl}) uses the same route flow. Retrieve a paid bearer receipt separately
 with the signed recovery API; never put it in a public history report.
 
+## Payment guideline
+
+When asked to pay for a paid API or crawl a paywalled site:
+
+1. **Discover:** `GET {baseUrl}/.well-known/x402.json` — lists paid routes.
+   **Protocol:** AIFP-1 (AiFinPay x402).
+2. **Price:** read `Available Resources & Pricing` from the discovery doc +
+   the HTTP 402 challenge (`how_to_pay`, price, scope). Prioritize high-value
+   endpoints; batch where possible.
+3. **Budget:** follow the operator's budget cap (e.g. max $1.00 per site).
+   Track spend per request; stop and save partial results when exhausted.
+4. **Wallet:** load the existing persistent identity first
+   (`AiFinPayAgent.fromEnvironment()` / MCP identity priority using
+   `@aifinpay/agent`). Generate a wallet only if none is configured, then
+   check limit and balance via `agent_quota` / `agent_history`.
+5. **Fund:** if balance is insufficient, report the public address and amount
+   needed and ask the operator to deposit. Never fund an ephemeral wallet.
+6. **Limit:** max **1000 USD equivalent per account per transaction**.
+   Above that, stop and require KYC — do not split across accounts to evade it.
+
+## Transaction display (never leak secrets)
+
+- Never print, log, or return private keys, seeds,
+  `SEED_HEX`/`AIFINPAY_AGENT_SECRET`, keystore JSON, or signing-secret
+  inputs. Public addresses and transaction hashes only.
+- Before sending, show the payload summary and wait for approval: sender,
+  recipient, amount (rounded, e.g. `1.055 POL`), amount (exact base units,
+  as a string), currency/token, network — plus the invoice as a table:
+
+  | resource | qty | price | total |
+  |---|---|---|---|
+  | /api/agent/genres | 200 | $0.0005 | $0.10 |
+
+- After sending, show payment id, transaction hash, status, and the
+  explorer link (from the quote/receipt `explorer_url`, or chain explorer +
+  hash). Quote or invoice creation is not a completed payment — never
+  report it as one.
+
 After a settlement error, retain the original quote, transaction reference and
 idempotency context and use the recovery path before another attempt. A new
 quote or a new `fetchPaid` call may charge again; this RC has no payment

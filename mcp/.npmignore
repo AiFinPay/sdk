@@ -1,0 +1,11 @@
+# Defense-in-depth alongside the `files` allowlist in package.json
+# (dist, bin, README.md, LICENSE, skills). Never exclude those here.
+src/
+tests/
+tsconfig.json
+smithery.yaml
+server.json
+.gitignore
+.mcp.json
+coverage/
+*.tsbuildinfo
