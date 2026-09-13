@@ -1,0 +1,62 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "AGENTS.md",
+    "node_modules/@daochild/agents-config/AGENTS.md",
+    "node_modules/@daochild/agents-config/.opencode/AGENTS.md",
+    "node_modules/@daochild/agents-config/.claude/rules/programming-best-practices.md",
+    "node_modules/@daochild/agents-config/.agents/rules/sdlc-gates.md"
+  ],
+  "permission": {
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow",
+      "~/.aifinpay/*": "deny",
+      "$HOME/.aifinpay/*": "deny"
+    },
+    "edit": {
+      "*": "ask",
+      "*.generated.ts": "deny",
+      "package-lock.json": "deny",
+      "~/.aifinpay/*": "deny",
+      "$HOME/.aifinpay/*": "deny"
+    },
+    "bash": {
+      "*": "allow",
+      "rm -rf *": "deny",
+      "sudo *": "deny",
+      "npm install *": "deny",
+      "npm publish *": "ask",
+      "git push *": "ask",
+      "git push --force*": "deny",
+      "git push * --force*": "deny",
+      "git push -f*": "deny",
+      "git push * -f*": "deny",
+      "git push --force-with-lease*": "ask",
+      "git push * --force-with-lease*": "ask",
+      "git reset --hard*": "ask",
+      "git clean -f*": "ask",
+      "git checkout -- *": "ask",
+      "git checkout .": "ask",
+      "git restore *": "ask",
+      "git stash drop*": "ask",
+      "git stash clear*": "ask",
+      "git branch -D *": "ask",
+      "git rebase*": "ask",
+      "git commit --amend*": "ask",
+      "git filter-branch*": "deny",
+      "git filter-repo*": "deny",
+      "git revert *": "allow"
+    },
+    "skill": {
+      "*": "ask",
+      "yagni-principle": "allow",
+      "grill-me": "allow"
+    },
+    "external_directory": {
+      "~/.aifinpay/*": "deny"
+    }
+  }
+}
