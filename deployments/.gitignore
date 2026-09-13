@@ -1,0 +1,6 @@
+dist/
+node_modules/
+*.tsbuildinfo
+registry/deployments.json
+idl/*.json
+abi/*.json
