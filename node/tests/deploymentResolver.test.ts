@@ -90,12 +90,34 @@ describe("resolveDeployment — explicit version selection", () => {
     expect(r.version).toBe("v1.2");
   });
 
+  it("explicit v1.4 returns v1.4 on every deployed prod network", () => {
+    // evm-contract@78240ec ships v1.4 for 9 prod networks; all must resolve.
+    for (const network of [
+      "polygon",
+      "arbitrum",
+      "avalanche",
+      "base",
+      "bnb",
+      "optimism",
+      "unichain",
+      "xrplevm",
+      "robinhood",
+    ]) {
+      const r = resolveDeployment({ environment: "prod", network, version: "v1.4" });
+      expect(r.version).toBe("v1.4");
+      if (r.version === "v1.4") {
+        expect(r.deployment.splitterVersion).toBe("1.4");
+      }
+    }
+  });
+
   it("explicit v1.4 does NOT silently downgrade — it throws when unavailable", () => {
-    // base has a v1.2 deployment but no v1.4.
+    // botchain has a v1.2 deployment but no v1.4 (no production deployment
+    // in evm-contract).
     expect(() =>
       resolveDeployment({
         environment: "prod",
-        network: "base",
+        network: "botchain",
         version: "v1.4",
       }),
     ).toThrow(VersionUnavailableError);
@@ -114,8 +136,8 @@ describe("resolveDeployment — automatic version selection", () => {
     expect(r.version).toBe("v1.4");
   });
 
-  it("auto falls back to v1.2 when v1.4 is unavailable (base)", () => {
-    const r = resolveDeployment({ environment: "prod", network: "base" });
+  it("auto falls back to v1.2 when v1.4 is unavailable (botchain)", () => {
+    const r = resolveDeployment({ environment: "prod", network: "botchain" });
     expect(r.version).toBe("v1.2");
   });
 
@@ -127,10 +149,10 @@ describe("resolveDeployment — automatic version selection", () => {
   it("auto is the default when no version is given", () => {
     const withAuto = resolveDeployment({
       environment: "prod",
-      network: "base",
+      network: "botchain",
       version: "auto",
     });
-    const noVersion = resolveDeployment({ environment: "prod", network: "base" });
+    const noVersion = resolveDeployment({ environment: "prod", network: "botchain" });
     expect(noVersion.version).toBe(withAuto.version);
   });
 
@@ -141,18 +163,36 @@ describe("resolveDeployment — automatic version selection", () => {
   });
 
   it("every legacy network without v1.4 falls back to v1.2 under auto", () => {
-    for (const network of ["base", "optimism", "unichain", "botchain", "xrplevm"]) {
+    // botchain is the only legacy (v1.1/v1.2) network with no v1.4 deployment;
+    // every other legacy network now resolves v1.4 under auto.
+    for (const network of ["botchain"]) {
       const r = resolveDeployment({ environment: "prod", network });
       expect(r.version).toBe("v1.2");
+    }
+    for (const network of ["base", "optimism", "unichain", "xrplevm"]) {
+      const r = resolveDeployment({ environment: "prod", network });
+      expect(r.version).toBe("v1.4");
     }
   });
 });
 
 describe("isV14Available", () => {
-  it("is true for polygon prod and amoy dev, false where undeployed", () => {
+  it("is true for every deployed prod network and amoy dev, false elsewhere", () => {
     expect(isV14Available("prod", "polygon")).toBe(true);
     expect(isV14Available("dev", "amoy")).toBe(true);
-    expect(isV14Available("prod", "base")).toBe(false);
+    for (const network of [
+      "arbitrum",
+      "avalanche",
+      "base",
+      "bnb",
+      "optimism",
+      "unichain",
+      "xrplevm",
+      "robinhood",
+    ]) {
+      expect(isV14Available("prod", network)).toBe(true);
+    }
+    expect(isV14Available("prod", "botchain")).toBe(false); // no v1.4 deployment
     expect(isV14Available("prod", "amoy")).toBe(false); // amoy is dev-only
     expect(isV14Available("dev", "polygon")).toBe(false);
   });

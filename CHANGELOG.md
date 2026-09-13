@@ -4,6 +4,14 @@ All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
 `1.0.0` onward the public API is stable and changes follow semver.
 
+## Unreleased — Node 2.0.0-rc.15 — 2026-09-13
+
+v1.4 deployments for all supported EVM networks (from `AiFinPay/evm-contract@78240ec`):
+
+- `V14_DEPLOYMENTS` now covers 10 networks (was: amoy + polygon only) — amoy (dev) plus arbitrum, avalanche, base, bnb, optimism, polygon, robinhood, unichain, xrplevm (prod). BOT Chain (677) stays absent: no production deployment exists for it upstream.
+- New `registry/v14/*.json` vendored deployment artifacts + `registry/v14-source.json` provenance, with `scripts/generate-v14-deployments.mjs` (`npm run registry:sync:v14 -- --from <evm-contract>`); `npm run registry:check` now verifies both the v1.3 route table and the v1.4 table.
+- `resolveDeployment(..., "auto")` now prefers v1.4 on base/optimism/unichain/xrplevm (previously v1.2 fallback); botchain remains the only legacy network without v1.4.
+
 ## Unreleased — Node 2.0.0-rc.14 — 2026-09-13
 
 Round 2 (medium/low, node-side):
