@@ -1,6 +1,6 @@
 # @aifinpay/agent (Node / TypeScript)
 
-This source is the unpublished `2.0.0-rc.12` security candidate. New AIFP-1
+This source is the `2.0.0` stable release. New AIFP-1
 payments require a reviewed Polygon v1.3 deployment pin and fresh independent
 native/USD price; see [receipt configuration and recovery](./PAYMENT_RECEIPTS.md).
 Legacy `call()` payments and v1.4 submission are disabled. Native authentication
@@ -24,14 +24,18 @@ the `x-signature` header to authenticate against AiFinPay-protected endpoints.
 
 ## Install
 
-This quickstart requires `2.0.0-rc.12`, which includes `fromEnvironment()`.
-That release is not published yet; the published `latest` version `1.8.4`
-does not provide this method. Until publication, build this source checkout:
+Install the published 2.0.0 package directly:
+
+```bash
+npm install @aifinpay/agent@2.0.0
+```
+
+Or build this source checkout:
 
 ```bash
 # From the SDK repository root
 cd node
-npm ci
+npm ci --no-audit --no-fund
 npm run build
 npm pack
 ```
@@ -39,13 +43,7 @@ npm pack
 Install the resulting tarball in your application:
 
 ```bash
-npm install /absolute/path/to/sdk/node/aifinpay-agent-2.0.0-rc.12.tgz
-```
-
-After this exact version has been published, install it directly:
-
-```bash
-npm install @aifinpay/agent@2.0.0-rc.12
+npm install /absolute/path/to/sdk/node/aifinpay-agent-2.0.0.tgz
 ```
 
 ## Quick start

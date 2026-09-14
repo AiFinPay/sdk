@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/wallet",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Derive an AiFinPay agent wallet (Solana + EVM + Casper) with four tiny crypto deps — no viem, no @solana/web3.js, ~4.5 MB. The light way to give an agent a wallet where the full SDK will not install.",
   "type": "module",
   "main": "dist/index.js",
@@ -61,7 +61,7 @@
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
-    "@aifinpay/agent": "file:../../../../../../tmp/aifinpay-agent-2.0.0-rc.16.tgz",
+    "@aifinpay/agent": "2.0.0",
     "@eslint/js": "^9.0.0",
     "@types/node": "^20.0.0",
     "eslint": "^10.10.0",
