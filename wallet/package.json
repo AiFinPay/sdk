@@ -58,18 +58,19 @@
     "@noble/curves": "^1.9.0",
     "@noble/hashes": "^1.5.0",
     "bs58": "^6.0.0",
+    "keytar": "^7.9.0",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
+    "@aifinpay/agent": "file:../../../../../../tmp/aifinpay-agent-2.0.0-rc.16.tgz",
     "@eslint/js": "^9.0.0",
-    "@aifinpay/agent": "^2.0.0-rc.16",
     "@types/node": "^20.0.0",
     "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^16.0.0",
-    "typescript-eslint": "^8.0.0",
     "prettier": "^3.9.6",
     "typescript": "^5.4.0",
+    "typescript-eslint": "^8.0.0",
     "vitest": "^4.1.5"
   }
 }

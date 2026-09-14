@@ -3,9 +3,11 @@
 // It must also stay free of the heavy transaction stack (AIFINP-117).
 
 import { describe, it, expect } from "vitest";
-import { readFileSync, existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { readFileSync, existsSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
+import { createCipheriv, scryptSync, randomBytes } from "node:crypto";
 import { deriveWallet, newWallet, walletFromSolanaSecret } from "../src/index.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -114,9 +116,9 @@ describe("the install stays light", () => {
     expect([...pkgs]).not.toContain("@aifinpay/agent");
   });
 
-  it("declares exactly the four light crypto deps, nothing heavier", () => {
+  it("declares exactly the five light crypto deps, nothing heavier", () => {
     const pkg = JSON.parse(readFileSync(resolve(HERE, "..", "package.json"), "utf8"));
-    expect(Object.keys(pkg.dependencies).sort()).toEqual(["@noble/curves", "@noble/hashes", "bs58", "tweetnacl"]);
+    expect(Object.keys(pkg.dependencies).sort()).toEqual(["@noble/curves", "@noble/hashes", "bs58", "keytar", "tweetnacl"]);
   });
 });
 
@@ -125,5 +127,66 @@ describe("the CLI writes an mcp-compatible keystore", () => {
     const w = deriveWallet("77".repeat(32));
     const store = { secretB58: w.keys.solanaSecretKeyB58, seedHex: w.keys.seedHex };
     expect(walletFromSolanaSecret(store.secretB58)).toEqual(w);
+  });
+});
+
+describe("encrypted keystore", () => {
+  function encrypt(secretB58: string, passphrase: string) {
+    const salt = randomBytes(16);
+    const iv = randomBytes(12);
+    const key = scryptSync(passphrase, salt, 32, {
+      N: 1 << 15,
+      r: 8,
+      p: 1,
+      maxmem: 64 * 1024 * 1024,
+    });
+    const cipher = createCipheriv("aes-256-gcm", key, iv);
+    const ct = Buffer.concat([cipher.update(secretB58, "utf8"), cipher.final()]);
+    return {
+      enc: "scrypt-aes-256-gcm",
+      salt: salt.toString("base64"),
+      iv: iv.toString("base64"),
+      tag: cipher.getAuthTag().toString("base64"),
+      ct: ct.toString("base64"),
+    };
+  }
+
+  it("encrypts and decrypts a secret correctly", () => {
+    const w = deriveWallet("99".repeat(32));
+    const passphrase = "test-passphrase-123";
+    const encrypted = encrypt(w.keys.solanaSecretKeyB58, passphrase);
+    const key = scryptSync(passphrase, Buffer.from(encrypted.salt, "base64"), 32, {
+      N: 1 << 15,
+      r: 8,
+      p: 1,
+      maxmem: 64 * 1024 * 1024,
+    });
+    const decipher = require("node:crypto").createDecipheriv("aes-256-gcm", key, Buffer.from(encrypted.iv, "base64"));
+    decipher.setAuthTag(Buffer.from(encrypted.tag, "base64"));
+    const decrypted = Buffer.concat([
+      decipher.update(Buffer.from(encrypted.ct, "base64")),
+      decipher.final(),
+    ]).toString("utf8");
+    expect(decrypted).toBe(w.keys.solanaSecretKeyB58);
+    expect(walletFromSolanaSecret(decrypted)).toEqual(w);
+  });
+
+  it("rejects wrong passphrase", () => {
+    const w = deriveWallet("88".repeat(32));
+    const encrypted = encrypt(w.keys.solanaSecretKeyB58, "correct-pass");
+    const wrongKey = scryptSync("wrong-pass", Buffer.from(encrypted.salt, "base64"), 32, {
+      N: 1 << 15,
+      r: 8,
+      p: 1,
+      maxmem: 64 * 1024 * 1024,
+    });
+    expect(() => {
+      const decipher = require("node:crypto").createDecipheriv("aes-256-gcm", wrongKey, Buffer.from(encrypted.iv, "base64"));
+      decipher.setAuthTag(Buffer.from(encrypted.tag, "base64"));
+      Buffer.concat([
+        decipher.update(Buffer.from(encrypted.ct, "base64")),
+        decipher.final(),
+      ]);
+    }).toThrow();
   });
 });
