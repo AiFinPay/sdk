@@ -1,0 +1,8 @@
+node_modules/
+src/
+tests/
+.aiignore
+.gitignore
+AGENTS.md
+STRUCTURE.md
+vitest.config.ts
