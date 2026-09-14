@@ -62,7 +62,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
-    "@aifinpay/agent": "^1.8.4",
+    "@aifinpay/agent": "^2.0.0-rc.16",
     "@types/node": "^20.0.0",
     "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",

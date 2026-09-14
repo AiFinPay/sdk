@@ -9,7 +9,7 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "@aifinpay/mcp": "^1.0.0",
+    "@aifinpay/mcp": "^2.0.0-rc.14",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "express": "^5.0.0",
     "express-rate-limit": "^7.4.0",

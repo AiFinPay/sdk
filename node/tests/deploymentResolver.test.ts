@@ -89,8 +89,18 @@ describe("resolveDeployment — explicit version selection", () => {
     expect(r.version).toBe("v1.2");
   });
 
-  it("explicit v1.4 returns v1.4 on every deployed prod network", () => {
-    // evm-contract@78240ec ships v1.4 for 9 prod networks; all must resolve.
+  it("explicit v1.4 returns v1.4 on every settlement-enabled prod network", () => {
+    // As of this release only Amoy (dev) is settlement-enabled; all prod v1.4
+    // deployments are quarantined until backend receipt verification and the
+    // settlement gate are complete.
+    const r = resolveDeployment({ environment: "dev", network: "amoy", version: "v1.4" });
+    expect(r.version).toBe("v1.4");
+    if (r.version === "v1.4") {
+      expect(r.deployment.splitterVersion).toBe("1.4");
+    }
+  });
+
+  it("explicit v1.4 throws when the deployment is quarantined", () => {
     for (const network of [
       "polygon",
       "arbitrum",
@@ -102,11 +112,9 @@ describe("resolveDeployment — explicit version selection", () => {
       "xrplevm",
       "robinhood",
     ]) {
-      const r = resolveDeployment({ environment: "prod", network, version: "v1.4" });
-      expect(r.version).toBe("v1.4");
-      if (r.version === "v1.4") {
-        expect(r.deployment.splitterVersion).toBe("1.4");
-      }
+      expect(() =>
+        resolveDeployment({ environment: "prod", network, version: "v1.4" })
+      ).toThrow(DeploymentDisabledError);
     }
   });
 
@@ -119,7 +127,7 @@ describe("resolveDeployment — explicit version selection", () => {
         network: "botchain",
         version: "v1.4",
       })
-    ).toThrow(DeploymentDisabledError);
+    ).toThrow(VersionUnavailableError);
   });
 
   it("explicit v1.2 on amoy throws (no legacy deployment on the dev network)", () => {
@@ -136,14 +144,14 @@ describe("resolveDeployment — explicit version selection", () => {
 describe("resolveDeployment — automatic version selection", () => {
   it("auto falls back to v1.2 when v1.4 is quarantined", () => {
     const r = resolveDeployment({ environment: "prod", network: "polygon" });
-    expect(r.version).toBe("v1.4");
+    expect(r.version).toBe("v1.2");
   });
 
   it("auto falls back to v1.2 when v1.4 is unavailable (botchain)", () => {
     const r = resolveDeployment({ environment: "prod", network: "botchain" });
     expect(r.version).toBe("v1.2");
     if (r.version === "v1.2") {
-      expect(r.deployment.splitter).toBe(SPLITTER_DEPLOYMENTS.polygon.splitter);
+      expect(r.deployment.splitter).toBe(SPLITTER_DEPLOYMENTS.botchain.splitter);
     }
   });
 
@@ -168,26 +176,24 @@ describe("resolveDeployment — automatic version selection", () => {
   });
 
   it("every legacy network without v1.4 falls back to v1.2 under auto", () => {
-    // botchain is the only legacy (v1.1/v1.2) network with no v1.4 deployment;
-    // every other legacy network now resolves v1.4 under auto.
-    for (const network of ["botchain"]) {
+    // All prod v1.4 deployments are currently quarantined, so every supported
+    // legacy network falls back to its v1.2 deployment under auto. botchain has
+    // no v1.4 record at all and therefore also falls back to v1.2.
+    for (const network of ["polygon", "botchain", "base", "optimism", "unichain", "xrplevm"]) {
       const r = resolveDeployment({ environment: "prod", network });
       expect(r.version).toBe("v1.2");
-    }
-    for (const network of ["base", "optimism", "unichain", "xrplevm"]) {
-      const r = resolveDeployment({ environment: "prod", network });
-      expect(r.version).toBe("v1.4");
     }
   });
 });
 
 describe("isV14Available", () => {
   it("means settlement-enabled, not merely present in the registry", () => {
+    // All prod v1.4 deployments are quarantined until the settlement gate opens.
     expect(isV14Available("prod", "polygon")).toBe(false);
-    expect(isV14Available("dev", "amoy")).toBe(true);
     for (const network of ["arbitrum", "avalanche", "base", "bnb", "optimism", "unichain", "xrplevm", "robinhood"]) {
-      expect(isV14Available("prod", network)).toBe(true);
+      expect(isV14Available("prod", network)).toBe(false);
     }
+    expect(isV14Available("dev", "amoy")).toBe(true); // dev is enabled
     expect(isV14Available("prod", "botchain")).toBe(false); // no v1.4 deployment
     expect(isV14Available("prod", "amoy")).toBe(false); // amoy is dev-only
     expect(isV14Available("dev", "polygon")).toBe(false);

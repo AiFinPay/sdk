@@ -8,7 +8,8 @@ version = "2.0.0rc1"
 description = "Unified agent-economy SDK for autonomous AI agents — chain-opaque AiFinPayAgent surface (call/balance/verify) over Polygon and Solana execution environments. Non-custodial, x402-native."
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
   { name = "CoinSecurities (SECCO)", email = "contact@aifinpay.io" },
 ]
@@ -24,7 +25,6 @@ keywords = [
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",

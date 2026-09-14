@@ -62,6 +62,13 @@ const PACKAGES = [
     versionAt: (ref) => JSON.parse(gitShow(ref, "skill/package.json")).version,
     published: [/^skill\/skills\//, /^skill\/SKILL\.md$/, /^skill\/package\.json$/, /^skill\/README\.md$/],
   },
+  {
+    name: "@aifinpay/deployments",
+    dir: "deployments",
+    version: () => JSON.parse(readFileSync("deployments/package.json", "utf8")).version,
+    versionAt: (ref) => JSON.parse(gitShow(ref, "deployments/package.json")).version,
+    published: [/^deployments\/src\//, /^deployments\/registry\//, /^deployments\/package\.json$/, /^deployments\/README\.md$/],
+  },
 ];
 
 function git(args) {

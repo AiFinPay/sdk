@@ -96,6 +96,11 @@
     "tweetnacl": "^1.0.0",
     "viem": "^2.21.0"
   },
+  "overrides": {
+    "jayson": {
+      "uuid": "^11.1.1"
+    }
+  },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
     "@types/node": "^20.0.0",

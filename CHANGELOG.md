@@ -11,6 +11,16 @@ Minimum Node engine is now 22 (`engines: >=22` in `@aifinpay/agent`,
 and the example bridges). Node 18/20 are no longer supported. CI now
 builds and tests on 22, 24 and 26. No runtime or API changes.
 
+### Security
+
+- Pinned `jayson`'s transitive `uuid` dependency to `^11.1.1` in
+  `@aifinpay/agent` and `@aifinpay/mcp` via `overrides`, resolving the
+  moderate `uuid` advisory (GHSA-w5hq-g745-h8pq). The remaining moderate
+  `stream-json` advisory (GHSA-528h-pc64-c93x) is inherited from
+  `@solana/web3.js` → `jayson`; `jayson@4.3.0` requires `stream-json@^1.9.1`
+  and no patched 1.x release exists. It is tracked as accepted
+  transitive risk and does not meet the high/critical audit threshold.
+
 ## Unreleased — Node 2.0.0-rc.15 — 2026-09-13
 
 v1.4 deployments for all supported EVM networks (from `AiFinPay/evm-contract@78240ec`):
