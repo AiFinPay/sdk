@@ -25,8 +25,8 @@ Monorepo of independent packages. Each package owns its own `AGENTS.md`; respect
 - Each package is built/tested independently from its own directory:
   - `npm run build` then `npm test` in `node/`, `wallet/`, `mcp/`, `gate/`, `deployments/`.
   - `python -m pip install -e . pytest` then `python -m pytest tests -q` in `python/`.
-- `node/`: run `npm run registry:check` **before** `npm run build`. It verifies `src/*.generated.ts` against vendored registry artifacts and their provenance. Never hand-edit generated files; change `registry/` inputs or `scripts/generate-*.mjs`, then run `registry:sync`.
-- `node/`: `npm run registry:sync` regenerates both `src/splitterRoutes.generated.ts` and `src/v14Deployments.generated.ts`/`src/solanaV14Deployments.generated.ts`. `npm run registry:check` verifies them in CI.
+- `node/`: run `npm run registry:check` **before** `npm run build`. It verifies `src/*.generated.ts` against the `@aifinpay/deployments` package installed as a local dependency. Never hand-edit generated files; change the `@aifinpay/deployments` inputs or `scripts/generate-*.mjs`, then run `registry:sync`.
+- `node/`: `npm run registry:sync` regenerates both `src/splitterRoutes.generated.ts` and `src/v14Deployments.generated.ts`/`src/solanaV14Deployments.generated.ts` from `@aifinpay/deployments`. `npm run registry:check` verifies them in CI.
 - `deployments/`: run `npm run build` then `npm run registry:build` to refresh `registry/splitter/evm/v1.4/deployments.json` and `registry/splitter/solana/deployments.json` from upstream repos.
 - `mcp-against-source` flow: when changing `node/` in a way that affects `mcp/`, pack the agent (`cd node && npm pack --pack-destination /tmp`), install the tarball into `mcp/` (`npm install --no-save /tmp/aifinpay-agent-*.tgz`), then build and test `mcp/`. CI already runs this; verify locally when touching the Node/MCP boundary.
 - Version gate: changing published files without a version bump fails CI (`node scripts/check-version-bump.mjs`). Bump `package.json` (or `python/pyproject.toml`) and the package/root `CHANGELOG.md` together.

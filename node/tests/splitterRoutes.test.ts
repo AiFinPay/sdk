@@ -247,10 +247,10 @@ describe("policy window (enabled route)", () => {
 });
 
 describe("registry provenance", () => {
-  it("records the evm-contract commit the route table was generated from", () => {
-    expect(SPLITTER_REGISTRY_SOURCE.repo).toBe("AiFinPay/evm-contract");
-    expect(SPLITTER_REGISTRY_SOURCE.commit).toMatch(/^[0-9a-f]{40}$/);
-    expect(SPLITTER_REGISTRY_SOURCE.artifactSha256).toMatch(/^[0-9a-f]{64}$/);
+  it("records the @aifinpay/deployments package the route table was generated from", () => {
+    expect(SPLITTER_REGISTRY_SOURCE.package).toBe("@aifinpay/deployments");
+    expect(SPLITTER_REGISTRY_SOURCE.path).toBe("registry/splitter/evm/v1.3/deployments.json");
+    expect(SPLITTER_REGISTRY_SOURCE.version).toBe("1.3");
   });
 
   it("every route is owned by the governance Safe the registry verified", () => {

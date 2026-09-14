@@ -1,75 +1,95 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
+const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const nodeRoot = path.resolve(here, "..");
-const registryPath = path.join(nodeRoot, "registry/payment-deployments.json");
 const evmOutput = path.join(nodeRoot, "src/v14Deployments.generated.ts");
 const solanaOutput = path.join(nodeRoot, "src/solanaV14Deployments.generated.ts");
 const checkOnly = process.argv.includes("--check");
 const zeroAddress = "0x0000000000000000000000000000000000000000";
 
-const registry = JSON.parse(fs.readFileSync(registryPath, "utf8"));
+// Source of truth: @aifinpay/deployments ships the canonical per-ecosystem
+// split registries. It is installed as a local file: dependency (the package is
+// private/unpublished) so the SDK resolves it through node_modules.
+const deploymentsPkg = require.resolve("@aifinpay/deployments/package.json");
+const deploymentsRoot = path.dirname(deploymentsPkg);
+const evmRegistryPath = path.join(deploymentsRoot, "registry/splitter/evm/v1.4/deployments.json");
+const solanaRegistryPath = path.join(deploymentsRoot, "registry/splitter/solana/deployments.json");
+
+const evmRegistry = JSON.parse(fs.readFileSync(evmRegistryPath, "utf8"));
+const solanaRegistry = JSON.parse(fs.readFileSync(solanaRegistryPath, "utf8"));
 
 function fail(message) {
   throw new Error(`Invalid payment deployment registry: ${message}`);
 }
 
-function validate() {
-  if (registry.schemaVersion !== 1) fail("schemaVersion must equal 1");
-  if (!Array.isArray(registry.deployments)) fail("deployments must be an array");
-
+function validateEvm(deployments) {
   const keys = new Set();
-  for (const deployment of registry.deployments) {
-    const key = `${deployment.ecosystem}:${deployment.environment}:${deployment.network}:${deployment.protocolVersion}`;
+  for (const deployment of deployments) {
+    const key = `evm:${deployment.environment}:${deployment.chain}:v1.4`;
     if (keys.has(key)) fail(`duplicate deployment ${key}`);
     keys.add(key);
 
-    if (deployment.protocolVersion !== "v1.4") fail(`${key} has unsupported version`);
     if (deployment.settlementEnabled && deployment.status !== "enabled") {
       fail(`${key} enables settlement without status=enabled`);
     }
     if (!deployment.settlementEnabled && !deployment.disabledReason) {
       fail(`${key} is disabled without disabledReason`);
     }
-    if (deployment.network === "botchain") fail("BOT Chain must not be registered for v1.4");
+    if (deployment.chain === "botchain") fail("BOT Chain must not be registered for v1.4");
+    if (!Number.isInteger(deployment.chainId)) fail(`${key} has invalid chainId`);
 
-    if (deployment.ecosystem === "evm") {
-      if (!Number.isInteger(deployment.chainId)) fail(`${key} has invalid chainId`);
-      const addresses = [
-        deployment.contracts?.splitter,
-        deployment.contracts?.tokenList,
-        deployment.contracts?.profiles,
-      ];
-      if (addresses.some((address) => !/^0x[0-9a-fA-F]{40}$/.test(address ?? ""))) {
-        fail(`${key} has an invalid component address`);
+    const addresses = [
+      deployment.contracts?.splitter,
+      deployment.contracts?.tokenList,
+      deployment.contracts?.profiles,
+    ];
+    if (addresses.some((address) => !/^0x[0-9a-fA-F]{40}$/.test(address ?? ""))) {
+      fail(`${key} has an invalid component address`);
+    }
+    if (deployment.status !== "invalid" && new Set(addresses.map((a) => a.toLowerCase())).size !== 3) {
+      fail(`${key} reuses a component address`);
+    }
+    for (const asset of deployment.assets ?? []) {
+      if (!asset.symbol || !/^0x[0-9a-fA-F]{40}$/.test(asset.address ?? "")) {
+        fail(`${key} has an invalid asset`);
       }
-      if (deployment.status !== "invalid" && new Set(addresses.map((a) => a.toLowerCase())).size !== 3) {
-        fail(`${key} reuses a component address`);
-      }
-      for (const asset of deployment.assets ?? []) {
-        if (!asset.symbol || !/^0x[0-9a-fA-F]{40}$/.test(asset.address ?? "")) {
-          fail(`${key} has an invalid asset`);
-        }
-        if (asset.address.toLowerCase() === zeroAddress) fail(`${key} contains a zero-address asset`);
-      }
+      if (asset.address.toLowerCase() === zeroAddress) fail(`${key} contains a zero-address asset`);
     }
   }
 
-  const polygon = registry.deployments.find((d) => d.ecosystem === "evm" && d.network === "polygon");
+  const polygon = deployments.find((d) => d.chain === "polygon");
   const bridgedUsdc = polygon?.assets?.find(
     (asset) => asset.address.toLowerCase() === "0x2791bca1f2de4661ed88a30c99a7a9449aa84174"
   );
   if (bridgedUsdc?.symbol !== "USDC.e") fail("Polygon 0x2791… must be identified as USDC.e");
+}
+
+function validateSolana(deployments) {
+  const keys = new Set();
+  for (const deployment of deployments) {
+    const key = `solana:${deployment.environment}:${deployment.cluster}:v1.4`;
+    if (keys.has(key)) fail(`duplicate deployment ${key}`);
+    keys.add(key);
+
+    if (deployment.settlementEnabled && deployment.status !== "enabled") {
+      fail(`${key} enables settlement without status=enabled`);
+    }
+    if (!deployment.settlementEnabled && !deployment.disabledReason) {
+      fail(`${key} is disabled without disabledReason`);
+    }
+  }
 
   const expectedSolana = {
     devnet: "8dty5bD738Z9TzEkDu8vLSnhpJNWtEGMUEcYaKCUTY6y",
     mainnet: "724Ut31i4ecY4dJ25z8HuZetu3A43xtNkPdk4JdbsfdD",
   };
-  for (const [network, programId] of Object.entries(expectedSolana)) {
-    const deployment = registry.deployments.find((d) => d.ecosystem === "solana" && d.network === network);
-    if (deployment?.programId !== programId) fail(`unexpected Solana ${network} program id`);
+  for (const [cluster, programId] of Object.entries(expectedSolana)) {
+    const deployment = deployments.find((d) => d.cluster === cluster);
+    if (deployment?.programId !== programId) fail(`unexpected Solana ${cluster} program id`);
   }
 }
 
@@ -79,64 +99,138 @@ function json(value) {
 
 function renderEvm() {
   const deployments = Object.fromEntries(
-    registry.deployments
-      .filter((deployment) => deployment.ecosystem === "evm")
-      .map((deployment) => {
-        const findAsset = (symbol) =>
-          deployment.assets.find((asset) => asset.symbol === symbol)?.address ?? zeroAddress;
-        return [
-          deployment.network,
-          {
-            network: deployment.network,
-            chainId: deployment.chainId,
-            environment: deployment.environment,
-            splitterVersion: "1.4",
-            status: deployment.status,
-            settlementEnabled: deployment.settlementEnabled,
-            ...(deployment.disabledReason ? { disabledReason: deployment.disabledReason } : {}),
-            sourceArtifact: deployment.sourceArtifact,
-            splitter: {
-              address: deployment.contracts.splitter,
-              admin: deployment.contracts.admin,
-              signer: deployment.contracts.signer,
-              pauser: deployment.contracts.pauser,
-              treasury: deployment.contracts.treasury,
-              tokenList: deployment.contracts.tokenList,
-              profiles: deployment.contracts.profiles,
-              assets: deployment.assets,
-              usdc: findAsset("USDC"),
-              usdt: findAsset("USDT"),
-            },
-            runtimeCodeHash: deployment.runtimeCodeHash,
-            safe: deployment.safe,
-          },
-        ];
-      })
-  );
-  const source = registry.sources.evm;
-  return `// DO NOT EDIT. Generated by scripts/generate-payment-deployments.mjs.\n\nimport type { SdkEnvironment } from "./deploymentResolver.js";\n\nexport interface V14Asset {\n  symbol: string;\n  address: \`0x\${string}\`;\n  name?: string;\n  source?: string | null;\n}\n\nexport interface V14Splitter {\n  address: \`0x\${string}\`;\n  admin: \`0x\${string}\`;\n  signer: \`0x\${string}\`;\n  pauser: \`0x\${string}\`;\n  treasury: \`0x\${string}\`;\n  tokenList: \`0x\${string}\`;\n  profiles: \`0x\${string}\`;\n  assets: readonly V14Asset[];\n  /** @deprecated Use assets; retained for one compatibility release. */\n  usdc: \`0x\${string}\`;\n  /** @deprecated Use assets; retained for one compatibility release. */\n  usdt: \`0x\${string}\`;\n}\n\nexport interface V14Safe {\n  address: \`0x\${string}\`;\n  version: string;\n  threshold: number;\n  owners: readonly \`0x\${string}\`[];\n}\n\nexport interface V14Deployment {\n  network: string;\n  chainId: number;\n  environment: SdkEnvironment;\n  splitterVersion: "1.4";\n  status: "enabled" | "disabled" | "invalid" | "retired";\n  settlementEnabled: boolean;\n  disabledReason?: string;\n  sourceArtifact: string;\n  splitter: V14Splitter;\n  runtimeCodeHash: \`0x\${string}\`;\n  safe: V14Safe;\n}\n\nexport const V14_DEPLOYMENTS_SOURCE = ${json({ ...source, branch: "dev" })} as const;\n\nexport const V14_DEPLOYMENTS: Record<string, V14Deployment> = ${json(deployments)};\n\nexport const V14_DEV_NETWORKS = ["amoy"] as const;\n`;
-}
-
-function renderSolana() {
-  const deployments = Object.fromEntries(
-    registry.deployments
-      .filter((deployment) => deployment.ecosystem === "solana")
-      .map((deployment) => [
-        deployment.network,
+    evmRegistry.deployments.map((deployment) => {
+      const findAsset = (symbol) => deployment.assets.find((asset) => asset.symbol === symbol)?.address ?? zeroAddress;
+      return [
+        deployment.chain,
         {
-          network: deployment.network,
+          network: deployment.chain,
+          chainId: deployment.chainId,
           environment: deployment.environment,
           splitterVersion: "1.4",
           status: deployment.status,
           settlementEnabled: deployment.settlementEnabled,
-          disabledReason: deployment.disabledReason,
-          programId: deployment.programId,
-          idl: { ...deployment.idl, artifact: deployment.sourceArtifact },
+          ...(deployment.disabledReason ? { disabledReason: deployment.disabledReason } : {}),
+          sourceArtifact: deployment.sourceArtifact || `deployments/${deployment.chain}-v14-${deployment.chain}-latest.json`,
+          splitter: {
+            address: deployment.contracts.splitter,
+            admin: deployment.contracts.admin,
+            signer: deployment.contracts.signer,
+            pauser: deployment.contracts.pauser,
+            treasury: deployment.contracts.treasury,
+            tokenList: deployment.contracts.tokenList,
+            profiles: deployment.contracts.profiles,
+            assets: deployment.assets,
+            usdc: findAsset("USDC"),
+            usdt: findAsset("USDT"),
+          },
+          runtimeCodeHash: deployment.runtimeCodeHash,
+          safe: {
+            address: deployment.safe.address,
+            version: deployment.safe.version,
+            threshold: deployment.safe.threshold,
+            owners: evmRegistry.governance?.[deployment.environment === "dev" ? "testnet" : "prod"].owners ?? [],
+          },
         },
-      ])
+      ];
+    })
   );
-  const source = registry.sources.solana;
-  return `// DO NOT EDIT. Generated by scripts/generate-payment-deployments.mjs.\n\nimport type { SdkEnvironment } from "./deploymentResolver.js";\n\nexport type SolanaNetwork = "devnet" | "mainnet";\n\nexport interface SolanaV14Deployment {\n  network: SolanaNetwork;\n  environment: SdkEnvironment;\n  splitterVersion: "1.4";\n  status: "enabled" | "disabled" | "invalid" | "retired";\n  settlementEnabled: boolean;\n  disabledReason?: string;\n  programId: string;\n  idl: { name: string; version: string; artifact: string };\n}\n\nexport const SOLANA_V14_DEPLOYMENTS_SOURCE = ${json({ ...source, branch: "dev" })} as const;\n\nexport const SOLANA_V14_DEPLOYMENTS: Record<string, SolanaV14Deployment> = ${json(deployments)};\n\nexport const SOLANA_DEV_NETWORKS = ["devnet"] as const;\n`;
+  const source = evmRegistry.source;
+  return `// DO NOT EDIT. Generated by scripts/generate-payment-deployments.mjs from @aifinpay/deployments.
+
+import type { SdkEnvironment } from "./deploymentResolver.js";
+
+export interface V14Asset {
+  symbol: string;
+  address: \`0x\${string}\`;
+  name?: string;
+  source?: string | null;
+}
+
+export interface V14Splitter {
+  address: \`0x\${string}\`;
+  admin: \`0x\${string}\`;
+  signer: \`0x\${string}\`;
+  pauser: \`0x\${string}\`;
+  treasury: \`0x\${string}\`;
+  tokenList: \`0x\${string}\`;
+  profiles: \`0x\${string}\`;
+  assets: readonly V14Asset[];
+  /** @deprecated Use assets; retained for one compatibility release. */
+  usdc: \`0x\${string}\`;
+  /** @deprecated Use assets; retained for one compatibility release. */
+  usdt: \`0x\${string}\`;
+}
+
+export interface V14Safe {
+  address: \`0x\${string}\`;
+  version: string;
+  threshold: number;
+  owners: readonly \`0x\${string}\`[];
+}
+
+export interface V14Deployment {
+  network: string;
+  chainId: number;
+  environment: SdkEnvironment;
+  splitterVersion: "1.4";
+  status: "enabled" | "disabled" | "invalid" | "retired";
+  settlementEnabled: boolean;
+  disabledReason?: string;
+  sourceArtifact: string;
+  splitter: V14Splitter;
+  runtimeCodeHash: \`0x\${string}\`;
+  safe: V14Safe;
+}
+
+export const V14_DEPLOYMENTS_SOURCE = ${json({ ...source, branch: "dev" })} as const;
+
+export const V14_DEPLOYMENTS: Record<string, V14Deployment> = ${json(deployments)};
+
+export const V14_DEV_NETWORKS = ["amoy"] as const;
+`;
+}
+
+function renderSolana() {
+  const deployments = Object.fromEntries(
+    solanaRegistry.deployments.map((deployment) => [
+      deployment.cluster,
+      {
+        network: deployment.cluster,
+        environment: deployment.environment,
+        splitterVersion: "1.4",
+        status: deployment.status,
+        settlementEnabled: deployment.settlementEnabled,
+        disabledReason: deployment.disabledReason,
+        programId: deployment.programId,
+        idl: { ...deployment.idl, artifact: deployment.sourceArtifact },
+      },
+    ])
+  );
+  const source = solanaRegistry.source;
+  return `// DO NOT EDIT. Generated by scripts/generate-payment-deployments.mjs from @aifinpay/deployments.
+
+import type { SdkEnvironment } from "./deploymentResolver.js";
+
+export type SolanaNetwork = "devnet" | "mainnet";
+
+export interface SolanaV14Deployment {
+  network: SolanaNetwork;
+  environment: SdkEnvironment;
+  splitterVersion: "1.4";
+  status: "enabled" | "disabled" | "invalid" | "retired";
+  settlementEnabled: boolean;
+  disabledReason?: string;
+  programId: string;
+  idl: { name: string; version: string; artifact: string };
+}
+
+export const SOLANA_V14_DEPLOYMENTS_SOURCE = ${json({ ...source, branch: "dev" })} as const;
+
+export const SOLANA_V14_DEPLOYMENTS: Record<string, SolanaV14Deployment> = ${json(deployments)};
+
+export const SOLANA_DEV_NETWORKS = ["devnet"] as const;
+`;
 }
 
 function writeOrCheck(outputPath, content) {
@@ -149,7 +243,8 @@ function writeOrCheck(outputPath, content) {
   }
 }
 
-validate();
+validateEvm(evmRegistry.deployments);
+validateSolana(solanaRegistry.deployments);
 writeOrCheck(evmOutput, renderEvm());
 writeOrCheck(solanaOutput, renderSolana());
 console.log(checkOnly ? "Payment deployment registry is current." : "Generated payment deployment tables.");
