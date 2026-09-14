@@ -133,7 +133,8 @@ Legacy v1.1/v1.2 deployments have varying owners (see version-specific READMEs).
 
 ### Combined
 
-- `registry/deployments.json` — Combined latest EVM + Solana records (backward-compat)
+- `registry/evm-splitter-v1.4.json` — Generated EVM v1.4 deployments (matches `splitter/v1.4/deployments.json` schema)
+- `registry/solana-splitter-v1.4.json` — Generated Solana v1.4 deployments (matches `splitter/solana/deployments.json` schema)
 
 ## Usage
 

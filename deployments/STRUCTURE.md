@@ -17,15 +17,15 @@ deployments/
 ├── dist/                  # compiled output (tsc)
 ├── tests/                 # offline unit tests
 └── registry/              # shipped deployment artifacts
-    ├── evm-splitter-v1.4.json     # EVM v1.4 deployments (includes Safe)
-    ├── solana-splitter-v1.4.json  # Solana v1.4.1 deployments
-    ├── deployments.json           # generated combined registry (backward-compat)
-    ├── reference/                 # historical / upstream copies
-    │   ├── evm-splitter-v1.3.json
-    │   ├── payment-deployments.json
-    │   ├── payment-deployments.schema.json
-    │   ├── splitter-table.json
-    │   └── splitter-table-source.json
+    ├── evm-splitter-v1.4.json     # EVM v1.4 deployments with governance (matches splitter/v1.4 schema)
+    ├── solana-splitter-v1.4.json  # Solana v1.4.1 deployments (matches splitter/solana schema)
+    ├── splitter/                  # versioned registry with governance metadata
+    │   ├── v1.4/deployments.json  # EVM v1.4 full contract suite
+    │   ├── solana/deployments.json # Solana v1.4 program deployments
+    │   ├── v1.3/deployments.json  # EVM v1.3 route table
+    │   ├── v1.2/deployments.json  # EVM v1.2 legacy
+    │   ├── v1.1/deployments.json  # EVM v1.1 legacy
+    │   └── casper/deployments.json # Casper deployments
     ├── abi/               # EVM / Tron ABI bundles
     └── idl/               # Solana / Aptos / Casper IDL artifacts
 ```
@@ -37,7 +37,7 @@ deployments/
 | `src/index.ts` | Public exports: `buildRegistry`, `writeSplitRegistries`, `grabEvmDeployments`, `grabSolanaDeployments`, `getEvmDeployment`, `getSolanaDeployment`, `isEvmDeployment`, `isSolanaDeployment`, `ABI_DIR`, `IDL_DIR`, and all types. |
 | `src/grabber.ts` | GitHub listing helpers, EVM + Solana fetch + latest-per-chain selection, split-file writer, O(1) lookup helpers. |
 | `src/types.ts` | Registry TypeScript types: `DeploymentRegistry`, `EcosystemRegistry`, `EvmDeployment`, `SolanaDeployment`, `Stablecoin`, type guards. |
-| `src/build.ts` | CLI entry point for `npm run registry:build`; writes `registry/deployments.json` and split files. |
+| `src/build.ts` | CLI entry point for `npm run registry:build`; writes split files (`evm-splitter-v1.4.json`, `solana-splitter-v1.4.json`). |
 
 
 ## Tests (`tests/`)
@@ -56,24 +56,18 @@ Canonical EVM v1.4 deployment registry. Includes `schemaVersion`, `generatedAt`,
 
 Canonical Solana v1.4.1 deployment registry. Includes `schemaVersion`, `generatedAt`, `ecosystem`, `protocolVersion`, `sources`, and a `deployments` array. Each deployment includes `programId` and `idl` metadata.
 
-### `registry/deployments.json`
+### `registry/splitter/`
 
-Combined, generated registry with two top-level keys:
+Versioned deployment registry with governance metadata. Each version directory contains `deployments.json` following a consistent schema:
 
-- `evm: Record<string, EvmDeployment>` keyed by `chainId`.
-- `solana: Record<string, SolanaDeployment>` keyed by cluster (`mainnet`, `devnet`).
+- `v1.4/deployments.json` — EVM v1.4 full contract suite with governance Safe info
+- `solana/deployments.json` — Solana v1.4 program deployments
+- `v1.3/deployments.json` — EVM v1.3 route table (merchant-aifp1 + agent-x402 routes)
+- `v1.2/deployments.json` — EVM v1.2 legacy with `paymentId` replay guard
+- `v1.1/deployments.json` — EVM v1.1 initial production release
+- `casper/deployments.json` — Casper deployments (testnet live, mainnet historical)
 
-Includes `generatedAt` and `sources` provenance. Kept for backward compatibility.
-
-### `registry/reference/`
-
-Historical and upstream-copied artifacts:
-
-- `evm-splitter-v1.3.json` — v1.3 route table snapshot (merchant-aifp1 + agent-x402 routes).
-- `payment-deployments.json` — upstream v1.4 combined registry.
-- `payment-deployments.schema.json` — JSON Schema for the v1.4 payment registry.
-- `splitter-table.json` — upstream v1.2/v1.3 route table.
-- `splitter-table-source.json` — provenance for `splitter-table.json`.
+Each `deployments.json` includes `$schema`, `version`, `description`, `schemaVersion`, `generatedAt`, `ecosystem`, `protocolVersion`, `source`, `governance` (EVM only), `deployments` array, and `sourceArtifact` metadata.
 
 ### `registry/abi/`
 
@@ -104,7 +98,7 @@ registry/idl/
 
 1. `npm ci --no-audit --no-fund`
 2. `npm run build` → populates `dist/`
-3. `npm run registry:build` → fetches upstream + writes `registry/deployments.json`, `registry/evm-splitter-v1.4.json`, `registry/solana-splitter-v1.4.json`
+3. `npm run registry:build` → fetches upstream + writes `registry/evm-splitter-v1.4.json`, `registry/solana-splitter-v1.4.json`
 4. `npm test` → runs `vitest` offline
 
 ## Full file list
@@ -120,14 +114,21 @@ package.json
 registry/abi/evm/B2BSplitterV14/B2BSplitterV14.json
 registry/abi/evm/TimelockWrapper/TimelockWrapper.json
 registry/abi/tron/.gitkeep
-registry/deployments.json
 registry/evm-splitter-v1.4.json
 registry/solana-splitter-v1.4.json
-registry/reference/evm-splitter-v1.3.json
-registry/reference/payment-deployments.json
-registry/reference/payment-deployments.schema.json
-registry/reference/splitter-table.json
-registry/reference/splitter-table-source.json
+registry/splitter/v1.1/deployments.json
+registry/splitter/v1.1/README.md
+registry/splitter/v1.2/deployments.json
+registry/splitter/v1.2/README.md
+registry/splitter/v1.3/deployments.json
+registry/splitter/v1.3/README.md
+registry/splitter/v1.4/deployments.json
+registry/splitter/v1.4/README.md
+registry/splitter/solana/deployments.json
+registry/splitter/solana/README.md
+registry/splitter/casper/deployments.json
+registry/splitter/casper/README.md
+registry/splitter/INDEX.md
 registry/idl/aptos/.gitkeep
 registry/idl/casper/.gitkeep
 registry/idl/solana/splitter-v14/splitter.devnet.json

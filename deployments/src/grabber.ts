@@ -248,6 +248,10 @@ export async function grabSolanaDeployments(): Promise<Record<string, SolanaDepl
       deployedAt: new Date().toISOString(),
       sourceUrl: url,
       idlPath: `registry/idl/splitter.${cluster}.json`,
+      idl: {
+        name: "splitter",
+        version: data.metadata?.version ?? "1.4.1",
+      },
     };
   }
 
@@ -292,26 +296,124 @@ export async function buildRegistry(): Promise<DeploymentRegistry> {
 /**
  * Write per-ecosystem split registry files from the combined registry.
  * Returns the list of file paths written.
+ * Uses the same schema as splitter versioned deployments.json for consistency.
  */
 export function writeSplitRegistries(registry: DeploymentRegistry, outDir: string): string[] {
   ensureDir(outDir);
 
   const evm14 = {
+    $schema: "./reference/payment-deployments.schema.json",
+    version: "1.4",
+    description: "B2BSplitter v1.4 — Full contract suite deployment",
     schemaVersion: 1,
     generatedAt: registry.generatedAt,
     ecosystem: "evm" as const,
     protocolVersion: "v1.4" as const,
-    sources: registry.sources,
-    deployments: Object.values(registry.evm),
+    source: {
+      repo: "AiFinPay/evm-contract",
+      commit: "a54a4c107de7bb42f54e411e621d3897938bfc31",
+      path: "deployments/*-v14-*-latest.json",
+    },
+    governance: {
+      prod: {
+        safe: "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        version: "1.5.0",
+        threshold: 3,
+        owners: [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A",
+        ],
+      },
+      testnet: {
+        safe: "0xc9ab36c2af2888414c7ea9160d9e33b773c2b388",
+        version: "1.4.1",
+        threshold: 3,
+        owners: [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A",
+        ],
+      },
+    },
+    deployments: Object.values(registry.evm).map((evm) => {
+      const isTestnet = evm.network === "amoy";
+      const disabledReasonMap: Record<string, string> = {
+        disabled: "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
+        invalid: "INVALID: splitter address equals TokenList; Profiles has no runtime code; redeploy required",
+        retired: "Superseded by newer deployment",
+      };
+      return {
+        chain: evm.network,
+        chainId: evm.chainId,
+        environment: isTestnet ? "dev" : "prod" as "dev" | "prod",
+        testnet: isTestnet,
+        status: evm.status as "enabled" | "disabled" | "invalid" | "retired",
+        settlementEnabled: evm.settlementEnabled,
+        disabledReason: evm.status !== "enabled" ? (disabledReasonMap[evm.status] || undefined) : undefined,
+        runtimeCodeHash: evm.runtimeCodeHash,
+        contracts: {
+          splitter: evm.splitterAddress,
+          tokenList: evm.tokenListAddress,
+          profiles: evm.profilesAddress,
+          admin: evm.admin,
+          signer: evm.signer,
+          pauser: evm.pauser,
+          treasury: evm.treasury,
+        },
+        assets: evm.stablecoins.map((s) => ({
+          symbol: s.symbol,
+          name: s.name || s.symbol,
+          address: s.address,
+        })),
+        safe: {
+          address: isTestnet ? "0xc9ab36c2af2888414c7ea9160d9e33b773c2b388" : "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+          version: isTestnet ? "1.4.1" : "1.5.0",
+          threshold: 3,
+        },
+      };
+    }),
+    sourceArtifact: {
+      path: "./evm-splitter-v1.4.json",
+      retrievedAt: new Date().toISOString().split("T")[0],
+    },
   };
 
   const solana14 = {
+    $schema: "./reference/payment-deployments.schema.json",
+    version: "1.4",
+    description: "Solana Splitter v1.4 — Program deployment",
     schemaVersion: 1,
     generatedAt: registry.generatedAt,
     ecosystem: "solana" as const,
     protocolVersion: "v1.4" as const,
-    sources: registry.sources,
-    deployments: Object.values(registry.solana),
+    source: {
+      repo: "AiFinPay/solana-contract",
+      commit: "e5df8f5436cf646ab495381eee04e0d1a10b4e2f",
+      path: "deployments/splitter_v14/",
+    },
+    deployments: Object.values(registry.solana).map((solana) => ({
+      cluster: solana.cluster,
+      environment: solana.cluster === "devnet" ? "dev" : "prod",
+      testnet: solana.cluster === "devnet",
+      status: "disabled" as const,
+      settlementEnabled: false,
+      disabledReason: solana.cluster === "devnet" 
+        ? "Backend Solana receipt verification is not implemented"
+        : "Backend Solana receipt verification is not implemented and upgrade authority is not multisig",
+      programId: solana.programAddress,
+      idl: {
+        name: "splitter",
+        version: solana.version || "1.4.1",
+      },
+      sourceArtifact: `deployments/splitter_v14/splitter.${solana.cluster}.json`,
+    })),
+    sourceArtifact: {
+      path: "./solana-splitter-v1.4.json",
+      retrievedAt: new Date().toISOString().split("T")[0],
+    },
   };
 
   const evmPath = join(outDir, "evm-splitter-v1.4.json");

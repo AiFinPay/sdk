@@ -43,6 +43,11 @@ export interface SolanaDeployment {
   sourceUrl: string;
   /** Path to the local IDL artifact copied from the upstream deployment. */
   idlPath: string;
+  /** IDL metadata */
+  idl?: {
+    name: string;
+    version: string;
+  };
 }
 
 export type Deployment = EvmDeployment | SolanaDeployment;
@@ -59,14 +64,87 @@ export interface DeploymentRegistry {
   sources: string[];
 }
 
-/** Per-ecosystem split registry file shape (v1.4). */
-export interface EcosystemRegistry<T extends Deployment> {
+/** Per-ecosystem split registry file shape (v1.4) - matches splitter versioned deployments.json schema. */
+export interface GovernanceConfig {
+  safe: string;
+  version: string;
+  threshold: number;
+  owners: string[];
+}
+
+export interface Governance {
+  prod: GovernanceConfig;
+  testnet: GovernanceConfig;
+}
+
+export interface SourceInfo {
+  repo: string;
+  commit: string;
+  path: string;
+}
+
+export interface SourceArtifact {
+  path: string;
+  retrievedAt: string;
+}
+
+export interface EvmDeploymentRecord {
+  chain: string;
+  chainId: number;
+  environment: "dev" | "prod";
+  testnet: boolean;
+  status: "enabled" | "disabled" | "invalid" | "retired";
+  settlementEnabled: boolean;
+  disabledReason?: string;
+  runtimeCodeHash: string;
+  contracts: {
+    splitter: string;
+    tokenList: string;
+    profiles: string;
+    admin: string;
+    signer: string;
+    pauser: string;
+    treasury: string;
+  };
+  assets: Array<{
+    symbol: string;
+    name: string;
+    address: string;
+  }>;
+  safe: {
+    address: string;
+    version: string;
+    threshold: number;
+  };
+}
+
+export interface SolanaDeploymentRecord {
+  cluster: "mainnet" | "devnet";
+  environment: "dev" | "prod";
+  testnet: boolean;
+  status: "enabled" | "disabled" | "invalid" | "retired";
+  settlementEnabled: boolean;
+  disabledReason: string;
+  programId: string;
+  idl: {
+    name: string;
+    version: string;
+  };
+  sourceArtifact: string;
+}
+
+export interface SplitterRegistry {
+  $schema: string;
+  version: string;
+  description: string;
   schemaVersion: number;
   generatedAt: string;
   ecosystem: "evm" | "solana";
   protocolVersion: string;
-  sources: string[];
-  deployments: T[];
+  source: SourceInfo;
+  governance?: Governance; // Only for EVM
+  deployments: EvmDeploymentRecord[] | SolanaDeploymentRecord[];
+  sourceArtifact: SourceArtifact;
 }
 
 export function isEvmDeployment(d: Deployment): d is EvmDeployment {

@@ -13,7 +13,7 @@ Payment rail for AI agents (AIFP-1 gross-inclusive settlement, AIFP-2/x402 negot
 - Node 22, Python 3.13. Use `npm ci --no-audit --no-fund` (never `npm install`) so lockfiles stay authoritative.
 - Per package: `npm run build` (`tsc`) then `npm test` (`vitest run`) from `node/`, `wallet/`, `mcp/`, `gate/`, `deployments/`; `python -m pytest tests -q` from `python/` (install with `python -m pip install -e . pytest`).
 - `node/`: run `npm run registry:check` before build — it verifies `*.generated.ts` against the vendored registry artifact + provenance. Never hand-edit `*.generated.ts`; change `registry/` inputs or `scripts/generate-splitter-routes.mjs`, then `registry:sync`.
-- `deployments/`: run `npm run build` then `npm run registry:build` to refresh `registry/deployments.json` from upstream repos; keep `registry/abi/` and `registry/idl/` paths documented for downstream ABI/IDL artifacts.
+- `deployments/`: run `npm run build` then `npm run registry:build` to refresh `registry/evm-splitter-v1.4.json` + `registry/solana-splitter-v1.4.json` from upstream repos; keep `registry/abi/` and `registry/idl/` paths documented for downstream ABI/IDL artifacts.
 - Version gate: changing published files without a version bump fails CI (`scripts/check-version-bump.mjs`). Bump version + CHANGELOG together.
 - Breaking `node/` changes are invisible to the `mcp` release job until published — verify with the `mcp-against-source` flow (pack `node/`, install tarball into `mcp/`, build + test).
 

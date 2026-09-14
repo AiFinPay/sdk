@@ -9,8 +9,9 @@ upstream repositories and produces per-ecosystem split registry files:
 - Solana v1.4.1: `registry/solana-splitter-v1.4.json`
 
 For each chain/cluster it keeps only the latest record by (version desc,
-timestamp desc), so lookup by `chainId` or `cluster` is O(1). A combined
-`registry/deployments.json` is also emitted for backward compatibility.
+timestamp desc), so lookup by `chainId` or `cluster` is O(1). The generated
+files use the same schema as `registry/splitter/v*/deployments.json` for
+consistency and include governance metadata.
 
 ```bash
 cd deployments
@@ -28,15 +29,15 @@ artifacts:
 
 ```
 registry/
-├── evm-splitter-v1.4.json     # EVM v1.4 deployments (includes Safe info)
-├── solana-splitter-v1.4.json  # Solana v1.4.1 deployments
-├── deployments.json           # combined EVM + Solana (backward-compat)
-├── reference/                 # historical / upstream copies
-│   ├── evm-splitter-v1.3.json      # historical v1.3 route table
-│   ├── payment-deployments.json    # upstream v1.4 combined registry
-│   ├── payment-deployments.schema.json
-│   ├── splitter-table.json         # upstream v1.2/v1.3 route table
-│   └── splitter-table-source.json  # provenance for splitter-table.json
+├── evm-splitter-v1.4.json     # EVM v1.4 with governance (matches splitter/v1.4 schema)
+├── solana-splitter-v1.4.json  # Solana v1.4.1 (matches splitter/solana schema)
+├── splitter/                  # versioned registry with governance metadata
+│   ├── v1.4/deployments.json  # EVM v1.4 full contract suite
+│   ├── solana/deployments.json # Solana v1.4 program deployments
+│   ├── v1.3/deployments.json  # EVM v1.3 route table
+│   ├── v1.2/deployments.json  # EVM v1.2 legacy
+│   ├── v1.1/deployments.json  # EVM v1.1 legacy
+│   └── casper/deployments.json # Casper deployments
 ├── abi/
 │   ├── evm/         # EVM ABI bundles (manual or build-copied)
 │   └── tron/        # Tron ABI bundles when applicable
@@ -50,10 +51,10 @@ registry/
 
 | Registry | Location | Versions | Status |
 |---|---|---|---|
-| Legacy route table | `registry/reference/splitter-table.json` (`node/registry/splitter-table.json` is authoritative) | v1.2 `legacy`, v1.3 `merchant-aifp1` / `agent-x402` | Superseded; kept for `node/` SDK generation |
-| Historical v1.3 split | `registry/reference/evm-splitter-v1.3.json` | v1.3 EVM routes | Historical snapshot; no upstream fetcher |
-| This package | `registry/evm-splitter-v1.4.json`, `registry/solana-splitter-v1.4.json` | v1.4 EVM + Solana | Active grabber output |
-| v1.4 combined reference | `registry/reference/payment-deployments.json` | v1.4 only | Upstream copy; only **Amoy** enabled; mainnets disabled/invalid until backend v1.4 verification is complete |
+| Legacy route table | `registry/splitter/v1.3/deployments.json` | v1.2 `legacy`, v1.3 `merchant-aifp1` / `agent-x402` | Superseded; kept for `node/` SDK generation |
+| Legacy v1.2 | `registry/splitter/v1.2/deployments.json` | v1.2 with `paymentId` replay guard | Superseded |
+| Legacy v1.1 | `registry/splitter/v1.1/deployments.json` | v1.1 initial release | Superseded |
+| This package | `registry/evm-splitter-v1.4.json`, `registry/solana-splitter-v1.4.json` | v1.4 EVM + Solana | Active grabber output (matches splitter schema) |
 
 v1.4 status at a glance (from `evm-splitter-v1.4.json`):
 - `amoy` — enabled, settlement on.

@@ -5,17 +5,14 @@ import { buildRegistry, writeSplitRegistries } from "./grabber.js";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(ROOT, "../registry");
-const OUT = join(OUT_DIR, "deployments.json");
 
 async function main() {
   if (!existsSync(OUT_DIR)) mkdirSync(OUT_DIR, { recursive: true });
   const registry = await buildRegistry();
-  writeFileSync(OUT, JSON.stringify(registry, null, 2) + "\n");
   const split = writeSplitRegistries(registry, OUT_DIR);
   const evmCount = Object.keys(registry.evm).length;
   const solanaCount = Object.keys(registry.solana).length;
   const solanaIdls = Object.values(registry.solana).map((d) => d.idlPath);
-  console.log(`Wrote ${OUT}`);
   console.log(`  EVM: ${evmCount} chain(s)`);
   console.log(`  Solana: ${solanaCount} cluster(s)`);
   console.log(`  Solana IDLs: ${solanaIdls.join(", ")}`);

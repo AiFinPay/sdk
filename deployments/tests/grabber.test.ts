@@ -255,6 +255,10 @@ describe("writeSplitRegistries", () => {
           deployedAt: "2026-09-13T00:00:00.000Z",
           sourceUrl: "http://gh/sol.json",
           idlPath: "registry/idl/solana/splitter.mainnet.json",
+          idl: {
+            name: "splitter",
+            version: "1.4.1",
+          },
         },
       },
       generatedAt: "2026-09-13T00:00:00.000Z",
@@ -262,8 +266,7 @@ describe("writeSplitRegistries", () => {
     };
 
     const written = writeSplitRegistries(registry, outDir);
-    expect(written).toContain(evmPath);
-    expect(written).toContain(solanaPath);
+    expect(written).toHaveLength(2);
     expect(existsSync(evmPath)).toBe(true);
     expect(existsSync(solanaPath)).toBe(true);
 
@@ -271,10 +274,18 @@ describe("writeSplitRegistries", () => {
     expect(evm.ecosystem).toBe("evm");
     expect(evm.protocolVersion).toBe("v1.4");
     expect(evm.deployments).toHaveLength(1);
+    expect(evm.$schema).toBeDefined();
+    expect(evm.governance).toBeDefined();
+    expect(evm.deployments[0].chain).toBe("polygon");
+    expect(evm.deployments[0].contracts).toBeDefined();
+    expect(evm.deployments[0].safe).toBeDefined();
 
     const solana = JSON.parse(readFileSync(solanaPath, "utf-8"));
     expect(solana.ecosystem).toBe("solana");
     expect(solana.protocolVersion).toBe("v1.4");
     expect(solana.deployments).toHaveLength(1);
+    expect(solana.$schema).toBeDefined();
+    expect(solana.deployments[0].cluster).toBe("mainnet");
+    expect(solana.deployments[0].idl).toBeDefined();
   });
 });
