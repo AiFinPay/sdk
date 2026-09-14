@@ -1,5 +1,5 @@
 {
-  "$schema": "../../reference/payment-deployments.schema.json",
+  "$schema": "",
   "version": "1.4",
   "description": "B2BSplitter v1.4 — Full contract suite deployment",
   "schemaVersion": 1,

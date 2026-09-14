@@ -1,5 +1,5 @@
 {
-  "$schema": "../../reference/payment-deployments.schema.json",
+  "$schema": "",
   "version": "1.3",
   "description": "B2BSplitter v1.3 — Protocol routes with immutable fee splits",
   "status": "active",

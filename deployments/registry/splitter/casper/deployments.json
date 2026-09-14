@@ -1,5 +1,5 @@
 {
-  "$schema": "../../reference/payment-deployments.schema.json",
+  "$schema": "",
   "version": "2.0",
   "description": "Casper Splitter — Rust → Wasm settlement contract for AI agent payments",
   "schemaVersion": 2,
