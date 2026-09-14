@@ -290,6 +290,40 @@ export async function buildRegistry(): Promise<DeploymentRegistry> {
 }
 
 /**
+ * Write per-ecosystem split registry files from the combined registry.
+ * Returns the list of file paths written.
+ */
+export function writeSplitRegistries(registry: DeploymentRegistry, outDir: string): string[] {
+  ensureDir(outDir);
+
+  const evm14 = {
+    schemaVersion: 1,
+    generatedAt: registry.generatedAt,
+    ecosystem: "evm" as const,
+    protocolVersion: "v1.4" as const,
+    sources: registry.sources,
+    deployments: Object.values(registry.evm),
+  };
+
+  const solana14 = {
+    schemaVersion: 1,
+    generatedAt: registry.generatedAt,
+    ecosystem: "solana" as const,
+    protocolVersion: "v1.4" as const,
+    sources: registry.sources,
+    deployments: Object.values(registry.solana),
+  };
+
+  const evmPath = join(outDir, "evm-splitter-v1.4.json");
+  const solanaPath = join(outDir, "solana-splitter-v1.4.json");
+
+  writeFileSync(evmPath, JSON.stringify(evm14, null, 2) + "\n");
+  writeFileSync(solanaPath, JSON.stringify(solana14, null, 2) + "\n");
+
+  return [evmPath, solanaPath];
+}
+
+/**
  * O(1) lookup helpers for generated registry.
  */
 export function getEvmDeployment(registry: DeploymentRegistry, chainId: number | string): EvmDeployment | undefined {

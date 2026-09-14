@@ -1,0 +1,110 @@
+{
+  "$schema": "../../reference/payment-deployments.schema.json",
+  "version": "2.0",
+  "description": "Casper Splitter — Rust → Wasm settlement contract for AI agent payments",
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-14T00:00:00.000Z",
+  "ecosystem": "casper",
+  "protocolVersion": "v1/v2/v3",
+  "idlPath": "../../idl/casper/aifinpay-casper-schema.json",
+  "source": {
+    "repo": "AiFinPay/casper-contract",
+    "url": "https://github.com/AiFinPay/casper-contract",
+    "localPath": "/home/daochild/dev/aifinpay/casper-contract"
+  },
+  "contract": {
+    "language": "Rust",
+    "runtime": "Wasm",
+    "dependencies": {
+      "casper-contract": "5.1.1",
+      "casper-types": "6.1.0"
+    },
+    "entryPoints": [
+      {
+        "name": "register_agent",
+        "args": [
+          { "name": "agent_id", "type": "String" },
+          { "name": "wallet", "type": "String" }
+        ],
+        "description": "Self-register caller wallet → AgentRegistered event"
+      },
+      {
+        "name": "pay_agent",
+        "args": [
+          { "name": "from_agent", "type": "String" },
+          { "name": "to_agent", "type": "String" },
+          { "name": "amount", "type": "U512" },
+          { "name": "request_id", "type": "String" }
+        ],
+        "description": "Record settlement → PaymentSettled event (v2); v1 recorded only"
+      },
+      {
+        "name": "get_payment_count",
+        "args": [],
+        "description": "Total settled payments"
+      }
+    ],
+    "events": [
+      { "name": "AgentRegistered", "fields": ["agent_id", "wallet"] },
+      { "name": "PaymentSettled", "fields": ["from", "to", "amount", "request_id"] }
+    ]
+  },
+  "deployments": [
+    {
+      "network": "casper-test",
+      "environment": "testnet",
+      "testnet": true,
+      "status": "live",
+      "settlementEnabled": true,
+      "contractPackageHash": "hash-47df409829ddf0612617460293ba591a19b26fa0c06918878204088d3eb9b78a",
+      "rpcEndpoint": "https://node.testnet.casper.network/rpc",
+      "explorer": "https://testnet.cspr.live/contract/47df409829ddf0612617460293ba591a19b26fa0c06918878204088d3eb9b78a",
+      "version": "v2",
+      "notes": "Verified deployment — atomic settlement with on-chain receipt",
+      "idlPath": "../../idl/casper/aifinpay-casper-schema.json",
+      "sampleTransactions": [
+        {
+          "action": "register_agent (buyer)",
+          "deployHash": "d4b7d0ad3b59a97a1165eab1dbc36dbee56ccf8a4bc48f3507071682427d23e0",
+          "explorer": "https://testnet.cspr.live/deploy/d4b7d0ad3b59a97a1165eab1dbc36dbee56ccf8a4bc48f3507071682427d23e0"
+        },
+        {
+          "action": "register_agent (provider)",
+          "deployHash": "6c41c8858f95af24afaf1267dcb8ced93c654f9a8bddfc722c6638825faac4e8",
+          "explorer": "https://testnet.cspr.live/deploy/6c41c8858f95af24afaf1267dcb8ced93c654f9a8bddfc722c6638825faac4e8"
+        },
+        {
+          "action": "PaymentSettled (pay_agent)",
+          "deployHash": "0b55b516058a3482beef0dac2d6997d84b402f82f71a97b3098e2aadaffb0137",
+          "explorer": "https://testnet.cspr.live/deploy/0b55b516058a3482beef0dac2d6997d84b402f82f71a97b3098e2aadaffb0137"
+        }
+      ]
+    },
+    {
+      "network": "casper",
+      "environment": "mainnet",
+      "testnet": false,
+      "status": "historical",
+      "settlementEnabled": false,
+      "contractHash": "contract-9903a5e3948e799196df54b17270bc6769338ac1cc36c9eb47e113f88d23f019",
+      "contractPackageHash": "hash-7ad34a204952eef63d5dcf5159fb7d009e85dea4f49cbdf73dde190652dfa375",
+      "rpcEndpoint": "https://node.casper.network/rpc",
+      "explorer": "https://cspr.live/contract/9903a5e3948e799196df54b17270bc6769338ac1cc36c9eb47e113f88d23f019",
+      "version": "v1",
+      "idlPath": "../../idl/casper/aifinpay-casper-schema.json",
+      "disabledReason": "v1: pay_agent recorded receipt but did NOT transfer value; separate native transfer required — not valid settlement proof",
+      "warning": "Do not reproduce this v1 flow. Use v2 testnet deployment for valid atomic settlement."
+    }
+  ],
+  "integration": {
+    "examples": "https://github.com/AiFinPay/casper-contract/tree/main/examples",
+    "demoScript": "https://github.com/AiFinPay/casper-contract/blob/main/demo/agent-compute-demo.js",
+    "x402Bridge": "https://github.com/AiFinPay/casper-contract/blob/main/demo/compute-bridge.js",
+    "mcpsServer": "https://github.com/AiFinPay/casper-contract/blob/main/demo/casper-mcp.mjs"
+  },
+  "sourceArtifact": {
+    "path": null,
+    "retrievedAt": "2026-09-14",
+    "note": "Data extracted from AiFinPay/casper-contract README and SUBMISSION.md"
+  }
+}

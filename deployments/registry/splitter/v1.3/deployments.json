@@ -1,0 +1,280 @@
+{
+  "$schema": "../../reference/payment-deployments.schema.json",
+  "version": "1.3",
+  "description": "B2BSplitter v1.3 — Protocol routes with immutable fee splits",
+  "status": "active",
+  "settlementEnabled": false,
+  "policyWindow": {
+    "validFrom": "2026-08-27T00:00:00.000Z",
+    "validUntil": "2026-11-25T00:00:00.000Z"
+  },
+  "build": {
+    "contract": "B2BSplitterV13",
+    "solcVersion": "0.8.35",
+    "evmVersion": "cancun",
+    "contractsTreeHash": "1711d24b711c9d7c80136c5e5716691f35e45eb4"
+  },
+  "governance": {
+    "safe": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+    "threshold": 3,
+    "owners": [
+      "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+      "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+      "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+      "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+      "0x849930eB20ED0a697c71BcE565f18702D202C0F8"
+    ]
+  },
+  "routes": {
+    "merchant-aifp1": {
+      "treasuryBps": 100,
+      "ipCreatorBps": 0,
+      "description": "AIFP-1 gross-inclusive: agent pays quoted gross, treasury 1%, merchant 99%"
+    },
+    "agent-x402": {
+      "treasuryBps": 0,
+      "ipCreatorBps": 0,
+      "description": "AIFP-2/x402: provider receives 100%, AiFinPay fee 0% (future fee-on-top)"
+    }
+  },
+  "runtimeCodeHashes": {
+    "merchant-aifp1": "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
+    "agent-x402": "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0"
+  },
+  "deployments": [
+    {
+      "chain": "amoy",
+      "chainId": 80002,
+      "testnet": true,
+      "routes": {
+        "merchant-aifp1": {
+          "splitter": "0xdB772E64F63854bf31f2366BF27e47D5699fe7fC",
+          "owner": "0x000035156F0cff1b4C36854773472fe0bd258E4d",
+          "treasury": "0x000035156F0cff1b4C36854773472fe0bd258E4d",
+          "stablecoins": { "USDC": "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582", "USDT": null },
+          "settlementEnabled": true,
+          "verifiedAt": "2026-08-29"
+        },
+        "agent-x402": {
+          "splitter": "0xFd1622847A89FB3De240d64DFCbd09C65c77D99d",
+          "owner": "0x000035156F0cff1b4C36854773472fe0bd258E4d",
+          "treasury": "0x000035156F0cff1b4C36854773472fe0bd258E4d",
+          "stablecoins": { "USDC": "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582", "USDT": null },
+          "settlementEnabled": true,
+          "verifiedAt": "2026-08-30"
+        }
+      }
+    },
+    {
+      "chain": "polygon",
+      "chainId": 137,
+      "testnet": false,
+      "routes": {
+        "merchant-aifp1": {
+          "splitter": "0x27C1C07563c92C1AEa52cC9b4452dF49dC5a7942",
+          "owner": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "stablecoins": { "USDC": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", "USDT": null },
+          "settlementEnabled": false,
+          "verifiedAt": "2026-08-27"
+        },
+        "agent-x402": {
+          "splitter": "0x660Cd915Fc54A7EaE5CEA6854505638bd2A08531",
+          "owner": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "stablecoins": { "USDC": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", "USDT": null },
+          "settlementEnabled": false,
+          "verifiedAt": "2026-08-27"
+        }
+      }
+    },
+    {
+      "chain": "optimism",
+      "chainId": 10,
+      "testnet": false,
+      "routes": {
+        "merchant-aifp1": {
+          "splitter": "0x1Fe2021336596655Fac72bC7bC40F7FFFA501d55",
+          "owner": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "stablecoins": { "USDC": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", "USDT": null },
+          "settlementEnabled": false,
+          "verifiedAt": "2026-08-27"
+        },
+        "agent-x402": {
+          "splitter": "0x38Ef6173ce0AC540f129680C2Aa4Ef739787bdBf",
+          "owner": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "stablecoins": { "USDC": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", "USDT": null },
+          "settlementEnabled": false,
+          "verifiedAt": "2026-08-27"
+        }
+      }
+    },
+    {
+      "chain": "bnb",
+      "chainId": 56,
+      "testnet": false,
+      "routes": {
+        "merchant-aifp1": {
+          "splitter": "0x79D481B835Cb050FAb7a045E619A6Fb9Cd73f510",
+          "owner": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "stablecoins": { "USDC": null, "USDT": null },
+          "settlementEnabled": false,
+          "verifiedAt": "2026-08-27"
+        },
+        "agent-x402": {
+          "splitter": "0x7656fb8B6627311A7d87273913D31b837Bb2b5A4",
+          "owner": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "stablecoins": { "USDC": null, "USDT": null },
+          "settlementEnabled": false,
+          "verifiedAt": "2026-08-27"
+        }
+      }
+    },
+    {
+      "chain": "unichain",
+      "chainId": 130,
+      "testnet": false,
+      "routes": {
+        "merchant-aifp1": {
+          "splitter": "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74",
+          "owner": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "stablecoins": { "USDC": "0x078D782b760474a361dDA0AF3839290b0EF57AD6", "USDT": null },
+          "settlementEnabled": false,
+          "verifiedAt": "2026-08-27"
+        },
+        "agent-x402": {
+          "splitter": "0xC701F45b3Bae9CA3a58cB33fCBA6291594D17843",
+          "owner": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "stablecoins": { "USDC": "0x078D782b760474a361dDA0AF3839290b0EF57AD6", "USDT": null },
+          "settlementEnabled": false,
+          "verifiedAt": "2026-08-27"
+        }
+      }
+    },
+    {
+      "chain": "botchain",
+      "chainId": 677,
+      "testnet": false,
+      "routes": {
+        "merchant-aifp1": {
+          "splitter": "0xe855e491D0950140704DB9Cec6B7b3F725360a56",
+          "owner": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "stablecoins": { "USDC": null, "USDT": null },
+          "settlementEnabled": false,
+          "verifiedAt": "2026-08-27"
+        },
+        "agent-x402": {
+          "splitter": "0x7E92FbE28aAc3a3942FDf019d29172bd02c96Cf0",
+          "owner": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "stablecoins": { "USDC": null, "USDT": null },
+          "settlementEnabled": false,
+          "verifiedAt": "2026-08-27"
+        }
+      }
+    },
+    {
+      "chain": "base",
+      "chainId": 8453,
+      "testnet": false,
+      "routes": {
+        "merchant-aifp1": {
+          "splitter": "0xB385Cc32fe39CF5B5778DF0Df0e8E9978b5F662a",
+          "owner": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "stablecoins": { "USDC": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "USDT": null },
+          "settlementEnabled": false,
+          "verifiedAt": "2026-08-27"
+        },
+        "agent-x402": {
+          "splitter": "0x1Fe2021336596655Fac72bC7bC40F7FFFA501d55",
+          "owner": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "stablecoins": { "USDC": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "USDT": null },
+          "settlementEnabled": false,
+          "verifiedAt": "2026-08-27"
+        }
+      }
+    },
+    {
+      "chain": "arbitrum",
+      "chainId": 42161,
+      "testnet": false,
+      "routes": {
+        "merchant-aifp1": {
+          "splitter": "0x80e2B445DFc44B3B2254aa376B31AEdDd3Ff934a",
+          "owner": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "stablecoins": { "USDC": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", "USDT": null },
+          "settlementEnabled": false,
+          "verifiedAt": "2026-08-27"
+        },
+        "agent-x402": {
+          "splitter": "0xE34Fc0E6694821c600Fa0955C0F74720ea6d8440",
+          "owner": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "stablecoins": { "USDC": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", "USDT": null },
+          "settlementEnabled": false,
+          "verifiedAt": "2026-08-27"
+        }
+      }
+    },
+    {
+      "chain": "avalanche",
+      "chainId": 43114,
+      "testnet": false,
+      "routes": {
+        "merchant-aifp1": {
+          "splitter": "0xE34Fc0E6694821c600Fa0955C0F74720ea6d8440",
+          "owner": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "stablecoins": { "USDC": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", "USDT": "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7" },
+          "settlementEnabled": false,
+          "verifiedAt": "2026-08-27"
+        },
+        "agent-x402": {
+          "splitter": "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74",
+          "owner": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "stablecoins": { "USDC": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", "USDT": "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7" },
+          "settlementEnabled": false,
+          "verifiedAt": "2026-08-27"
+        }
+      }
+    },
+    {
+      "chain": "xrplevm",
+      "chainId": 1440000,
+      "testnet": false,
+      "routes": {
+        "merchant-aifp1": {
+          "splitter": "0xe855e491D0950140704DB9Cec6B7b3F725360a56",
+          "owner": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "stablecoins": { "USDC": null, "USDT": null },
+          "settlementEnabled": false,
+          "verifiedAt": "2026-08-27"
+        },
+        "agent-x402": {
+          "splitter": "0x7E92FbE28aAc3a3942FDf019d29172bd02c96Cf0",
+          "owner": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "treasury": "0xFd936f75D9221949f2FEaB54Cd342F7527154eD5",
+          "stablecoins": { "USDC": null, "USDT": null },
+          "settlementEnabled": false,
+          "verifiedAt": "2026-08-27"
+        }
+      }
+    }
+  ],
+  "sourceArtifact": {
+    "path": "../../reference/splitter-table.json",
+    "retrievedAt": "2026-08-30"
+  }
+}

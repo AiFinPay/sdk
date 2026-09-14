@@ -1,0 +1,45 @@
+{
+  "$schema": "../../reference/payment-deployments.schema.json",
+  "version": "1.1",
+  "description": "B2BSplitter v1.1 — Initial production version with immutable fee split",
+  "status": "superseded",
+  "settlementEnabled": false,
+  "build": {
+    "contract": "B2BSplitterV11",
+    "runtimeCodeHash": "0x545b3a4ba195edc6b728df8cc64f28da528c9e7805c15f1aa61ef58c3c562197"
+  },
+  "feeStructure": {
+    "treasuryBps": 100,
+    "ipCreatorBps": 1,
+    "description": "1% protocol fee + 0.01% IP creator fee; merchant receives remainder"
+  },
+  "deployments": [
+    {
+      "chain": "base",
+      "chainId": 8453,
+      "splitter": "0x8Ad9830D16b1f10333866a3f38C949CbB19f4BAD",
+      "owner": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+      "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+      "rpcQuorum": 2,
+      "verifiedAt": "2026-08-07",
+      "validFrom": "2026-08-04T00:00:00.000Z",
+      "validUntil": "2026-09-03T00:00:00.000Z"
+    },
+    {
+      "chain": "unichain",
+      "chainId": 130,
+      "splitter": "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB",
+      "owner": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+      "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+      "rpcQuorum": 2,
+      "verifiedAt": "2026-08-07",
+      "validFrom": "2026-08-04T00:00:00.000Z",
+      "validUntil": "2026-09-03T00:00:00.000Z"
+    }
+  ],
+  "sourceArtifact": {
+    "path": "../../reference/splitter-table.json",
+    "routes": ["base:legacy", "unichain:legacy"],
+    "retrievedAt": "2026-08-30"
+  }
+}

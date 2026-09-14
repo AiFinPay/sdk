@@ -1,0 +1,108 @@
+{
+  "name": "aifinpay_casper",
+  "version": "2.0.0",
+  "description": "AiFinPay settlement contract for Casper — AI agent payment registry",
+  "language": "Rust",
+  "runtime": "Wasm",
+  "dependencies": {
+    "casper-contract": "5.1.1",
+    "casper-types": "6.1.0"
+  },
+  "entryPoints": [
+    {
+      "name": "register_agent",
+      "args": [
+        {
+          "name": "agent_id",
+          "type": "String",
+          "description": "Unique agent identifier"
+        },
+        {
+          "name": "wallet",
+          "type": "String",
+          "description": "Agent's wallet address (account hash)"
+        }
+      ],
+      "returnType": "Unit",
+      "description": "Self-register caller wallet → AgentRegistered event"
+    },
+    {
+      "name": "pay_agent",
+      "args": [
+        {
+          "name": "from_agent",
+          "type": "String",
+          "description": "Paying agent ID"
+        },
+        {
+          "name": "to_agent",
+          "type": "String",
+          "description": "Receiving agent ID"
+        },
+        {
+          "name": "amount",
+          "type": "U512",
+          "description": "Payment amount in motes (1 CSPR = 10^9 motes)"
+        },
+        {
+          "name": "request_id",
+          "type": "String",
+          "description": "Unique request identifier for idempotency"
+        }
+      ],
+      "returnType": "Unit",
+      "description": "Record settlement → PaymentSettled event (v2); v1 recorded only without transfer"
+    },
+    {
+      "name": "get_payment_count",
+      "args": [],
+      "returnType": "U32",
+      "description": "Total number of settled payments"
+    }
+  ],
+  "events": [
+    {
+      "name": "AgentRegistered",
+      "fields": [
+        { "name": "agent_id", "type": "String" },
+        { "name": "wallet", "type": "String" }
+      ]
+    },
+    {
+      "name": "PaymentSettled",
+      "fields": [
+        { "name": "from", "type": "String" },
+        { "name": "to", "type": "String" },
+        { "name": "amount", "type": "U512" },
+        { "name": "request_id", "type": "String" }
+      ]
+    }
+  ],
+  "errors": {
+    "0": "AgentAlreadyRegistered",
+    "1": "AgentNotRegistered",
+    "2": "DuplicateRequestId",
+    "3": "InvalidCaller"
+  },
+  "deployments": {
+    "testnet": {
+      "network": "casper-test",
+      "contractPackageHash": "hash-47df409829ddf0612617460293ba591a19b26fa0c06918878204088d3eb9b78a",
+      "status": "live",
+      "version": "v2"
+    },
+    "mainnet": {
+      "network": "casper",
+      "contractHash": "contract-9903a5e3948e799196df54b17270bc6769338ac1cc36c9eb47e113f88d23f019",
+      "contractPackageHash": "hash-7ad34a204952eef63d5dcf5159fb7d009e85dea4f49cbdf73dde190652dfa375",
+      "status": "historical",
+      "version": "v1",
+      "warning": "v1: receipt only, no atomic transfer — not valid settlement proof"
+    }
+  },
+  "source": {
+    "repo": "AiFinPay/casper-contract",
+    "url": "https://github.com/AiFinPay/casper-contract",
+    "contractPath": "src/main.rs"
+  }
+}

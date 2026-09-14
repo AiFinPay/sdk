@@ -59,6 +59,16 @@ export interface DeploymentRegistry {
   sources: string[];
 }
 
+/** Per-ecosystem split registry file shape (v1.4). */
+export interface EcosystemRegistry<T extends Deployment> {
+  schemaVersion: number;
+  generatedAt: string;
+  ecosystem: "evm" | "solana";
+  protocolVersion: string;
+  sources: string[];
+  deployments: T[];
+}
+
 export function isEvmDeployment(d: Deployment): d is EvmDeployment {
   return d.kind === "evm";
 }

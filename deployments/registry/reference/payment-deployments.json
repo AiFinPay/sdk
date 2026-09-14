@@ -1,0 +1,442 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-13T00:00:00.000Z",
+  "sources": {
+    "evm": {
+      "repo": "AiFinPay/evm-contract",
+      "commit": "a54a4c107de7bb42f54e411e621d3897938bfc31",
+      "path": "deployments/*-v14-*-latest.json"
+    },
+    "solana": {
+      "repo": "AiFinPay/solana-contract",
+      "commit": "e5df8f5436cf646ab495381eee04e0d1a10b4e2f",
+      "path": "deployments/splitter_v14/"
+    }
+  },
+  "deployments": [
+    {
+      "ecosystem": "evm",
+      "network": "amoy",
+      "environment": "dev",
+      "chainId": 80002,
+      "protocolVersion": "v1.4",
+      "status": "enabled",
+      "settlementEnabled": true,
+      "sourceArtifact": "deployments/amoy-v14-amoy-latest.json",
+      "splitterVersion": "1.4",
+      "contracts": {
+        "splitter": "0xBdC126193FADf38A86Cd509e56018a95d5B6eeFA",
+        "tokenList": "0xe67E48966a67AaaaDE5A97F6196E66cd5B16Ac3F",
+        "profiles": "0x632082e6b99E567005FA4e87774AC199Df9a81a6",
+        "admin": "0x00009352dc8a1041A724c01632dc549935e05B98",
+        "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+        "pauser": "0x00008a55086A450Dc8D7789312D21ACEa142F45e",
+        "treasury": "0x0000DA1886e173C09A4e04723d8226D84d9c5122"
+      },
+      "assets": [
+        {
+          "symbol": "USDC",
+          "address": "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582"
+        }
+      ],
+      "runtimeCodeHash": "0xd4990487312c00916aa218bdcd697bbf1a2729335b6a4fda903517b9d3153a27",
+      "safe": {
+        "address": "0xc9ab36c2af2888414c7ea9160d9e33b773c2b388",
+        "version": "1.4.1",
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
+      }
+    },
+    {
+      "ecosystem": "evm",
+      "network": "polygon",
+      "environment": "prod",
+      "chainId": 137,
+      "protocolVersion": "v1.4",
+      "status": "disabled",
+      "settlementEnabled": false,
+      "disabledReason": "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
+      "sourceArtifact": "deployments/polygon-v14-polygon-latest.json",
+      "splitterVersion": "1.4",
+      "contracts": {
+        "splitter": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+        "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+        "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+        "admin": "0x01b80329ff81ce1d22a9e2e8807df5f92414c3c3",
+        "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+        "pauser": "0x01b80329ff81ce1d22a9e2e8807df5f92414c3c3",
+        "treasury": "0x01b80329ff81ce1d22a9e2e8807df5f92414c3c3"
+      },
+      "assets": [
+        {
+          "symbol": "USDC",
+          "name": "USDC",
+          "address": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
+        },
+        {
+          "symbol": "USDC.e",
+          "name": "Bridged USDC",
+          "address": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+        }
+      ],
+      "runtimeCodeHash": "0x974b871ac79082d92a7e3bba89ba52794f7906f99119dfad7959017e5b0bf038",
+      "safe": {
+        "address": "0x01b80329ff81ce1d22a9e2e8807df5f92414c3c3",
+        "version": "1.5.0",
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
+      }
+    },
+    {
+      "ecosystem": "evm",
+      "network": "arbitrum",
+      "environment": "prod",
+      "chainId": 42161,
+      "protocolVersion": "v1.4",
+      "status": "disabled",
+      "settlementEnabled": false,
+      "disabledReason": "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
+      "sourceArtifact": "deployments/arbitrum-v14-arbitrum-latest.json",
+      "splitterVersion": "1.4",
+      "contracts": {
+        "splitter": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+        "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+        "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+        "admin": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+        "pauser": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "treasury": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e"
+      },
+      "assets": [
+        {
+          "symbol": "USDC",
+          "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+        }
+      ],
+      "runtimeCodeHash": "0xc15837e6f438d0fd2f23e0c5eb7a2f655b2af7dc717bd2861365819de45757f7",
+      "safe": {
+        "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+        "version": "1.5.0",
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
+      }
+    },
+    {
+      "ecosystem": "evm",
+      "network": "avalanche",
+      "environment": "prod",
+      "chainId": 43114,
+      "protocolVersion": "v1.4",
+      "status": "disabled",
+      "settlementEnabled": false,
+      "disabledReason": "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
+      "sourceArtifact": "deployments/avalanche-v14-avalanche-latest.json",
+      "splitterVersion": "1.4",
+      "contracts": {
+        "splitter": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+        "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+        "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+        "admin": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+        "pauser": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "treasury": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e"
+      },
+      "assets": [
+        {
+          "symbol": "USDC",
+          "address": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E"
+        },
+        {
+          "symbol": "USDT",
+          "address": "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7"
+        }
+      ],
+      "runtimeCodeHash": "0x65db1830b1d15400cba35b4ef54dd6c5852d5baa077a732bdc84f7c2218952ef",
+      "safe": {
+        "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+        "version": "1.5.0",
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
+      }
+    },
+    {
+      "ecosystem": "evm",
+      "network": "bnb",
+      "environment": "prod",
+      "chainId": 56,
+      "protocolVersion": "v1.4",
+      "status": "disabled",
+      "settlementEnabled": false,
+      "disabledReason": "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
+      "sourceArtifact": "deployments/bnb-v14-bnb-latest.json",
+      "splitterVersion": "1.4",
+      "contracts": {
+        "splitter": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+        "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+        "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+        "admin": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+        "pauser": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "treasury": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e"
+      },
+      "assets": [
+        {
+          "symbol": "USDC",
+          "address": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d"
+        },
+        {
+          "symbol": "USDT",
+          "address": "0x55d398326f99059fF775485246999027B3197955"
+        }
+      ],
+      "runtimeCodeHash": "0x8aa8c5999a1a0ee87198e380188faaa9d6df88819b47d68682096cc33db81638",
+      "safe": {
+        "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+        "version": "1.5.0",
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
+      }
+    },
+    {
+      "ecosystem": "evm",
+      "network": "base",
+      "environment": "prod",
+      "chainId": 8453,
+      "protocolVersion": "v1.4",
+      "status": "invalid",
+      "settlementEnabled": false,
+      "disabledReason": "INVALID: splitter address equals TokenList and Profiles has no runtime code; redeploy required",
+      "sourceArtifact": "deployments/base-v14-base-latest.json",
+      "splitterVersion": "1.4",
+      "contracts": {
+        "splitter": "0xbA98C0797707611787B04680E260036573D9D7a1",
+        "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+        "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+        "admin": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+        "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+        "pauser": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+        "treasury": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e"
+      },
+      "assets": [
+        {
+          "symbol": "USDC",
+          "name": "USDC",
+          "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+        }
+      ],
+      "runtimeCodeHash": "0xc724e02657817177d1394e8d41189dd7f8299bb5cf2da04946572378c935883c",
+      "safe": {
+        "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+        "version": "1.5.0",
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
+      }
+    },
+    {
+      "ecosystem": "evm",
+      "network": "optimism",
+      "environment": "prod",
+      "chainId": 10,
+      "protocolVersion": "v1.4",
+      "status": "disabled",
+      "settlementEnabled": false,
+      "disabledReason": "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
+      "sourceArtifact": "deployments/optimism-v14-optimism-latest.json",
+      "splitterVersion": "1.4",
+      "contracts": {
+        "splitter": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+        "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+        "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+        "admin": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+        "pauser": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "treasury": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e"
+      },
+      "assets": [
+        {
+          "symbol": "USDC",
+          "address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85"
+        }
+      ],
+      "runtimeCodeHash": "0x5a2d0ffb996d5655fa483e41d3e5870c6a032fd00bea71c3107f95a4b405e152",
+      "safe": {
+        "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+        "version": "1.5.0",
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
+      }
+    },
+    {
+      "ecosystem": "evm",
+      "network": "unichain",
+      "environment": "prod",
+      "chainId": 130,
+      "protocolVersion": "v1.4",
+      "status": "disabled",
+      "settlementEnabled": false,
+      "disabledReason": "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
+      "sourceArtifact": "deployments/unichain-v14-unichain-latest.json",
+      "splitterVersion": "1.4",
+      "contracts": {
+        "splitter": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+        "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+        "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+        "admin": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+        "pauser": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "treasury": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e"
+      },
+      "assets": [
+        {
+          "symbol": "USDC",
+          "address": "0x078D782b760474a361dDA0AF3839290b0EF57AD6"
+        }
+      ],
+      "runtimeCodeHash": "0xcb4f1c15a87720c326daa574a7ab52c116c208805167b46dd055f47c9c8695ca",
+      "safe": {
+        "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+        "version": "1.5.0",
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
+      }
+    },
+    {
+      "ecosystem": "evm",
+      "network": "xrplevm",
+      "environment": "prod",
+      "chainId": 1440000,
+      "protocolVersion": "v1.4",
+      "status": "disabled",
+      "settlementEnabled": false,
+      "disabledReason": "No stablecoin is configured and backend verification is incomplete",
+      "sourceArtifact": "deployments/xrplevm-v14-xrplevm-latest.json",
+      "splitterVersion": "1.4",
+      "contracts": {
+        "splitter": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+        "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+        "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+        "admin": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+        "pauser": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "treasury": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e"
+      },
+      "assets": [],
+      "runtimeCodeHash": "0xd26862dbc501481675f50924ca013acd5c20aca339f2a1aca818becedf7b5aa0",
+      "safe": {
+        "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+        "version": "1.5.0",
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
+      }
+    },
+    {
+      "ecosystem": "evm",
+      "network": "robinhood",
+      "environment": "prod",
+      "chainId": 4663,
+      "protocolVersion": "v1.4",
+      "status": "disabled",
+      "settlementEnabled": false,
+      "disabledReason": "TokenList is empty; USDe/USDG require Safe allowlisting and backend verification",
+      "sourceArtifact": "deployments/robinhood-v14-robinhood-latest.json",
+      "splitterVersion": "1.4",
+      "contracts": {
+        "splitter": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+        "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+        "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+        "admin": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+        "pauser": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "treasury": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e"
+      },
+      "assets": [],
+      "runtimeCodeHash": "0x96812eb70224f48c095b240bc0e1d739a7fcb878c3237b5f795629c239d7ef72",
+      "safe": {
+        "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+        "version": "1.5.0",
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
+      }
+    },
+    {
+      "ecosystem": "solana",
+      "network": "devnet",
+      "environment": "dev",
+      "protocolVersion": "v1.4",
+      "status": "disabled",
+      "settlementEnabled": false,
+      "disabledReason": "Backend Solana receipt verification is not implemented",
+      "sourceArtifact": "deployments/splitter_v14/splitter.devnet.20260911-195503.json",
+      "programId": "8dty5bD738Z9TzEkDu8vLSnhpJNWtEGMUEcYaKCUTY6y",
+      "idl": {
+        "name": "splitter",
+        "version": "1.4.1"
+      }
+    },
+    {
+      "ecosystem": "solana",
+      "network": "mainnet",
+      "environment": "prod",
+      "protocolVersion": "v1.4",
+      "status": "disabled",
+      "settlementEnabled": false,
+      "disabledReason": "Backend Solana receipt verification is not implemented and upgrade authority is not multisig",
+      "sourceArtifact": "deployments/splitter_v14/splitter.mainnet.20260911-200222.json",
+      "programId": "724Ut31i4ecY4dJ25z8HuZetu3A43xtNkPdk4JdbsfdD",
+      "idl": {
+        "name": "splitter",
+        "version": "1.4.1"
+      }
+    }
+  ]
+}

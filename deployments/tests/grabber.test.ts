@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import { compareVersionTime, fetchJson, listGitHubFiles, IDL_DIR } from "../src/grabber.js";
+import { compareVersionTime, fetchJson, listGitHubFiles, IDL_DIR, writeSplitRegistries } from "../src/grabber.js";
 
 describe("compareVersionTime", () => {
   it("prefers higher version", () => {
@@ -211,5 +211,70 @@ describe("buildRegistry", () => {
     expect(registry.evm["137"]).toBeDefined();
     expect(registry.solana["mainnet"]).toBeDefined();
     expect(registry.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+});
+
+describe("writeSplitRegistries", () => {
+  it("writes evm and solana v1.4 split files", () => {
+    const outDir = `${IDL_DIR}/../split-test`;
+    const evmPath = `${outDir}/evm-splitter-v1.4.json`;
+    const solanaPath = `${outDir}/solana-splitter-v1.4.json`;
+    for (const p of [evmPath, solanaPath]) {
+      if (existsSync(p)) rmSync(p);
+    }
+
+    const registry = {
+      evm: {
+        "137": {
+          kind: "evm" as const,
+          chainId: 137,
+          network: "polygon",
+          version: "1.4",
+          splitterAddress: "0xA",
+          tokenListAddress: "0xB",
+          profilesAddress: "0xC",
+          admin: "0xD",
+          signer: "0xE",
+          pauser: "0xF",
+          treasury: "0x1",
+          runtimeCodeHash: "0x2",
+          stablecoins: [],
+          settlementEnabled: false,
+          status: "disabled",
+          deployedAt: "2026-09-13T00:00:00.000Z",
+          sourceUrl: "http://gh/polygon.json",
+          abiPath: null,
+        },
+      },
+      solana: {
+        mainnet: {
+          kind: "solana" as const,
+          cluster: "mainnet" as const,
+          version: "1.4.1",
+          programAddress: "So11111111111111111111111111111111111111112",
+          deployedAt: "2026-09-13T00:00:00.000Z",
+          sourceUrl: "http://gh/sol.json",
+          idlPath: "registry/idl/solana/splitter.mainnet.json",
+        },
+      },
+      generatedAt: "2026-09-13T00:00:00.000Z",
+      sources: ["http://src"],
+    };
+
+    const written = writeSplitRegistries(registry, outDir);
+    expect(written).toContain(evmPath);
+    expect(written).toContain(solanaPath);
+    expect(existsSync(evmPath)).toBe(true);
+    expect(existsSync(solanaPath)).toBe(true);
+
+    const evm = JSON.parse(readFileSync(evmPath, "utf-8"));
+    expect(evm.ecosystem).toBe("evm");
+    expect(evm.protocolVersion).toBe("v1.4");
+    expect(evm.deployments).toHaveLength(1);
+
+    const solana = JSON.parse(readFileSync(solanaPath, "utf-8"));
+    expect(solana.ecosystem).toBe("solana");
+    expect(solana.protocolVersion).toBe("v1.4");
+    expect(solana.deployments).toHaveLength(1);
   });
 });
