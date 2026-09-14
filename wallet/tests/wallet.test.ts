@@ -3,12 +3,11 @@
 // It must also stay free of the heavy transaction stack (AIFINP-117).
 
 import { describe, it, expect } from "vitest";
-import { readFileSync, existsSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
-import { dirname, resolve, join } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { tmpdir } from "node:os";
-import { createCipheriv, scryptSync, randomBytes } from "node:crypto";
-import { deriveWallet, newWallet, walletFromSolanaSecret } from "../src/index.js";
+import { createCipheriv, createDecipheriv, scryptSync, randomBytes } from "node:crypto";
+import { deriveWallet, newWallet, walletFromSolanaSecret } from "../src";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SEEDS = ["11".repeat(32), "ab".repeat(32), "0f".repeat(32), "00".repeat(31) + "01"];
@@ -161,7 +160,7 @@ describe("encrypted keystore", () => {
       p: 1,
       maxmem: 64 * 1024 * 1024,
     });
-    const decipher = require("node:crypto").createDecipheriv("aes-256-gcm", key, Buffer.from(encrypted.iv, "base64"));
+    const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(encrypted.iv, "base64"));
     decipher.setAuthTag(Buffer.from(encrypted.tag, "base64"));
     const decrypted = Buffer.concat([
       decipher.update(Buffer.from(encrypted.ct, "base64")),
@@ -181,7 +180,7 @@ describe("encrypted keystore", () => {
       maxmem: 64 * 1024 * 1024,
     });
     expect(() => {
-      const decipher = require("node:crypto").createDecipheriv("aes-256-gcm", wrongKey, Buffer.from(encrypted.iv, "base64"));
+      const decipher = createDecipheriv("aes-256-gcm", wrongKey, Buffer.from(encrypted.iv, "base64"));
       decipher.setAuthTag(Buffer.from(encrypted.tag, "base64"));
       Buffer.concat([
         decipher.update(Buffer.from(encrypted.ct, "base64")),
