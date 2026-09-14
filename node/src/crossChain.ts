@@ -18,6 +18,26 @@ import { AiFinPayError } from "./errors.js";
 
 const LIFI_API = "https://li.quest/v1";
 
+// LiFi's public API answers callers without an API key, and says what that
+// costs in its own response headers: `ratelimit-limit: 75`, `ratelimit-reset:
+// 7200` — seventy-five requests every two hours, per caller. This SDK sends no
+// key, so that is the budget every bridge here has to fit inside.
+//
+// The old 5s interval did not fit. A Circle CCTP transfer on Polygon takes the
+// 15-25 minutes this file's own comment describes, which at 5s is 180-300
+// status requests for ONE bridge — the quota is gone around minute six, and
+// every poll after that is a 429. 20s keeps a full 30-minute wait at 90
+// requests, which still exceeds 75; hence the backoff below, which is what
+// actually makes a long wait survivable without a key.
+const DEFAULT_POLL_INTERVAL_MS = 20_000;
+
+// How many unreadable answers in a row before we stop guessing. Low enough
+// that a rate-limited caller finds out quickly, high enough to ride out a
+// transient 502 from a bridge aggregator mid-transfer.
+const MAX_UNREADABLE_POLLS = 5;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
+
 // ── Supported EVM chains for cross-chain settlement ──────────────────────
 // EVM chain IDs (canonical, used by both viem and LiFi).
 export const EVM_CHAINS = {
@@ -124,7 +144,15 @@ export async function bridgeQuote(opts: BridgeQuoteOptions): Promise<BridgeQuote
   if (!r.ok) {
     const detail = await r.text().catch(() => "<unreadable>");
     throw new AiFinPayError(
-      `bridgeQuote: LiFi /quote returned ${r.status} for ${opts.fromChain}→${opts.toChain}: ${detail.slice(0, 300)}`,
+      `bridgeQuote: LiFi /quote returned ${r.status} for ${opts.fromChain}→${opts.toChain}: ${detail.slice(0, 300)}` +
+        // 429 here means the caller ran out of anonymous quota, not that the
+        // route does not exist. Without saying so, the message reads as "this
+        // pair is unsupported" and sends whoever gets it looking in the wrong
+        // place entirely.
+        (r.status === 429
+          ? ` — this is a RATE LIMIT, not an unsupported route. LiFi allows callers without ` +
+            `an API key 75 requests per two hours (see the ratelimit-* response headers).`
+          : ``),
     );
   }
   const j = (await r.json()) as LifiQuoteResponse;
@@ -324,14 +352,38 @@ export async function bridgeWaitForArrival(
     timeoutMs?:      number;
   } = {},
 ): Promise<{ status: "done" | "failed"; dest_tx?: string; raw: unknown }> {
-  const pollMs = opts.pollIntervalMs ?? 5000;
+  const pollMs = opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const timeoutMs = opts.timeoutMs   ?? 30 * 60 * 1000; // 30 min ceiling
   const deadline = Date.now() + timeoutMs;
 
+  let consecutiveUnreadable = 0;
+  let lastStatusCode = 0;
+
   while (Date.now() < deadline) {
     const url = `${LIFI_API}/status?txHash=${sourceTxHash}`;
-    const r = await fetch(url);
+    let r: Response;
+    try {
+      r = await fetch(url);
+    } catch (err) {
+      // A dropped connection used to abort the whole wait, so one blip during
+      // a 25-minute CCTP transfer lost the observation entirely. It now counts
+      // on the same tally as an unreadable answer: "the network is down" and
+      // "LiFi will not answer" are the same fact to the caller.
+      consecutiveUnreadable += 1;
+      if (consecutiveUnreadable >= MAX_UNREADABLE_POLLS) {
+        throw new AiFinPayError(
+          `bridgeWaitForArrival: cannot REACH LiFi to read the status of ${sourceTxHash} — ` +
+            `${consecutiveUnreadable} consecutive network failures, last was ${String(err)}. ` +
+            `This is a failure to observe the transfer, NOT evidence that it failed. ` +
+            `Check it directly at https://scan.li.fi/tx/${sourceTxHash}`,
+        );
+      }
+      await sleep(Math.min(pollMs * 2 ** consecutiveUnreadable, Math.max(0, deadline - Date.now())));
+      continue;
+    }
+
     if (r.ok) {
+      consecutiveUnreadable = 0;
       const j = (await r.json()) as {
         status?:    string;
         receiving?: { txHash?: string };
@@ -342,10 +394,50 @@ export async function bridgeWaitForArrival(
       if (j.status === "FAILED" || j.status === "INVALID") {
         return { status: "failed", raw: j };
       }
+      await sleep(Math.min(pollMs, deadline - Date.now()));
+      continue;
     }
-    await new Promise((resolve) => setTimeout(resolve, pollMs));
+
+    // A non-2xx answer used to fall through to the same sleep as "still in
+    // flight", which made "LiFi would not tell us" indistinguishable from
+    // "it has not arrived". With the old 5s interval that was not academic:
+    // the anonymous quota is 75 requests per two hours, so every poll past
+    // minute six came back 429, the loop read each one as in-flight, and at
+    // the deadline it announced the transfer had not finalised — for a
+    // transfer that had. Money moved and the SDK said it had not.
+    consecutiveUnreadable += 1;
+    lastStatusCode = r.status;
+    if (consecutiveUnreadable >= MAX_UNREADABLE_POLLS) {
+      throw new AiFinPayError(
+        `bridgeWaitForArrival: cannot READ the status of ${sourceTxHash} — LiFi answered ` +
+          `${r.status} ${consecutiveUnreadable} times in a row. This is a failure to observe ` +
+          `the transfer, NOT evidence that it failed: the funds may already have arrived. ` +
+          (r.status === 429
+            ? `LiFi rate-limits callers without an API key to 75 requests per two hours; ` +
+              `raise pollIntervalMs or configure a key. `
+            : ``) +
+          `Check it directly at https://scan.li.fi/tx/${sourceTxHash}`,
+      );
+    }
+
+    // 429 carries retry-after; honour it when present, and back off either
+    // way so a rate-limited caller stops spending quota it does not have.
+    const retryAfterS = Number(r.headers.get("retry-after"));
+    const backoff =
+      Number.isFinite(retryAfterS) && retryAfterS > 0
+        ? retryAfterS * 1000
+        : pollMs * 2 ** consecutiveUnreadable;
+    await sleep(Math.min(backoff, Math.max(0, deadline - Date.now())));
   }
+
+  // Deliberately does not say the transfer failed. At the deadline we know
+  // only that we never saw it complete, and the two are different facts —
+  // one of them is actionable by the agent, the other sends it re-sending
+  // money that is already on the other side.
   throw new AiFinPayError(
-    `bridgeWaitForArrival: timeout after ${timeoutMs}ms — source tx ${sourceTxHash} did not finalise on dest`,
+    `bridgeWaitForArrival: gave up after ${timeoutMs}ms without observing completion of ` +
+      `${sourceTxHash}. The transfer may still be in flight or already done` +
+      (lastStatusCode ? ` (last status response: HTTP ${lastStatusCode})` : ``) +
+      `. Check it at https://scan.li.fi/tx/${sourceTxHash}`,
   );
 }

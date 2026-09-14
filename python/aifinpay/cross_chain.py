@@ -26,6 +26,22 @@ from .errors import AiFinPayError
 
 LIFI_API = "https://li.quest/v1"
 
+# LiFi answers callers without an API key, and states the price in its own
+# response headers: `ratelimit-limit: 75`, `ratelimit-reset: 7200` — seventy
+# five requests every two hours. This SDK sends no key, so that is the budget
+# every bridge here has to fit inside.
+#
+# The old 5s interval did not fit. A Circle CCTP transfer on Polygon takes the
+# 15-25 minutes the docstring below describes, which at 5s is 180-300 status
+# requests for ONE bridge. 20s keeps a full 30-minute wait at 90 requests;
+# the backoff on an unreadable answer is what makes it survivable without a key.
+DEFAULT_POLL_INTERVAL_MS = 20_000
+
+# Unreadable answers in a row before we stop guessing — low enough that a
+# rate-limited caller finds out quickly, high enough to ride out a transient
+# 502 from a bridge aggregator mid-transfer.
+MAX_UNREADABLE_POLLS = 5
+
 # ── Supported EVM chains for cross-chain settlement ──────────────────────
 # EVM chain IDs (canonical, used by both web3.py and LiFi). Ported verbatim
 # from the Node SDK.
@@ -291,7 +307,7 @@ def bridge_execute(
 def bridge_wait_for_arrival(
     source_tx_hash:   str,
     *,
-    poll_interval_ms: int = 5000,
+    poll_interval_ms: int = DEFAULT_POLL_INTERVAL_MS,
     timeout_ms:       int = 30 * 60 * 1000,
     request_timeout:  float = 30.0,
 ) -> Dict[str, Any]:
@@ -306,6 +322,8 @@ def bridge_wait_for_arrival(
     """
     poll_s = poll_interval_ms / 1000.0
     deadline = time.time() + (timeout_ms / 1000.0)
+    consecutive_unreadable = 0
+    last_status_code = 0
 
     while time.time() < deadline:
         try:
@@ -315,6 +333,7 @@ def bridge_wait_for_arrival(
                 timeout=request_timeout,
             )
             if r.ok:
+                consecutive_unreadable = 0
                 j = r.json()
                 status = j.get("status")
                 if status == "DONE":
@@ -326,13 +345,67 @@ def bridge_wait_for_arrival(
                     }
                 if status in ("FAILED", "INVALID"):
                     return {"status": "failed", "dest_tx": None, "raw": j}
-        except requests.RequestException:
-            # Transient network errors are swallowed; we'll retry on the
-            # next poll. A persistent outage hits the timeout below.
-            pass
+                time.sleep(poll_s)
+                continue
+
+            # A non-2xx answer used to fall through to the same sleep as
+            # "still in flight", making "LiFi would not tell us" identical to
+            # "it has not arrived". The anonymous quota is 75 requests per two
+            # hours, so at the old 5s interval every poll past minute six came
+            # back 429, each was read as in-flight, and at the deadline this
+            # announced that the transfer had not finalised — for a transfer
+            # that had. Money moved and the SDK said it had not.
+            consecutive_unreadable += 1
+            last_status_code = r.status_code
+            if consecutive_unreadable >= MAX_UNREADABLE_POLLS:
+                hint = ""
+                if r.status_code == 429:
+                    hint = (
+                        "LiFi rate-limits callers without an API key to 75 requests "
+                        "per two hours; raise poll_interval_ms or configure a key. "
+                    )
+                raise AiFinPayError(
+                    f"bridge_wait_for_arrival: cannot READ the status of {source_tx_hash} — "
+                    f"LiFi answered {r.status_code} {consecutive_unreadable} times in a row. "
+                    f"This is a failure to observe the transfer, NOT evidence that it failed: "
+                    f"the funds may already have arrived. {hint}"
+                    f"Check it directly at https://scan.li.fi/tx/{source_tx_hash}"
+                )
+
+            retry_after = r.headers.get("retry-after")
+            try:
+                backoff = float(retry_after) if retry_after else 0.0
+            except ValueError:
+                backoff = 0.0
+            if backoff <= 0:
+                backoff = poll_s * (2 ** consecutive_unreadable)
+            time.sleep(max(0.0, min(backoff, deadline - time.time())))
+            continue
+        except requests.RequestException as exc:
+            # A blip is worth riding out — a 25-minute CCTP bridge should not
+            # lose its observation to one dropped connection. A sustained
+            # outage is not a blip, and used to be swallowed silently for the
+            # full thirty minutes; it now surfaces on the same counter as an
+            # unreadable HTTP answer, because "the network is down" and "LiFi
+            # will not answer" are the same fact to the caller.
+            consecutive_unreadable += 1
+            if consecutive_unreadable >= MAX_UNREADABLE_POLLS:
+                raise AiFinPayError(
+                    f"bridge_wait_for_arrival: cannot REACH LiFi to read the status of "
+                    f"{source_tx_hash} — {consecutive_unreadable} consecutive network "
+                    f"failures, last was {exc!r}. This is a failure to observe the "
+                    f"transfer, NOT evidence that it failed. Check it directly at "
+                    f"https://scan.li.fi/tx/{source_tx_hash}"
+                ) from exc
         time.sleep(poll_s)
 
+    # Deliberately does not say the transfer failed. At the deadline we know
+    # only that we never saw it complete, and the two are different facts —
+    # one is actionable by the agent, the other sends it re-sending money that
+    # is already on the other side.
+    seen = f" (last status response: HTTP {last_status_code})" if last_status_code else ""
     raise AiFinPayError(
-        f"bridge_wait_for_arrival: timeout after {timeout_ms}ms — "
-        f"source tx {source_tx_hash} did not finalise on dest"
+        f"bridge_wait_for_arrival: gave up after {timeout_ms}ms without observing "
+        f"completion of {source_tx_hash}. The transfer may still be in flight or "
+        f"already done{seen}. Check it at https://scan.li.fi/tx/{source_tx_hash}"
     )

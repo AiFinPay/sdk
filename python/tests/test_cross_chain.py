@@ -188,12 +188,79 @@ def test_bridge_wait_for_arrival_returns_failed():
     assert out["status"] == "failed"
 
 
-def test_bridge_wait_for_arrival_times_out():
+def test_bridge_wait_for_arrival_times_out_without_claiming_failure():
+    # The message used to read "timeout after Nms — source tx ... did not
+    # finalise on dest". At the deadline we know only that we never saw it
+    # complete, which is a different fact: one is actionable, the other sends
+    # an agent re-sending money that is already on the other side.
     with patch("aifinpay.cross_chain.requests.get") as mock_get, \
          patch("aifinpay.cross_chain.time.sleep") as _sleep:
         mock_get.return_value = _ok_response({"status": "PENDING"})
-        with pytest.raises(AiFinPayError, match="timeout after"):
+        with pytest.raises(AiFinPayError, match="without observing completion"):
             bridge_wait_for_arrival("0xsrc", poll_interval_ms=1, timeout_ms=5)
+
+
+# ── A rate limit is not a failed bridge ─────────────────────────────────
+#
+# LiFi allows callers without an API key 75 requests per two hours, and this
+# SDK sends none. Polling every 5s for up to 30 minutes asked up to 360 times
+# for one transfer, and every non-2xx answer was treated exactly like "not
+# arrived yet" — so a CCTP transfer, which this module says takes 15-25 min on
+# Polygon, exhausted the quota around minute six and was then reported as not
+# having finalised. For a transfer that had.
+
+
+def _resp(status_code, body=None, headers=None):
+    r = MagicMock()
+    r.ok = 200 <= status_code < 300
+    r.status_code = status_code
+    r.headers = headers or {}
+    r.json.return_value = body or {}
+    return r
+
+
+def test_a_persistent_429_is_reported_as_unreadable_not_as_absent():
+    with patch("aifinpay.cross_chain.requests.get") as mock_get, \
+         patch("aifinpay.cross_chain.time.sleep") as _sleep:
+        mock_get.return_value = _resp(429, {}, {"retry-after": "0"})
+        with pytest.raises(AiFinPayError) as exc:
+            bridge_wait_for_arrival("0xsrc", poll_interval_ms=1, timeout_ms=60_000)
+    msg = str(exc.value)
+    assert "cannot READ" in msg
+    assert "NOT evidence that it failed" in msg
+    assert "75 requests" in msg
+    # and it stops early rather than spending the whole window on 429s
+    assert mock_get.call_count <= 10
+
+
+def test_a_transient_429_followed_by_done_still_returns_done():
+    with patch("aifinpay.cross_chain.requests.get") as mock_get, \
+         patch("aifinpay.cross_chain.time.sleep") as _sleep:
+        mock_get.side_effect = [
+            _resp(429, {}, {"retry-after": "0"}),
+            _resp(429, {}, {"retry-after": "0"}),
+            _ok_response({"status": "DONE", "receiving": {"txHash": "0xdest"}}),
+        ]
+        out = bridge_wait_for_arrival("0xsrc", poll_interval_ms=1, timeout_ms=60_000)
+    assert out["status"] == "done"
+    assert out["dest_tx"] == "0xdest"
+
+
+def test_a_sustained_network_failure_surfaces_instead_of_being_swallowed():
+    # This used to be `except RequestException: pass` for the full window, so a
+    # dead network looked exactly like a slow bridge for thirty minutes.
+    with patch("aifinpay.cross_chain.requests.get") as mock_get, \
+         patch("aifinpay.cross_chain.time.sleep") as _sleep:
+        mock_get.side_effect = requests.RequestException("connection reset")
+        with pytest.raises(AiFinPayError, match="cannot REACH LiFi"):
+            bridge_wait_for_arrival("0xsrc", poll_interval_ms=1, timeout_ms=60_000)
+
+
+def test_the_default_poll_interval_fits_the_quota_it_is_given():
+    # 30 minutes at 5s is 360 requests against a budget of 75. This fails if
+    # someone lowers it back for responsiveness without reading the header.
+    from aifinpay.cross_chain import DEFAULT_POLL_INTERVAL_MS
+    assert (30 * 60 * 1000) / DEFAULT_POLL_INTERVAL_MS <= 90
 
 
 # ── AiFinPayAgent.bridge_quote convenience wrapper ──────────────────────
