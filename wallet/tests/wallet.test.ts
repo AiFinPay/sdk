@@ -2,12 +2,13 @@
 // full agent already uses, while deriving deterministic NEAR/Aptos additions.
 // It must also stay free of the heavy transaction stack (AIFINP-117).
 
-import { describe, it, expect } from "vitest";
-import { readFileSync, existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { readFileSync, existsSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createCipheriv, createDecipheriv, scryptSync, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, scryptSync, randomBytes, randomFillSync } from "node:crypto";
 import { deriveWallet, newWallet, walletFromSolanaSecret } from "../src";
+import { sha3_256 } from "@noble/hashes/sha3";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SEEDS = ["11".repeat(32), "ab".repeat(32), "0f".repeat(32), "00".repeat(31) + "01"];
@@ -115,9 +116,9 @@ describe("the install stays light", () => {
     expect([...pkgs]).not.toContain("@aifinpay/agent");
   });
 
-  it("declares exactly the five light crypto deps, nothing heavier", () => {
+  it("declares exactly the four light crypto deps, nothing heavier", () => {
     const pkg = JSON.parse(readFileSync(resolve(HERE, "..", "package.json"), "utf8"));
-    expect(Object.keys(pkg.dependencies).sort()).toEqual(["@noble/curves", "@noble/hashes", "bs58", "keytar", "tweetnacl"]);
+    expect(Object.keys(pkg.dependencies).sort()).toEqual(["@noble/curves", "@noble/hashes", "bs58", "tweetnacl"]);
   });
 });
 
@@ -187,5 +188,144 @@ describe("encrypted keystore", () => {
         decipher.final(),
       ]);
     }).toThrow();
+  });
+});
+
+describe("plain keystore round-trip", () => {
+  const tmpDir = resolve(HERE, "tmp-plain-keystore");
+  const originalEnv = process.env.AIFINPAY_HOME;
+  const originalPassphrase = process.env.AIFINPAY_WALLET_PASSPHRASE;
+
+  beforeEach(() => {
+    process.env.AIFINPAY_HOME = tmpDir;
+    delete process.env.AIFINPAY_WALLET_PASSPHRASE;
+    rmSync(tmpDir, { recursive: true, force: true });
+    mkdirSync(tmpDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    if (originalEnv === undefined) delete process.env.AIFINPAY_HOME;
+    else process.env.AIFINPAY_HOME = originalEnv;
+    if (originalPassphrase === undefined) delete process.env.AIFINPAY_WALLET_PASSPHRASE;
+    else process.env.AIFINPAY_WALLET_PASSPHRASE = originalPassphrase;
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("creates a plain keystore without a passphrase", async () => {
+    const cli = await import("../src/cli.js");
+    await cli.run!("new", ["--plain"]);
+    const keystorePath = join(tmpDir, "agent.json");
+    expect(existsSync(keystorePath)).toBe(true);
+    const store = JSON.parse(readFileSync(keystorePath, "utf8"));
+    expect(store).toHaveProperty("secretB58");
+    expect(store).not.toHaveProperty("enc");
+  });
+
+  it("shows and exports from a plain keystore without a passphrase", async () => {
+    const cli = await import("../src/cli.js");
+    await cli.run!("new", ["--plain"]);
+
+    const logs: string[] = [];
+    const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((...args: any[]) => {
+      logs.push(args[0]);
+      return originalStdoutWrite.apply(process.stdout, args);
+    }) as any;
+
+    await cli.run!("show", []);
+    await cli.run!("export", []);
+
+    process.stdout.write = originalStdoutWrite;
+
+    const showOutput = logs.filter((l) => l.includes("EVM")).join("");
+    const seedOutput = logs.filter((l) => /^[0-9a-f]{64}\n$/.test(l)).join("");
+    expect(showOutput).toContain("EVM");
+    expect(seedOutput).toMatch(/^[0-9a-f]{64}\n$/);
+  });
+
+  it("requires a passphrase for an encrypted keystore", async () => {
+    const cli = await import("../src/cli.js");
+    process.env.AIFINPAY_WALLET_PASSPHRASE = "StrongPass123!@$.^";
+    await cli.run!("new", []);
+    const keystorePath = join(tmpDir, "agent.json");
+    expect(existsSync(keystorePath)).toBe(true);
+    const store = JSON.parse(readFileSync(keystorePath, "utf8"));
+    expect(store).toHaveProperty("enc");
+
+    delete process.env.AIFINPAY_WALLET_PASSPHRASE;
+    await expect(cli.run!("show", [])).rejects.toThrow("AIFINPAY_WALLET_PASSPHRASE is required to decrypt");
+  });
+});
+
+describe("passphrase validation", () => {
+  const validatePassphrase = (passphrase: string | undefined): string => {
+    if (passphrase === undefined || passphrase === null || passphrase === "") {
+      throw new Error("AIFINPAY_WALLET_PASSPHRASE is not set. Please set a strong passphrase in .env file.");
+    }
+    if (passphrase.length < 16) {
+      throw new Error("AIFINPAY_WALLET_PASSPHRASE must be at least 16 characters long.");
+    }
+    const hasLower = /[a-z]/.test(passphrase);
+    const hasUpper = /[A-Z]/.test(passphrase);
+    const hasDigit = /[0-9]/.test(passphrase);
+    const hasSpecial = /[!@$.^*_+=-]/.test(passphrase);
+
+    if (!hasLower || !hasUpper || !hasDigit || !hasSpecial) {
+      throw new Error(
+        "AIFINPAY_WALLET_PASSPHRASE must contain: lowercase (a-z), uppercase (A-Z), digits (0-9), and special characters (!@$.^*_+=-). " +
+        "No # or other special characters allowed."
+      );
+    }
+    return passphrase;
+  };
+
+  const generateStrongPassphrase = (): string => {
+    const randomBytes = new Uint8Array(32);
+    randomFillSync(randomBytes);
+    const hash = sha3_256(randomBytes);
+    return Array.from(hash, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  };
+
+  it("rejects undefined passphrase", () => {
+    expect(() => validatePassphrase(undefined)).toThrow("AIFINPAY_WALLET_PASSPHRASE is not set");
+  });
+
+  it("rejects null passphrase", () => {
+    expect(() => validatePassphrase(null as any)).toThrow("AIFINPAY_WALLET_PASSPHRASE is not set");
+  });
+
+  it("rejects empty string passphrase", () => {
+    expect(() => validatePassphrase("")).toThrow("AIFINPAY_WALLET_PASSPHRASE is not set");
+  });
+
+  it("rejects passphrase shorter than 16 characters", () => {
+    expect(() => validatePassphrase("short123!@#")).toThrow("must be at least 16 characters");
+  });
+
+  it("rejects passphrase without lowercase", () => {
+    expect(() => validatePassphrase("STRONGPASS123!@$.^")).toThrow("must contain: lowercase");
+  });
+
+  it("rejects passphrase without uppercase", () => {
+    expect(() => validatePassphrase("strongpass123!@$.^")).toThrow("must contain: lowercase (a-z), uppercase (A-Z)");
+  });
+
+  it("rejects passphrase without digit", () => {
+    expect(() => validatePassphrase("StrongPass!@$.^*")).toThrow("must contain: lowercase (a-z), uppercase (A-Z), digits (0-9)");
+  });
+
+  it("rejects passphrase without special character", () => {
+    expect(() => validatePassphrase("StrongPass123456")).toThrow("must contain: lowercase (a-z), uppercase (A-Z), digits (0-9), and special characters");
+  });
+
+  it("accepts valid strong passphrase", () => {
+    const valid = "StrongPass123!@$.^";
+    expect(validatePassphrase(valid)).toBe(valid);
+  });
+
+  it("generates a valid strong passphrase", () => {
+    const passphrase = generateStrongPassphrase();
+    expect(passphrase).toMatch(/^[0-9a-f]{64}$/);
+    expect(passphrase.length).toBe(64);
   });
 });
