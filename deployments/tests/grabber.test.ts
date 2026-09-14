@@ -217,8 +217,8 @@ describe("buildRegistry", () => {
 describe("writeSplitRegistries", () => {
   it("writes evm and solana v1.4 split files", () => {
     const outDir = `${IDL_DIR}/../split-test`;
-    const evmPath = `${outDir}/evm-splitter-v1.4.json`;
-    const solanaPath = `${outDir}/solana-splitter-v1.4.json`;
+    const evmPath = `${outDir}/splitter/evm/v1.4/deployments.json`;
+    const solanaPath = `${outDir}/splitter/solana/deployments.json`;
     for (const p of [evmPath, solanaPath]) {
       if (existsSync(p)) rmSync(p);
     }

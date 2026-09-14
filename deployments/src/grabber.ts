@@ -235,11 +235,8 @@ export async function grabSolanaDeployments(): Promise<Record<string, SolanaDepl
     }
   }
 
-  ensureDir(IDL_DIR);
   const registry: Record<string, SolanaDeployment> = {};
   for (const [cluster, { url, data }] of byCluster) {
-    const idlPath = join(IDL_DIR, `splitter.${cluster}.json`);
-    writeFileSync(idlPath, JSON.stringify(data, null, 2) + "\n");
     registry[cluster] = {
       kind: "solana",
       cluster,
@@ -247,11 +244,8 @@ export async function grabSolanaDeployments(): Promise<Record<string, SolanaDepl
       programAddress: data.address,
       deployedAt: new Date().toISOString(),
       sourceUrl: url,
-      idlPath: `registry/idl/splitter.${cluster}.json`,
-      idl: {
-        name: "splitter",
-        version: data.metadata?.version ?? "1.4.1",
-      },
+      idlPath: null,
+      idl: null,
     };
   }
 
@@ -299,7 +293,10 @@ export async function buildRegistry(): Promise<DeploymentRegistry> {
  * Uses the same schema as splitter versioned deployments.json for consistency.
  */
 export function writeSplitRegistries(registry: DeploymentRegistry, outDir: string): string[] {
-  ensureDir(outDir);
+  const evmDir = join(outDir, "splitter/evm/v1.4");
+  const solanaDir = join(outDir, "splitter/solana");
+  ensureDir(evmDir);
+  ensureDir(solanaDir);
 
   const evm14 = {
     $schema: "./reference/payment-deployments.schema.json",
@@ -376,7 +373,7 @@ export function writeSplitRegistries(registry: DeploymentRegistry, outDir: strin
       };
     }),
     sourceArtifact: {
-      path: "./evm-splitter-v1.4.json",
+      path: "./splitter/evm/v1.4/deployments.json",
       retrievedAt: new Date().toISOString().split("T")[0],
     },
   };
@@ -404,20 +401,20 @@ export function writeSplitRegistries(registry: DeploymentRegistry, outDir: strin
         ? "Backend Solana receipt verification is not implemented"
         : "Backend Solana receipt verification is not implemented and upgrade authority is not multisig",
       programId: solana.programAddress,
-      idl: {
+      idl: solana.idl ?? {
         name: "splitter",
         version: solana.version || "1.4.1",
       },
       sourceArtifact: `deployments/splitter_v14/splitter.${solana.cluster}.json`,
     })),
     sourceArtifact: {
-      path: "./solana-splitter-v1.4.json",
+      path: "./splitter/solana/deployments.json",
       retrievedAt: new Date().toISOString().split("T")[0],
     },
   };
 
-  const evmPath = join(outDir, "evm-splitter-v1.4.json");
-  const solanaPath = join(outDir, "solana-splitter-v1.4.json");
+  const evmPath = join(evmDir, "deployments.json");
+  const solanaPath = join(solanaDir, "deployments.json");
 
   writeFileSync(evmPath, JSON.stringify(evm14, null, 2) + "\n");
   writeFileSync(solanaPath, JSON.stringify(solana14, null, 2) + "\n");

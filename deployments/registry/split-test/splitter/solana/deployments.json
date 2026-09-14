@@ -3,7 +3,7 @@
   "version": "1.4",
   "description": "Solana Splitter v1.4 — Program deployment",
   "schemaVersion": 1,
-  "generatedAt": "2026-09-14T14:47:20.335Z",
+  "generatedAt": "2026-09-13T00:00:00.000Z",
   "ecosystem": "solana",
   "protocolVersion": "v1.4",
   "source": {
@@ -13,27 +13,13 @@
   },
   "deployments": [
     {
-      "cluster": "devnet",
-      "environment": "dev",
-      "testnet": true,
-      "status": "disabled",
-      "settlementEnabled": false,
-      "disabledReason": "Backend Solana receipt verification is not implemented",
-      "programId": "8dty5bD738Z9TzEkDu8vLSnhpJNWtEGMUEcYaKCUTY6y",
-      "idl": {
-        "name": "splitter",
-        "version": "1.4.1"
-      },
-      "sourceArtifact": "deployments/splitter_v14/splitter.devnet.json"
-    },
-    {
       "cluster": "mainnet",
       "environment": "prod",
       "testnet": false,
       "status": "disabled",
       "settlementEnabled": false,
       "disabledReason": "Backend Solana receipt verification is not implemented and upgrade authority is not multisig",
-      "programId": "724Ut31i4ecY4dJ25z8HuZetu3A43xtNkPdk4JdbsfdD",
+      "programId": "So11111111111111111111111111111111111111112",
       "idl": {
         "name": "splitter",
         "version": "1.4.1"

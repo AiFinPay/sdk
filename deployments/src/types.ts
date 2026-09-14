@@ -42,12 +42,12 @@ export interface SolanaDeployment {
   deployedAt: string; // ISO 8601 from filename
   sourceUrl: string;
   /** Path to the local IDL artifact copied from the upstream deployment. */
-  idlPath: string;
+  idlPath: string | null;
   /** IDL metadata */
-  idl?: {
+  idl: {
     name: string;
     version: string;
-  };
+  } | null;
 }
 
 export type Deployment = EvmDeployment | SolanaDeployment;

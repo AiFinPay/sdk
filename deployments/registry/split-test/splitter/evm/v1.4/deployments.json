@@ -1,0 +1,69 @@
+{
+  "$schema": "./reference/payment-deployments.schema.json",
+  "version": "1.4",
+  "description": "B2BSplitter v1.4 — Full contract suite deployment",
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-13T00:00:00.000Z",
+  "ecosystem": "evm",
+  "protocolVersion": "v1.4",
+  "source": {
+    "repo": "AiFinPay/evm-contract",
+    "commit": "a54a4c107de7bb42f54e411e621d3897938bfc31",
+    "path": "deployments/*-v14-*-latest.json"
+  },
+  "governance": {
+    "prod": {
+      "safe": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "version": "1.5.0",
+      "threshold": 3,
+      "owners": [
+        "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+        "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+        "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+        "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+      ]
+    },
+    "testnet": {
+      "safe": "0xc9ab36c2af2888414c7ea9160d9e33b773c2b388",
+      "version": "1.4.1",
+      "threshold": 3,
+      "owners": [
+        "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+        "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+        "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+        "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+      ]
+    }
+  },
+  "deployments": [
+    {
+      "chain": "polygon",
+      "chainId": 137,
+      "environment": "prod",
+      "testnet": false,
+      "status": "disabled",
+      "settlementEnabled": false,
+      "disabledReason": "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
+      "runtimeCodeHash": "0x2",
+      "contracts": {
+        "splitter": "0xA",
+        "tokenList": "0xB",
+        "profiles": "0xC",
+        "admin": "0xD",
+        "signer": "0xE",
+        "pauser": "0xF",
+        "treasury": "0x1"
+      },
+      "assets": [],
+      "safe": {
+        "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+        "version": "1.5.0",
+        "threshold": 3
+      }
+    }
+  ],
+  "sourceArtifact": {
+    "path": "./splitter/evm/v1.4/deployments.json",
+    "retrievedAt": "2026-09-14"
+  }
+}
