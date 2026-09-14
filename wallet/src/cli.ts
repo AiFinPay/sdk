@@ -2,18 +2,26 @@
 /**
  * `npx @aifinpay/wallet` — create or show an agent wallet, no heavy install.
  *
- *   npx @aifinpay/wallet          create one if absent, else show it
- *   npx @aifinpay/wallet new      create (refuses to overwrite a funded one)
- *   npx @aifinpay/wallet show     print the existing wallet's addresses
- *   npx @aifinpay/wallet export   print the seed to back up
- *   npx @aifinpay/wallet new --encrypt  create encrypted keystore (prompts for passphrase)
- *   npx @aifinpay/wallet keyring-save   store secret in OS keyring
- *   npx @aifinpay/wallet keyring-load   load secret from OS keyring
- *   npx @aifinpay/wallet keyring-delete remove secret from OS keyring
+ *   npx @aifinpay/wallet                    create one if absent, else show it (encrypted by default)
+ *   npx @aifinpay/wallet new                create (refuses to overwrite, encrypted by default)
+ *   npx @aifinpay/wallet new --plain        create unencrypted keystore (legacy format)
+ *   npx @aifinpay/wallet show               print the existing wallet's addresses
+ *   npx @aifinpay/wallet export             print the seed to back up
+ *   npx @aifinpay/wallet keyring-save       store secret in OS keyring
+ *   npx @aifinpay/wallet keyring-load       load secret from OS keyring
+ *   npx @aifinpay/wallet keyring-delete     BLOCKED: use 'keyring-delete-all' instead
+ *   npx @aifinpay/wallet keyring-save-passphrase   store passphrase in OS keyring (for agents)
+ *   npx @aifinpay/wallet keyring-load-passphrase   load passphrase from OS keyring
+ *   npx @aifinpay/wallet keyring-delete-all remove BOTH secret and passphrase (safe cleanup)
+ *
+ * SECURITY: Passphrase cannot be deleted alone - prevents orphaning encrypted wallets.
  *
  * The keystore is ~/.aifinpay/agent.json (mode 600) — the same file
  * @aifinpay/mcp reads, so `npx @aifinpay/mcp` picks up this wallet with no
  * further config.
+ *
+ * SECURITY: New wallets are encrypted by default (scrypt-aes-256-gcm).
+ * Use --plain to create legacy unencrypted keystores.
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, statSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -23,6 +31,7 @@ import { newWallet, walletFromSolanaSecret, type DerivedWallet } from "./index.j
 
 const SERVICE_NAME = "aifinpay-wallet";
 const ACCOUNT_NAME = "agent-secret";
+const PASSPHRASE_ACCOUNT = "agent-passphrase";
 
 const HOME = process.env.AIFINPAY_HOME || join(homedir(), ".aifinpay");
 const KEYSTORE = join(HOME, "agent.json");
@@ -92,8 +101,8 @@ function decrypt(store: EncryptedKeystore, passphrase: string): string {
   ]).toString("utf8");
 }
 
-function print(w: DerivedWallet, created: boolean) {
-  if (created) process.stdout.write(`Created ${KEYSTORE} (mode 600).\n\n`);
+function print(w: DerivedWallet, created: boolean, isEncrypted: boolean = false) {
+  if (created && !isEncrypted) process.stdout.write(`Created ${KEYSTORE} (mode 600).\n\n`);
   process.stdout.write(
     `Your agent's addresses — the EVM one is the same on every EVM chain:\n\n` +
       `  EVM     ${w.evmAddress}\n` +
@@ -160,7 +169,12 @@ async function promptPassphrase(prompt: string): Promise<string> {
 async function create(force: boolean, useEncryption: boolean): Promise<DerivedWallet> {
   const existing = readStore();
   if (existing && !force) {
-    return walletFromSolanaSecret("secretB58" in existing ? existing.secretB58 : decrypt(existing, await promptPassphrase("Enter passphrase: ")));
+    if ("enc" in existing) {
+      const envPass = process.env.AIFINPAY_WALLET_PASSPHRASE;
+      const passphrase = envPass ?? await promptPassphrase("Enter passphrase: ");
+      return walletFromSolanaSecret(decrypt(existing, passphrase));
+    }
+    return walletFromSolanaSecret(existing.secretB58);
   }
   if (existing && force) {
     process.stderr.write(`Refusing: ${KEYSTORE} already exists and may hold funds. Move it aside first.\n`);
@@ -171,7 +185,13 @@ async function create(force: boolean, useEncryption: boolean): Promise<DerivedWa
   
   let content: string;
   if (useEncryption) {
-    const passphrase = await promptPassphrase("Enter passphrase for encrypted keystore: ");
+    const envPass = process.env.AIFINPAY_WALLET_PASSPHRASE;
+    let passphrase: string;
+    if (envPass) {
+      passphrase = envPass;
+    } else {
+      passphrase = await promptPassphrase("Enter passphrase for encrypted keystore: ");
+    }
     const encrypted = encryptSecret(w.keys.solanaSecretKeyB58, passphrase);
     content = JSON.stringify({ ...encrypted, created: nowIso() }, null, 2) + "\n";
   } else {
@@ -195,22 +215,27 @@ function warnIfLoose() {
   }
 }
 
+async function getKeytar() {
+  const mod = await import("keytar");
+  return (mod.default ?? mod) as typeof import("keytar");
+}
+
 async function keyringSave(): Promise<void> {
-  const keytarModule = await import("keytar");
+  const keytar = await getKeytar();
   const store = readStore();
   if (!store) {
     process.stderr.write("no wallet found — run `npx @aifinpay/wallet new` first.\n");
     process.exit(1);
   }
   const secretB58 = "secretB58" in store ? store.secretB58 : await decrypt(store, await promptPassphrase("Enter passphrase to decrypt keystore: "));
-  await keytarModule.setPassword(SERVICE_NAME, ACCOUNT_NAME, secretB58);
+  await keytar.setPassword(SERVICE_NAME, ACCOUNT_NAME, secretB58);
   process.stdout.write(`Stored Solana secret in OS keyring (${SERVICE_NAME}/${ACCOUNT_NAME}).\n`);
   process.stdout.write(`You can now safely delete ${KEYSTORE} and use 'keyring-load' to restore it.\n`);
 }
 
 async function keyringLoad(): Promise<void> {
-  const keytarModule = await import("keytar");
-  const secretB58 = await keytarModule.getPassword(SERVICE_NAME, ACCOUNT_NAME);
+  const keytar = await getKeytar();
+  const secretB58 = await keytar.getPassword(SERVICE_NAME, ACCOUNT_NAME);
   if (!secretB58) {
     process.stderr.write("no secret found in OS keyring.\n");
     process.exit(1);
@@ -225,9 +250,9 @@ async function keyringLoad(): Promise<void> {
   process.stdout.write(`  Casper  ${w.casperAddress}\n`);
 }
 
-async function keyringDelete(): Promise<void> {
-  const keytarModule = await import("keytar");
-  const deleted = await keytarModule.deletePassword(SERVICE_NAME, ACCOUNT_NAME);
+async function keyringDeleteSecretOnly(): Promise<void> {
+  const keytar = await getKeytar();
+  const deleted = await keytar.deletePassword(SERVICE_NAME, ACCOUNT_NAME);
   if (deleted) {
     process.stdout.write(`Removed secret from OS keyring (${SERVICE_NAME}/${ACCOUNT_NAME}).\n`);
   } else {
@@ -236,25 +261,80 @@ async function keyringDelete(): Promise<void> {
   }
 }
 
+async function keyringSavePassphrase(): Promise<void> {
+  const keytar = await getKeytar();
+  const store = readStore();
+  if (!store || !("enc" in store)) {
+    process.stderr.write("no encrypted keystore found — run `npx @aifinpay/wallet new` first (without --plain).\n");
+    process.exit(1);
+  }
+  const envPass = process.env.AIFINPAY_WALLET_PASSPHRASE;
+  let passphrase: string;
+  if (envPass) {
+    passphrase = envPass;
+  } else {
+    passphrase = await promptPassphrase("Enter the keystore passphrase to store: ");
+  }
+  await keytar.setPassword(SERVICE_NAME, PASSPHRASE_ACCOUNT, passphrase);
+  process.stdout.write(`Stored passphrase in OS keyring (${SERVICE_NAME}/${PASSPHRASE_ACCOUNT}).\n`);
+  process.stdout.write(`Agents can now auto-decrypt ${KEYSTORE}.\n`);
+}
+
+async function keyringLoadPassphrase(): Promise<string> {
+  const keytar = await getKeytar();
+  const passphrase = await keytar.getPassword(SERVICE_NAME, PASSPHRASE_ACCOUNT);
+  if (!passphrase) {
+    process.stderr.write("no passphrase found in OS keyring.\n");
+    process.exit(1);
+  }
+  return passphrase;
+}
+
+async function keyringDeleteAll(): Promise<void> {
+  const keytar = await getKeytar();
+  const deletedSecret = await keytar.deletePassword(SERVICE_NAME, ACCOUNT_NAME);
+  const deletedPassphrase = await keytar.deletePassword(SERVICE_NAME, PASSPHRASE_ACCOUNT);
+  if (deletedSecret || deletedPassphrase) {
+    process.stdout.write(`Removed all keyring entries (${SERVICE_NAME}).\n`);
+  } else {
+    process.stderr.write("no entries found in OS keyring to delete.\n");
+    process.exit(1);
+  }
+}
+
 const cmd = (process.argv[2] || "").toLowerCase();
-const hasEncryptFlag = process.argv.includes("--encrypt");
+const hasPlainFlag = process.argv.includes("--plain");
+const isEncryptedByDefault = !hasPlainFlag;
 
 if (cmd === "-h" || cmd === "--help" || cmd === "help") {
   process.stdout.write(
-    `npx @aifinpay/wallet          create if absent, else show\n` +
-      `npx @aifinpay/wallet new      create (won't overwrite a funded wallet)\n` +
-      `npx @aifinpay/wallet new --encrypt  create encrypted keystore (prompts for passphrase)\n` +
-      `npx @aifinpay/wallet show     print addresses\n` +
-      `npx @aifinpay/wallet export   print the seed to back up\n` +
-      `npx @aifinpay/wallet keyring-save   store secret in OS keyring\n` +
-      `npx @aifinpay/wallet keyring-load   load secret from OS keyring to ${KEYSTORE}\n` +
-      `npx @aifinpay/wallet keyring-delete remove secret from OS keyring\n`
+    `npx @aifinpay/wallet                    create if absent, else show (encrypted by default)\n` +
+      `npx @aifinpay/wallet new                create encrypted keystore (won't overwrite existing)\n` +
+      `npx @aifinpay/wallet new --plain        create unencrypted legacy keystore\n` +
+      `npx @aifinpay/wallet show               print addresses\n` +
+      `npx @aifinpay/wallet export             print the seed to back up\n` +
+      `npx @aifinpay/wallet keyring-save       store secret in OS keyring\n` +
+      `npx @aifinpay/wallet keyring-load       load secret from OS keyring to ${KEYSTORE}\n` +
+      `npx @aifinpay/wallet keyring-delete     ERROR: Use 'keyring-delete-all' instead\n` +
+      `npx @aifinpay/wallet keyring-save-passphrase   store passphrase in OS keyring (for agents)\n` +
+      `npx @aifinpay/wallet keyring-load-passphrase   load passphrase from OS keyring\n` +
+      `npx @aifinpay/wallet keyring-delete-all remove BOTH secret and passphrase from OS keyring\n`
   );
   process.exit(0);
 }
 
 const run = async () => {
   warnIfLoose();
+  async function getPassphrase(): Promise<string> {
+    if (process.env.AIFINPAY_WALLET_PASSPHRASE) {
+      return process.env.AIFINPAY_WALLET_PASSPHRASE;
+    }
+    const keytar = await getKeytar();
+    const stored = await keytar.getPassword(SERVICE_NAME, PASSPHRASE_ACCOUNT);
+    if (stored) return stored;
+    return await promptPassphrase("Enter passphrase: ");
+  }
+
   if (cmd === "export") {
     const s = readStore();
     if (!s) {
@@ -265,7 +345,8 @@ const run = async () => {
     if ("seedHex" in s && s.seedHex) {
       seedHex = s.seedHex;
     } else if ("enc" in s) {
-      const secretB58 = decrypt(s, await promptPassphrase("Enter passphrase: "));
+      const passphrase = await getPassphrase();
+      const secretB58 = decrypt(s, passphrase);
       const w = walletFromSolanaSecret(secretB58);
       seedHex = w.keys.seedHex;
     } else {
@@ -281,11 +362,20 @@ const run = async () => {
   if (cmd === "show") {
     const s = readStore();
     if (!s) {
-      process.stderr.write("no wallet yet — run `npx @aifinpay/wallet new`.\n");
+      process.stderr.write("no wallet yet — run `npx @aifinpay/wallet`.\n");
       process.exit(1);
     }
-    const secretB58 = "secretB58" in s ? s.secretB58 : decrypt(s, await promptPassphrase("Enter passphrase: "));
-    print(walletFromSolanaSecret(secretB58), false);
+    let secretB58: string;
+    if ("secretB58" in s) {
+      secretB58 = s.secretB58;
+    } else if ("enc" in s) {
+      const passphrase = await getPassphrase();
+      secretB58 = decrypt(s, passphrase);
+    } else {
+      process.stderr.write("invalid keystore format.\n");
+      process.exit(1);
+    }
+    print(walletFromSolanaSecret(secretB58), false, "enc" in s);
     return;
   }
   if (cmd === "keyring-save") {
@@ -297,7 +387,21 @@ const run = async () => {
     return;
   }
   if (cmd === "keyring-delete") {
-    await keyringDelete();
+    process.stderr.write(`ERROR: Cannot delete secret only - this would orphan the encrypted wallet.\n`);
+    process.stderr.write(`Use 'keyring-delete-all' to remove both secret and passphrase, or delete the keystore file.\n`);
+    process.exit(1);
+  }
+  if (cmd === "keyring-save-passphrase") {
+    await keyringSavePassphrase();
+    return;
+  }
+  if (cmd === "keyring-load-passphrase") {
+    const passphrase = await keyringLoadPassphrase();
+    process.stdout.write(passphrase + "\n");
+    return;
+  }
+  if (cmd === "keyring-delete-all") {
+    await keyringDeleteAll();
     return;
   }
   if (cmd && cmd !== "new") {
@@ -305,8 +409,8 @@ const run = async () => {
     process.exit(2);
   }
   const had = existsSync(KEYSTORE);
-  const w = await create(cmd === "new", hasEncryptFlag);
-  print(w, !had);
+  const w = await create(cmd === "new", isEncryptedByDefault);
+  print(w, !had, isEncryptedByDefault);
 };
 
 run().catch((e) => {

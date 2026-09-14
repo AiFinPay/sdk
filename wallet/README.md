@@ -73,19 +73,64 @@ reads, so `npx @aifinpay/mcp` picks up a wallet made here with no extra config.
 ## CLI
 
 ```
-npx @aifinpay/wallet                    create if absent, else show
-npx @aifinpay/wallet new                create (won't overwrite a funded wallet)
-npx @aifinpay/wallet new --encrypt      create encrypted keystore (prompts for passphrase)
+npx @aifinpay/wallet                    create if absent, else show (encrypted by default)
+npx @aifinpay/wallet new                create encrypted keystore (won't overwrite existing)
+npx @aifinpay/wallet new --plain        create unencrypted legacy keystore (not recommended)
 npx @aifinpay/wallet show               print addresses
 npx @aifinpay/wallet export             print the seed to back up
 npx @aifinpay/wallet keyring-save       store secret in OS keyring
 npx @aifinpay/wallet keyring-load       load secret from OS keyring to ~/.aifinpay/agent.json
-npx @aifinpay/wallet keyring-delete     remove secret from OS keyring
+npx @aifinpay/wallet keyring-delete     BLOCKED: use 'keyring-delete-all' instead
+npx @aifinpay/wallet keyring-save-passphrase   store passphrase in OS keyring (for agents)
+npx @aifinpay/wallet keyring-load-passphrase   load passphrase from OS keyring
+npx @aifinpay/wallet keyring-delete-all remove BOTH secret and passphrase (safe cleanup)
 ```
 
-**Encrypted Keystore:** Use `--encrypt` to create a passphrase-encrypted keystore (scrypt-aes-256-gcm). The encrypted format is compatible with `@aifinpay/agent` and `@aifinpay/mcp` (requires `AIFINPAY_WALLET_PASSPHRASE` environment variable).
+**Security:** The `keyring-delete` command is blocked to prevent orphaning encrypted wallets. Use `keyring-delete-all` to remove both secret and passphrase together, or delete the keystore file directly.
+
+**Encrypted Keystore (Default):** New wallets are encrypted by default using scrypt-aes-256-gcm. You'll be prompted for a passphrase during creation. The encrypted format is compatible with `@aifinpay/agent` and `@aifinpay/mcp` (requires `AIFINPAY_WALLET_PASSPHRASE` environment variable).
+
+**Agent Passphrase Storage:** After creating an encrypted wallet, run `keyring-save-passphrase` to store the passphrase in OS keyring. This allows agents to auto-decrypt the wallet without hardcoding passwords. The passphrase is stored separately from the encrypted file under a different keyring account name.
+
+**Legacy Plain Keystore:** Use `--plain` to create an unencrypted keystore (not recommended for production). This matches the legacy format used in earlier versions.
 
 **OS Keyring:** The `keyring-*` commands store/retrieve your secret from the OS secure storage (macOS Keychain, Windows Credential Manager, Linux libsecret/KWallet). After `keyring-save`, you can safely delete `~/.aifinpay/agent.json` and restore it later with `keyring-load`.
+
+## Local Development
+
+When working from the source tree (without publishing to npm):
+
+```bash
+cd wallet/
+npm install
+npm run build
+
+# Use the local CLI directly
+node dist/cli.js new
+node dist/cli.js show
+node dist/cli.js export
+node dist/cli.js keyring-save
+node dist/cli.js keyring-save-passphrase
+
+# Or with flags
+node dist/cli.js new --plain
+```
+
+**Non-interactive mode (agents/scripts):** Set the passphrase via environment variable:
+
+```bash
+# Create encrypted wallet without prompts
+export AIFINPAY_WALLET_PASSPHRASE="your-secure-passphrase"
+node dist/cli.js new
+
+# Save passphrase to OS keyring (for future auto-decrypt)
+node dist/cli.js keyring-save-passphrase
+
+# Now agents can auto-decrypt without environment variable
+node dist/cli.js show
+```
+
+**Note:** Without `AIFINPAY_WALLET_PASSPHRASE`, the CLI requires an interactive terminal (TTY) for passphrase prompts. Use `--plain` for non-encrypted wallets in scripts.
 
 ## Library
 
