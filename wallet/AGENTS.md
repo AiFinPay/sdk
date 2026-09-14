@@ -5,7 +5,7 @@ Light agent wallet (Solana + EVM + Casper) with 5 tiny crypto deps — no viem, 
 ## Scope
 
 - This package only. Do not touch `gate/`, `mcp/`, `mcp-http/`, `node/`, `python/`.
-- Source is 3 files: `src/derive.ts`, `src/index.ts`, `src/cli.ts`.
+- Source is 4 files: `src/derive.ts`, `src/index.ts`, `src/cli.ts`, `scripts/check-libsecret.js`.
 
 ## Commands
 
@@ -30,6 +30,11 @@ npx @aifinpay/wallet keyring-delete     # remove secret from OS keyring
 - **Encrypted keystore**: `--encrypt` flag creates a scrypt-aes-256-gcm encrypted keystore
 - **OS Keyring integration**: `keyring-*` commands store/retrieve secrets from the OS secure storage
 - **File permissions**: Keystore is mode 600, directory is mode 700
+
+## Prerequisites
+
+- **Linux**: `libsecret-1-dev` (Debian/Ubuntu) or `libsecret-devel` (Red Hat) required for keyring support
+- **preinstall script**: `scripts/check-libsecret.js` runs before npm install and blocks installation with helpful instructions if libsecret is missing on Linux
 
 ## Rules
 
