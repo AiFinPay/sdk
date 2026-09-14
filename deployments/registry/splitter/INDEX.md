@@ -5,18 +5,18 @@ Versioned storage for B2BSplitter contract deployments across all supported chai
 ## Structure
 
 ```
-deployments/registry/splitter/
+deployments/registry/splitter
 ├── INDEX.md                 # This file
-├── v1.1/                    # EVM Legacy — Initial version (immutable 1%/0.01% fee)
+├── evm/v1.1/                    # EVM Legacy — Initial version (immutable 1%/0.01% fee)
 │   ├── README.md
 │   └── deployments.json
-├── v1.2/                    # EVM Legacy — Added paymentId replay guard
+├── evm/v1.2/                    # EVM Legacy — Added paymentId replay guard
 │   ├── README.md
 │   └── deployments.json
-├── v1.3/                    # EVM Route table — Protocol routes (merchant-aifp1 / agent-x402)
+├── evm/v1.3/                    # EVM Route table — Protocol routes (merchant-aifp1 / agent-x402)
 │   ├── README.md
 │   └── deployments.json
-├── v1.4/                    # EVM Full contract suite — 7 contracts per chain
+├── evm/v1.4/                    # EVM Full contract suite — 7 contracts per chain
 │   ├── README.md
 │   └── deployments.json
 ├── solana/                  # Solana v1.4 — Program deployments (non-EVM)
@@ -31,10 +31,10 @@ deployments/registry/splitter/
 
 | Version | Ecosystem | Status | Chains/Networks | Key Feature |
 |---------|-----------|--------|-----------------|-------------|
-| [v1.1](./v1.1/README.md) | EVM | Superseded | Base, Unichain | Initial production release |
-| [v1.2](./v1.2/README.md) | EVM | Superseded | Polygon, Optimism, BOT Chain, XRPL EVM | `bytes32 paymentId` replay guard |
-| [v1.3](./v1.3/README.md) | EVM | Active | 10 chains × 2 routes | Protocol routes with immutable fee splits |
-| [v1.4](./v1.4/README.md) | EVM | Mostly disabled | 10 chains | Full contract suite (7 contracts per chain) |
+| [v1.1](evm/v1.1/README.md) | EVM | Superseded | Base, Unichain | Initial production release |
+| [v1.2](evm/v1.2/README.md) | EVM | Superseded | Polygon, Optimism, BOT Chain, XRPL EVM | `bytes32 paymentId` replay guard |
+| [v1.3](evm/v1.3/README.md) | EVM | Active | 10 chains × 2 routes | Protocol routes with immutable fee splits |
+| [v1.4](evm/v1.4/README.md) | EVM | Mostly disabled | 10 chains | Full contract suite (7 contracts per chain) |
 | [v1.4](./solana/README.md) | Solana | Disabled | Devnet, Mainnet | Program ID + IDL (Anchor-style) |
 | [v1/v2](./casper/README.md) | Casper | Testnet live | Testnet (live), Mainnet (historical v1) | Rust → Wasm contract; `register_agent` / `pay_agent` |
 
@@ -144,13 +144,13 @@ Use the `@aifinpay/agent` SDK's `resolveSplitterRoute(chain, route)` function �
 
 ### For auditors
 
-1. Check `v1.2/deployments.json` for superseded addresses
+1. Check `evm/v1.2` for superseded addresses
 2. Verify migration guards in `node/tests/splitterV12.test.ts`
 3. Compare runtime code hashes against on-chain `eth_getCode`
 
 ### For deployment verification
 
-1. Check `v1.3/deployments.json` for current addresses
+1. Check `evm/v1.3` for current addresses
 2. Verify `runtimeCodeHash` matches deployed bytecode
 3. Confirm `owner` and `treasury` match expected governance Safe
 4. Check `validFrom`/`validUntil` policy window

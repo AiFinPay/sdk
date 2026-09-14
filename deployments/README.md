@@ -51,9 +51,9 @@ registry/
 
 | Registry | Location | Versions | Status |
 |---|---|---|---|
-| Legacy route table | `registry/splitter/v1.3/deployments.json` | v1.2 `legacy`, v1.3 `merchant-aifp1` / `agent-x402` | Superseded; kept for `node/` SDK generation |
-| Legacy v1.2 | `registry/splitter/v1.2/deployments.json` | v1.2 with `paymentId` replay guard | Superseded |
-| Legacy v1.1 | `registry/splitter/v1.1/deployments.json` | v1.1 initial release | Superseded |
+| Legacy route table | `registry/splitter/evm/v1.3` | v1.2 `legacy`, v1.3 `merchant-aifp1` / `agent-x402` | Superseded; kept for `node/` SDK generation |
+| Legacy v1.2 | `registry/splitter/evm/v1.2` | v1.2 with `paymentId` replay guard | Superseded |
+| Legacy v1.1 | `registry/splitter/evm/v1.1` | v1.1 initial release | Superseded |
 | This package | `registry/evm-splitter-v1.4.json`, `registry/solana-splitter-v1.4.json` | v1.4 EVM + Solana | Active grabber output (matches splitter schema) |
 
 v1.4 status at a glance (from `evm-splitter-v1.4.json`):
