@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { existsSync, readFileSync, rmSync } from "node:fs";
-import { compareVersionTime, fetchJson, listGitHubFiles, IDL_DIR, writeSplitRegistries } from "../src/grabber.js";
+import { existsSync, readFileSync, rmSync, mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { compareVersionTime, fetchJson, listGitHubFiles, writeSplitRegistries } from "../src/grabber.js";
+
+const TEST_DIR = join(dirname(fileURLToPath(import.meta.url)), "tmp");
 
 describe("compareVersionTime", () => {
   it("prefers higher version", () => {
@@ -99,7 +103,7 @@ describe("grabEvmDeployments", () => {
 });
 
 describe("grabSolanaDeployments", () => {
-  it("selects latest per cluster and writes IDL files", async () => {
+  it("selects latest per cluster", async () => {
     const idl = { address: "So11111111111111111111111111111111111111112", metadata: { version: "1.4.1" } };
     vi.doMock("../src/grabber.js", () => ({
       listGitHubFiles: async () => [
@@ -115,14 +119,16 @@ describe("grabSolanaDeployments", () => {
             cluster: "mainnet",
             version: "1.4.1",
             programAddress: idl.address,
-            idlPath: "idl/splitter.mainnet.json",
+            idlPath: "registry/idl/solana/splitter-v14/splitter.mainnet.json",
+            idl: { name: "splitter", version: "1.4.1" },
           },
           devnet: {
             kind: "solana",
             cluster: "devnet",
             version: "1.4.1",
             programAddress: idl.address,
-            idlPath: "idl/splitter.devnet.json",
+            idlPath: "registry/idl/solana/splitter-v14/splitter.devnet.json",
+            idl: { name: "splitter", version: "1.4.1" },
           },
         };
       },
@@ -131,19 +137,13 @@ describe("grabSolanaDeployments", () => {
     const result = await mockedGrab();
     expect(result.mainnet).toBeDefined();
     expect(result.mainnet.programAddress).toBe(idl.address);
-    expect(result.mainnet.idlPath).toBe("idl/splitter.mainnet.json");
+    expect(result.mainnet.idlPath).toBe("registry/idl/solana/splitter-v14/splitter.mainnet.json");
     expect(result.devnet).toBeDefined();
-    expect(result.devnet.idlPath).toBe("idl/splitter.devnet.json");
+    expect(result.devnet.idlPath).toBe("registry/idl/solana/splitter-v14/splitter.devnet.json");
   });
 
-  it("writes IDL content to disk", async () => {
+  it("references existing IDL files", async () => {
     const idl = { address: "So11111111111111111111111111111111111111112", metadata: { version: "1.4.1" } };
-    // Clean any stale test artifacts.
-    const devnetPath = `${IDL_DIR}/splitter.devnet.json`;
-    const mainnetPath = `${IDL_DIR}/splitter.mainnet.json`;
-    for (const p of [devnetPath, mainnetPath]) {
-      if (existsSync(p)) rmSync(p);
-    }
 
     vi.doMock("../src/grabber.js", () => ({
       listGitHubFiles: async () => [
@@ -153,21 +153,16 @@ describe("grabSolanaDeployments", () => {
       fetchJson: async () => idl,
       compareVersionTime,
       grabSolanaDeployments: async () => {
-        // Simulate the real write that build.ts would also do.
-        const fs = await import("node:fs");
-        fs.writeFileSync(devnetPath, JSON.stringify(idl, null, 2) + "\n");
-        fs.writeFileSync(mainnetPath, JSON.stringify(idl, null, 2) + "\n");
         return {
-          mainnet: { kind: "solana", cluster: "mainnet", version: "1.4.1", programAddress: idl.address, idlPath: "idl/splitter.mainnet.json" },
-          devnet: { kind: "solana", cluster: "devnet", version: "1.4.1", programAddress: idl.address, idlPath: "idl/splitter.devnet.json" },
+          mainnet: { kind: "solana", cluster: "mainnet", version: "1.4.1", programAddress: idl.address, idlPath: "registry/idl/solana/splitter-v14/splitter.mainnet.json", idl: { name: "splitter", version: "1.4.1" } },
+          devnet: { kind: "solana", cluster: "devnet", version: "1.4.1", programAddress: idl.address, idlPath: "registry/idl/solana/splitter-v14/splitter.devnet.json", idl: { name: "splitter", version: "1.4.1" } },
         };
       },
     }));
     const { grabSolanaDeployments: mockedGrab } = await import("../src/grabber.js");
-    await mockedGrab();
-    expect(existsSync(devnetPath)).toBe(true);
-    expect(existsSync(mainnetPath)).toBe(true);
-    expect(JSON.parse(readFileSync(devnetPath, "utf-8")).address).toBe(idl.address);
+    const result = await mockedGrab();
+    expect(result.mainnet.idlPath).toBe("registry/idl/solana/splitter-v14/splitter.mainnet.json");
+    expect(result.devnet.idlPath).toBe("registry/idl/solana/splitter-v14/splitter.devnet.json");
   });
 });
 
@@ -216,7 +211,9 @@ describe("buildRegistry", () => {
 
 describe("writeSplitRegistries", () => {
   it("writes evm and solana v1.4 split files", () => {
-    const outDir = `${IDL_DIR}/../split-test`;
+    mkdirSync(TEST_DIR, { recursive: true });
+    const outDir = join(TEST_DIR, "output");
+    mkdirSync(outDir, { recursive: true });
     const evmPath = `${outDir}/splitter/evm/v1.4/deployments.json`;
     const solanaPath = `${outDir}/splitter/solana/deployments.json`;
     for (const p of [evmPath, solanaPath]) {
@@ -287,5 +284,7 @@ describe("writeSplitRegistries", () => {
     expect(solana.$schema).toBeDefined();
     expect(solana.deployments[0].cluster).toBe("mainnet");
     expect(solana.deployments[0].idl).toBeDefined();
+
+    rmSync(TEST_DIR, { recursive: true, force: true });
   });
 });

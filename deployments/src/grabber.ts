@@ -237,6 +237,7 @@ export async function grabSolanaDeployments(): Promise<Record<string, SolanaDepl
 
   const registry: Record<string, SolanaDeployment> = {};
   for (const [cluster, { url, data }] of byCluster) {
+    const idlPath = join(IDL_DIR, "solana/splitter-v14", `splitter.${cluster}.json`);
     registry[cluster] = {
       kind: "solana",
       cluster,
@@ -244,8 +245,11 @@ export async function grabSolanaDeployments(): Promise<Record<string, SolanaDepl
       programAddress: data.address,
       deployedAt: new Date().toISOString(),
       sourceUrl: url,
-      idlPath: null,
-      idl: null,
+      idlPath: `registry/idl/solana/splitter-v14/splitter.${cluster}.json`,
+      idl: {
+        name: "splitter",
+        version: data.metadata?.version ?? "1.4.1",
+      },
     };
   }
 
