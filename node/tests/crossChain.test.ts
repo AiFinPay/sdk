@@ -174,3 +174,93 @@ describe("AiFinPayAgent.bridgeQuote (high-level USDC convenience)", () => {
     expect(u.searchParams.get("fromAmount")).toBe("2500000");
   });
 });
+
+// ── A rate limit is not a failed bridge ──────────────────────────────────
+//
+// LiFi allows callers without an API key 75 requests per two hours, and this
+// SDK sends no key. bridgeWaitForArrival used to poll every 5s for up to 30
+// minutes — up to 360 requests for one transfer — and treated every non-2xx
+// answer exactly like "not arrived yet". So a Circle CCTP transfer, which this
+// module's own comment says takes 15-25 minutes on Polygon, would exhaust the
+// quota around minute six, read every subsequent 429 as in-flight, and then
+// report that the transfer had not finalised. For a transfer that had.
+//
+// These assert the distinction the old code could not make: refusing to answer
+// and answering "not yet" are different facts.
+describe("bridgeWaitForArrival under a rate limit", () => {
+  const TX = "0x" + "ab".repeat(32) as `0x${string}`;
+
+  const answer = (status: number, body: unknown = {}, headers: Record<string, string> = {}) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { "content-type": "application/json", ...headers },
+    });
+
+  it("reports a persistent 429 as unreadable, not as a transfer that did not arrive", async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return answer(429, { message: "rate limited" }, { "retry-after": "0" });
+    }) as typeof fetch;
+
+    const { bridgeWaitForArrival } = await import("../src/crossChain.js");
+    await expect(
+      bridgeWaitForArrival(TX, { pollIntervalMs: 1, timeoutMs: 5_000 }),
+    ).rejects.toThrow(/cannot READ/);
+
+    // and it says why, and where to look, rather than declaring a failure
+    await expect(
+      bridgeWaitForArrival(TX, { pollIntervalMs: 1, timeoutMs: 5_000 }),
+    ).rejects.toThrow(/RATE LIMIT|75 requests per two hours/);
+
+    // it also stops early rather than spending the whole window on 429s
+    expect(calls).toBeLessThan(20);
+  });
+
+  it("does not claim the transfer failed — the wording is about observation", async () => {
+    globalThis.fetch = (async () => answer(429, {})) as typeof fetch;
+    const { bridgeWaitForArrival } = await import("../src/crossChain.js");
+    const err = await bridgeWaitForArrival(TX, { pollIntervalMs: 1, timeoutMs: 3_000 }).catch(
+      (e) => e as Error,
+    );
+    expect(err.message).toMatch(/NOT evidence that it failed/);
+    expect(err.message).not.toMatch(/did not finalise/);
+  });
+
+  it("a transient 429 followed by DONE still returns done", async () => {
+    let n = 0;
+    globalThis.fetch = (async () => {
+      n += 1;
+      if (n <= 2) return answer(429, {}, { "retry-after": "0" });
+      return answer(200, { status: "DONE", receiving: { txHash: "0xdest" } });
+    }) as typeof fetch;
+
+    const { bridgeWaitForArrival } = await import("../src/crossChain.js");
+    const out = await bridgeWaitForArrival(TX, { pollIntervalMs: 1, timeoutMs: 10_000 });
+    expect(out.status).toBe("done");
+    expect(out.dest_tx).toBe("0xdest");
+  });
+
+  it("a sustained network failure surfaces instead of being swallowed", async () => {
+    globalThis.fetch = (async () => {
+      throw new TypeError("fetch failed");
+    }) as typeof fetch;
+    const { bridgeWaitForArrival } = await import("../src/crossChain.js");
+    await expect(
+      bridgeWaitForArrival(TX, { pollIntervalMs: 1, timeoutMs: 5_000 }),
+    ).rejects.toThrow(/cannot REACH LiFi/);
+  });
+
+  it("the default poll interval fits the quota it is given", async () => {
+    // 30 minutes at 5s is 360 requests against a budget of 75. The default has
+    // to be a number that does not guarantee exhaustion; this fails if someone
+    // lowers it back for responsiveness without reading the header.
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync(new URL("../src/crossChain.ts", import.meta.url), "utf8"),
+    );
+    const m = src.match(/DEFAULT_POLL_INTERVAL_MS = ([\d_]+)/);
+    expect(m).toBeTruthy();
+    const ms = Number(m![1].replace(/_/g, ""));
+    expect(30 * 60 * 1000 / ms).toBeLessThanOrEqual(90);
+  });
+});
