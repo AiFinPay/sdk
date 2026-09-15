@@ -34,7 +34,9 @@ deployments/
 
 | File | Purpose |
 |------|---------|
-| `src/index.ts` | Public exports: `buildRegistry`, `writeSplitRegistries`, `grabEvmDeployments`, `grabSolanaDeployments`, `getEvmDeployment`, `getSolanaDeployment`, `isEvmDeployment`, `isSolanaDeployment`, `ABI_DIR`, `IDL_DIR`, and all types. |
+| `src/index.ts` | Public exports: `AifinpayRegistry`, `ArtifactRegistry`, `buildRegistry`, `writeSplitRegistries`, `grabEvmDeployments`, `grabSolanaDeployments`, `getEvmDeployment`, `getSolanaDeployment`, `isEvmDeployment`, `isSolanaDeployment`, `ABI_DIR`, `IDL_DIR`, and all types. |
+| `src/registry.ts` | `AifinpayRegistry` class: programmatic interface for querying deployment records with O(1) lookups. |
+| `src/artifacts.ts` | `ArtifactRegistry` class: programmatic interface for querying ABI/IDL artifacts. |
 | `src/grabber.ts` | GitHub listing helpers, EVM + Solana fetch + latest-per-chain selection, deployment file writer, O(1) lookup helpers. |
 | `src/types.ts` | Registry TypeScript types: `DeploymentRegistry`, `EcosystemRegistry`, `EvmDeployment`, `SolanaDeployment`, `Stablecoin`, type guards. |
 | `src/build.ts` | CLI entry point for `npm run registry:build`; writes deployment files to `registry/splitter/evm/v1.4/` and `registry/splitter/solana/`. |
@@ -45,6 +47,8 @@ deployments/
 | File | Coverage |
 |------|----------|
 | `tests/grabber.test.ts` | `compareVersionTime`, `listGitHubFiles`, `fetchJson`, mocked `grabEvmDeployments`, mocked `grabSolanaDeployments` + IDL writes, mocked `buildRegistry`, `writeSplitRegistries`. |
+| `tests/registry.test.ts` | `AifinpayRegistry` class: all public methods for EVM/Solana deployment queries. |
+| `tests/artifacts.test.ts` | `ArtifactRegistry` class: EVM ABI, Solana IDL, Casper IDL, Aptos IDL, Tron ABI queries. |
 
 ## Registry artifacts (`registry/`)
 
@@ -102,6 +106,8 @@ Excluding `node_modules/` and `dist/`:
 .gitignore
 AGENTS.md
 README.md
+USAGE.md                 # User documentation for programmatic interface
+STRUCTURE.md             # This file
 package-lock.json
 package.json
 registry/abi/evm/B2BSplitterV14/B2BSplitterV14.json
@@ -128,7 +134,11 @@ src/build.ts
 src/grabber.ts
 src/index.ts
 src/types.ts
+src/registry.ts            # AifinpayRegistry class
+src/artifacts.ts            # ArtifactRegistry class
 tests/grabber.test.ts
+tests/registry.test.ts      # AifinpayRegistry tests
+tests/artifacts.test.ts     # ArtifactRegistry tests
 tsconfig.json
 vitest.config.ts
 ```
