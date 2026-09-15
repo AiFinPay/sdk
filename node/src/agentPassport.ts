@@ -1,6 +1,10 @@
 import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sign, verify } from "node:crypto";
 import { aifinpayApiUrl } from "./apiUrl.js";
 
+/**
+ * Networks supported in Agent Passport.
+ * @deprecated "botchain" is deprecated. Use "robinhood" instead.
+ */
 export type AgentPassportNetwork =
   | "polygon"
   | "avalanche"

@@ -3,6 +3,7 @@ import { apiUrl } from "../api.js";
 
 const DEFAULT_BASE = "https://aifinpay.io";
 const ROUTES = new Set(["AIFP-1", "AIFP-2"]);
+// botchain is deprecated; retained for backward compatibility until removal
 const CHAINS = new Set([
   "polygon",
   "avalanche",

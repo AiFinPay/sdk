@@ -11,6 +11,16 @@ Minimum Node engine is now 22 (`engines: >=22` in `@aifinpay/agent`,
 and the example bridges). Node 18/20 are no longer supported. CI now
 builds and tests on 22, 24 and 26. No runtime or API changes.
 
+### Deprecations
+
+- **BOT Chain (chainId: 677) is deprecated in favor of Robinhood Chain (chainId: 4663).**
+  All type definitions, exports, and configuration surfaces now carry `@deprecated`
+  JSDoc annotations. Backward compatibility is maintained — existing code using
+  `botchain` continues to work, but TypeScript will emit deprecation warnings.
+  Migration: replace `botchain` with `robinhood` in chain selections, type
+  parameters, and configuration. The `botchain` export and type entries will be
+  removed in a future major version.
+
 ### Security
 
 - Pinned `jayson`'s transitive `uuid` dependency to `^11.1.1` in

@@ -190,9 +190,9 @@ export interface AiFinPayAgentOptions extends AgentOptions {
   spendLedger?: SpendLedger;
   solanaRpc?: string; // default: env AIFINPAY_SOLANA_RPC or mainnet-beta
   /** RPC overrides for non-Polygon EVM chains — both bridge-flow chains
-   *  and splitter-settlement chains (base, optimism, unichain, botchain,
-   *  xrplevm). Splitter chains fall back to the public RPC listed in
-   *  SPLITTER_DEPLOYMENTS when no override is given. */
+    *  and splitter-settlement chains (base, optimism, unichain, botchain (deprecated),
+    *  xrplevm). Splitter chains fall back to the public RPC listed in
+    *  SPLITTER_DEPLOYMENTS when no override is given. */
   evmRpcUrls?: Partial<Record<AnyEvmChainName, string>>;
 }
 
@@ -333,7 +333,10 @@ export function paymentIdFor(orderId: string): `0x${string}` {
 // They live in ./chains.js so this module and splitterRoutes.ts cannot drift
 // apart on a chain id or RPC.
 
-/** EVM chains with a live, on-chain-verified B2BSplitter deployment. */
+/** 
+ * EVM chains with a live, on-chain-verified B2BSplitter deployment.
+ * @deprecated "botchain" is deprecated and will be removed in a future version. Use "robinhood" instead.
+ */
 export type SplitterChainName = "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm";
 
 export interface SplitterDeployment {
@@ -414,6 +417,7 @@ export const SPLITTER_DEPLOYMENTS: Record<SplitterChainName, SplitterDeployment>
     nativeUsdEnv: "AIFINPAY_ETH_USD",
     nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
   },
+  /** @deprecated BOT Chain (chainId: 677) is deprecated. Use robinhood (chainId: 4663) instead. */
   botchain: {
     version: "1.2",
     chainId: 677,

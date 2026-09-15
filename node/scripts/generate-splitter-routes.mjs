@@ -49,6 +49,7 @@ const CHAIN_TRANSPORT = {
   optimism: { viem: "optimism", rpc: "https://mainnet.optimism.io", explorer: "https://optimistic.etherscan.io" },
   bnb: { viem: "bsc", rpc: "https://bsc-dataseed.bnbchain.org", explorer: "https://bscscan.com" },
   unichain: { viem: "unichain", rpc: "https://mainnet.unichain.org", explorer: "https://uniscan.xyz" },
+  // botchain is deprecated; retained for backward compatibility until removal
   botchain: { viem: "botchain", rpc: "https://rpc.botchain.ai", explorer: "https://scan.botchain.ai" },
   base: { viem: "base", rpc: "https://mainnet.base.org", explorer: "https://basescan.org" },
   arbitrum: { viem: "arbitrum", rpc: "https://arb1.arbitrum.io/rpc", explorer: "https://arbiscan.io" },
@@ -57,6 +58,7 @@ const CHAIN_TRANSPORT = {
 };
 
 /** Chains whose viem export comes from ./chains.js rather than viem/chains. */
+// botchain is deprecated; retained for backward compatibility until removal
 const LOCAL_CHAINS = new Set(["botchain", "xrplevm"]);
 
 /** The two v1.3 protocol routes. An unexpected route is an error, not a pass. */
@@ -127,6 +129,7 @@ function selectRoutes(artifact) {
 }
 
 function getRpcQuorum(chain) {
+  // botchain is deprecated; retained for backward compatibility
   return chain === "botchain" || chain === "xrplevm" ? 1 : 2;
 }
 

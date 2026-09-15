@@ -2,6 +2,10 @@ import { keccak256, stringToHex, type Address, type Hex, type PublicClient, type
 import { settlementHttp } from "./settlementHttp.js";
 
 export type SettlementRouteClass = "AIFP-1" | "AIFP-2";
+/**
+ * EVM networks supported for AIFP-1/AIFP-2 settlement.
+ * @deprecated "botchain" is deprecated and will be removed in a future version. Use "robinhood" instead.
+ */
 export type SettlementEvmNetwork =
   "polygon" | "avalanche" | "arbitrum" | "bnb" | "base" | "unichain" | "optimism" | "botchain" | "xrplevm" | "amoy";
 
@@ -176,6 +180,7 @@ const CHAIN_IDS: Record<SettlementEvmNetwork, number> = {
   base: 8453,
   unichain: 130,
   optimism: 10,
+  /** @deprecated BOT Chain (chainId: 677) is deprecated. Use robinhood (chainId: 4663) instead. */
   botchain: 677,
   xrplevm: 1440000,
 };
@@ -189,6 +194,7 @@ const NATIVE_ASSETS: Record<SettlementEvmNetwork, string> = {
   base: "ETH",
   unichain: "ETH",
   optimism: "ETH",
+  /** @deprecated BOT Chain is deprecated. Use robinhood instead. */
   botchain: "BOT",
   xrplevm: "XRP",
 };

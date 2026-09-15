@@ -46,7 +46,10 @@ export { SPLITTER_ROUTES, SPLITTER_GOVERNANCE, SPLITTER_REGISTRY_SOURCE } from "
 /** Protocol routes. A route is a fee profile fixed at construction. */
 export type SplitterRoute = "merchant-aifp1" | "agent-x402";
 
-/** Chains carrying v1.3 route splitters. */
+/** 
+ * Chains carrying v1.3 route splitters.
+ * @deprecated "botchain" is deprecated. Use "robinhood" instead.
+ */
 export type SplitterRouteChain =
   "amoy" | "polygon" | "optimism" | "bnb" | "unichain" | "botchain" | "base" | "arbitrum" | "avalanche" | "xrplevm";
 

@@ -230,6 +230,7 @@ export class Agent {
    * is rarely needed anymore. Kept for back-compat through 1.0.0.
    */
   async quoteSplit(args: {
+    /** @deprecated "botchain" is deprecated. Use "robinhood" instead. */
     chain: "solana" | "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm";
     merchantAmount: bigint | number | string;
   }): Promise<Record<string, unknown>> {
@@ -265,6 +266,7 @@ export class Agent {
    * onboarding message).
    */
   async payWithSplitInvoice(args: {
+    /** @deprecated "botchain" is deprecated. Use "robinhood" instead. */
     chain: "solana" | "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm";
     merchantWallet: string;
     merchantAmount: bigint | number | string;

@@ -1,9 +1,13 @@
-// BOT Chain, Robinhood Chain, and XRPL EVM are not shipped with viem/chains, so
+// Robinhood Chain and XRPL EVM are not shipped with viem/chains, so
 // they are defined here rather than in each module that needs them. Two
 // definitions of the same chain is a drift risk: they would be edited
 // separately and eventually disagree about an RPC or a chain id.
 import { defineChain, type Chain } from "viem";
 
+/**
+ * @deprecated BOT Chain (chainId: 677) is deprecated. Use robinhood (chainId: 4663) instead.
+ * This export is retained for backward compatibility and will be removed in a future version.
+ */
 export const botchain: Chain = defineChain({
   id: 677,
   name: "BOT Chain",
