@@ -17,6 +17,14 @@ const b58 = (bs58 as unknown as { default?: typeof bs58 }).default ?? bs58;
 
 const hex = (b: Uint8Array): string => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 
+export enum DerivationDomain {
+  EVM = "aifinpay:evm:v1\0",
+  SOLANA = "aifinpay:solana:v1\0",
+  NEAR = "aifinpay:near:v1\0",
+  APTOS = "aifinpay:aptos:v1\0",
+  CASPER = "aifinpay:casper:v1\0",
+}
+
 const fromHex = (s: string): Uint8Array => {
   const clean = s.startsWith("0x") ? s.slice(2) : s;
   if (clean.length !== 64 || /[^0-9a-fA-F]/.test(clean)) {
@@ -97,19 +105,19 @@ export function deriveWallet(seedHex: string): DerivedWallet {
 
   const sol = nacl.sign.keyPair.fromSeed(seed);
 
-  const evmPriv = domainSeed("aifinpay:evm:v1\0", seed);
+  const evmPriv = domainSeed(DerivationDomain.EVM, seed);
   const evmPub = secp256k1.getPublicKey(evmPriv, false).slice(1);
   const evmAddress = toChecksum(keccak_256(evmPub).slice(-20));
 
-  const nearSeed = domainSeed("aifinpay:near:v1\0", seed);
+  const nearSeed = domainSeed(DerivationDomain.NEAR, seed);
   const nearKp = nacl.sign.keyPair.fromSeed(nearSeed);
   const nearAddress = hex(nearKp.publicKey);
 
-  const aptosSeed = domainSeed("aifinpay:aptos:v1\0", seed);
+  const aptosSeed = domainSeed(DerivationDomain.APTOS, seed);
   const aptosKp = nacl.sign.keyPair.fromSeed(aptosSeed);
   const aptosAddress = aptosAuthKey(aptosKp.publicKey);
 
-  const casperSeed = domainSeed("aifinpay:casper:v1\0", seed);
+  const casperSeed = domainSeed(DerivationDomain.CASPER, seed);
   const casperKp = nacl.sign.keyPair.fromSeed(casperSeed);
   const casperPublicKey = `01${hex(casperKp.publicKey)}`;
   const name = new TextEncoder().encode("ed25519");
