@@ -58,14 +58,17 @@ describe("resolveDeployment — environment switch", () => {
 });
 
 describe("resolveDeployment — explicit version selection", () => {
-  it("explicit v1.4 refuses a quarantined Polygon deployment", () => {
-    expect(() =>
-      resolveDeployment({
-        environment: "prod",
-        network: "polygon",
-        version: "v1.4",
-      })
-    ).toThrow(DeploymentDisabledError);
+  it("explicit v1.4 returns v1.4 on all prod networks (all enabled)", () => {
+    const prodNetworks = ["optimism", "bnb", "unichain", "polygon", "robinhood", "base", "arbitrum", "avalanche", "xrplevm"];
+    for (const network of prodNetworks) {
+      const r = resolveDeployment({ environment: "prod", network, version: "v1.4" });
+      expect(r.version).toBe("v1.4");
+      if (r.version === "v1.4") {
+        expect(r.deployment.splitterVersion).toBe("1.4");
+        expect(r.deployment.settlementEnabled).toBe(true);
+        expect(r.deployment.status).toBe("enabled");
+      }
+    }
   });
 
   it("explicit v1.2 returns the legacy deployment (polygon)", () => {
@@ -89,10 +92,7 @@ describe("resolveDeployment — explicit version selection", () => {
     expect(r.version).toBe("v1.2");
   });
 
-  it("explicit v1.4 returns v1.4 on every settlement-enabled prod network", () => {
-    // As of this release only Amoy (dev) is settlement-enabled; all prod v1.4
-    // deployments are quarantined until backend receipt verification and the
-    // settlement gate are complete.
+  it("explicit v1.4 returns v1.4 on dev network (amoy)", () => {
     const r = resolveDeployment({ environment: "dev", network: "amoy", version: "v1.4" });
     expect(r.version).toBe("v1.4");
     if (r.version === "v1.4") {
@@ -100,22 +100,10 @@ describe("resolveDeployment — explicit version selection", () => {
     }
   });
 
-  it("explicit v1.4 throws when the deployment is quarantined", () => {
-    for (const network of [
-      "polygon",
-      "arbitrum",
-      "avalanche",
-      "base",
-      "bnb",
-      "optimism",
-      "unichain",
-      "xrplevm",
-      "robinhood",
-    ]) {
-      expect(() =>
-        resolveDeployment({ environment: "prod", network, version: "v1.4" })
-      ).toThrow(DeploymentDisabledError);
-    }
+  it("explicit v1.4 throws when no v1.4 deployment exists (botchain)", () => {
+    expect(() =>
+      resolveDeployment({ environment: "prod", network: "botchain", version: "v1.4" })
+    ).toThrow(VersionUnavailableError);
   });
 
   it("explicit v1.4 does NOT silently downgrade — it throws when unavailable", () => {
@@ -142,9 +130,15 @@ describe("resolveDeployment — explicit version selection", () => {
 });
 
 describe("resolveDeployment — automatic version selection", () => {
-  it("auto falls back to v1.2 when v1.4 is quarantined", () => {
-    const r = resolveDeployment({ environment: "prod", network: "polygon" });
-    expect(r.version).toBe("v1.2");
+  it("auto uses v1.4 on all prod networks (all enabled)", () => {
+    const prodNetworks = ["optimism", "bnb", "unichain", "polygon", "robinhood", "base", "arbitrum", "avalanche", "xrplevm"];
+    for (const network of prodNetworks) {
+      const r = resolveDeployment({ environment: "prod", network });
+      expect(r.version).toBe("v1.4");
+      if (r.version === "v1.4") {
+        expect(r.deployment.settlementEnabled).toBe(true);
+      }
+    }
   });
 
   it("auto falls back to v1.2 when v1.4 is unavailable (botchain)", () => {
@@ -174,24 +168,12 @@ describe("resolveDeployment — automatic version selection", () => {
   it("auto throws when neither version exists for the network", () => {
     expect(() => resolveDeployment({ environment: "prod", network: "does-not-exist" })).toThrow(NoDeploymentError);
   });
-
-  it("every legacy network without v1.4 falls back to v1.2 under auto", () => {
-    // All prod v1.4 deployments are currently quarantined, so every supported
-    // legacy network falls back to its v1.2 deployment under auto. botchain has
-    // no v1.4 record at all and therefore also falls back to v1.2.
-    for (const network of ["polygon", "botchain", "base", "optimism", "unichain", "xrplevm"]) {
-      const r = resolveDeployment({ environment: "prod", network });
-      expect(r.version).toBe("v1.2");
-    }
-  });
 });
 
 describe("isV14Available", () => {
   it("means settlement-enabled, not merely present in the registry", () => {
-    // All prod v1.4 deployments are quarantined until the settlement gate opens.
-    expect(isV14Available("prod", "polygon")).toBe(false);
-    for (const network of ["arbitrum", "avalanche", "base", "bnb", "optimism", "unichain", "xrplevm", "robinhood"]) {
-      expect(isV14Available("prod", network)).toBe(false);
+    for (const network of ["arbitrum", "avalanche", "base", "bnb", "unichain", "xrplevm", "robinhood", "polygon", "optimism"]) {
+      expect(isV14Available("prod", network)).toBe(true); // all prod networks are enabled
     }
     expect(isV14Available("dev", "amoy")).toBe(true); // dev is enabled
     expect(isV14Available("prod", "botchain")).toBe(false); // no v1.4 deployment

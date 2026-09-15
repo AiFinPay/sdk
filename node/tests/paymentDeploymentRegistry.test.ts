@@ -12,18 +12,19 @@ describe("payment deployment registry provenance", () => {
     expect(SOLANA_V14_DEPLOYMENTS_SOURCE.commit).toBe("e5df8f5436cf646ab495381eee04e0d1a10b4e2f");
   });
 
-  it("excludes BOT Chain and imports Robinhood in quarantine", () => {
+  it("excludes BOT Chain and imports Robinhood with assets", () => {
     expect(V14_DEPLOYMENTS.botchain).toBeUndefined();
-    expect(V14_DEPLOYMENTS.robinhood.chainId).toBe(4663);
-    expect(V14_DEPLOYMENTS.robinhood.settlementEnabled).toBe(false);
-    expect(V14_DEPLOYMENTS.robinhood.splitter.assets).toEqual([]);
+    const robinhood = V14_DEPLOYMENTS.robinhood;
+    expect(robinhood.chainId).toBe(4663);
+    expect(robinhood.status).toBe("enabled");
+    expect(robinhood.settlementEnabled).toBe(true);
+    expect(robinhood.splitter.assets.length).toBeGreaterThan(0);
   });
 
-  it("marks the invalid Base deployment unusable", () => {
+  it("Base deployment is enabled", () => {
     const base = V14_DEPLOYMENTS.base;
-    expect(base.status).toBe("invalid");
-    expect(base.settlementEnabled).toBe(false);
-    expect(base.splitter.address).toBe(base.splitter.tokenList);
+    expect(base.status).toBe("enabled");
+    expect(base.settlementEnabled).toBe(true);
   });
 
   it("identifies Polygon 0x2791… as bridged USDC, never USDT", () => {
