@@ -22,3 +22,4 @@ export type {
 } from "./types.js";
 export { isEvmDeployment, isSolanaDeployment } from "./types.js";
 export { getEvmDeployment, getSolanaDeployment } from "./grabber.js";
+export { AifinpayRegistry } from "./registry.js";
