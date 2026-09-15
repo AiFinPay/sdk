@@ -14,7 +14,6 @@
     "registry:build": "node dist/build.js",
     "test": "vitest run"
   },
-  "private": true,
   "license": "MIT",
   "repository": {
     "type": "git",
