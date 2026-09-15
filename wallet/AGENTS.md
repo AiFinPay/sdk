@@ -69,7 +69,7 @@ const legacy = await newWallet({ mode: "legacy-solana" });
 await createWalletCLI("new", ["node", "wallet", "--legacy-solana"]);
 ```
 
-## Rules
+## Rules (Mandatory)
 
 - Never silently overwrite the keystore: `new` refuses if the file exists (see `src/cli.ts`); keep that guard.
 - Derivation is NOT BIP-39 — never claim standard-wallet recovery works.

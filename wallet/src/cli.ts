@@ -16,18 +16,23 @@
  * Use AIFINPAY_WALLET_PASSPHRASE environment variable for non-interactive mode.
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, statSync, appendFileSync } from "node:fs";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { join, dirname } from "node:path";
+import { pathToFileURL, fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { createCipheriv, createDecipheriv, scryptSync, randomBytes, randomFillSync } from "node:crypto";
 import { sha3_256 } from "@noble/hashes/sha3";
 import { newWallet, walletFromSolanaSecret, walletFromSeed, type DerivedWallet, type DerivationMode } from "./index.js";
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
 function getPaths() {
   const HOME = process.env.AIFINPAY_HOME || join(homedir(), ".aifinpay");
   const KEYSTORE = join(HOME, "agent.json");
   const ENV_FILE = join(HOME, ".env");
-  return { HOME, KEYSTORE, ENV_FILE };
+  const INSTRUCTIONS_FILE = join(HOME, "instructions.md");
+  const RULES_FILE = join(HOME, "rules.md");
+  const AIIGNORE_FILE = join(HOME, ".aiignore");
+  return { HOME, KEYSTORE, ENV_FILE, INSTRUCTIONS_FILE, RULES_FILE, AIIGNORE_FILE };
 }
 
 type EncryptedKeystore = {
@@ -164,7 +169,7 @@ async function promptPassphrase(prompt: string): Promise<string> {
 }
 
 async function create(force: boolean, useEncryption: boolean, mode?: DerivationMode): Promise<DerivedWallet> {
-  const { HOME, KEYSTORE, ENV_FILE } = getPaths();
+  const { HOME, KEYSTORE, ENV_FILE, INSTRUCTIONS_FILE, RULES_FILE, AIIGNORE_FILE } = getPaths();
   const existing = readStore();
   if (existing && !force) {
     return loadWalletFromStore(existing);
@@ -175,6 +180,27 @@ async function create(force: boolean, useEncryption: boolean, mode?: DerivationM
   }
   const w = await newWallet({ mode });
   mkdirSync(HOME, { recursive: true, mode: 0o700 });
+  
+  const SRC_INSTRUCTIONS = join(__dirname, "..", ".aifinpay", "instructions.md");
+  const SRC_RULES = join(__dirname, "..", ".aifinpay", "rules.md");
+  
+  if (!existsSync(INSTRUCTIONS_FILE) && existsSync(SRC_INSTRUCTIONS)) {
+    const content = readFileSync(SRC_INSTRUCTIONS, "utf8");
+    writeFileSync(INSTRUCTIONS_FILE, content, { mode: 0o644 });
+  }
+  
+  if (!existsSync(RULES_FILE) && existsSync(SRC_RULES)) {
+    const content = readFileSync(SRC_RULES, "utf8");
+    writeFileSync(RULES_FILE, content, { mode: 0o644 });
+  }
+  
+  if (!existsSync(AIIGNORE_FILE)) {
+    const aiignoreContent = `# AiFinPay agent files
+agent.json
+secrets/
+`;
+    writeFileSync(AIIGNORE_FILE, aiignoreContent, { mode: 0o644 });
+  }
   
   let content: string;
   if (useEncryption) {
@@ -188,7 +214,7 @@ async function create(force: boolean, useEncryption: boolean, mode?: DerivationM
       process.stdout.write(`Generated strong passphrase and saved to ${ENV_FILE}\n\n`);
     }
     const encrypted = encryptSecret(w.keys.solanaSecretKeyB58, passphrase);
-    content = JSON.stringify({ ...encrypted, created: nowIso(), derivationMode: w.derivationMode }, null, 2) + "\n";
+    content = JSON.stringify({ ...encrypted, created: nowIso(), derivationMode: w.derivationMode, seedHex: w.keys.seedHex }, null, 2) + "\n";
   } else {
     content = JSON.stringify({ secretB58: w.keys.solanaSecretKeyB58, seedHex: w.keys.seedHex, created: nowIso(), derivationMode: w.derivationMode }, null, 2) + "\n";
   }
@@ -224,11 +250,15 @@ function loadWalletFromStore(store: KeystoreFile): DerivedWallet {
     const passphrase = validatePassphrase(envPass);
     const secretB58 = decrypt(store, passphrase);
     const mode: DerivationMode = "derivationMode" in store && (store.derivationMode === "legacy-solana" || store.derivationMode === "standard") ? store.derivationMode : "standard";
-    // For encrypted keystores, we need seedHex for standard mode
+    // For encrypted keystores in standard mode, use seedHex
     const seedHex = "seedHex" in store && typeof store.seedHex === "string" && store.seedHex ? store.seedHex : undefined;
-    if (mode === "standard" && seedHex) {
+    if (mode === "standard") {
+      if (!seedHex) {
+        throw new Error("seedHex required for standard derivation mode in encrypted keystore");
+      }
       return walletFromSeed(seedHex, { mode });
     }
+    // legacy-solana mode: Solana secret = raw seed
     return walletFromSolanaSecret(secretB58, { mode });
   }
   throw new Error("invalid keystore format.");
@@ -239,11 +269,15 @@ function nowIso(): string {
 }
 
 export function generateStrongPassphrase(): string {
-  const randomBytes = new Uint8Array(32);
-  randomFillSync(randomBytes);
+  const randomData = new Uint8Array(64);
+  randomFillSync(randomData);
 
-  const hash = sha3_256(randomBytes);
-  return Array.from(hash, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@$.^*_+=-";
+  let passphrase = "";
+  for (let i = 0; i < 32; i++) {
+    passphrase += charset[randomData[i] % charset.length];
+  }
+  return passphrase;
 }
 
 function validatePassphrase(passphrase: string | undefined): string {
@@ -277,6 +311,14 @@ function validatePassphrase(passphrase: string | undefined): string {
 function savePassphraseToEnv(passphrase: string, envFile: string): void {
   const { HOME } = getPaths();
   mkdirSync(HOME, { recursive: true, mode: 0o700 });
+
+  const secretsDir = join(HOME, "secrets");
+  const passphraseFile = join(secretsDir, "passphrase");
+  if (!existsSync(secretsDir)) {
+    mkdirSync(secretsDir, { recursive: true, mode: 0o700 });
+  }
+  writeFileSync(passphraseFile, passphrase, { mode: 0o600 });
+  chmodSync(passphraseFile, 0o600);
 
   let envContent = "";
   if (existsSync(envFile)) {
