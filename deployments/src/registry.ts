@@ -220,4 +220,115 @@ export class AifinpayRegistry {
   getTestnetDeployments(): EvmDeploymentRecord[] {
     return this.getAllEvmDeployments().filter((d) => d.testnet);
   }
+
+  /**
+   * Get list of supported chain IDs.
+   * @param filter - Optional filter: "all" | "prod" | "testnet" | "enabled"
+   */
+  getSupportedChains(filter?: "all" | "prod" | "testnet" | "enabled"): number[] {
+    const deployments = this.getAllEvmDeployments();
+    const filtered = deployments.filter((d) => {
+      if (filter === "prod") return d.environment === "prod" && !d.testnet;
+      if (filter === "testnet") return d.testnet;
+      if (filter === "enabled") return d.status === "enabled" && d.settlementEnabled;
+      return true;
+    });
+    return filtered.map((d) => d.chainId).sort((a, b) => a - b);
+  }
+
+  /**
+   * Get list of supported networks with metadata.
+   * @param filter - Optional filter: "all" | "prod" | "testnet" | "enabled"
+   */
+  getNetworkList(filter?: "all" | "prod" | "testnet" | "enabled"): Array<{
+    chainId: number;
+    name: string;
+    status: string;
+    settlementEnabled: boolean;
+    testnet: boolean;
+  }> {
+    const deployments = this.getAllEvmDeployments();
+    const filtered = deployments.filter((d) => {
+      if (filter === "prod") return d.environment === "prod" && !d.testnet;
+      if (filter === "testnet") return d.testnet;
+      if (filter === "enabled") return d.status === "enabled" && d.settlementEnabled;
+      return true;
+    });
+    return filtered
+      .sort((a, b) => a.chainId - b.chainId)
+      .map((d) => ({
+        chainId: d.chainId,
+        name: d.chain,
+        status: d.status,
+        settlementEnabled: d.settlementEnabled,
+        testnet: d.testnet,
+      }));
+  }
+
+  /**
+   * Check if a chain is supported.
+   */
+  isChainSupported(chainId: number): boolean {
+    return this.getEvmDeployment(chainId) !== null;
+  }
+
+  /**
+   * Get chain ID by network name.
+   * Returns null if not found.
+   */
+  getChainIdByNetwork(network: string): number | null {
+    const deployment = this.getEvmByNetwork(network);
+    return deployment?.chainId ?? null;
+  }
+
+  /**
+   * Get network name by chain ID.
+   * Returns null if not found.
+   */
+  getNetworkByChainId(chainId: number): string | null {
+    const deployment = this.getEvmDeployment(chainId);
+    return deployment?.chain ?? null;
+  }
+
+  /**
+   * Export supported chains as markdown table.
+   * @param filter - Optional filter: "all" | "prod" | "testnet" | "enabled"
+   */
+  exportAsMarkdown(filter?: "all" | "prod" | "testnet" | "enabled"): string {
+    const networks = this.getNetworkList(filter);
+    if (networks.length === 0) {
+      return "No networks found.";
+    }
+
+    const header = "| Chain ID | Network | Status | Settlement | Testnet |\n|----------|---------|--------|------------|---------|";
+    const rows = networks.map(
+      (n) =>
+        `| ${n.chainId} | ${n.name} | ${n.status} | ${n.settlementEnabled ? "✅" : "❌"} | ${n.testnet ? "Yes" : "No"} |`,
+    );
+    return [header, ...rows].join("\n");
+  }
+
+  /**
+   * Export supported chains as JSON.
+   * @param filter - Optional filter: "all" | "prod" | "testnet" | "enabled"
+   */
+  exportAsJson(filter?: "all" | "prod" | "testnet" | "enabled"): string {
+    const networks = this.getNetworkList(filter);
+    return JSON.stringify(networks, null, 2);
+  }
+
+  /**
+   * Export supported chains as CSV.
+   * @param filter - Optional filter: "all" | "prod" | "testnet" | "enabled"
+   */
+  exportAsCsv(filter?: "all" | "prod" | "testnet" | "enabled"): string {
+    const networks = this.getNetworkList(filter);
+    if (networks.length === 0) {
+      return "chainId,name,status,settlementEnabled,testnet\n";
+    }
+
+    const header = "chainId,name,status,settlementEnabled,testnet";
+    const rows = networks.map((n) => `${n.chainId},${n.name},${n.status},${n.settlementEnabled},${n.testnet}`);
+    return [header, ...rows].join("\n");
+  }
 }

@@ -142,6 +142,86 @@ console.log(registry.getVersion());      // "1.4"
 console.log(registry.getGeneratedAt());  // ISO 8601 timestamp
 ```
 
+### Supported Chains
+
+```typescript
+const registry = AifinpayRegistry.loadEvm();
+
+// Get all supported chain IDs
+const allChains = registry.getSupportedChains();           // [1, 10, 137, ...]
+
+// Get only production chains
+const prodChains = registry.getSupportedChains("prod");
+
+// Get only testnet chains
+const testnetChains = registry.getSupportedChains("testnet");
+
+// Get only enabled chains (status = "enabled" AND settlementEnabled = true)
+const enabledChains = registry.getSupportedChains("enabled");
+```
+
+### Network List
+
+```typescript
+const registry = AifinpayRegistry.loadEvm();
+
+// Get network list with metadata
+const networks = registry.getNetworkList();
+// Returns: Array<{ chainId, name, status, settlementEnabled, testnet }>
+
+for (const network of networks) {
+  console.log(`${network.name} (chainId: ${network.chainId}): ${network.status}`);
+}
+
+// Filter by production only
+const prodNetworks = registry.getNetworkList("prod");
+```
+
+### Chain Helpers
+
+```typescript
+const registry = AifinpayRegistry.loadEvm();
+
+// Check if a chain is supported
+const isSupported = registry.isChainSupported(10);  // true/false
+
+// Get chain ID by network name
+const optimismId = registry.getChainIdByNetwork("optimism");  // 10
+
+// Get network name by chain ID
+const networkName = registry.getNetworkByChainId(10);  // "optimism"
+```
+
+### Export Formats
+
+```typescript
+const registry = AifinpayRegistry.loadEvm();
+
+// Export as markdown table
+const markdown = registry.exportAsMarkdown();
+console.log(markdown);
+// | Chain ID | Network | Status | Settlement | Testnet |
+// |----------|---------|--------|------------|---------|
+// | 10 | optimism | enabled | ✅ | No |
+// | 137 | polygon | enabled | ✅ | No |
+
+// Export filtered markdown
+const prodMarkdown = registry.exportAsMarkdown("prod");
+const enabledMarkdown = registry.exportAsMarkdown("enabled");
+
+// Export as JSON
+const json = registry.exportAsJson();
+console.log(json);
+// [{"chainId":10,"name":"optimism","status":"enabled",...}, ...]
+
+// Export as CSV
+const csv = registry.exportAsCsv();
+console.log(csv);
+// chainId,name,status,settlementEnabled,testnet
+// 10,optimism,enabled,true,false
+// 137,polygon,enabled,true,false
+```
+
 ---
 
 ## ArtifactRegistry — ABI/IDL Artifacts
@@ -241,7 +321,9 @@ const allAbis = artifacts.getAllTronAbis();
 
 ---
 
-## Complete Example
+## Complete Examples
+
+### Setup Payment on Chain
 
 ```typescript
 import { AifinpayRegistry, ArtifactRegistry } from "@aifinpay/deployments";
@@ -292,6 +374,50 @@ async function setupPayment(chainId: number) {
 // Usage
 const config = await setupPayment(10); // Optimism
 console.log(config);
+```
+
+### Generate Supported Chains Documentation
+
+```typescript
+import { AifinpayRegistry } from "@aifinpay/deployments";
+
+const registry = AifinpayRegistry.loadEvm();
+
+// Generate markdown table for README
+const markdown = registry.exportAsMarkdown("prod");
+console.log(markdown);
+// | Chain ID | Network   | Status  | Settlement | Testnet |
+// |----------|-----------|---------|------------|---------|
+// | 10       | optimism  | enabled | ✅         | No      |
+// | 137      | polygon   | enabled | ✅         | No      |
+
+// Generate JSON for API response
+const json = registry.exportAsJson("enabled");
+console.log(json);
+
+// Generate CSV for spreadsheet
+const csv = registry.exportAsCsv();
+console.log(csv);
+```
+
+### Check Chain Support
+
+```typescript
+import { AifinpayRegistry } from "@aifinpay/deployments";
+
+const registry = AifinpayRegistry.loadEvm();
+
+// Check if specific chains are supported
+const supportedChains = [1, 10, 137, 8453];
+for (const chainId of supportedChains) {
+  const name = registry.getNetworkByChainId(chainId);
+  const isSupported = registry.isChainSupported(chainId);
+  console.log(`Chain ${chainId} (${name}): ${isSupported ? "✅" : "❌"}`);
+}
+
+// Get chain ID for network name
+const optimismId = registry.getChainIdByNetwork("optimism");
+console.log(`Optimism chain ID: ${optimismId}`);  // 10
 ```
 
 ---

@@ -21,6 +21,15 @@ const optimism = evmRegistry.getEvmDeployment(10);
 const splitterAddr = evmRegistry.getSplitterAddress(10);
 const stablecoins = evmRegistry.getStablecoins(10);
 
+// Get supported chains
+const chains = evmRegistry.getSupportedChains("enabled");  // [10, 137, ...]
+const networks = evmRegistry.getNetworkList();             // [{ chainId, name, status, ... }]
+
+// Export as markdown/json/csv
+const markdown = evmRegistry.exportAsMarkdown("prod");
+const json = evmRegistry.exportAsJson();
+const csv = evmRegistry.exportAsCsv();
+
 // Query artifacts
 const abi = artifacts.getEvmAbi("B2BSplitterV14", "1.4");
 const solanaIdl = artifacts.getSolanaIdl("mainnet");
@@ -94,6 +103,12 @@ registry/
 - `isSettlementEnabled(chainId)` — settlement status
 - `getGovernanceSafe(env)` — Safe multisig address
 - `filterByStatus(status)`, `getProdDeployments()`, `getTestnetDeployments()` — filtering
+- `getSupportedChains(filter?)` — get list of supported chain IDs (filter: "all" | "prod" | "testnet" | "enabled")
+- `getNetworkList(filter?)` — get network list with metadata
+- `isChainSupported(chainId)` — check if chain is supported
+- `getChainIdByNetwork(network)` — get chain ID by name
+- `getNetworkByChainId(chainId)` — get network name by ID
+- `exportAsMarkdown(filter?)`, `exportAsJson(filter?)`, `exportAsCsv(filter?)` — export formats
 
 ### Artifact Registry
 

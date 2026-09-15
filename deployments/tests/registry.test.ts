@@ -220,4 +220,119 @@ describe("AifinpayRegistry", () => {
       expect(testnet.every((d) => d.testnet)).toBe(true);
     });
   });
+
+  describe("getSupportedChains", () => {
+    it("gets all supported chain IDs", () => {
+      const registry = AifinpayRegistry.loadEvm();
+      const chains = registry.getSupportedChains();
+      expect(Array.isArray(chains)).toBe(true);
+      expect(chains.length).toBeGreaterThan(0);
+      expect(chains).toEqual([...chains].sort((a, b) => a - b));
+    });
+
+    it("gets only prod chain IDs", () => {
+      const registry = AifinpayRegistry.loadEvm();
+      const prodChains = registry.getSupportedChains("prod");
+      expect(prodChains.length).toBeGreaterThan(0);
+    });
+
+    it("gets only testnet chain IDs", () => {
+      const registry = AifinpayRegistry.loadEvm();
+      const testnetChains = registry.getSupportedChains("testnet");
+      expect(Array.isArray(testnetChains)).toBe(true);
+    });
+
+    it("gets only enabled chain IDs", () => {
+      const registry = AifinpayRegistry.loadEvm();
+      const enabledChains = registry.getSupportedChains("enabled");
+      expect(Array.isArray(enabledChains)).toBe(true);
+    });
+  });
+
+  describe("getNetworkList", () => {
+    it("gets network list with metadata", () => {
+      const registry = AifinpayRegistry.loadEvm();
+      const networks = registry.getNetworkList();
+      expect(Array.isArray(networks)).toBe(true);
+      expect(networks[0]).toHaveProperty("chainId");
+      expect(networks[0]).toHaveProperty("name");
+      expect(networks[0]).toHaveProperty("status");
+      expect(networks[0]).toHaveProperty("settlementEnabled");
+      expect(networks[0]).toHaveProperty("testnet");
+    });
+
+    it("gets only prod networks", () => {
+      const registry = AifinpayRegistry.loadEvm();
+      const prodNetworks = registry.getNetworkList("prod");
+      expect(prodNetworks.every((n) => !n.testnet)).toBe(true);
+    });
+  });
+
+  describe("isChainSupported", () => {
+    it("returns true for supported chain", () => {
+      const registry = AifinpayRegistry.loadEvm();
+      expect(registry.isChainSupported(10)).toBe(true);
+    });
+
+    it("returns false for unsupported chain", () => {
+      const registry = AifinpayRegistry.loadEvm();
+      expect(registry.isChainSupported(99999)).toBe(false);
+    });
+  });
+
+  describe("getChainIdByNetwork and getNetworkByChainId", () => {
+    it("gets chain ID by network name", () => {
+      const registry = AifinpayRegistry.loadEvm();
+      expect(registry.getChainIdByNetwork("optimism")).toBe(10);
+      expect(registry.getChainIdByNetwork("polygon")).toBe(137);
+    });
+
+    it("returns null for unknown network", () => {
+      const registry = AifinpayRegistry.loadEvm();
+      expect(registry.getChainIdByNetwork("unknown")).toBeNull();
+    });
+
+    it("gets network name by chain ID", () => {
+      const registry = AifinpayRegistry.loadEvm();
+      expect(registry.getNetworkByChainId(10)).toBe("optimism");
+      expect(registry.getNetworkByChainId(137)).toBe("polygon");
+    });
+
+    it("returns null for unknown chain ID", () => {
+      const registry = AifinpayRegistry.loadEvm();
+      expect(registry.getNetworkByChainId(99999)).toBeNull();
+    });
+  });
+
+  describe("exportAsMarkdown", () => {
+    it("exports markdown table", () => {
+      const registry = AifinpayRegistry.loadEvm();
+      const markdown = registry.exportAsMarkdown();
+      expect(markdown).toContain("| Chain ID | Network |");
+      expect(markdown).toContain("|----------|---------|");
+    });
+
+    it("exports filtered markdown", () => {
+      const registry = AifinpayRegistry.loadEvm();
+      const prodMarkdown = registry.exportAsMarkdown("prod");
+      expect(prodMarkdown).toContain("| Chain ID | Network |");
+    });
+  });
+
+  describe("exportAsJson", () => {
+    it("exports JSON array", () => {
+      const registry = AifinpayRegistry.loadEvm();
+      const json = registry.exportAsJson();
+      const parsed = JSON.parse(json);
+      expect(Array.isArray(parsed)).toBe(true);
+    });
+  });
+
+  describe("exportAsCsv", () => {
+    it("exports CSV format", () => {
+      const registry = AifinpayRegistry.loadEvm();
+      const csv = registry.exportAsCsv();
+      expect(csv).toContain("chainId,name,status,settlementEnabled,testnet");
+    });
+  });
 });
