@@ -135,7 +135,7 @@ node dist/cli.js show
 ## Library
 
 ```ts
-import { deriveWallet, newWallet } from "@aifinpay/wallet";
+import { deriveWallet, newWallet, walletFromSeed } from "@aifinpay/wallet";
 
 const w = await newWallet();
 w.evmAddress; // 0x… (same on every EVM chain)
@@ -146,6 +146,37 @@ w.keys.evmPrivateKey; // for building your own transactions
 w.keys.solanaSecretKeyB58; // tweetnacl 64-byte secret, base58
 
 deriveWallet(w.keys.seedHex); // same seed → same wallet, deterministic
+```
+
+### Legacy Solana Derivation
+
+Use `--legacy-solana` mode for compatibility with existing wallets that use raw seed derivation (not recommended for new wallets):
+
+```ts
+import { newWallet, walletFromSeed } from "@aifinpay/wallet";
+
+// Create wallet with legacy Solana derivation
+const legacyWallet = await newWallet({ mode: "legacy-solana" });
+
+// Or recover from existing seed with legacy mode
+const recovered = walletFromSeed(seedHex, { mode: "legacy-solana" });
+```
+
+### Programmatic CLI Usage
+
+Use the CLI function programmatically with custom options:
+
+```ts
+import { createWalletCLI } from "@aifinpay/wallet";
+
+// Create wallet with legacy Solana derivation
+await createWalletCLI("new", ["node", "wallet", "--legacy-solana"]);
+
+// Create encrypted wallet with legacy mode
+await createWalletCLI("new", ["node", "wallet", "--legacy-solana"]);
+
+// Create unencrypted legacy wallet
+await createWalletCLI("new", ["node", "wallet", "--plain"]);
 ```
 
 ## Recovery

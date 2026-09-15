@@ -25,6 +25,9 @@ export enum DerivationDomain {
   CASPER = "aifinpay:casper:v1\0",
 }
 
+/** @deprecated Legacy Solana derivation uses raw seed without domain separation. New wallets should use standard derivation. */
+export const LEGACY_SOLANA_DERIVATION = false;
+
 const fromHex = (s: string): Uint8Array => {
   const clean = s.startsWith("0x") ? s.slice(2) : s;
   if (clean.length !== 64 || /[^0-9a-fA-F]/.test(clean)) {
@@ -72,8 +75,10 @@ export interface DerivedWallet {
   aptosAddress: `0x${string}`;
   /** Casper account hash retained for balance/display compatibility. */
   casperAddress: string;
-  /** Casper algorithm-tagged Ed25519 public key used by AIFP-3 ownership proof. */
+  /** Casper algorithmic-tagged Ed25519 public key used by AIFP-3 ownership proof. */
   casperPublicKey: string;
+  /** Derivation mode used for this wallet. */
+  derivationMode: DerivationMode;
   keys: {
     /** 32-byte AiFinPay seed — the recovery source for this wallet format. */
     seedHex: string;
@@ -88,6 +93,8 @@ export interface DerivedWallet {
   };
 }
 
+export type DerivationMode = "standard" | "legacy-solana";
+
 /**
  * Derivation contract (v1, backwards-compatible for the original three):
  *   Solana = Ed25519(seed)
@@ -100,10 +107,17 @@ export interface DerivedWallet {
  * therefore remain byte-identical to earlier @aifinpay/wallet releases. AIFP-3
  * binds whichever wallet format an agent uses to one global Agent Identity.
  */
-export function deriveWallet(seedHex: string): DerivedWallet {
+export function deriveWallet(seedHex: string, options?: { mode?: DerivationMode }): DerivedWallet {
   const seed = fromHex(seedHex);
+  const mode = options?.mode ?? "standard";
 
-  const sol = nacl.sign.keyPair.fromSeed(seed);
+  let sol: nacl.SignKeyPair;
+  if (mode === "legacy-solana") {
+    sol = nacl.sign.keyPair.fromSeed(seed);
+  } else {
+    const solSeed = domainSeed(DerivationDomain.SOLANA, seed);
+    sol = nacl.sign.keyPair.fromSeed(solSeed);
+  }
 
   const evmPriv = domainSeed(DerivationDomain.EVM, seed);
   const evmPub = secp256k1.getPublicKey(evmPriv, false).slice(1);
@@ -134,6 +148,7 @@ export function deriveWallet(seedHex: string): DerivedWallet {
     aptosAddress,
     casperAddress,
     casperPublicKey,
+    derivationMode: mode,
     keys: {
       seedHex: hex(seed),
       solanaSecretKeyB58: b58.encode(sol.secretKey),
@@ -145,7 +160,7 @@ export function deriveWallet(seedHex: string): DerivedWallet {
   };
 }
 
-export async function newWallet(): Promise<DerivedWallet> {
+export async function newWallet(options?: { mode?: DerivationMode }): Promise<DerivedWallet> {
   const seed = new Uint8Array(32);
   if (typeof globalThis.crypto?.getRandomValues === "function") {
     globalThis.crypto.getRandomValues(seed);
@@ -153,12 +168,28 @@ export async function newWallet(): Promise<DerivedWallet> {
     const { randomFillSync } = await import("node:crypto");
     randomFillSync(seed);
   }
-  return deriveWallet(hex(seed));
+  return deriveWallet(hex(seed), options);
 }
 
-/** Recover the same wallet from the MCP keystore's Solana secret key. */
-export function walletFromSolanaSecret(secretB58: string): DerivedWallet {
+/**
+ * Recover the same wallet from the MCP keystore's Solana secret key.
+ * Uses standard derivation by default. Pass `legacy-solana` mode only for migrating legacy wallets.
+ * Note: This only works for legacy-solana mode where Solana key = raw seed. For standard mode,
+ * use the stored seedHex instead.
+ */
+export function walletFromSolanaSecret(secretB58: string, options?: { mode?: DerivationMode }): DerivedWallet {
   const sk = b58.decode(secretB58);
   if (sk.length < 32) throw new Error("not a Solana secret key (need at least 32 bytes)");
-  return deriveWallet(hex(sk.slice(0, 32)));
+  const mode = options?.mode ?? "standard";
+  if (mode === "legacy-solana") {
+    return deriveWallet(hex(sk.slice(0, 32)), { mode: "legacy-solana" });
+  }
+  throw new Error("walletFromSolanaSecret only supports legacy-solana mode. For standard mode, use seedHex from keystore.");
+}
+
+/**
+ * Recover wallet from stored seedHex. This is the preferred method for standard derivation.
+ */
+export function walletFromSeed(seedHex: string, options?: { mode?: DerivationMode }): DerivedWallet {
+  return deriveWallet(seedHex, options);
 }

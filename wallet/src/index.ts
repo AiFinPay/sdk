@@ -14,5 +14,6 @@
  * clean: this light package to CREATE a wallet anywhere, the full SDK only when
  * you actually PAY.
  */
-export { deriveWallet, newWallet, walletFromSolanaSecret } from "./derive.js";
-export type { DerivedWallet } from "./derive.js";
+export { deriveWallet, newWallet, walletFromSolanaSecret, walletFromSeed, DerivationDomain, LEGACY_SOLANA_DERIVATION } from "./derive.js";
+export type { DerivedWallet, DerivationMode } from "./derive.js";
+export { run as createWalletCLI } from "./cli.js";

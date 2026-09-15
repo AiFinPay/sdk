@@ -7,7 +7,7 @@ import { readFileSync, existsSync, writeFileSync, mkdirSync, rmSync } from "node
 import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createCipheriv, createDecipheriv, scryptSync, randomBytes, randomFillSync } from "node:crypto";
-import { deriveWallet, newWallet, walletFromSolanaSecret } from "../src";
+import { deriveWallet, newWallet, walletFromSolanaSecret, type DerivationMode } from "../src";
 import { sha3_256 } from "@noble/hashes/sha3";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -30,6 +30,7 @@ describe("derivation", () => {
     expect(w.keys.nearSecretSeedHex).toMatch(/^[0-9a-f]{64}$/);
     expect(w.keys.aptosSecretSeedHex).toMatch(/^[0-9a-f]{64}$/);
     expect(w.keys.casperSecretSeedHex).toMatch(/^[0-9a-f]{64}$/);
+    expect(w.derivationMode).toBe("standard");
   });
 
   it("newWallet returns a recoverable seed", async () => {
@@ -39,13 +40,20 @@ describe("derivation", () => {
   });
 
   it("walletFromSolanaSecret recovers the same complete wallet the keystore stores", () => {
-    const w = deriveWallet("cd".repeat(32));
-    expect(walletFromSolanaSecret(w.keys.solanaSecretKeyB58)).toEqual(w);
+    const w = deriveWallet("cd".repeat(32), { mode: "legacy-solana" });
+    expect(walletFromSolanaSecret(w.keys.solanaSecretKeyB58, { mode: "legacy-solana" })).toEqual(w);
   });
 
   it("rejects a malformed seed and a too-short secret", () => {
     expect(() => deriveWallet("nope")).toThrow();
     expect(() => walletFromSolanaSecret("1")).toThrow();
+  });
+
+  it("legacy-solana mode derives Solana address from raw seed", () => {
+    const w = deriveWallet("cd".repeat(32), { mode: "legacy-solana" });
+    expect(w.derivationMode).toBe("legacy-solana");
+    const recovered = walletFromSolanaSecret(w.keys.solanaSecretKeyB58, { mode: "legacy-solana" });
+    expect(recovered.solanaAddress).toBe(w.solanaAddress);
   });
 });
 
@@ -67,7 +75,7 @@ describe("backwards-compatible with @aifinpay/agent", () => {
     it(`seed ${seed.slice(0, 6)}… preserves legacy funded addresses`, async () => {
       if (!full) return;
       const agent = await full.fromSeed(seed);
-      const w = deriveWallet(seed);
+      const w = deriveWallet(seed, { mode: "legacy-solana" });
       expect(w.solanaAddress).toBe(agent.solanaAddress);
       expect(w.evmAddress).toBe(agent.evmAddress);
       expect(w.casperAddress).toBe(agent.casperAddress);
@@ -124,9 +132,9 @@ describe("the install stays light", () => {
 
 describe("the CLI writes an mcp-compatible keystore", () => {
   it("stores secretB58 that walletFromSolanaSecret round-trips", () => {
-    const w = deriveWallet("77".repeat(32));
-    const store = { secretB58: w.keys.solanaSecretKeyB58, seedHex: w.keys.seedHex };
-    expect(walletFromSolanaSecret(store.secretB58)).toEqual(w);
+    const w = deriveWallet("77".repeat(32), { mode: "legacy-solana" });
+    const store = { secretB58: w.keys.solanaSecretKeyB58, seedHex: w.keys.seedHex, derivationMode: "legacy-solana" as DerivationMode };
+    expect(walletFromSolanaSecret(store.secretB58, { mode: "legacy-solana" })).toEqual(w);
   });
 });
 
@@ -152,7 +160,7 @@ describe("encrypted keystore", () => {
   }
 
   it("encrypts and decrypts a secret correctly", () => {
-    const w = deriveWallet("99".repeat(32));
+    const w = deriveWallet("99".repeat(32), { mode: "legacy-solana" });
     const passphrase = "test-passphrase-123";
     const encrypted = encrypt(w.keys.solanaSecretKeyB58, passphrase);
     const key = scryptSync(passphrase, Buffer.from(encrypted.salt, "base64"), 32, {
@@ -168,7 +176,7 @@ describe("encrypted keystore", () => {
       decipher.final(),
     ]).toString("utf8");
     expect(decrypted).toBe(w.keys.solanaSecretKeyB58);
-    expect(walletFromSolanaSecret(decrypted)).toEqual(w);
+    expect(walletFromSolanaSecret(decrypted, { mode: "legacy-solana" })).toEqual(w);
   });
 
   it("rejects wrong passphrase", () => {
@@ -213,7 +221,7 @@ describe("plain keystore round-trip", () => {
 
   it("creates a plain keystore without a passphrase", async () => {
     const cli = await import("../src/cli.js");
-    await cli.run!("new", ["--plain"]);
+    await cli.run!("new", ["node", "wallet", "--plain"]);
     const keystorePath = join(tmpDir, "agent.json");
     expect(existsSync(keystorePath)).toBe(true);
     const store = JSON.parse(readFileSync(keystorePath, "utf8"));
@@ -223,7 +231,7 @@ describe("plain keystore round-trip", () => {
 
   it("shows and exports from a plain keystore without a passphrase", async () => {
     const cli = await import("../src/cli.js");
-    await cli.run!("new", ["--plain"]);
+    await cli.run!("new", ["node", "wallet", "--plain"]);
 
     const logs: string[] = [];
     const originalStdoutWrite = process.stdout.write.bind(process.stdout);
@@ -246,7 +254,7 @@ describe("plain keystore round-trip", () => {
   it("requires a passphrase for an encrypted keystore", async () => {
     const cli = await import("../src/cli.js");
     process.env.AIFINPAY_WALLET_PASSPHRASE = "StrongPass123!@$.^";
-    await cli.run!("new", []);
+    await cli.run!("new", ["node", "wallet"]);
     const keystorePath = join(tmpDir, "agent.json");
     expect(existsSync(keystorePath)).toBe(true);
     const store = JSON.parse(readFileSync(keystorePath, "utf8"));

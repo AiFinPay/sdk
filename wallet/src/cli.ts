@@ -21,11 +21,14 @@ import { pathToFileURL } from "node:url";
 import { homedir } from "node:os";
 import { createCipheriv, createDecipheriv, scryptSync, randomBytes, randomFillSync } from "node:crypto";
 import { sha3_256 } from "@noble/hashes/sha3";
-import { newWallet, walletFromSolanaSecret, type DerivedWallet } from "./index.js";
+import { newWallet, walletFromSolanaSecret, walletFromSeed, type DerivedWallet, type DerivationMode } from "./index.js";
 
-const HOME = process.env.AIFINPAY_HOME || join(homedir(), ".aifinpay");
-const KEYSTORE = join(HOME, "agent.json");
-const ENV_FILE = join(HOME, ".env");
+function getPaths() {
+  const HOME = process.env.AIFINPAY_HOME || join(homedir(), ".aifinpay");
+  const KEYSTORE = join(HOME, "agent.json");
+  const ENV_FILE = join(HOME, ".env");
+  return { HOME, KEYSTORE, ENV_FILE };
+}
 
 type EncryptedKeystore = {
   enc: "scrypt-aes-256-gcm";
@@ -39,11 +42,13 @@ type PlainKeystore = {
   secretB58: string;
   seedHex?: string;
   created?: string;
+  derivationMode?: DerivationMode;
 };
 
-type KeystoreFile = PlainKeystore | (EncryptedKeystore & { created?: string });
+type KeystoreFile = PlainKeystore | (EncryptedKeystore & { created?: string; derivationMode?: DerivationMode });
 
 function readStore(): KeystoreFile | null {
+  const { KEYSTORE } = getPaths();
   if (!existsSync(KEYSTORE)) return null;
   try {
     const p = JSON.parse(readFileSync(KEYSTORE, "utf8"));
@@ -93,6 +98,7 @@ function decrypt(store: EncryptedKeystore, passphrase: string): string {
 }
 
 function print(w: DerivedWallet, created: boolean, isEncrypted: boolean = false) {
+  const { KEYSTORE } = getPaths();
   if (created && !isEncrypted) process.stdout.write(`Created ${KEYSTORE} (mode 600).\n\n`);
   process.stdout.write(
     `Your agent's addresses — the EVM one is the same on every EVM chain:\n\n` +
@@ -157,7 +163,8 @@ async function promptPassphrase(prompt: string): Promise<string> {
   });
 }
 
-async function create(force: boolean, useEncryption: boolean): Promise<DerivedWallet> {
+async function create(force: boolean, useEncryption: boolean, mode?: DerivationMode): Promise<DerivedWallet> {
+  const { HOME, KEYSTORE, ENV_FILE } = getPaths();
   const existing = readStore();
   if (existing && !force) {
     return loadWalletFromStore(existing);
@@ -166,7 +173,7 @@ async function create(force: boolean, useEncryption: boolean): Promise<DerivedWa
     process.stderr.write(`Refusing: ${KEYSTORE} already exists and may hold funds. Move it aside first.\n`);
     process.exit(1);
   }
-  const w = await newWallet();
+  const w = await newWallet({ mode });
   mkdirSync(HOME, { recursive: true, mode: 0o700 });
   
   let content: string;
@@ -177,13 +184,13 @@ async function create(force: boolean, useEncryption: boolean): Promise<DerivedWa
       passphrase = validatePassphrase(envPass);
     } else {
       passphrase = generateStrongPassphrase();
-      savePassphraseToEnv(passphrase);
+      savePassphraseToEnv(passphrase, ENV_FILE);
       process.stdout.write(`Generated strong passphrase and saved to ${ENV_FILE}\n\n`);
     }
     const encrypted = encryptSecret(w.keys.solanaSecretKeyB58, passphrase);
-    content = JSON.stringify({ ...encrypted, created: nowIso() }, null, 2) + "\n";
+    content = JSON.stringify({ ...encrypted, created: nowIso(), derivationMode: w.derivationMode }, null, 2) + "\n";
   } else {
-    content = JSON.stringify({ secretB58: w.keys.solanaSecretKeyB58, seedHex: w.keys.seedHex, created: nowIso() }, null, 2) + "\n";
+    content = JSON.stringify({ secretB58: w.keys.solanaSecretKeyB58, seedHex: w.keys.seedHex, created: nowIso(), derivationMode: w.derivationMode }, null, 2) + "\n";
   }
   
   writeFileSync(KEYSTORE, content, { mode: 0o600 });
@@ -193,7 +200,18 @@ async function create(force: boolean, useEncryption: boolean): Promise<DerivedWa
 
 function loadWalletFromStore(store: KeystoreFile): DerivedWallet {
   if ("secretB58" in store) {
-    return walletFromSolanaSecret(store.secretB58);
+    const mode: DerivationMode = "derivationMode" in store && (store.derivationMode === "legacy-solana" || store.derivationMode === "standard") ? store.derivationMode : "standard";
+    // For legacy-solana mode, Solana secret = raw seed, so we can recover from secretB58
+    // For standard mode, we need seedHex since Solana secret is derived differently
+    if (mode === "legacy-solana") {
+      return walletFromSolanaSecret(store.secretB58, { mode });
+    }
+    // Standard mode: use seedHex
+    const seedHex = "seedHex" in store && typeof store.seedHex === "string" ? store.seedHex : undefined;
+    if (!seedHex) {
+      throw new Error("seedHex required for standard derivation mode");
+    }
+    return walletFromSeed(seedHex, { mode });
   }
   if ("enc" in store) {
     const envPass = process.env.AIFINPAY_WALLET_PASSPHRASE;
@@ -204,7 +222,14 @@ function loadWalletFromStore(store: KeystoreFile): DerivedWallet {
       );
     }
     const passphrase = validatePassphrase(envPass);
-    return walletFromSolanaSecret(decrypt(store, passphrase));
+    const secretB58 = decrypt(store, passphrase);
+    const mode: DerivationMode = "derivationMode" in store && (store.derivationMode === "legacy-solana" || store.derivationMode === "standard") ? store.derivationMode : "standard";
+    // For encrypted keystores, we need seedHex for standard mode
+    const seedHex = "seedHex" in store && typeof store.seedHex === "string" && store.seedHex ? store.seedHex : undefined;
+    if (mode === "standard" && seedHex) {
+      return walletFromSeed(seedHex, { mode });
+    }
+    return walletFromSolanaSecret(secretB58, { mode });
   }
   throw new Error("invalid keystore format.");
 }
@@ -249,12 +274,13 @@ function validatePassphrase(passphrase: string | undefined): string {
   return passphrase;
 }
 
-function savePassphraseToEnv(passphrase: string): void {
+function savePassphraseToEnv(passphrase: string, envFile: string): void {
+  const { HOME } = getPaths();
   mkdirSync(HOME, { recursive: true, mode: 0o700 });
 
   let envContent = "";
-  if (existsSync(ENV_FILE)) {
-    envContent = readFileSync(ENV_FILE, "utf8");
+  if (existsSync(envFile)) {
+    envContent = readFileSync(envFile, "utf8");
     const lines = envContent.split("\n");
     const filteredLines = lines.filter(line => !line.startsWith("AIFINPAY_WALLET_PASSPHRASE="));
     envContent = filteredLines.join("\n").trim();
@@ -263,11 +289,12 @@ function savePassphraseToEnv(passphrase: string): void {
   const newLine = `AIFINPAY_WALLET_PASSPHRASE=${passphrase}`;
   const finalContent = envContent ? `${envContent}\n${newLine}\n` : `${newLine}\n`;
 
-  appendFileSync(ENV_FILE, finalContent, { mode: 0o600 });
-  chmodSync(ENV_FILE, 0o600);
+  appendFileSync(envFile, finalContent, { mode: 0o600 });
+  chmodSync(envFile, 0o600);
 }
 
 function warnIfLoose() {
+  const { KEYSTORE } = getPaths();
   if (!existsSync(KEYSTORE)) return;
   const mode = statSync(KEYSTORE).mode & 0o777;
   if (mode & 0o077) {
@@ -278,22 +305,30 @@ function warnIfLoose() {
 const cmd = (process.argv[2] || "").toLowerCase();
 const hasPlainFlag = process.argv.includes("--plain");
 const isEncryptedByDefault = !hasPlainFlag;
+const hasLegacyFlag = process.argv.includes("--legacy-solana");
 
 if (cmd === "-h" || cmd === "--help" || cmd === "help") {
   process.stdout.write(
-    `npx @aifinpay/wallet new          create encrypted keystore (won't overwrite existing)\n` +
-      `npx @aifinpay/wallet new --plain  create unencrypted legacy keystore\n` +
-      `npx @aifinpay/wallet show         print addresses\n` +
-      `npx @aifinpay/wallet export       print the seed to back up\n`
+    `npx @aifinpay/wallet new                   create encrypted keystore (won't overwrite existing)\n` +
+      `npx @aifinpay/wallet new --plain           create unencrypted legacy keystore\n` +
+      `npx @aifinpay/wallet new --legacy-solana   create wallet with legacy Solana derivation (not recommended)\n` +
+      `npx @aifinpay/wallet show                  print addresses\n` +
+      `npx @aifinpay/wallet export                print the seed to back up\n` +
+      `\nLibrary usage:\n` +
+      `  import { newWallet, createWalletCLI } from "@aifinpay/wallet";\n` +
+      `  await newWallet({ mode: "legacy-solana" });\n` +
+      `  await createWalletCLI("new", ["node", "wallet", "--legacy-solana"]);\n`
   );
   process.exit(0);
 }
 
-export const run = async (cmdArg?: string, argv?: string[]) => {
+export const run = async (cmdArg?: string, argv?: string[], options?: { mode?: DerivationMode }) => {
   warnIfLoose();
   const localCmd = cmdArg ?? cmd;
   const localPlain = (argv || process.argv).includes("--plain");
   const localEncrypted = !localPlain;
+  const localLegacy = options?.mode === "legacy-solana" || (argv || process.argv).includes("--legacy-solana");
+  const derivationMode: DerivationMode = localLegacy ? "legacy-solana" : "standard";
 
   if (localCmd === "export") {
     const s = readStore();
@@ -341,8 +376,9 @@ export const run = async (cmdArg?: string, argv?: string[]) => {
     process.stderr.write("command required — use `npx @aifinpay/wallet new`.\n");
     process.exit(2);
   }
+  const { KEYSTORE } = getPaths();
   const had = existsSync(KEYSTORE);
-  const w = await create(localCmd === "new", localEncrypted);
+  const w = await create(localCmd === "new", localEncrypted, derivationMode);
   print(w, !had, localEncrypted);
 };
 
