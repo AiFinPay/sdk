@@ -34,7 +34,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const OUTPUT = join(ROOT, "src/splitterRoutes.generated.ts");
+const OUTPUT = join(ROOT, "src/generated/splitterRoutes.generated.ts");
 const deploymentsPkg = require.resolve("@aifinpay/deployments/package.json");
 const deploymentsRoot = dirname(deploymentsPkg);
 const ARTIFACT = join(deploymentsRoot, "registry/splitter/evm/v1.3/deployments.json");
@@ -178,8 +178,8 @@ function render(artifact, selected) {
 // CI regenerates this file and fails on any difference, so a hand-edited
 // payout address turns the build red instead of shipping.
 import { ${viemImports.join(", ")} } from "viem/chains";
-import { ${localImports.join(", ")} } from "./chains.js";
-import type { SplitterRouteDeployment, SplitterRouteKey } from "./splitterRoutes.js";
+import { ${localImports.join(", ")} } from "../chains.js";
+import type { SplitterRouteDeployment, SplitterRouteKey } from "../splitterRoutes.js";
 
 /** Where this table came from, so a deployed build can be traced to its source. */
 export const SPLITTER_REGISTRY_SOURCE = {

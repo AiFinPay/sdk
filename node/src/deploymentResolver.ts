@@ -20,7 +20,7 @@
  * logic only, so a payout address can never be changed by editing control flow.
  */
 import { SPLITTER_DEPLOYMENTS, type SplitterChainName, type SplitterDeployment } from "./unifiedAgent.js";
-import { V14_DEPLOYMENTS, V14_DEV_NETWORKS, type V14Deployment } from "./v14Deployments.generated.js";
+import { V14_DEPLOYMENTS, V14_DEV_NETWORKS, type V14Deployment } from "./generated/v14Deployments.generated.js";
 
 export type SdkEnvironment = "dev" | "prod";
 

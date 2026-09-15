@@ -39,9 +39,9 @@
  */
 import type { Chain } from "viem/chains";
 
-import { SPLITTER_ROUTES } from "./splitterRoutes.generated.js";
+import { SPLITTER_ROUTES } from "./generated/splitterRoutes.generated.js";
 
-export { SPLITTER_ROUTES, SPLITTER_GOVERNANCE, SPLITTER_REGISTRY_SOURCE } from "./splitterRoutes.generated.js";
+export { SPLITTER_ROUTES, SPLITTER_GOVERNANCE, SPLITTER_REGISTRY_SOURCE } from "./generated/splitterRoutes.generated.js";
 
 /** Protocol routes. A route is a fee profile fixed at construction. */
 export type SplitterRoute = "merchant-aifp1" | "agent-x402";

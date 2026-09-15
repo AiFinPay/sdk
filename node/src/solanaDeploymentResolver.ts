@@ -34,7 +34,7 @@ import {
   SOLANA_DEV_NETWORKS,
   SOLANA_V14_DEPLOYMENTS,
   type SolanaV14Deployment,
-} from "./solanaV14Deployments.generated.js";
+} from "./generated/solanaV14Deployments.generated.js";
 
 /** Selectable protocol versions on the request side. "v1.2" exists for parity
  *  with the EVM selector but has no Solana deployment behind it. */

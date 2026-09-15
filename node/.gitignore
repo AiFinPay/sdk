@@ -10,3 +10,6 @@ coverage/
 
 # Host-local configs may carry secrets
 .mcp.json
+
+# Generated files - can be regenerated from @aifinpay/deployments
+src/generated/*.generated.ts

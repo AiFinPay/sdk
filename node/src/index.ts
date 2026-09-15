@@ -90,8 +90,8 @@ export type {
   ResolveDeploymentOptions,
   ResolvedDeployment,
 } from "./deploymentResolver.js";
-export { V14_DEPLOYMENTS, V14_DEPLOYMENTS_SOURCE, V14_DEV_NETWORKS } from "./v14Deployments.generated.js";
-export type { V14Deployment, V14Asset, V14Splitter, V14Safe } from "./v14Deployments.generated.js";
+export { V14_DEPLOYMENTS, V14_DEPLOYMENTS_SOURCE, V14_DEV_NETWORKS } from "./generated/v14Deployments.generated.js";
+export type { V14Deployment, V14Asset, V14Splitter, V14Safe } from "./generated/v14Deployments.generated.js";
 
 // ── Solana environment & protocol-version resolver (AIFINP-224) ──────────
 export {
@@ -113,8 +113,8 @@ export {
   SOLANA_V14_DEPLOYMENTS,
   SOLANA_V14_DEPLOYMENTS_SOURCE,
   SOLANA_DEV_NETWORKS,
-} from "./solanaV14Deployments.generated.js";
-export type { SolanaV14Deployment, SolanaNetwork } from "./solanaV14Deployments.generated.js";
+} from "./generated/solanaV14Deployments.generated.js";
+export type { SolanaV14Deployment, SolanaNetwork } from "./generated/solanaV14Deployments.generated.js";
 
 export { AiFinPayAgent, SPLITTER_DEPLOYMENTS, paymentIdFor } from "./unifiedAgent.js";
 export type {
@@ -198,7 +198,9 @@ export {
   toSafeError,
 } from "./errors.js";
 export type { SafeErrorShape } from "./errors.js";
+/** @deprecated Legacy x402 facilitators — use AIFP-1/AIFP-2 settlement instead */
 export { AiFinPayFacilitator, CoinbaseX402Facilitator, REGISTERED, detectFacilitator } from "./facilitators/index.js";
+/** @deprecated Legacy x402 facilitators — use AIFP-1/AIFP-2 settlement instead */
 export type { AuthPayload, Facilitator, FacilitatorClass, PayOptions } from "./facilitators/index.js";
 
 export { type SpendLedger, MemorySpendLedger, FileSpendLedger } from "./spendLedger.js";
