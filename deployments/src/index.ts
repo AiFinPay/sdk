@@ -23,3 +23,11 @@ export type {
 export { isEvmDeployment, isSolanaDeployment } from "./types.js";
 export { getEvmDeployment, getSolanaDeployment } from "./grabber.js";
 export { AifinpayRegistry } from "./registry.js";
+export { ArtifactRegistry } from "./artifacts.js";
+export type {
+  EvmAbiArtifact,
+  SolanaIdlArtifact,
+  CasperIdlArtifact,
+  AptosIdlArtifact,
+  TronAbiArtifact,
+} from "./artifacts.js";
