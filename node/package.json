@@ -89,7 +89,7 @@
   },
   "bugs": "https://github.com/AiFinPay/sdk/issues",
   "dependencies": {
-    "@aifinpay/deployments": "file:../deployments",
+    "@aifinpay/deployments": "^1.1.0",
     "@noble/curves": "^1.9.0",
     "@noble/hashes": "^1.5.0",
     "@solana/web3.js": "^1.95.0",
