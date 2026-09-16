@@ -7,7 +7,7 @@ export type SettlementRouteClass = "AIFP-1" | "AIFP-2";
  * @deprecated "botchain" is deprecated and will be removed in a future version. Use "robinhood" instead.
  */
 export type SettlementEvmNetwork =
-  "polygon" | "avalanche" | "arbitrum" | "bnb" | "base" | "unichain" | "optimism" | "botchain" | "xrplevm" | "amoy";
+  "polygon" | "avalanche" | "arbitrum" | "bnb" | "base" | "unichain" | "optimism" | "robinhood" | "xrplevm" | "amoy";
 
 export interface SettlementRoute {
   route_class: SettlementRouteClass;
@@ -182,6 +182,7 @@ const CHAIN_IDS: Record<SettlementEvmNetwork, number> = {
   optimism: 10,
   /** @deprecated BOT Chain (chainId: 677) is deprecated. Use robinhood (chainId: 4663) instead. */
   botchain: 677,
+  robinhood: 4663,
   xrplevm: 1440000,
 };
 
@@ -196,6 +197,7 @@ const NATIVE_ASSETS: Record<SettlementEvmNetwork, string> = {
   optimism: "ETH",
   /** @deprecated BOT Chain is deprecated. Use robinhood instead. */
   botchain: "BOT",
+  robinhood: "ETH",
   xrplevm: "XRP",
 };
 

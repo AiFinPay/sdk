@@ -26,7 +26,7 @@ import {
 } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { polygon, base, arbitrum, optimism, bsc, mainnet, unichain, type Chain } from "viem/chains";
-import { botchain, xrplevm } from "./chains.js";
+import { botchain, xrplevm, robinhood } from "./chains.js";
 import {
   Connection,
   Keypair,
@@ -337,7 +337,7 @@ export function paymentIdFor(orderId: string): `0x${string}` {
  * EVM chains with a live, on-chain-verified B2BSplitter deployment.
  * @deprecated "botchain" is deprecated and will be removed in a future version. Use "robinhood" instead.
  */
-export type SplitterChainName = "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm";
+export type SplitterChainName = "polygon" | "base" | "optimism" | "unichain" | "botchain" | "robinhood" | "xrplevm";
 
 export interface SplitterDeployment {
   chainId: number;
@@ -451,6 +451,7 @@ const EVM_CHAIN_OBJECTS: Record<EvmChainName, Chain> = {
   arbitrum,
   optimism,
   base,
+  robinhood,
 };
 
 /**

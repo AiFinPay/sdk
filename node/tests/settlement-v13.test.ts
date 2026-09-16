@@ -267,6 +267,7 @@ describe("canonical v1.3 settlement invoice", () => {
       unichain: 130,
       optimism: 10,
       botchain: 677,
+      robinhood: 4663,
       xrplevm: 1440000,
     });
   });
