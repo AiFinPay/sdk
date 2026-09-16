@@ -43,6 +43,12 @@
   ],
   "author": "CoinSecurities (SECCO) <contact@aifinpay.io>",
   "homepage": "https://github.com/AiFinPay/sdk/tree/main/wallet#readme",
+  "contributors": [
+    {
+      "name": "Pavlo Bolhar",
+      "url": "https://github.com/daochild"
+    }
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/AiFinPay/sdk.git",
@@ -62,7 +68,6 @@
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
-    "@aifinpay/agent": "2.0.0",
     "@eslint/js": "^9.0.0",
     "@types/node": "^20.0.0",
     "eslint": "^10.10.0",
