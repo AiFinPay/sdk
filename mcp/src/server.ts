@@ -22,6 +22,10 @@ import {
   runSettlementRoutes,
   settlementInvoiceTool,
   runSettlementInvoice,
+  settlementSolanaTool,
+  runSettlementSolana,
+  settlementCasperTool,
+  runSettlementCasper,
 } from "./tools/production-control.js";
 
 // Every backend/public request made by this server goes through safeFetch.
@@ -132,6 +136,8 @@ export async function createServer(config: McpConfig = {}) {
       agentPassportResolveTool(),
       settlementRoutesTool(),
       settlementInvoiceTool(),
+      settlementSolanaTool(),
+      settlementCasperTool(),
     ],
   }));
 
@@ -183,6 +189,10 @@ export async function createServer(config: McpConfig = {}) {
         return runSettlementRoutes(ctx, args ?? {});
       case "settlement_invoice":
         return runSettlementInvoice(ctx, args ?? {});
+      case "settlement_solana":
+        return runSettlementSolana(ctx, args ?? {});
+      case "settlement_casper":
+        return runSettlementCasper(ctx, args ?? {});
       default:
         return {
           isError: true,

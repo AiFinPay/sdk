@@ -16,7 +16,10 @@ export function agentAddressTool() {
       type: "object",
       properties: {
         solana: { type: "string", description: "Solana base58 address" },
-        evm: { type: "string", description: "EVM address used across EVM networks" },
+        evm: {
+          type: "string",
+          description: "EVM address used across EVM networks (Polygon, Base, Arbitrum, Optimism, BNB, Unichain, Avalanche, Robinhood, etc.)",
+        },
         casper: {
           type: "string",
           description:

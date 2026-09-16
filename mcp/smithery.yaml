@@ -1,7 +1,7 @@
 name: aifinpay
 displayName: AiFinPay
-description: Stripe for AI agents. Pay for any HTTP API in stablecoins or native tokens on Polygon and Solana mainnet with one MCP call. Non-custodial, on-chain settlement.
-version: 1.0.0
+description: Stripe for AI agents. Pay for any HTTP API in stablecoins or native tokens across 8 EVM chains and Solana with one MCP call. Non-custodial, on-chain settlement.
+version: 2.0.0
 license: MIT
 homepage: https://aifinpay.io
 repository: https://github.com/AiFinPay/sdk
@@ -22,11 +22,19 @@ tags:
   - x402
   - polygon
   - solana
+  - avalanche
+  - arbitrum
+  - bnb
+  - base
+  - unichain
+  - optimism
   - stablecoins
   - usdc
   - usdt
   - stripe-for-ai
   - non-custodial
+  - agent-passport
+  - settlement
 
 startCommand:
   type: stdio
@@ -35,42 +43,88 @@ startCommand:
     - "@aifinpay/mcp"
 
 runtime:
-  node: ">=20"
+  node: ">=22"
 
 configSchema:
   type: object
   properties:
+    SEED_HASH:
+      type: string
+      title: Seed hash (hex)
+      description: 32-byte seed encoded as 64 hex characters (optionally 0x-prefixed). Passed directly to AiFinPayAgent.fromSeed. Highest priority wallet source.
+    AIFINPAY_AGENTS_FILE:
+      type: string
+      title: Agents file path
+      description: Path to a JSON file containing an agents array with id and seed_hash fields. Use with AIFINPAY_AGENT_ID to select a specific agent.
+    AIFINPAY_AGENT_ID:
+      type: string
+      title: Agent ID
+      description: Select a specific agent from the agents file when multiple entries exist.
     AIFINPAY_AGENT_SECRET:
       type: string
       title: Agent secret (base58)
-      description: Persistent Ed25519 secret for the agent identity. Both the Solana and the EVM address derive deterministically from it. Leave blank to generate a fresh keypair each session (testing only). Signing happens locally inside the MCP process; never transmitted to AiFinPay servers.
+      description: Legacy Ed25519 secret for the agent identity. Both the Solana and the EVM address derive deterministically from it. Leave blank to generate a fresh keypair each session (testing only). Signing happens locally inside the MCP process; never transmitted to AiFinPay servers.
     AIFINPAY_MAX_USD:
       type: string
       title: Max USD per call
-      description: Hard cap per paid call (applies to both payable_fetch and agent_call). Refuses to settle anything above this.
+      description: Hard cap per paid call. Refuses to settle anything above this. Does not enable signing.
       default: "0.10"
     AIFINPAY_BASE_URL:
       type: string
       title: API base URL
-      description: Override the AiFinPay backend endpoint (nonce, manifest, registry).
+      description: Override the AiFinPay backend endpoint.
       default: https://aifinpay.io
+    AIFINPAY_TIMEOUT_MS:
+      type: string
+      title: Request timeout (ms)
+      description: SDK request timeout in milliseconds.
+      default: "30000"
+    AIFINPAY_MODE:
+      type: string
+      title: Runtime mode
+      description: Set to "dev" to expose dev_payment_quote tool. Requires a separate dev backend URL.
+    AIFINPAY_HOME:
+      type: string
+      title: Wallet home directory
+      description: Directory of the legacy agent.json keystore.
+    AIFINPAY_WALLET_PASSPHRASE:
+      type: string
+      title: Wallet passphrase
+      description: Passphrase for encrypted legacy keystore files.
+    AIFINPAY_GATEWAY_ORIGINS:
+      type: string
+      title: Gateway origins
+      description: Comma-separated exact HTTPS origins trusted for AIFP-1 settlement.
+    AIFINPAY_GATEWAY_PATH_MODE:
+      type: string
+      title: Gateway path mode
+      description: "Use gateway for merchant-slug identity or direct for full request-path identity."
+      default: gateway
+    AIFINPAY_TRUSTED_HOSTS:
+      type: string
+      title: Trusted hosts
+      description: Exact hosts allowed to bypass the DNS pre-check.
+    AIFINPAY_ALLOW_PRIVATE_FETCH:
+      type: string
+      title: Allow private fetch
+      description: Set to "1" to enable local-development network access. Never enable on public hosted MCP.
   required: []
 
 tools:
-  - name: agent_call
-    description: Registry-resolved paid call to a named provider (exa, io-net, venice, ...). Resolves bridge URL + price from the public registry, settles on-chain, retries with proof, returns the upstream response with the tx hash.
-  - name: agent_claim_self
-    description: Attach this agent to a user's AiFinPay account using a magic-link URL — the agent signs a claim challenge with its own key. Shows up on the user's watchlist + dashboard.
-  - name: payable_fetch
-    description: One-shot paid HTTP fetch. Hits a 402-gated endpoint, negotiates the quote, signs and broadcasts payment on-chain, retries with proof, and returns the response body. The agent's fetch for the paid web.
   - name: agent_address
-    description: Return the agent's on-chain identities (Polygon 0x and Solana base58) derived from the configured secret. Used for funding the agent before its first paid call.
-  - name: agent_quote
-    description: Get a price quote for any 402-gated endpoint without paying. Returns facilitator flavor and merchant terms.
-  - name: pay_with_split
-    description: Get on-chain instructions for a payment through the AiFinPay splitter contract for B2B partner endpoints. Partner receives their share and the protocol fee is taken on top, atomically in a single transaction.
-  - name: quote_split
-    description: Get a quote for a B2B endpoint using the atomic fee-on-top splitter. Shows partner share, protocol fee, chain, and expiry.
+    description: Return the agent's on-chain identities (Solana, EVM and Casper) derived from the configured secret. Used for funding the agent before its first paid call.
+  - name: agent_reload
+    description: Reload the configured local wallet files after init or a file update, without starting a new conversation. Returns public addresses only.
+  - name: agent_quota
+    description: How many prepaid requests this agent has left, per service. Lists active quota batches (merchant, resource, used, remaining, expiry). Read-only.
+  - name: agent_history
+    description: Read an agent's payment history by EVM address, public passport identifier, or both. Transactions are indexed AiFinPay Polygon settlements.
+  - name: agent_passport_resolve
+    description: Resolve an AiFinPay Agent Passport by @username, permanent AIFP number, or immutable agent id. Returns verified public wallet bindings only.
+  - name: settlement_routes
+    description: Read AiFinPay's currently runtime-verified v1.3 settlement routes. AIFP-1 is merchant monetisation (99% merchant / 1% AiFinPay). AIFP-2/x402 is 100% provider.
+  - name: settlement_invoice
+    description: Build and validate a non-signing v1.3 settlement invoice. This tool never moves funds.
 
 live_evidence:
   - chain: polygon
