@@ -388,7 +388,8 @@ export const run = async (cmdArg?: string, argv?: string[], options?: { mode?: D
       }
       const passphrase = validatePassphrase(envPass);
       const secretB58 = decrypt(s, passphrase);
-      const w = walletFromSolanaSecret(secretB58);
+      const mode: DerivationMode = "derivationMode" in s && (s.derivationMode === "legacy-solana" || s.derivationMode === "standard") ? s.derivationMode : "standard";
+      const w = walletFromSolanaSecret(secretB58, { mode });
       seedHex = w.keys.seedHex;
     } else {
       seedHex = s.seedHex;
