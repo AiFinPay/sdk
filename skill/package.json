@@ -6,7 +6,9 @@
   "files": [
     "skills",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    ".claude-plugin",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "test": "node scripts/validate.mjs",
