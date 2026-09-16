@@ -5,7 +5,7 @@ import {
   runSettlementCasper,
   runSettlementRoutes,
 } from "../src/tools/production-control.js";
-import type { ToolContext } from "../src/server.js";
+import type { ToolContext } from "../src";
 
 function ctx(overrides?: { fetchImpl?: typeof fetch; baseUrl?: string }): ToolContext {
   return {

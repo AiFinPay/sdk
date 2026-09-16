@@ -22,6 +22,8 @@
     "skills"
   ],
   "scripts": {
+    "sync:skills": "node scripts/sync-skills.mjs",
+    "prebuild": "npm run sync:skills",
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "prepublishOnly": "npm run build",
@@ -71,6 +73,7 @@
   "bugs": "https://github.com/AiFinPay/sdk/issues",
   "dependencies": {
     "@aifinpay/agent": "^2.0.1",
+    "@aifinpay/skill": "^2.0.9",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "bs58": "^6.0.0",
     "tweetnacl": "^1.0.3"
