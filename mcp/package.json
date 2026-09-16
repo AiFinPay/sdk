@@ -19,7 +19,10 @@
     "bin",
     "README.md",
     "LICENSE",
-    "skills"
+    "skills",
+    "package.json",
+    "package-lock.json",
+    "smithery.yaml"
   ],
   "scripts": {
     "sync:skills": "node scripts/sync-skills.mjs",
