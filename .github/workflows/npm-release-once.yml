@@ -1,0 +1,143 @@
+name: One-off npm release
+
+on:
+  push:
+    branches:
+      - feat/tokenlist-to-deployments
+    paths:
+      - .github/workflows/npm-release-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify npm authentication
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm whoami
+
+      - name: Publish @aifinpay/skill
+        working-directory: skill
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+          npm pack --dry-run
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "@aifinpay/skill@$VERSION" version >/dev/null 2>&1; then
+            echo "@aifinpay/skill@$VERSION already exists; skipping"
+          else
+            npm publish --access public
+          fi
+
+      - name: Publish @aifinpay/deployments
+        working-directory: deployments
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          npm test
+          npm pack --dry-run
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "@aifinpay/deployments@$VERSION" version >/dev/null 2>&1; then
+            echo "@aifinpay/deployments@$VERSION already exists; skipping"
+          else
+            npm publish --access public
+          fi
+
+      - name: Wait for deployments package to resolve
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for i in {1..20}; do
+            if npm view @aifinpay/deployments@1.1.0 version >/dev/null 2>&1; then exit 0; fi
+            sleep 3
+          done
+          echo "@aifinpay/deployments@1.1.0 is not resolvable from npm"
+          exit 1
+
+      - name: Replace local deployments dependency and refresh node lockfile
+        working-directory: node
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund '@aifinpay/deployments@^1.1.0'
+          test "$(node -p "require('./package.json').dependencies['@aifinpay/deployments']")" = '^1.1.0'
+
+      - name: Commit release dependency fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add node/package.json node/package-lock.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix: use published deployments dependency'
+            git push origin HEAD:feat/tokenlist-to-deployments
+          fi
+
+      - name: Build, test and publish @aifinpay/agent
+        working-directory: node
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm ci --no-audit --no-fund
+          npm run registry:check
+          npm run build
+          npm test
+          npm pack --dry-run
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "@aifinpay/agent@$VERSION" version >/dev/null 2>&1; then
+            echo "@aifinpay/agent@$VERSION already exists; skipping"
+          else
+            npm publish --access public
+          fi
+
+      - name: Wait for agent package to resolve
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for i in {1..20}; do
+            if npm view @aifinpay/agent@2.0.0 version >/dev/null 2>&1; then exit 0; fi
+            sleep 3
+          done
+          echo "@aifinpay/agent@2.0.0 is not resolvable from npm"
+          exit 1
+
+      - name: Refresh wallet lockfile
+        working-directory: wallet
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Commit wallet lockfile refresh
+        run: |
+          git add wallet/package-lock.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore: refresh wallet lockfile for agent 2.0.0'
+            git push origin HEAD:feat/tokenlist-to-deployments
+          fi
+
+      - name: Build, test and publish @aifinpay/wallet
+        working-directory: wallet
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          npm test
+          npm pack --dry-run
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "@aifinpay/wallet@$VERSION" version >/dev/null 2>&1; then
+            echo "@aifinpay/wallet@$VERSION already exists; skipping"
+          else
+            npm publish --access public
+          fi
