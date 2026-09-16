@@ -27,6 +27,7 @@ import {
   settlementCasperTool,
   runSettlementCasper,
 } from "./tools/production-control.js";
+import { supportedChainsTool, runSupportedChains } from "./tools/supported-chains.js";
 
 // Every backend/public request made by this server goes through safeFetch.
 // Public deployments never lift private-network protection; local development
@@ -138,6 +139,7 @@ export async function createServer(config: McpConfig = {}) {
       settlementInvoiceTool(),
       settlementSolanaTool(),
       settlementCasperTool(),
+      supportedChainsTool(),
     ],
   }));
 
@@ -193,6 +195,8 @@ export async function createServer(config: McpConfig = {}) {
         return runSettlementSolana(ctx, args ?? {});
       case "settlement_casper":
         return runSettlementCasper(ctx, args ?? {});
+      case "supported_chains":
+        return runSupportedChains(ctx, args ?? {});
       default:
         return {
           isError: true,
