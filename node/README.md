@@ -1,6 +1,6 @@
 # @aifinpay/agent (Node / TypeScript)
 
-This source is the `2.0.0` stable release. New AIFP-1
+Stable `2.0.0` release. New AIFP-1
 payments require a reviewed Polygon v1.3 deployment pin and fresh independent
 native/USD price; see [receipt configuration and recovery](./PAYMENT_RECEIPTS.md).
 Legacy `call()` payments and v1.4 submission are disabled. Native authentication
@@ -24,10 +24,10 @@ the `x-signature` header to authenticate against AiFinPay-protected endpoints.
 
 ## Install
 
-Install the published 2.0.0 package directly:
+Install the published stable package:
 
 ```bash
-npm install @aifinpay/agent@2.0.0
+npm install @aifinpay/agent
 ```
 
 Or build this source checkout:

@@ -4,7 +4,7 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-This 2.0 release candidate does not expose payment-signing tools. Returning a
+Stable `2.0.0` release. This release does not expose payment-signing tools. Returning a
 wallet address or preparing an invoice does not authorize or execute a payment.
 Signing remains gated on the verified SDK v2 executor and its release evidence.
 Local MCP tools for wallet discovery, payment history, quotas and non-signing
@@ -49,14 +49,14 @@ wallet. With no configured wallet at all the server has an ephemeral identity:
 
 ## Initialize and connect
 
-This RC does not register payment-signing tools. Its legacy SDK dependency
+This release does not register payment-signing tools. Its legacy SDK dependency
 supplies wallet derivation only; installing this MCP does not enable v2
 settlement. An invoice or quote is not a completed payment.
 
 ## Local configuration
 
 ```bash
-npx @aifinpay/mcp@next init
+npx @aifinpay/mcp init
 ```
 
 Select the wallet in this order: `SEED_HASH` → `./aifinpay/agents.json` →
@@ -66,8 +66,8 @@ See the skill for the exact project-file schema and multi-agent selection.
 `init` prints the selected wallet's public addresses. If a seed or project wallet
 is already configured, it does not create a second legacy wallet. With no
 wallet, it creates the legacy keystore with mode `600`; existing keystores are
-retained. Back up that file privately. The `@next` tag selects the 2.0 RC lane;
-use the release containing these changes, or build this source checkout.
+retained. Back up that file privately. Use the published `2.0.0` release or
+build this source checkout.
 
 Use an absolute `AIFINPAY_AGENTS_FILE` path when the host's working directory
 is not your project directory. Do not put the seed itself in a shared config.
@@ -78,7 +78,7 @@ A client configuration can use the keystore without embedding its secret:
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["-y", "@aifinpay/mcp@2.0.0-rc.12"],
+      "args": ["-y", "@aifinpay/mcp@2.0.0"],
       "env": {
         "AIFINPAY_AGENTS_FILE": "/absolute/project/aifinpay/agents.json",
         "AIFINPAY_AGENT_ID": "research-agent"

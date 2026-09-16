@@ -3,13 +3,15 @@
 This walks you from a clean machine to your first verified on-chain
 payment via the AiFinPay SDK. No KYC, no API key, no custodian.
 
+**Stable 2.0.0 release** — install from npm/PyPI or build from source.
+
 There are three paths. Pick whichever matches what you're building:
 
 1. **Python or Node SDK** — programmatic use from your own agent code.
 2. **Claude Desktop / Cursor (MCP)** — zero-code; the LLM gets payment
    tools automatically.
 3. **Framework adapter** (LangChain, CrewAI, OpenAI Agents, AutoGPT…) —
-   plug `agent.pay()` into your existing pipeline.
+   plug `agent.call()` into your existing pipeline.
 
 ## Path 1 — Python SDK
 

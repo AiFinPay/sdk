@@ -1,11 +1,10 @@
 # aifinpay-agent (Python)
 
-This source is the unpublished `2.0.0rc1` security candidate. Native auth now
+Stable `2.0.0` release. Native auth now
 requires a request-bound v2 challenge from the coordinated backend update.
 `auth_headers()` refuses the retired unbound proof, and legacy paid `call()`
 settlement is disabled; free provider responses still pass through. Python
-does not yet expose Node's verified v1.3 `fetchPaid` executor. Do not interpret
-the historical payment examples below as enabled routes in this candidate.
+does not yet expose Node's verified v1.3 `fetchPaid` executor.
 
 Non-custodial **multi-facilitator** x402 payment client for autonomous
 AI agents on [AiFinPay](https://aifinpay.io) — canonical domain
@@ -27,10 +26,7 @@ the right auth payload (three-headers for AiFinPay, base64
 ## Install
 
 ```bash
-# install (latest)
-pip install aifinpay-agent
-
-# stable (when 1.0 ships)
+# install stable
 pip install aifinpay-agent
 ```
 
