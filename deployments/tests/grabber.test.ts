@@ -210,7 +210,7 @@ describe("buildRegistry", () => {
 });
 
 describe("writeSplitRegistries", () => {
-  it("writes evm and solana v1.4 split files", () => {
+  it("writes evm and solana v1.4 split files", async () => {
     mkdirSync(TEST_DIR, { recursive: true });
     const outDir = join(TEST_DIR, "output");
     mkdirSync(outDir, { recursive: true });
@@ -262,7 +262,7 @@ describe("writeSplitRegistries", () => {
       sources: ["http://src"],
     };
 
-    const written = writeSplitRegistries(registry, outDir);
+    const written = await writeSplitRegistries(registry, outDir);
     expect(written).toHaveLength(2);
     expect(existsSync(evmPath)).toBe(true);
     expect(existsSync(solanaPath)).toBe(true);

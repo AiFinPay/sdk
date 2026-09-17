@@ -115,6 +115,7 @@ export interface EvmDeploymentRecord {
     address: string;
     version: string;
     threshold: number;
+    owners: string[];
   };
 }
 

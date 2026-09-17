@@ -174,14 +174,14 @@ describe("AifinpayRegistry", () => {
       expect(splitter).toMatch(/^0x[a-fA-F0-9]{40}$/);
     });
 
-    it("gets TokenList address from v1.2 returns null (no tokenList in flat records)", () => {
+    it("gets TokenList address from v1.2 (zero address, contract not deployed)", () => {
       const v12 = AifinpayRegistry.loadEvm("1.2");
-      expect(v12.getTokenListAddress(137)).toBeNull();
+      expect(v12.getTokenListAddress(137)).toBe("0x0000000000000000000000000000000000000000");
     });
 
-    it("gets Profiles address from v1.2 returns null (no profiles in flat records)", () => {
+    it("gets Profiles address from v1.2 (zero address, contract not deployed)", () => {
       const v12 = AifinpayRegistry.loadEvm("1.2");
-      expect(v12.getProfilesAddress(137)).toBeNull();
+      expect(v12.getProfilesAddress(137)).toBe("0x0000000000000000000000000000000000000000");
     });
   });
 

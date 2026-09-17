@@ -211,6 +211,46 @@ interface RawSolanaDeployment {
   metadata: { version?: string; name?: string };
 }
 
+export interface SafeMultisigInfo {
+  network: string;
+  chainId: number;
+  timestamp: string;
+  safeVersion: string;
+  safeAddress: string;
+  owners: string[];
+  threshold: number;
+}
+
+/**
+ * Fetch per-chain Safe multisig info from upstream deployment files.
+ * Each chain publishes a `{network}-safe-multisig-latest.json` file with
+ * the actual deployed Safe address, owners, and threshold.
+ */
+export async function fetchSafeMultisigs(
+  networks: Array<{ network: string; chainId: number }>,
+): Promise<Map<number, SafeMultisigInfo>> {
+  const result = new Map<number, SafeMultisigInfo>();
+  let urls: string[];
+  try {
+    urls = await listGitHubFiles("AiFinPay", "evm-contract", "deployments", "dev");
+  } catch {
+    return result;
+  }
+  const safeFiles = urls.filter((u) => u.includes("safe-multisig-latest.json"));
+
+  for (const { network, chainId } of networks) {
+    const match = safeFiles.find((u) => u.includes(`${network}-safe-multisig-latest.json`));
+    if (!match) continue;
+    try {
+      const data = await fetchJson<SafeMultisigInfo>(match);
+      result.set(chainId, data);
+    } catch {
+      // Skip chains where safe-multisig fetch fails
+    }
+  }
+  return result;
+}
+
 /**
  * List and fetch Solana splitter_v14 deployments. Keep latest per cluster.
  */
@@ -296,11 +336,14 @@ export async function buildRegistry(): Promise<DeploymentRegistry> {
  * Returns the list of file paths written.
  * Uses the same schema as splitter versioned deployments.json for consistency.
  */
-export function writeSplitRegistries(registry: DeploymentRegistry, outDir: string): string[] {
+export async function writeSplitRegistries(registry: DeploymentRegistry, outDir: string): Promise<string[]> {
   const evmDir = join(outDir, "splitter/evm/v1.4");
   const solanaDir = join(outDir, "splitter/solana");
   ensureDir(evmDir);
   ensureDir(solanaDir);
+
+  const evmNetworks = Object.values(registry.evm).map((e) => ({ network: e.network, chainId: e.chainId }));
+  const safeMultisigs = await fetchSafeMultisigs(evmNetworks);
 
   const evm14 = {
     $schema: "./reference/payment-deployments.schema.json",
@@ -369,11 +412,23 @@ export function writeSplitRegistries(registry: DeploymentRegistry, outDir: strin
           name: s.name || s.symbol,
           address: s.address,
         })),
-        safe: {
-          address: isTestnet ? "0xc9ab36c2af2888414c7ea9160d9e33b773c2b388" : "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
-          version: isTestnet ? "1.4.1" : "1.5.0",
-          threshold: 3,
-        },
+        safe: (() => {
+          const safeInfo = safeMultisigs.get(evm.chainId);
+          if (safeInfo) {
+            return {
+              address: safeInfo.safeAddress,
+              version: safeInfo.safeVersion,
+              threshold: safeInfo.threshold,
+              owners: safeInfo.owners,
+            };
+          }
+          return {
+            address: isTestnet ? "0xc9ab36c2af2888414c7ea9160d9e33b773c2b388" : "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+            version: isTestnet ? "1.4.1" : "1.5.0",
+            threshold: 3,
+            owners: [],
+          };
+        })(),
       };
     }),
     sourceArtifact: {

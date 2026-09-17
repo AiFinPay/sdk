@@ -9,7 +9,7 @@ const OUT_DIR = join(ROOT, "../registry");
 async function main() {
   if (!existsSync(OUT_DIR)) mkdirSync(OUT_DIR, { recursive: true });
   const registry = await buildRegistry();
-  const split = writeSplitRegistries(registry, OUT_DIR);
+  const split = await writeSplitRegistries(registry, OUT_DIR);
   const evmCount = Object.keys(registry.evm).length;
   const solanaCount = Object.keys(registry.solana).length;
   const solanaIdls = Object.values(registry.solana).map((d) => d.idlPath);

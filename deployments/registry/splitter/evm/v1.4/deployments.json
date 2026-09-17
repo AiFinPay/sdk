@@ -1,7 +1,7 @@
 {
   "$schema": "./reference/payment-deployments.schema.json",
   "version": "1.4",
-  "description": "B2BSplitter v1.4 — Full contract suite deployment",
+  "description": "B2BSplitter v1.4 \u2014 Full contract suite deployment",
   "schemaVersion": 1,
   "generatedAt": "2026-09-15T12:08:01.929Z",
   "ecosystem": "evm",
@@ -21,7 +21,8 @@
         "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
         "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
         "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
-      ]
+      ],
+      "note": "Polygon uses a separate Safe at 0x01b80329ff81ce1d22a9e2e8807df5f92414c3c3"
     },
     "testnet": {
       "safe": "0xc9ab36c2af2888414c7ea9160d9e33b773c2b388",
@@ -63,7 +64,13 @@
       "safe": {
         "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
         "version": "1.5.0",
-        "threshold": 3
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
       }
     },
     {
@@ -98,7 +105,13 @@
       "safe": {
         "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
         "version": "1.5.0",
-        "threshold": 3
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
       }
     },
     {
@@ -128,7 +141,13 @@
       "safe": {
         "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
         "version": "1.5.0",
-        "threshold": 3
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
       }
     },
     {
@@ -161,9 +180,15 @@
         }
       ],
       "safe": {
-        "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+        "address": "0x01b80329ff81ce1d22a9e2e8807df5f92414c3c3",
         "version": "1.5.0",
-        "threshold": 3
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
       }
     },
     {
@@ -198,7 +223,13 @@
       "safe": {
         "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
         "version": "1.5.0",
-        "threshold": 3
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
       }
     },
     {
@@ -228,7 +259,13 @@
       "safe": {
         "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
         "version": "1.5.0",
-        "threshold": 3
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
       }
     },
     {
@@ -258,7 +295,13 @@
       "safe": {
         "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
         "version": "1.5.0",
-        "threshold": 3
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
       }
     },
     {
@@ -293,7 +336,13 @@
       "safe": {
         "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
         "version": "1.5.0",
-        "threshold": 3
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
       }
     },
     {
@@ -323,7 +372,13 @@
       "safe": {
         "address": "0xc9ab36c2af2888414c7ea9160d9e33b773c2b388",
         "version": "1.4.1",
-        "threshold": 3
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
       }
     },
     {
@@ -347,7 +402,13 @@
       "safe": {
         "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
         "version": "1.5.0",
-        "threshold": 3
+        "threshold": 3,
+        "owners": [
+          "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+          "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+          "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+          "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+        ]
       }
     }
   ],
