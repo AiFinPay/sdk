@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/mcp-http",
-  "version": "2.0.0",
+  "version": "2.0.2",
   "private": true,
   "description": "HTTP/Streamable transport wrapper for @aifinpay/mcp — exposes the AiFinPay MCP server at https://mcp.aifinpay.io/mcp so catalogs (Smithery, mcp.so) that require a public URL can list it.",
   "type": "module",
@@ -9,8 +9,8 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "@aifinpay/agent": "file:../../../../../../tmp/aifinpay-agent-2.0.0.tgz",
-    "@aifinpay/mcp": "file:../../../../../../tmp/aifinpay-mcp-2.0.0.tgz",
+    "@aifinpay/agent": "^2.0.1",
+    "@aifinpay/mcp": "^2.1.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "express": "^5.0.0",
     "express-rate-limit": "^7.4.0",
@@ -23,6 +23,7 @@
   "overrides": {
     "ws": ">=8.21.0",
     "fast-uri": ">=3.1.5",
-    "ip-address": ">=10.3.1"
+    "ip-address": ">=10.3.1",
+    "uuid": ">=14.0.2"
   }
 }
