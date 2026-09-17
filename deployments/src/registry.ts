@@ -155,7 +155,7 @@ export class AifinpayRegistry {
    */
   getSplitterAddress(chainId: number): string | null {
     const record = this.getEvmDeployment(chainId);
-    return record?.contracts.splitter ?? null;
+    return record?.contracts?.splitter ?? (record as any)?.splitter ?? null;
   }
 
   /**
@@ -164,7 +164,7 @@ export class AifinpayRegistry {
    */
   getTokenListAddress(chainId: number): string | null {
     const record = this.getEvmDeployment(chainId);
-    return record?.contracts.tokenList ?? null;
+    return record?.contracts?.tokenList ?? null;
   }
 
   /**
@@ -173,7 +173,7 @@ export class AifinpayRegistry {
    */
   getProfilesAddress(chainId: number): string | null {
     const record = this.getEvmDeployment(chainId);
-    return record?.contracts.profiles ?? null;
+    return record?.contracts?.profiles ?? null;
   }
 
   /**

@@ -1,45 +1,92 @@
 {
-  "$schema": "",
+  "$schema": "./reference/payment-deployments.schema.json",
   "version": "1.1",
   "description": "B2BSplitter v1.1 — Initial production version with immutable fee split",
-  "status": "superseded",
-  "settlementEnabled": false,
-  "build": {
-    "contract": "B2BSplitterV11",
-    "runtimeCodeHash": "0x545b3a4ba195edc6b728df8cc64f28da528c9e7805c15f1aa61ef58c3c562197"
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-17T16:33:35.333Z",
+  "ecosystem": "evm",
+  "protocolVersion": "v1.1",
+  "source": {
+    "repo": "AiFinPay/evm-contract",
+    "commit": "unknown-pre-v1.4",
+    "path": "deployments/legacy-v1.1"
   },
-  "feeStructure": {
-    "treasuryBps": 100,
-    "ipCreatorBps": 1,
-    "description": "1% protocol fee + 0.01% IP creator fee; merchant receives remainder"
+  "governance": {
+    "prod": {
+      "safe": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "version": "1.5.0",
+      "threshold": 3,
+      "owners": [
+        "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+        "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+        "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+        "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+      ]
+    },
+    "testnet": {
+      "safe": "0xc9ab36c2af2888414c7ea9160d9e33b773c2b388",
+      "version": "1.4.1",
+      "threshold": 3,
+      "owners": [
+        "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+        "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+        "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+        "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+      ]
+    }
   },
   "deployments": [
     {
       "chain": "base",
       "chainId": 8453,
-      "splitter": "0x8Ad9830D16b1f10333866a3f38C949CbB19f4BAD",
-      "owner": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
-      "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
-      "rpcQuorum": 2,
-      "verifiedAt": "2026-08-07",
-      "validFrom": "2026-08-04T00:00:00.000Z",
-      "validUntil": "2026-09-03T00:00:00.000Z"
+      "environment": "prod",
+      "testnet": false,
+      "status": "retired",
+      "settlementEnabled": false,
+      "runtimeCodeHash": "0x545b3a4ba195edc6b728df8cc64f28da528c9e7805c15f1aa61ef58c3c562197",
+      "contracts": {
+        "splitter": "0x8Ad9830D16b1f10333866a3f38C949CbB19f4BAD",
+        "tokenList": "0x0000000000000000000000000000000000000000",
+        "profiles": "0x0000000000000000000000000000000000000000",
+        "admin": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+        "signer": "0x0000000000000000000000000000000000000000",
+        "pauser": "0x0000000000000000000000000000000000000000",
+        "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9"
+      },
+      "assets": [],
+      "safe": {
+        "address": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "version": "1.5.0",
+        "threshold": 3
+      }
     },
     {
       "chain": "unichain",
       "chainId": 130,
-      "splitter": "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB",
-      "owner": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
-      "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
-      "rpcQuorum": 2,
-      "verifiedAt": "2026-08-07",
-      "validFrom": "2026-08-04T00:00:00.000Z",
-      "validUntil": "2026-09-03T00:00:00.000Z"
+      "environment": "prod",
+      "testnet": false,
+      "status": "retired",
+      "settlementEnabled": false,
+      "runtimeCodeHash": "0x545b3a4ba195edc6b728df8cc64f28da528c9e7805c15f1aa61ef58c3c562197",
+      "contracts": {
+        "splitter": "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB",
+        "tokenList": "0x0000000000000000000000000000000000000000",
+        "profiles": "0x0000000000000000000000000000000000000000",
+        "admin": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+        "signer": "0x0000000000000000000000000000000000000000",
+        "pauser": "0x0000000000000000000000000000000000000000",
+        "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9"
+      },
+      "assets": [],
+      "safe": {
+        "address": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "version": "1.5.0",
+        "threshold": 3
+      }
     }
   ],
   "sourceArtifact": {
-    "path": "../../reference/splitter-table.json",
-    "routes": ["base:legacy", "unichain:legacy"],
+    "path": "./splitter/evm/v1.1/deployments.json",
     "retrievedAt": "2026-08-30"
   }
 }

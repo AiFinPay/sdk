@@ -167,6 +167,22 @@ describe("AifinpayRegistry", () => {
       expect(registry.getTokenListAddress(99999)).toBeNull();
       expect(registry.getProfilesAddress(99999)).toBeNull();
     });
+
+    it("gets Splitter address from v1.2 flat records", () => {
+      const v12 = AifinpayRegistry.loadEvm("1.2");
+      const splitter = v12.getSplitterAddress(137);
+      expect(splitter).toMatch(/^0x[a-fA-F0-9]{40}$/);
+    });
+
+    it("gets TokenList address from v1.2 returns null (no tokenList in flat records)", () => {
+      const v12 = AifinpayRegistry.loadEvm("1.2");
+      expect(v12.getTokenListAddress(137)).toBeNull();
+    });
+
+    it("gets Profiles address from v1.2 returns null (no profiles in flat records)", () => {
+      const v12 = AifinpayRegistry.loadEvm("1.2");
+      expect(v12.getProfilesAddress(137)).toBeNull();
+    });
   });
 
   describe("getGovernanceSafe", () => {

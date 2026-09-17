@@ -1,76 +1,140 @@
 {
-  "$schema": "",
+  "$schema": "./reference/payment-deployments.schema.json",
   "version": "1.2",
   "description": "B2BSplitter v1.2 — Added bytes32 paymentId replay guard",
-  "status": "superseded",
-  "settlementEnabled": false,
-  "build": {
-    "contract": "B2BSplitterV12"
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-17T16:33:35.333Z",
+  "ecosystem": "evm",
+  "protocolVersion": "v1.2",
+  "source": {
+    "repo": "AiFinPay/evm-contract",
+    "commit": "unknown-pre-v1.4",
+    "path": "deployments/legacy-v1.2"
   },
-  "feeStructure": {
-    "treasuryBps": 100,
-    "ipCreatorBps": 1,
-    "description": "1% protocol fee + 0.01% IP creator fee; merchant receives remainder"
+  "governance": {
+    "prod": {
+      "safe": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "version": "1.5.0",
+      "threshold": 3,
+      "owners": [
+        "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+        "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+        "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+        "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+      ]
+    },
+    "testnet": {
+      "safe": "0xc9ab36c2af2888414c7ea9160d9e33b773c2b388",
+      "version": "1.4.1",
+      "threshold": 3,
+      "owners": [
+        "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+        "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+        "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+        "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+      ]
+    }
   },
-  "changes": [
-    "Added bytes32 paymentId parameter to prevent replay attacks",
-    "Renamed native entrypoint from payMatic to payNative",
-    "Deterministic paymentId derivation: keccak256(orderId)"
-  ],
   "deployments": [
     {
       "chain": "polygon",
       "chainId": 137,
-      "splitter": "0xbD1fa5453f212F096c0213788a645eC597FB4DDe",
-      "owner": "0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e",
-      "treasury": "0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e",
+      "environment": "prod",
+      "testnet": false,
+      "status": "retired",
+      "settlementEnabled": false,
       "runtimeCodeHash": "0x9001fbb7ec70097909415325dc70c5b2102c4312dcd8e01e7495cfcaca2edaff",
-      "rpcQuorum": 2,
-      "verifiedAt": "2026-08-07",
-      "validFrom": "2026-08-04T00:00:00.000Z",
-      "validUntil": "2026-09-03T00:00:00.000Z"
+      "contracts": {
+        "splitter": "0xbD1fa5453f212F096c0213788a645eC597FB4DDe",
+        "tokenList": "0x0000000000000000000000000000000000000000",
+        "profiles": "0x0000000000000000000000000000000000000000",
+        "admin": "0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e",
+        "signer": "0x0000000000000000000000000000000000000000",
+        "pauser": "0x0000000000000000000000000000000000000000",
+        "treasury": "0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e"
+      },
+      "assets": [],
+      "safe": {
+        "address": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "version": "1.5.0",
+        "threshold": 3
+      }
     },
     {
       "chain": "optimism",
       "chainId": 10,
-      "splitter": "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74",
-      "owner": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
-      "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+      "environment": "prod",
+      "testnet": false,
+      "status": "retired",
+      "settlementEnabled": false,
       "runtimeCodeHash": "0xcdf939fd4f9a189e3dba991c5d538bd77b3d493d2ce4e356b61e5742dbde1899",
-      "rpcQuorum": 2,
-      "verifiedAt": "2026-08-07",
-      "validFrom": "2026-08-04T00:00:00.000Z",
-      "validUntil": "2026-09-03T00:00:00.000Z"
+      "contracts": {
+        "splitter": "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74",
+        "tokenList": "0x0000000000000000000000000000000000000000",
+        "profiles": "0x0000000000000000000000000000000000000000",
+        "admin": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+        "signer": "0x0000000000000000000000000000000000000000",
+        "pauser": "0x0000000000000000000000000000000000000000",
+        "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9"
+      },
+      "assets": [],
+      "safe": {
+        "address": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "version": "1.5.0",
+        "threshold": 3
+      }
     },
     {
       "chain": "botchain",
       "chainId": 677,
-      "splitter": "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
-      "owner": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
-      "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+      "environment": "prod",
+      "testnet": false,
+      "status": "retired",
+      "settlementEnabled": false,
       "runtimeCodeHash": "0xabd084ff64e98bb8ac7db7783d80c6a6bcc69716dfb8f64a4686bed5cf428d96",
-      "rpcQuorum": 1,
-      "verifiedAt": "2026-08-07",
-      "validFrom": "2026-08-04T00:00:00.000Z",
-      "validUntil": "2026-09-03T00:00:00.000Z"
+      "contracts": {
+        "splitter": "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
+        "tokenList": "0x0000000000000000000000000000000000000000",
+        "profiles": "0x0000000000000000000000000000000000000000",
+        "admin": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+        "signer": "0x0000000000000000000000000000000000000000",
+        "pauser": "0x0000000000000000000000000000000000000000",
+        "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9"
+      },
+      "assets": [],
+      "safe": {
+        "address": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "version": "1.5.0",
+        "threshold": 3
+      }
     },
     {
       "chain": "xrplevm",
       "chainId": 1440000,
-      "splitter": "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
-      "owner": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
-      "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+      "environment": "prod",
+      "testnet": false,
+      "status": "retired",
+      "settlementEnabled": false,
       "runtimeCodeHash": "0xeb68cf314d335f888726a527dec10d989c26e2c5d6a8df68d117cc7d4dcec239",
-      "rpcQuorum": 1,
-      "verifiedAt": "2026-08-07",
-      "validFrom": "2026-08-04T00:00:00.000Z",
-      "validUntil": "2026-09-03T00:00:00.000Z",
-      "note": "Same address as BOT Chain (CREATE deployment with identical deployer + nonce)"
+      "contracts": {
+        "splitter": "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
+        "tokenList": "0x0000000000000000000000000000000000000000",
+        "profiles": "0x0000000000000000000000000000000000000000",
+        "admin": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9",
+        "signer": "0x0000000000000000000000000000000000000000",
+        "pauser": "0x0000000000000000000000000000000000000000",
+        "treasury": "0x1D5eF769A024B3157c76884fbd10302d8d83fAB9"
+      },
+      "assets": [],
+      "safe": {
+        "address": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "version": "1.5.0",
+        "threshold": 3
+      }
     }
   ],
   "sourceArtifact": {
-    "path": "../../reference/splitter-table.json",
-    "routes": ["polygon:legacy", "optimism:legacy", "botchain:legacy", "xrplevm:legacy"],
+    "path": "./splitter/evm/v1.2/deployments.json",
     "retrievedAt": "2026-08-30"
   }
 }
