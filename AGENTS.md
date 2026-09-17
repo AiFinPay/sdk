@@ -12,7 +12,7 @@ Monorepo of independent packages. Each package owns its own `AGENTS.md`; respect
 - `mcp/` — `@aifinpay/mcp` (MCP server). Depends on the **published** `@aifinpay/agent` from npm, *not* `../node`.
 - `wallet/` — `@aifinpay/wallet` (light wallet + CLI). Keystore: `~/.aifinpay/agent.json`.
 - `gate/` — `@aifinpay/gate` (merchant AIFP-1 paywall, optional Express peer dep).
-- `mcp-http/` — private transport shim for `https://mcp.aifinpay.io/mcp`. `private: true`, never publish.
+- `mcp-http/` — transport shim for `https://mcp.aifinpay.io/mcp`.
 - `deployments/` — `@aifinpay/deployments` (canonical registry grabber, private).
 - `python/` — `aifinpay-agent` (Python SDK).
 - `skill/` — `@aifinpay/skill` (published skill markdown). Must stay mirrored with repo-root `skills/` and `mcp/skills/`.

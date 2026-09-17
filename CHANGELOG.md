@@ -4,6 +4,15 @@ All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
 `1.0.0` onward the public API is stable and changes follow semver.
 
+## 2.0.2 — 2026-09-17
+
+### Added
+
+- **`@aifinpay/mcp-http`** — HTTP/Streamable transport wrapper for
+  `@aifinpay/mcp`. Exposes the AiFinPay MCP server at
+  `https://mcp.aifinpay.io/mcp` for catalogs (Smithery, mcp.so, LobeHub)
+  that require a public HTTP URL. Previously private; now published to npm.
+
 ## 2.0.0 — 2026-09-16
 
 **Stable release** — Node `2.0.0`, MCP `2.0.0`, Python `2.0.0`. All RC
