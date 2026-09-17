@@ -370,13 +370,20 @@ app.delete("/mcp", async (req, res) => {
   await session.transport.handleRequest(req, res);
 });
 
-app.listen(PORT, () => {
-  sessionLog("info", `listening on :${PORT}, public URL ${PUBLIC_URL}`);
-  sessionLog("info", `oauth: required=${AUTH_REQUIRED} issuer=${ISSUER || "(none)"} resource=${RESOURCE}`);
-  if (AUTH_REQUIRED && !ISSUER) {
-    sessionLog("error", "AIFINPAY_AUTH_REQUIRED=true but AIFINPAY_OAUTH_ISSUER is unset — clients will 401 with nowhere to link.");
-  }
-  if (AUTH_REQUIRED && ISSUER) {
-    sessionLog("info", `Bearer gate ON — verifying JWT against ${ISSUER} JWKS (aud=${RESOURCE}${REQUIRED_SCOPE ? `, scope=${REQUIRED_SCOPE}` : ""}).`);
-  }
-});
+// Only start the server when run directly (not imported for testing).
+const _isMain = process.argv[1] &&
+  new URL(process.argv[1], "file://").href === import.meta.url.href;
+if (_isMain) {
+  app.listen(PORT, () => {
+    sessionLog("info", `listening on :${PORT}, public URL ${PUBLIC_URL}`);
+    sessionLog("info", `oauth: required=${AUTH_REQUIRED} issuer=${ISSUER || "(none)"} resource=${RESOURCE}`);
+    if (AUTH_REQUIRED && !ISSUER) {
+      sessionLog("error", "AIFINPAY_AUTH_REQUIRED=true but AIFINPAY_OAUTH_ISSUER is unset — clients will 401 with nowhere to link.");
+    }
+    if (AUTH_REQUIRED && ISSUER) {
+      sessionLog("info", `Bearer gate ON — verifying JWT against ${ISSUER} JWKS (aud=${RESOURCE}${REQUIRED_SCOPE ? `, scope=${REQUIRED_SCOPE}` : ""}).`);
+    }
+  });
+}
+
+export { app };
