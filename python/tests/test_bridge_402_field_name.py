@@ -48,9 +48,7 @@ def test_legacy_pay_matic_only_bridge_still_works():
 
 
 def test_pay_native_wins_when_a_bridge_sends_both():
-    pm = native_pay_block(
-        {"pay_native": {"order_id": "new"}, "pay_matic": {"order_id": "old"}}
-    )
+    pm = native_pay_block({"pay_native": {"order_id": "new"}, "pay_matic": {"order_id": "old"}})
     assert pm == {"order_id": "new"}
 
 

@@ -28,7 +28,7 @@ export interface StoreContractOptions {
 export async function assertStoreContract(
   makeStore: () => GateStore | Promise<GateStore>,
   t: AssertLike,
-  opts: StoreContractOptions = {},
+  opts: StoreContractOptions = {}
 ): Promise<void> {
   const sleep = opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
   const uniq = () => `contract:${Date.now()}:${Math.random().toString(16).slice(2)}`;
@@ -61,9 +61,7 @@ export async function assertStoreContract(
     const s = await makeStore();
     const key = uniq();
     const N = 50;
-    const results = await Promise.all(
-      Array.from({ length: N }, () => s.incrBy(key, 1, 60_000)),
-    );
+    const results = await Promise.all(Array.from({ length: N }, () => s.incrBy(key, 1, 60_000)));
     const sorted = [...results].sort((a, b) => a - b);
     t.equal(new Set(results).size, N, "concurrent incrBy returned duplicate values (lost update)");
     t.equal(sorted[0], 1, "concurrent incrBy must start at 1");

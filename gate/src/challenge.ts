@@ -37,9 +37,7 @@ export function buildChallenge(args: {
   const api = (args.apiBase ?? "https://api.aifinpay.io").replace(/\/+$/, "");
   return {
     error: "AIFP-402",
-    detail:
-      args.detail ||
-      "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+    detail: args.detail || "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
     protocol: "AIFP-1",
     merchant_id: merchantId,
     resource,

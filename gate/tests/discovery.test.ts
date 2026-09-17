@@ -13,7 +13,12 @@ const OPTS = {
   apiBase: "https://api.aifinpay.io",
   resources: [
     { resource: "/api/agent/genres", tier: "standard" as const },
-    { resource: "/api/agent/*", tier: "complex" as const, scope: "prefix" as const, name: "agent API" },
+    {
+      resource: "/api/agent/*",
+      tier: "complex" as const,
+      scope: "prefix" as const,
+      name: "agent API",
+    },
   ],
 };
 
@@ -35,8 +40,16 @@ describe("x402 discovery document", () => {
   it("lists every gated resource with its price and scope", () => {
     const d = buildDiscoveryDocument(OPTS) as any;
     expect(d.resources).toHaveLength(2);
-    expect(d.resources[0]).toMatchObject({ resource: "/api/agent/genres", tier: "standard", scope: "exact" });
-    expect(d.resources[1]).toMatchObject({ resource: "/api/agent/*", scope: "prefix", name: "agent API" });
+    expect(d.resources[0]).toMatchObject({
+      resource: "/api/agent/genres",
+      tier: "standard",
+      scope: "exact",
+    });
+    expect(d.resources[1]).toMatchObject({
+      resource: "/api/agent/*",
+      scope: "prefix",
+      name: "agent API",
+    });
     for (const r of d.resources) expect(typeof r.unit_price_usd).toBe("string");
   });
 
@@ -58,15 +71,26 @@ describe("x402 discovery document", () => {
 describe("aifpDiscovery middleware", () => {
   function run(method: string, path: string) {
     const mw = aifpDiscovery(OPTS);
-    let served: { status?: number; body?: string; type?: string } = {};
+    const served: { status?: number; body?: string; type?: string } = {};
     let nexted = false;
     const req: any = { method, path, header: () => undefined };
     const res: any = {
-      set(k: any, v?: any) { if (k === "content-type") this._t = v; return this; },
-      status(s: number) { served.status = s; return this; },
-      send(b: string) { served.body = b; return this; },
+      set(k: any, v?: any) {
+        if (k === "content-type") this._t = v;
+        return this;
+      },
+      status(s: number) {
+        served.status = s;
+        return this;
+      },
+      send(b: string) {
+        served.body = b;
+        return this;
+      },
     };
-    mw(req, res, () => { nexted = true; });
+    mw(req, res, () => {
+      nexted = true;
+    });
     return { served, nexted, res };
   }
 
@@ -80,7 +104,7 @@ describe("aifpDiscovery middleware", () => {
   it("passes everything else through untouched", () => {
     // The merchant mounts it app-wide; it must not swallow real routes.
     expect(run("GET", "/api/agent/genres").nexted).toBe(true);
-    expect(run("POST", "/.well-known/x402.json").nexted).toBe(true);   // GET only
+    expect(run("POST", "/.well-known/x402.json").nexted).toBe(true); // GET only
     expect(run("GET", "/").nexted).toBe(true);
   });
 });

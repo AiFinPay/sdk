@@ -20,6 +20,18 @@ export interface AuthPayload {
   method?: string;
 }
 
+/** Immutable details of the request that received a 402 challenge. */
+export interface AuthRequestContext {
+  /** Canonical URL the SDK sent without credentials. */
+  url: URL;
+  /** Uppercase HTTP method the SDK sent without credentials. */
+  method: string;
+  /** Origin explicitly configured on the Agent, never inferred from a 402 body. */
+  trustedOrigin: string;
+  /** SHA-256 of the exact request body bytes sent before the challenge. */
+  bodyDigest: string;
+}
+
 /**
  * A facilitator handles ONE x402 wire format. Implementations are
  * stateless; state (keypair, base URL) lives on the Agent.
@@ -28,11 +40,7 @@ export interface Facilitator {
   readonly name: string;
 
   /** Build the auth payload to merge into the retry request. */
-  buildAuth(
-    response: Response,
-    agent: Agent,
-    options: PayOptions,
-  ): Promise<AuthPayload>;
+  buildAuth(response: Response, agent: Agent, options: PayOptions, context?: AuthRequestContext): Promise<AuthPayload>;
 }
 
 /** Constructor + static `detect` predicate together. */

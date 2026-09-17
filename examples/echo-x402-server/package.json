@@ -10,13 +10,13 @@
     "demo:sdk": "node test-client.js"
   },
   "dependencies": {
-    "@aifinpay/agent": "^1.0.0",
+    "@aifinpay/agent": "2.0.0",
     "bs58": "^6.0.0",
     "express": "^5.0.0",
     "tweetnacl": "^1.0.3"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "license": "MIT"
 }

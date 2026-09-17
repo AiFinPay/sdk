@@ -1,8 +1,15 @@
 /** Runtime configuration loaded from env. */
 export interface McpConfig {
-  /** Base58 secret to load the agent identity. If absent, a fresh keypair is
-   *  generated AND printed to stderr at startup with a "save this!" warning. */
+  /** Legacy base58 secret, after SEED_HASH and the project agents file. */
   agentSecretB58?: string;
+  /** 32-byte hex seed, consumed exactly as AiFinPayAgent.fromSeed does. */
+  seedHash?: string;
+  agentsFile?: string;
+  agentId?: string;
+  walletHome?: string;
+  walletPassphrase?: string;
+  /** Enables dev discovery/quoting only; never enables settlement signing. */
+  devMode?: boolean;
 
   /** Custom AiFinPay backend URL. Defaults to production. */
   baseUrl?: string;
@@ -27,6 +34,9 @@ export interface McpConfig {
    *  statement that you know who that is. */
   gatewayOrigins?: string[];
 
+  /** AIFP-1 resource identity: merchant slug or full direct request path. */
+  gatewayPathMode?: "gateway" | "direct";
+
   /** Hosts whose DNS pre-check is skipped, exact names only.
    *
    *  safe-fetch resolves a hostname and refuses if any answer is a private
@@ -44,18 +54,30 @@ export interface McpConfig {
 }
 
 export function loadConfigFromEnv(): McpConfig {
+  if (process.env.AIFINPAY_MODE && !["live", "dev"].includes(process.env.AIFINPAY_MODE)) {
+    throw new Error("AIFINPAY_MODE must be live or dev");
+  }
   return {
+    devMode: process.env.AIFINPAY_MODE === "dev",
+    seedHash: process.env.SEED_HASH,
+    agentsFile: process.env.AIFINPAY_AGENTS_FILE || undefined,
+    agentId: process.env.AIFINPAY_AGENT_ID || undefined,
+    walletHome: process.env.AIFINPAY_HOME || undefined,
+    walletPassphrase: process.env.AIFINPAY_WALLET_PASSPHRASE || undefined,
     agentSecretB58: process.env.AIFINPAY_AGENT_SECRET || undefined,
     baseUrl: process.env.AIFINPAY_BASE_URL || undefined,
-    timeoutMs: process.env.AIFINPAY_TIMEOUT_MS
-      ? Number(process.env.AIFINPAY_TIMEOUT_MS)
-      : undefined,
-    maxAmountUsd: process.env.AIFINPAY_MAX_USD
-      ? Number(process.env.AIFINPAY_MAX_USD)
-      : undefined,
+    timeoutMs: process.env.AIFINPAY_TIMEOUT_MS ? Number(process.env.AIFINPAY_TIMEOUT_MS) : undefined,
+    maxAmountUsd: process.env.AIFINPAY_MAX_USD ? Number(process.env.AIFINPAY_MAX_USD) : undefined,
     gatewayOrigins: splitOrigins(process.env.AIFINPAY_GATEWAY_ORIGINS),
+    gatewayPathMode: parseGatewayPathMode(process.env.AIFINPAY_GATEWAY_PATH_MODE),
     trustedHosts: splitList(process.env.AIFINPAY_TRUSTED_HOSTS),
   };
+}
+
+function parseGatewayPathMode(raw: string | undefined): "gateway" | "direct" {
+  if (raw === undefined || raw.trim() === "") return "gateway";
+  if (raw === "gateway" || raw === "direct") return raw;
+  throw new Error("AIFINPAY_GATEWAY_PATH_MODE must be either gateway or direct");
 }
 
 /** Comma-separated list → trimmed entries, or undefined when unset/empty.
@@ -64,7 +86,10 @@ export function loadConfigFromEnv(): McpConfig {
  *  variable to an empty string means the former. */
 function splitList(raw: string | undefined): string[] | undefined {
   if (!raw) return undefined;
-  const out = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  const out = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   return out.length ? out : undefined;
 }
 
@@ -76,12 +101,15 @@ function splitOrigins(raw: string | undefined): string[] | undefined {
   if (!list) return undefined;
   for (const entry of list) {
     let u: URL;
-    try { u = new URL(entry); }
-    catch { throw new Error(`AIFINPAY_GATEWAY_ORIGINS: "${entry}" is not a URL`); }
+    try {
+      u = new URL(entry);
+    } catch {
+      throw new Error(`AIFINPAY_GATEWAY_ORIGINS: "${entry}" is not a URL`);
+    }
     if (u.origin !== entry.replace(/\/+$/, "")) {
       throw new Error(
-        `AIFINPAY_GATEWAY_ORIGINS: "${entry}" must be a bare origin like https://dev.example.com `
-        + `(got path/query "${u.pathname}${u.search}")`,
+        `AIFINPAY_GATEWAY_ORIGINS: "${entry}" must be a bare origin like https://dev.example.com ` +
+          `(got path/query "${u.pathname}${u.search}")`
       );
     }
     // WHATWG URL accepts "*" in a hostname, so new URL("https://*.example.com")
@@ -91,8 +119,8 @@ function splitOrigins(raw: string | undefined): string[] | undefined {
     // like the feature is broken.
     if (!/^[a-z0-9.-]+$/i.test(u.hostname) || u.hostname.startsWith("-") || u.hostname.includes("..")) {
       throw new Error(
-        `AIFINPAY_GATEWAY_ORIGINS: "${entry}" is not a plain hostname. `
-        + `Wildcards are not supported — name each origin you settle against.`,
+        `AIFINPAY_GATEWAY_ORIGINS: "${entry}" is not a plain hostname. ` +
+          `Wildcards are not supported — name each origin you settle against.`
       );
     }
     if (u.protocol !== "https:" && u.hostname !== "localhost" && u.hostname !== "127.0.0.1") {

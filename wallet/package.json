@@ -1,8 +1,10 @@
 {
   "name": "@aifinpay/wallet",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "description": "Derive an AiFinPay agent wallet (Solana + EVM + Casper) with four tiny crypto deps — no viem, no @solana/web3.js, ~4.5 MB. The light way to give an agent a wallet where the full SDK will not install.",
   "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "license": "MIT",
   "exports": {
     ".": {
@@ -15,11 +17,18 @@
   },
   "files": [
     "dist",
-    "README.md"
+    ".aifinpay",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "npm run build",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"**/*.{js,mjs,cjs,jsx,ts,tsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{js,mjs,cjs,jsx,ts,tsx,json,md}\""
   },
   "keywords": [
     "aifinpay",
@@ -32,7 +41,14 @@
     "derive",
     "keypair"
   ],
+  "author": "CoinSecurities (SECCO) <contact@aifinpay.io>",
   "homepage": "https://github.com/AiFinPay/sdk/tree/main/wallet#readme",
+  "contributors": [
+    {
+      "name": "Pavlo Bolhar",
+      "url": "https://github.com/daochild"
+    }
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/AiFinPay/sdk.git",
@@ -40,7 +56,10 @@
   },
   "bugs": "https://github.com/AiFinPay/sdk/issues",
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@noble/curves": "^1.9.0",
@@ -49,9 +68,14 @@
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
-    "@aifinpay/agent": "^1.8.4",
+    "@eslint/js": "^9.0.0",
     "@types/node": "^20.0.0",
+    "eslint": "^10.10.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.0.0",
+    "prettier": "^3.9.6",
     "typescript": "^5.4.0",
+    "typescript-eslint": "^8.0.0",
     "vitest": "^4.1.5"
   }
 }

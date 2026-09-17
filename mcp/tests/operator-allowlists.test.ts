@@ -20,7 +20,9 @@ describe("gateway origins", () => {
     const prev = process.env.AIFINPAY_GATEWAY_ORIGINS;
     if (v === undefined) delete process.env.AIFINPAY_GATEWAY_ORIGINS;
     else process.env.AIFINPAY_GATEWAY_ORIGINS = v;
-    try { return fn(); } finally {
+    try {
+      return fn();
+    } finally {
       if (prev === undefined) delete process.env.AIFINPAY_GATEWAY_ORIGINS;
       else process.env.AIFINPAY_GATEWAY_ORIGINS = prev;
     }
@@ -34,24 +36,48 @@ describe("gateway origins", () => {
   });
 
   it("accepts explicit origins", () => {
-    expect(withEnv("https://dev.ratersapp.com, https://gateway.aifinpay.io",
-      () => loadConfigFromEnv().gatewayOrigins))
-      .toEqual(["https://dev.ratersapp.com", "https://gateway.aifinpay.io"]);
+    expect(
+      withEnv("https://dev.ratersapp.com, https://gateway.aifinpay.io", () => loadConfigFromEnv().gatewayOrigins)
+    ).toEqual(["https://dev.ratersapp.com", "https://gateway.aifinpay.io"]);
   });
 
   it("refuses an entry with a path — it would read as allowed and match nothing", () => {
-    expect(() => withEnv("https://dev.ratersapp.com/genres", () => loadConfigFromEnv()))
-      .toThrow(/bare origin/);
+    expect(() => withEnv("https://dev.ratersapp.com/genres", () => loadConfigFromEnv())).toThrow(/bare origin/);
   });
 
   it("refuses plaintext", () => {
     // Settling over http means anyone on the path can answer the 402.
-    expect(() => withEnv("http://dev.ratersapp.com", () => loadConfigFromEnv()))
-      .toThrow(/not https/);
+    expect(() => withEnv("http://dev.ratersapp.com", () => loadConfigFromEnv())).toThrow(/not https/);
   });
 
   it("refuses a wildcard rather than silently matching nothing", () => {
     expect(() => withEnv("https://*.ratersapp.com", () => loadConfigFromEnv())).toThrow();
+  });
+});
+
+describe("gateway path mode", () => {
+  it("defaults to gateway and accepts direct", () => {
+    const previous = process.env.AIFINPAY_GATEWAY_PATH_MODE;
+    try {
+      delete process.env.AIFINPAY_GATEWAY_PATH_MODE;
+      expect(loadConfigFromEnv().gatewayPathMode).toBe("gateway");
+      process.env.AIFINPAY_GATEWAY_PATH_MODE = "direct";
+      expect(loadConfigFromEnv().gatewayPathMode).toBe("direct");
+    } finally {
+      if (previous === undefined) delete process.env.AIFINPAY_GATEWAY_PATH_MODE;
+      else process.env.AIFINPAY_GATEWAY_PATH_MODE = previous;
+    }
+  });
+
+  it("rejects unknown values", () => {
+    const previous = process.env.AIFINPAY_GATEWAY_PATH_MODE;
+    try {
+      process.env.AIFINPAY_GATEWAY_PATH_MODE = "merchant";
+      expect(() => loadConfigFromEnv()).toThrow(/AIFINPAY_GATEWAY_PATH_MODE/);
+    } finally {
+      if (previous === undefined) delete process.env.AIFINPAY_GATEWAY_PATH_MODE;
+      else process.env.AIFINPAY_GATEWAY_PATH_MODE = previous;
+    }
   });
 });
 
@@ -61,8 +87,7 @@ describe("trusted hosts skip the DNS pre-check, and nothing else", () => {
     // Naming it proves the allowlist is consulted BEFORE that branch: the
     // request proceeds and fails on the network instead.
     const f = makeSafeFetch({ trustedHosts: ["this-host-does-not-exist.invalid"] });
-    await expect(f("https://this-host-does-not-exist.invalid/"))
-      .rejects.not.toThrow(/cannot resolve/);
+    await expect(f("https://this-host-does-not-exist.invalid/")).rejects.not.toThrow(/cannot resolve/);
   });
 
   it("an untrusted private host is still refused", async () => {
@@ -81,7 +106,6 @@ describe("trusted hosts skip the DNS pre-check, and nothing else", () => {
     // The original message was "cannot resolve <host>", which reads as a broken
     // SDK when the real cause is a proxied environment.
     const f = makeSafeFetch({});
-    await expect(f("https://this-host-does-not-exist.invalid/"))
-      .rejects.toThrow(/AIFINPAY_TRUSTED_HOSTS/);
+    await expect(f("https://this-host-does-not-exist.invalid/")).rejects.toThrow(/AIFINPAY_TRUSTED_HOSTS/);
   });
 });

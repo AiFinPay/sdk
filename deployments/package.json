@@ -1,0 +1,37 @@
+{
+  "name": "@aifinpay/deployments",
+  "version": "1.1.0",
+  "description": "Deployment aifinpay",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "package.json",
+    "package-lock.json",
+    "dist",
+    "registry",
+    "README.md",
+    "USAGE.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "registry:build": "node dist/build.js",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AiFinPay/sdk.git",
+    "directory": "deployments"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.5"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

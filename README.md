@@ -1,5 +1,12 @@
 # AiFinPay — Payment Rail for AI Agents
 
+**Stable 2.0.0 release** — Node/MCP `2.0.0` and Python `2.0.0` are now stable.
+Install from npm/PyPI or build from source as described in
+[Node setup](./node/README.md). Native auth requires the coordinated backend v2 update. Legacy
+`call()` payments and v1.4 execution are disabled; Node `fetchPaid` requires
+a reviewed Polygon v1.3 deployment pin and fresh trusted native/USD price.
+See [payment recovery](./node/PAYMENT_RECEIPTS.md).
+
 [![npm @aifinpay/agent](https://img.shields.io/npm/v/@aifinpay/agent?label=%40aifinpay%2Fagent&color=blue)](https://www.npmjs.com/package/@aifinpay/agent)
 [![npm @aifinpay/mcp](https://img.shields.io/npm/v/@aifinpay/mcp?label=%40aifinpay%2Fmcp&color=blue)](https://www.npmjs.com/package/@aifinpay/mcp)
 [![PyPI aifinpay-agent](https://img.shields.io/pypi/v/aifinpay-agent?color=blue)](https://pypi.org/project/aifinpay-agent/)
@@ -16,8 +23,8 @@ its exact deployment, runtime hash, profile and paid E2E evidence are pinned.
 
 > Canonical domain: **aifinpay.io** — the legacy `aifinpay.company` host is
 > retired; ignore any cached docs or install instructions pointing there
-> (including the old `@alpha` npm tag). Install plain `@aifinpay/agent` /
-> `@aifinpay/mcp` (latest). Protocol and network inventory:
+> (including the old `@alpha` npm tag). Registry installation examples below
+> refer to published packages, not this security candidate. Network inventory:
 > [aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
 
 ```bash
@@ -60,9 +67,12 @@ Cline) lives in [`MCP_CONFIG.md`](./MCP_CONFIG.md).
 
 | Package | Path | Install | Latest |
 |---|---|---|---|
-| **`aifinpay-agent`** (Python) | [`./python`](./python) | `pip install aifinpay-agent` | `1.1.1` |
-| **`@aifinpay/agent`** (Node / TypeScript) | [`./node`](./node) | `npm install @aifinpay/agent` | `1.2.1` |
-| **`@aifinpay/mcp`** (MCP server) | [`./mcp`](./mcp) | `npx @aifinpay/mcp` | `1.1.1` |
+| **`aifinpay-agent`** (Python) | [`./python`](./python) | `pip install aifinpay-agent` | `2.0.0` |
+| **`@aifinpay/agent`** (Node / TypeScript) | [`./node`](./node) | `npm install @aifinpay/agent` | `2.0.0` |
+| **`@aifinpay/mcp`** (MCP server) | [`./mcp`](./mcp) | `npx @aifinpay/mcp` | `2.0.0` |
+| **`@aifinpay/deployments`** (registry grabber) | [`./deployments`](./deployments) | internal | `1.0.0` |
+| **`@aifinpay/gate`** (merchant paywall) | [`./gate`](./gate) | `npm install @aifinpay/gate` | `0.3.2` |
+| **`@aifinpay/wallet`** (light wallet / keystore) | [`./wallet`](./wallet) | `npm install @aifinpay/wallet` | `1.1.0` |
 | Go SDK | — | `go get github.com/AiFinPay/sdk/go` | **soon** |
 | Rust SDK | — | `cargo add aifinpay-sdk` | **soon** |
 
@@ -200,6 +210,9 @@ sdk/
 ├── python/                  aifinpay-agent (PyPI)
 ├── node/                    @aifinpay/agent (npm)
 ├── mcp/                     @aifinpay/mcp (npm)
+├── wallet/                  @aifinpay/wallet (keystore + CLI)
+├── gate/                    @aifinpay/gate (merchant paywall)
+├── deployments/             @aifinpay/deployments (registry grabber, private)
 ├── docs/                    QUICKSTART.md, MCP_CONFIG.md, integrations
 └── examples/
     ├── openai-agent/        OpenAI Agents SDK tool

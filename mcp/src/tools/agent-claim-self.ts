@@ -85,7 +85,10 @@ const DEFAULT_CLAIM_ORIGINS = [
 function allowedOrigins(): string[] {
   const raw = process.env.AIFINPAY_CLAIM_ORIGINS;
   if (!raw) return DEFAULT_CLAIM_ORIGINS;
-  return raw.split(",").map((o) => o.trim().replace(/\/+$/, "")).filter(Boolean);
+  return raw
+    .split(",")
+    .map((o) => o.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
 }
 
 /** null when the URL may be used; otherwise the reason it may not. */
@@ -93,8 +96,10 @@ function originRefusal(url: URL): string | null {
   const origin = `${url.protocol}//${url.host}`;
   const allowed = allowedOrigins();
   if (!allowed.includes(origin)) {
-    return `refusing to use ${origin}: not an allowed AiFinPay origin. ` +
-      `Allowed: ${allowed.join(", ")}. Set AIFINPAY_CLAIM_ORIGINS to add one deliberately.`;
+    return (
+      `refusing to use ${origin}: not an allowed AiFinPay origin. ` +
+      `Allowed: ${allowed.join(", ")}. Set AIFINPAY_CLAIM_ORIGINS to add one deliberately.`
+    );
   }
   return null;
 }
@@ -115,24 +120,25 @@ function challengeIsWellFormed(message: unknown, address: string): boolean {
   if (typeof message !== "string") return false;
   const chain = address.startsWith("0x") ? "polygon" : "solana";
   const prefix = `AiFinPay-claim:${chain}:${address}:`;
-  const matches = chain === "polygon"
-    ? message.toLowerCase().startsWith(prefix.toLowerCase())
-    : message.startsWith(prefix);
+  const matches =
+    chain === "polygon" ? message.toLowerCase().startsWith(prefix.toLowerCase()) : message.startsWith(prefix);
   if (!matches) return false;
   return /^[0-9a-f]{32}$/.test(message.slice(prefix.length));
 }
 
-export async function runAgentClaimSelf(
-  ctx: ToolContext,
-  args: Record<string, unknown>,
-) {
+export async function runAgentClaimSelf(ctx: ToolContext, args: Record<string, unknown>) {
   const magicLinkUrl = typeof args.magic_link_url === "string" ? args.magic_link_url : "";
   const label = typeof args.label === "string" ? args.label : null;
 
   if (!magicLinkUrl || !magicLinkUrl.includes("/api/auth/verify?token=")) {
     return {
       isError: true,
-      content: [{ type: "text", text: "magic_link_url required — should look like https://aifinpay.io/api/auth/verify?token=…" }],
+      content: [
+        {
+          type: "text",
+          text: "magic_link_url required — should look like https://aifinpay.io/api/auth/verify?token=…",
+        },
+      ],
     };
   }
 
@@ -161,7 +167,12 @@ export async function runAgentClaimSelf(
     if (!setCookie) {
       return {
         isError: true,
-        content: [{ type: "text", text: `Magic link did not return a session cookie (HTTP ${res.status}). Link may be expired or already used.` }],
+        content: [
+          {
+            type: "text",
+            text: `Magic link did not return a session cookie (HTTP ${res.status}). Link may be expired or already used.`,
+          },
+        ],
       };
     }
   } catch (e) {
@@ -171,18 +182,24 @@ export async function runAgentClaimSelf(
     };
   }
   // Some setups split multiple cookies; grab the session one we care about.
-  const cookieHeader = setCookie.split(",").map((c) => c.trim().split(";")[0]).join("; ");
+  const cookieHeader = setCookie
+    .split(",")
+    .map((c) => c.trim().split(";")[0])
+    .join("; ");
 
   // Claim both chains (EVM + Solana). Each is its own challenge + sig.
   // We try Polygon first because that's where live bridges settle today;
   // Solana side is best-effort — if anything fails we still consider the
   // overall claim successful as long as Polygon went through.
-  const evmAddr   = ctx.agent.evmAddress;
-  const solAddr   = ctx.agent.solanaAddress;
-  const innerAny  = ctx.agent.inner as unknown as { secretKey: Uint8Array };
-  const solSecret = innerAny.secretKey;  // tweetnacl 64-byte secretKey
+  const evmAddr = ctx.agent.evmAddress;
+  const solAddr = ctx.agent.solanaAddress;
+  const innerAny = ctx.agent.inner as unknown as { secretKey: Uint8Array };
+  const solSecret = innerAny.secretKey; // tweetnacl 64-byte secretKey
 
-  async function claimOne(address: string, sigFn: (msg: string) => Promise<{ signature?: string; signature_base58?: string }>) {
+  async function claimOne(
+    address: string,
+    sigFn: (msg: string) => Promise<{ signature?: string; signature_base58?: string }>
+  ) {
     // 1) challenge
     const cr = await fetch(`${apiBase}/api/me/agents/challenge`, {
       method: "POST",
@@ -249,11 +266,11 @@ export async function runAgentClaimSelf(
   // Never block the claim flow on a balance check; if the RPC is down or
   // balance() throws, fall back to the standard funding recommendation.
   let polygonUsdc = 0;
-  let solanaUsdc  = 0;
+  let solanaUsdc = 0;
   try {
     const bal = await ctx.agent.balance();
     polygonUsdc = bal.chains.polygon.usdc ?? 0;
-    solanaUsdc  = bal.chains.solana.usdc  ?? 0;
+    solanaUsdc = bal.chains.solana.usdc ?? 0;
   } catch {
     /* swallow — keep funding_recommendation as-is */
   }
@@ -268,7 +285,7 @@ export async function runAgentClaimSelf(
     // Funded threshold: 0.10 USDC (~4 io-net calls). Below this we still
     // show the funding tip; at-or-above we show a "Funded" status so the
     // agent doesn't tell the user to send money they already sent.
-    const FUNDED_USDC_THRESHOLD = 0.10;
+    const FUNDED_USDC_THRESHOLD = 0.1;
     const polygonFunded = polygonUsdc >= FUNDED_USDC_THRESHOLD;
 
     const fundingFields: Record<string, string> = polygonFunded
@@ -293,16 +310,20 @@ export async function runAgentClaimSelf(
       content: [
         {
           type: "text",
-          text: JSON.stringify({
-            ok: true,
-            polygon_address: evmAddr,
-            polygon_claim: "ok",
-            solana_address: solAddr,
-            solana_claim: solRes.ok ? "ok" : `skipped (${solRes.reason})`,
-            label: label || null,
-            ...fundingFields,
-            next: `Visit ${DASHBOARD_BASE}/agents/${evmAddr} (Polygon view) or ${DASHBOARD_BASE}/agents/${solAddr} (Solana view). Watchlist: ${apiBase}/me.`,
-          }, null, 2),
+          text: JSON.stringify(
+            {
+              ok: true,
+              polygon_address: evmAddr,
+              polygon_claim: "ok",
+              solana_address: solAddr,
+              solana_claim: solRes.ok ? "ok" : `skipped (${solRes.reason})`,
+              label: label || null,
+              ...fundingFields,
+              next: `Visit ${DASHBOARD_BASE}/agents/${evmAddr} (Polygon view) or ${DASHBOARD_BASE}/agents/${solAddr} (Solana view). Watchlist: ${apiBase}/me.`,
+            },
+            null,
+            2
+          ),
         },
       ],
     };

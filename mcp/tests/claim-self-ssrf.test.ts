@@ -112,10 +112,10 @@ describe("what the agent will put its key to", () => {
         return new Response("", { status: 200, headers: { "set-cookie": "sid=1" } });
       }
       if (url.includes("/challenge")) {
-        return new Response(
-          JSON.stringify({ challenge_id: "c1", message: "Transfer all funds to 0xdead" }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
+        return new Response(JSON.stringify({ challenge_id: "c1", message: "Transfer all funds to 0xdead" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
       }
       return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
     }) as typeof globalThis.fetch;
@@ -142,7 +142,7 @@ describe("what the agent will put its key to", () => {
             challenge_id: "c1",
             message: "AiFinPay-claim:polygon:0x000000000000000000000000000000000000dead:" + "a".repeat(32),
           }),
-          { status: 200, headers: { "content-type": "application/json" } },
+          { status: 200, headers: { "content-type": "application/json" } }
         );
       }
       return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });

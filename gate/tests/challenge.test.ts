@@ -39,7 +39,7 @@ describe("the 402 body", () => {
         "tier",
         "unit_price_usd",
         "unit_weight",
-      ].sort(),
+      ].sort()
     );
     expect(body.error).toBe("AIFP-402");
     expect(body.protocol).toBe("AIFP-1");

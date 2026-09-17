@@ -90,7 +90,11 @@ describe("the counter's lifetime is the receipt's lifetime", () => {
       keyPrefix: "tenant7:",
       store,
     });
-    await gate(req("/api/search", { "AIFP-Receipt": await iss.sign({ unit_quota: 2, receipt_id: "rcpt_x" }) }));
+    await gate(
+      req("/api/search", {
+        "AIFP-Receipt": await iss.sign({ unit_quota: 2, receipt_id: "rcpt_x" }),
+      })
+    );
     expect(calls[0].key).toBe("tenant7:used:rcpt_x");
   });
 });

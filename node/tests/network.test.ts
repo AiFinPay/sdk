@@ -14,9 +14,9 @@ import { AiFinPayAgent } from "../src/index.js";
 const TEST_NONCE = "test-nonce-123";
 
 interface Captured {
-  url:    string;
+  url: string;
   method: string;
-  body:   any;
+  body: any;
 }
 
 let originalFetch: typeof globalThis.fetch;
@@ -29,7 +29,11 @@ function installMock(searchResult: unknown[] = []) {
     const method = (init?.method ?? "GET").toUpperCase();
     let body: any = undefined;
     if (init?.body) {
-      try { body = JSON.parse(String(init.body)); } catch { body = String(init.body); }
+      try {
+        body = JSON.parse(String(init.body));
+      } catch {
+        body = String(init.body);
+      }
     }
     captured.push({ url, method, body });
 
@@ -38,34 +42,40 @@ function installMock(searchResult: unknown[] = []) {
 
     if (path === "/api/network/nonce") {
       return new Response(JSON.stringify({ nonce: TEST_NONCE }), {
-        status: 200, headers: { "content-type": "application/json" },
+        status: 200,
+        headers: { "content-type": "application/json" },
       });
     }
     if (/\/api\/network\/agents\/0x[0-9a-f]{40}\/publish$/.test(path)) {
-      return new Response(JSON.stringify({
-        ok: true,
-        agent: {
-          address:      body.signature ? path.split("/")[4] : null,
-          name:         body.name,
-          description:  body.description ?? null,
-          endpoint:     body.endpoint,
-          capabilities: body.capabilities ?? [],
-          pricing:      body.pricing ?? null,
-          rating:       null,
-          published_at: 1_700_000_000,
-          created_at:   1_700_000_000,
-        },
-        profile_url: `https://dashboard.aifinpay.io/network/agents/${path.split("/")[4]}`,
-      }), { status: 200, headers: { "content-type": "application/json" } });
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          agent: {
+            address: body.signature ? path.split("/")[4] : null,
+            name: body.name,
+            description: body.description ?? null,
+            endpoint: body.endpoint,
+            capabilities: body.capabilities ?? [],
+            pricing: body.pricing ?? null,
+            rating: null,
+            published_at: 1_700_000_000,
+            created_at: 1_700_000_000,
+          },
+          profile_url: `https://dashboard.aifinpay.io/network/agents/${path.split("/")[4]}`,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
     }
     if (/\/api\/network\/agents\/0x[0-9a-f]{40}\/unpublish$/.test(path)) {
       return new Response(JSON.stringify({ ok: true, published: false }), {
-        status: 200, headers: { "content-type": "application/json" },
+        status: 200,
+        headers: { "content-type": "application/json" },
       });
     }
     if (path === "/api/network/agents") {
       return new Response(JSON.stringify({ count: searchResult.length, agents: searchResult }), {
-        status: 200, headers: { "content-type": "application/json" },
+        status: 200,
+        headers: { "content-type": "application/json" },
       });
     }
     return new Response("not mocked", { status: 404 });
@@ -88,11 +98,11 @@ describe("AiFinPayAgent.register", () => {
     const addr = agent.evmAddress.toLowerCase();
 
     const result = await agent.register({
-      name:         "Weather Oracle",
-      endpoint:     "https://weather.example.com/agent",
-      description:  "Forecasts on demand",
+      name: "Weather Oracle",
+      endpoint: "https://weather.example.com/agent",
+      description: "Forecasts on demand",
       capabilities: ["weather", "forecast"],
-      pricing:      { perCall: 0.01, currency: "USDC" },
+      pricing: { perCall: 0.01, currency: "USDC" },
     });
 
     // 1. nonce was fetched first, then publish POSTed
@@ -128,9 +138,9 @@ describe("AiFinPayAgent.register", () => {
     const agent = await AiFinPayAgent.new({ telemetry: false });
 
     await agent.register({
-      name:     "Bare Agent",
+      name: "Bare Agent",
       endpoint: "https://bare.example.com",
-      pricing:  { perCall: 0.5 },
+      pricing: { perCall: 0.5 },
     });
 
     const body = captured[1]!.body;
@@ -144,18 +154,20 @@ describe("AiFinPayAgent.register", () => {
       const path = new URL(typeof input === "string" ? input : input.toString()).pathname;
       if (path === "/api/network/nonce") {
         return new Response(JSON.stringify({ nonce: TEST_NONCE }), {
-          status: 200, headers: { "content-type": "application/json" },
+          status: 200,
+          headers: { "content-type": "application/json" },
         });
       }
       return new Response(JSON.stringify({ error: "signature_invalid" }), {
-        status: 401, headers: { "content-type": "application/json" },
+        status: 401,
+        headers: { "content-type": "application/json" },
       });
     }) as typeof globalThis.fetch;
 
     const agent = await AiFinPayAgent.new({ telemetry: false });
-    await expect(
-      agent.register({ name: "X", endpoint: "https://x.example.com" }),
-    ).rejects.toThrow(/network publish failed: signature_invalid/);
+    await expect(agent.register({ name: "X", endpoint: "https://x.example.com" })).rejects.toThrow(
+      /network publish failed: signature_invalid/
+    );
   });
 });
 
@@ -184,12 +196,19 @@ describe("AiFinPayAgent.unregister", () => {
 
 describe("AiFinPayAgent.search", () => {
   it("builds a capability query from a bare string and parses the agents array", async () => {
-    const fixture = [{
-      address: "0x000000000000000000000000000000000000dead",
-      name: "Weather Oracle", description: null, endpoint: "https://w.example.com",
-      capabilities: ["weather"], pricing: null, rating: null,
-      published_at: 1_700_000_000, created_at: 1_700_000_000,
-    }];
+    const fixture = [
+      {
+        address: "0x000000000000000000000000000000000000dead",
+        name: "Weather Oracle",
+        description: null,
+        endpoint: "https://w.example.com",
+        capabilities: ["weather"],
+        pricing: null,
+        rating: null,
+        published_at: 1_700_000_000,
+        created_at: 1_700_000_000,
+      },
+    ];
     installMock(fixture);
     const agent = await AiFinPayAgent.new({ telemetry: false });
 

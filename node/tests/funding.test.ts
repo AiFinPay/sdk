@@ -1,9 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import {
-  AiFinPayAgent,
-  InsufficientFundsError,
-  SPLITTER_DEPLOYMENTS,
-} from "../src/index.js";
+import { AiFinPayAgent, InsufficientFundsError, SPLITTER_DEPLOYMENTS } from "../src/index.js";
 
 // Two failures that shared a cause: the SDK preferred a number compiled into
 // itself over admitting it did not know one.
@@ -24,7 +20,9 @@ const SEED = "a".repeat(64);
 const polygon = SPLITTER_DEPLOYMENTS.polygon;
 
 let originalFetch: typeof globalThis.fetch;
-beforeEach(() => { originalFetch = globalThis.fetch; });
+beforeEach(() => {
+  originalFetch = globalThis.fetch;
+});
 afterEach(() => {
   globalThis.fetch = originalFetch;
   delete process.env[polygon.nativeUsdEnv];
@@ -50,7 +48,7 @@ describe("the native price behind the pre-sign guard", () => {
     expect(usd).toBe(0.073);
     expect(source).toBe("aifinpay price feed");
     // The specific number that blocked real payments.
-    expect(usd).not.toBe(0.70);
+    expect(usd).not.toBe(0.7);
   });
 
   it("lets an operator override the feed", async () => {
@@ -97,9 +95,10 @@ describe("an agent that cannot pay", () => {
 
   it("throws InsufficientFundsError instead of a viem internals dump", async () => {
     const agent = await AiFinPayAgent.fromSeed(SEED);
-    const err = await (agent as any)
-      .assertCanAffordNative(clientWith(0n), polygon, 10n ** 16n)
-      .then(() => null, (e: unknown) => e);
+    const err = await (agent as any).assertCanAffordNative(clientWith(0n), polygon, 10n ** 16n).then(
+      () => null,
+      (e: unknown) => e
+    );
 
     expect(err).toBeInstanceOf(InsufficientFundsError);
     const e = err as InsufficientFundsError;
@@ -114,18 +113,20 @@ describe("an agent that cannot pay", () => {
   it("says nothing when the balance covers payment and gas", async () => {
     const agent = await AiFinPayAgent.fromSeed(SEED);
     await expect(
-      (agent as any).assertCanAffordNative(clientWith(10n ** 18n), polygon, 10n ** 16n),
+      (agent as any).assertCanAffordNative(clientWith(10n ** 18n), polygon, 10n ** 16n)
     ).resolves.toBeUndefined();
   });
 
   it("treats an unreadable RPC as unknown, not as insufficient", async () => {
     // Otherwise a flaky endpoint reports the agent as broke, and the operator
     // funds an address that was never short.
-    const broken = { getBalance: async () => { throw new Error("RPC down"); },
-                     getGasPrice: async () => 30_000_000_000n };
+    const broken = {
+      getBalance: async () => {
+        throw new Error("RPC down");
+      },
+      getGasPrice: async () => 30_000_000_000n,
+    };
     const agent = await AiFinPayAgent.fromSeed(SEED);
-    await expect(
-      (agent as any).assertCanAffordNative(broken, polygon, 10n ** 16n),
-    ).resolves.toBeUndefined();
+    await expect((agent as any).assertCanAffordNative(broken, polygon, 10n ** 16n)).resolves.toBeUndefined();
   });
 });

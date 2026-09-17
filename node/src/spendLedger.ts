@@ -58,9 +58,7 @@ const RESERVATION_TTL_MS = 5 * 60_000;
 
 function liveTotal(entries: Entry[], windowMs: number, now: number): number {
   const cutoff = now - windowMs;
-  return entries
-    .filter((e) => e.at >= cutoff && (!e.expiresAt || e.expiresAt > now))
-    .reduce((s, e) => s + e.usd, 0);
+  return entries.filter((e) => e.at >= cutoff && (!e.expiresAt || e.expiresAt > now)).reduce((s, e) => s + e.usd, 0);
 }
 
 function prune(entries: Entry[], windowMs: number, now: number): Entry[] {

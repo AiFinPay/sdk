@@ -22,12 +22,25 @@
  *
  * Configure via env (all optional; the secret is read from the keystore below
  * when the variable is unset):
- *   AIFINPAY_AGENT_SECRET   base58 secret — overrides the keystore
+ *   SEED_HASH              32-byte hex seed — highest priority
+ *   AIFINPAY_AGENTS_FILE    project agents file — second priority
+ *   AIFINPAY_AGENT_SECRET   legacy base58 secret — overrides the legacy keystore
  *   AIFINPAY_BASE_URL       default https://aifinpay.io
  *   AIFINPAY_TIMEOUT_MS     default 30000
  *   AIFINPAY_MAX_USD        hard cap per single payment (no default)
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync, chmodSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  existsSync,
+  openSync,
+  closeSync,
+  fchmodSync,
+  fsyncSync,
+  linkSync,
+  unlinkSync,
+} from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { createRequire } from "node:module";
@@ -62,7 +75,7 @@ Run init once. It writes ${KEYSTORE} with mode 600 and the server picks
 it up automatically — you do not have to put the secret in a config file.
 
 Env (all optional):
-  AIFINPAY_AGENT_SECRET   base58 secret; overrides the keystore
+  SEED_HASH              32-byte hex seed; highest priority\n  AIFINPAY_AGENTS_FILE    default ./aifinpay/agents.json; second priority\n  AIFINPAY_AGENT_ID       select one record when the file has multiple agents\n  AIFINPAY_AGENT_SECRET   legacy base58 secret; after project wallet sources
   AIFINPAY_MAX_USD        hard cap per single payment — set this
   AIFINPAY_BASE_URL       default https://aifinpay.io
   AIFINPAY_TIMEOUT_MS     default 30000
@@ -88,27 +101,50 @@ const PASSPHRASE = process.env.AIFINPAY_WALLET_PASSPHRASE || null;
 // is unaffected: no passphrase => plaintext, exactly as before. scrypt to
 // stretch, AES-256-GCM so tampering is detected rather than decrypting to junk.
 function encryptSecret(secretB58) {
-  const salt = randomBytes(16), iv = randomBytes(12);
-  const key = scryptSync(PASSPHRASE, salt, 32, { N: 1 << 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+  const salt = randomBytes(16),
+    iv = randomBytes(12);
+  const key = scryptSync(PASSPHRASE, salt, 32, {
+    N: 1 << 15,
+    r: 8,
+    p: 1,
+    maxmem: 64 * 1024 * 1024,
+  });
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   const ct = Buffer.concat([cipher.update(secretB58, "utf8"), cipher.final()]);
-  return { enc: "scrypt-aes-256-gcm", salt: salt.toString("base64"), iv: iv.toString("base64"),
-           tag: cipher.getAuthTag().toString("base64"), ct: ct.toString("base64"),
-           created: new Date().toISOString() };
+  return {
+    enc: "scrypt-aes-256-gcm",
+    salt: salt.toString("base64"),
+    iv: iv.toString("base64"),
+    tag: cipher.getAuthTag().toString("base64"),
+    ct: ct.toString("base64"),
+    created: new Date().toISOString(),
+  };
 }
 function decryptSecret(store) {
   if (!PASSPHRASE) throw new Error(`${KEYSTORE} is encrypted but AIFINPAY_WALLET_PASSPHRASE is not set.`);
-  const key = scryptSync(PASSPHRASE, Buffer.from(store.salt, "base64"), 32, { N: 1 << 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+  const key = scryptSync(PASSPHRASE, Buffer.from(store.salt, "base64"), 32, {
+    N: 1 << 15,
+    r: 8,
+    p: 1,
+    maxmem: 64 * 1024 * 1024,
+  });
   const dc = createDecipheriv("aes-256-gcm", key, Buffer.from(store.iv, "base64"));
   dc.setAuthTag(Buffer.from(store.tag, "base64"));
-  try { return Buffer.concat([dc.update(Buffer.from(store.ct, "base64")), dc.final()]).toString("utf8"); }
-  catch { throw new Error(`could not decrypt ${KEYSTORE}: wrong AIFINPAY_WALLET_PASSPHRASE or the file was modified.`); }
+  try {
+    return Buffer.concat([dc.update(Buffer.from(store.ct, "base64")), dc.final()]).toString("utf8");
+  } catch {
+    throw new Error(`could not decrypt ${KEYSTORE}: wrong AIFINPAY_WALLET_PASSPHRASE or the file was modified.`);
+  }
 }
 
 function readKeystore() {
   if (!existsSync(KEYSTORE)) return null;
   let parsed;
-  try { parsed = JSON.parse(readFileSync(KEYSTORE, "utf8")); } catch { return null; }
+  try {
+    parsed = JSON.parse(readFileSync(KEYSTORE, "utf8"));
+  } catch {
+    return null;
+  }
   // A decrypt failure THROWS rather than returning null — null reads as "no
   // wallet" and mints a new one, which is how a mistyped passphrase loses a key.
   if (parsed?.enc) return { secretB58: decryptSecret(parsed), created: parsed.created, encrypted: true };
@@ -118,47 +154,82 @@ function readKeystore() {
 if (arg === "init") {
   const { Agent, AiFinPayAgent } = await import("@aifinpay/agent");
 
+  const { loadConfigFromEnv } = await import("../dist/config.js");
+  const { loadWalletIdentity } = await import("../dist/identity.js");
+  const selected = loadWalletIdentity(loadConfigFromEnv());
+  if (selected && selected.source !== "legacy-keystore") {
+    const agent = selected.seedHash
+      ? await AiFinPayAgent.fromSeed(selected.seedHash)
+      : await AiFinPayAgent.fromSolanaSecret(selected.secretB58);
+    process.stdout.write(
+      `Using ${selected.source}; no replacement wallet created.\n` +
+        `EVM ${agent.evmAddress}\nSolana ${agent.solanaAddress}\nCasper ${agent.casperAddress}\n` +
+        `Keep your configured seed backed up privately. Call agent_reload in an already connected MCP server.\n`
+    );
+    process.exit(0);
+  }
+
   let store = readKeystore();
-  const freshlyCreated = !store;
-  if (store) {
-    // Never silently overwrite. The file is the only copy of a key that may
-    // already hold funds; a second `init` that regenerated it would destroy a
-    // wallet to save one line of output.
-    process.stdout.write(`Existing wallet found at ${KEYSTORE} — keeping it.\n\n`);
-  } else {
+  let freshlyCreated = false;
+  if (!store) {
     mkdirSync(HOME, { recursive: true, mode: 0o700 });
     const secretB58 = Agent.new().secretB58;
-    store = { secretB58, created: new Date().toISOString() };
-    const onDisk = PASSPHRASE ? encryptSecret(secretB58) : store;
-    writeFileSync(KEYSTORE, JSON.stringify(onDisk, null, 2) + "\n", { mode: 0o600 });
-    chmodSync(KEYSTORE, 0o600); // writeFileSync honours umask; this does not
+    const candidate = { secretB58, created: new Date().toISOString() };
+    const onDisk = PASSPHRASE ? encryptSecret(secretB58) : candidate;
+    const temporary = join(HOME, `.agent-init-${process.pid}-${randomBytes(12).toString("hex")}.tmp`);
+    // Publish a complete file without replacing an existing wallet. Two init
+    // processes may both see no keystore; only one exclusive link can win.
+    // A direct exclusive write would expose a partially written file to readers.
+    let fd;
+    let ownsTemporary = false;
+    try {
+      fd = openSync(temporary, "wx", 0o600);
+      ownsTemporary = true;
+      fchmodSync(fd, 0o600);
+      writeFileSync(fd, JSON.stringify(onDisk, null, 2) + "\n");
+      fsyncSync(fd);
+      closeSync(fd);
+      fd = undefined;
+      try {
+        linkSync(temporary, KEYSTORE);
+        store = candidate;
+        freshlyCreated = true;
+      } catch (error) {
+        if (error.code !== "EEXIST") throw error;
+        store = readKeystore();
+        if (!store) throw new Error(`Existing ${KEYSTORE} is unreadable; refusing to replace it.`);
+      }
+    } finally {
+      if (fd !== undefined) closeSync(fd);
+      if (ownsTemporary) unlinkSync(temporary);
+    }
+  }
+  if (freshlyCreated) {
     process.stdout.write(
       PASSPHRASE
         ? `Created ${KEYSTORE} (mode 600, ENCRYPTED). Keep AIFINPAY_WALLET_PASSPHRASE — the wallet is unrecoverable without it.\n\n`
-        : `Created ${KEYSTORE} (mode 600, plaintext). For at-rest encryption, set AIFINPAY_WALLET_PASSPHRASE before init.\n\n`,
+        : `Created ${KEYSTORE} (mode 600, plaintext). For at-rest encryption, set AIFINPAY_WALLET_PASSPHRASE before init.\n\n`
     );
+  } else {
+    process.stdout.write(`Existing wallet found at ${KEYSTORE} — keeping it.\n\n`);
   }
 
   // The one-time recovery output.
   //
-  // Shown ONLY on creation, ONLY in the terminal, and ONLY when the keystore is
-  // plaintext. This is NOT the leak the audit (AIFINP-220 §3) forbids — that is
-  // a key written to CHAT or LOGS, where an LLM provider or a log shipper keeps
-  // it forever. This is the deliberate one-time backup prompt every wallet CLI
-  // shows, on a channel the user controls. Opposite things: the owner reading
-  // their own recovery phrase once, vs a secret leaking into a transcript.
+  // Shown only to the successful creator of a plaintext wallet on a TTY.
+  // Piped output (including agent subprocess logs) contains public data only.
   //
   // Encrypted keystores print nothing here: recovery there IS the keystore file
   // plus the passphrase, and re-printing the plaintext secret would defeat the
   // encryption the user just asked for.
-  if (freshlyCreated && !PASSPHRASE) {
+  if (freshlyCreated && !PASSPHRASE && process.stdout.isTTY) {
     process.stdout.write(
       `\n  RECOVERY KEY (shown once, never again):\n\n` +
-      `    ${store.secretB58}\n\n` +
-      `  Save this off this machine NOW. Anyone with it controls the wallet and\n` +
-      `  its funds. Do NOT paste it into a chat, an issue, or a config file — the\n` +
-      `  keystore at ${KEYSTORE} already holds it (encrypt it with\n` +
-      `  AIFINPAY_WALLET_PASSPHRASE). This line is your OFF-machine backup.\n\n`,
+        `    ${store.secretB58}\n\n` +
+        `  Save this off this machine NOW. Anyone with it controls the wallet and\n` +
+        `  its funds. Do NOT paste it into a chat, an issue, or a config file — the\n` +
+        `  keystore at ${KEYSTORE} already holds it (encrypt it with\n` +
+        `  AIFINPAY_WALLET_PASSPHRASE). This line is your OFF-machine backup.\n\n`
     );
   }
 
@@ -169,26 +240,26 @@ if (arg === "init") {
       `  EVM     ${agent.evmAddress}\n` +
       `  Solana  ${agent.solanaAddress}\n` +
       `  Casper  ${agent.casperAddress}\n\n` +
-      `Add this to your MCP client config and restart it:\n\n` +
+      `Add this to your MCP client config and connect/reconnect this MCP server:\n\n` +
       JSON.stringify(
         {
           mcpServers: {
             aifinpay: {
               command: "npx",
-              args: ["-y", "@aifinpay/mcp"],
+              args: ["-y", `@aifinpay/mcp@${VERSION}`],
               env: { AIFINPAY_MAX_USD: "0.10" },
             },
           },
         },
         null,
-        2,
+        2
       ) +
       `\n\nThe secret is NOT in that block on purpose — the server reads the\n` +
-      `keystore. Config files get pasted into chats and committed to git.\n\n` +
+      `keystore. If this server is already connected, call agent_reload after init.\nA new conversation is not required by this server.\n\n` +
       `Back up ${KEYSTORE}. It is the only copy. The derivation is not\n` +
       `BIP-39, so no standard wallet can recover this from a phrase.\n\n` +
-      `The addresses hold nothing yet. Send POL to the EVM address to let the\n` +
-      `agent pay for calls.\n`,
+      `The EVM address is used for Polygon payments. Check its balance before\n` +
+      `funding it or paying for calls.\n`
   );
   process.exit(0);
 }
@@ -200,31 +271,8 @@ if (arg && !arg.startsWith("-")) {
 
 // ── server ────────────────────────────────────────────────────────────────
 
-// Fall back to the keystore so `init` once is genuinely enough. Env still wins:
-// a caller that sets AIFINPAY_AGENT_SECRET explicitly means it.
-if (!process.env.AIFINPAY_AGENT_SECRET) {
-  const store = readKeystore();
-  if (store) {
-    try {
-      const mode = statSync(KEYSTORE).mode & 0o777;
-      if (mode & 0o077) {
-        process.stderr.write(
-          `[warn] [aifinpay-mcp] ${KEYSTORE} is mode ${mode.toString(8)} — readable beyond your user. ` +
-            `Run: chmod 600 ${KEYSTORE}\n`,
-        );
-      }
-    } catch {
-      /* stat failure is not a reason to refuse to start */
-    }
-    process.env.AIFINPAY_AGENT_SECRET = store.secretB58;
-  } else {
-    process.stderr.write(
-      `[info] [aifinpay-mcp] no wallet configured. Run \`npx @aifinpay/mcp init\` once ` +
-        `for a persistent one; starting with a throwaway identity for now.\n`,
-    );
-  }
-}
-
+// Identity selection is shared with the programmatic server and agent_reload.
+// Do not copy a file secret into process.env: it would mask later file updates.
 const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
 const { createServer, loadConfigFromEnv } = await import("../dist/index.js");
 

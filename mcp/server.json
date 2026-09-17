@@ -9,10 +9,7 @@
   "repository": "https://github.com/AiFinPay/sdk",
   "icon": "https://aifinpay.io/favicon.png",
   "categories": ["payments", "web3", "agent-tools"],
-  "tags": [
-    "payments", "ai-agents", "x402", "polygon", "solana",
-    "stablecoins", "usdc", "usdt", "stripe-for-ai", "non-custodial"
-  ],
+  "tags": ["payments", "ai-agents", "x402", "polygon", "solana", "stablecoins", "usdc", "usdt", "stripe-for-ai", "non-custodial"],
   "install": {
     "command": "npx",
     "args": ["@aifinpay/mcp"]

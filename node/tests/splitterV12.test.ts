@@ -14,10 +14,10 @@ import { SPLITTER_DEPLOYMENTS, paymentIdFor } from "../src/unifiedAgent.js";
 // nonce produce the same CREATE address on both — so a test asserting they
 // differ would be wrong.
 const V12 = {
-  polygon:  "0xbD1fa5453f212F096c0213788a645eC597FB4DDe",
+  polygon: "0xbD1fa5453f212F096c0213788a645eC597FB4DDe",
   optimism: "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74",
   botchain: "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
-  xrplevm:  "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
+  xrplevm: "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
 } as const;
 
 describe("B2BSplitter v1.2 migration", () => {

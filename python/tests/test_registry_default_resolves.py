@@ -61,7 +61,7 @@ def test_default_host_matches_the_node_sdk():
     compare against.
     """
     node_agent = Path(__file__).resolve().parents[2] / "node" / "src" / "agent.ts"
-    if not node_agent.exists():          # python package published on its own
+    if not node_agent.exists():  # python package published on its own
         return
     m = re.search(r'DEFAULT_BASE_URL\s*=\s*"([^"]+)"', node_agent.read_text(encoding="utf-8"))
     assert m, "node/src/agent.ts no longer declares DEFAULT_BASE_URL — update this test"

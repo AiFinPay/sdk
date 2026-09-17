@@ -1,0 +1,13 @@
+# Defense-in-depth alongside the `files` allowlist in package.json
+# (dist, README.md, PAYMENT_RECEIPTS.md, LICENSE). Never exclude those here.
+src/
+tests/
+registry/
+scripts/
+tsconfig.json
+vitest.config.ts
+.gitignore
+.mcp.json
+coverage/
+*.tsbuildinfo
+node_modules/

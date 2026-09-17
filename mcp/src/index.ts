@@ -2,12 +2,9 @@
  * @aifinpay/mcp — MCP server exposing AiFinPay's autonomous x402 payment
  * loop as agent-callable tools.
  *
- * Tools:
- *   - agent_address()                    — return Solana + EVM addresses to fund
- *   - agent_call(provider, body)         — registry-resolved paid call (Polygon settle)
- *   - payable_fetch(url, opts?)          — raw-URL paid fetch (legacy Solana path)
- *   - agent_quote(url)                   — inspect 402 cost before paying
- *   - pay_with_split / quote_split       — direct B2BSplitter invoice (advanced)
+ * Tools: public addresses, history, quotas, passport resolution, non-signing
+ * settlement invoices, local wallet reload, and opt-in dev batch quoting.
+ * Signing tools are not registered in this RC.
  *
  * Quick start (stdio transport for Claude Desktop / MCP-aware runtimes):
  *

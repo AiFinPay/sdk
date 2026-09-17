@@ -17,7 +17,7 @@ describe("a prepaid batch cannot be overspent under concurrency", () => {
     const token = await iss.sign({ unit_quota: 5 });
 
     const results = await Promise.all(
-      Array.from({ length: 20 }, () => gate(req("/api/search", { "AIFP-Receipt": token }))),
+      Array.from({ length: 20 }, () => gate(req("/api/search", { "AIFP-Receipt": token })))
     );
 
     const served = results.filter((r) => r.ok);
@@ -52,7 +52,7 @@ describe("a prepaid batch cannot be overspent under concurrency", () => {
     const token = await iss.sign({ resource: "/api/heavy", unit_quota: 10 });
 
     const results = await Promise.all(
-      Array.from({ length: 6 }, () => gate(req("/api/heavy", { "AIFP-Receipt": token }))),
+      Array.from({ length: 6 }, () => gate(req("/api/heavy", { "AIFP-Receipt": token })))
     );
     expect(results.filter((r) => r.ok).length).toBe(3);
   });
@@ -83,7 +83,7 @@ describe("a prepaid batch cannot be overspent under concurrency", () => {
     const token = await iss.sign({ unit_quota: 5 });
 
     const results = await Promise.all(
-      Array.from({ length: 20 }, () => gate(req("/api/search", { "AIFP-Receipt": token }))),
+      Array.from({ length: 20 }, () => gate(req("/api/search", { "AIFP-Receipt": token })))
     );
     // 20 calls served against a 5-unit batch: a 300% giveaway, silent, with a
     // 200 on every one of them.

@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  AifpAuthError,
-  AifpConflictError,
-  AifpMerchant,
-  AifpValidationError,
-  ResourceRegistry,
-} from "../src/index.js";
+import { AifpAuthError, AifpConflictError, AifpMerchant, AifpValidationError, ResourceRegistry } from "../src/index.js";
 
 const SECRET = "sk_live_supersecret_do_not_log_me";
 
@@ -58,9 +52,7 @@ describe("AifpMerchant transport", () => {
       fetch: fetchImpl,
       retries: 3,
     });
-    await expect(m.createResource({ route_pattern: "/a", type: "api" })).rejects.toThrow(
-      /unreachable/,
-    );
+    await expect(m.createResource({ route_pattern: "/a", type: "api" })).rejects.toThrow(/unreachable/);
     expect(attempts).toBe(1);
   });
 
@@ -71,7 +63,12 @@ describe("AifpMerchant transport", () => {
       if (attempts < 3) throw new Error("network blip");
       return { status: 200, body: { resources: [] } };
     });
-    const m = new AifpMerchant({ merchantId: "mrch_1", secret: SECRET, fetch: fetchImpl, retries: 2 });
+    const m = new AifpMerchant({
+      merchantId: "mrch_1",
+      secret: SECRET,
+      fetch: fetchImpl,
+      retries: 2,
+    });
     await m.listResources();
     expect(attempts).toBe(3);
   });
@@ -89,7 +86,7 @@ describe("AifpMerchant error mapping", () => {
     }));
     const m = new AifpMerchant({ merchantId: "mrch_1", secret: SECRET, fetch: fetchImpl });
     await expect(m.createResource({ route_pattern: "/api/search", type: "api" })).rejects.toBeInstanceOf(
-      AifpConflictError,
+      AifpConflictError
     );
     // The id is what turns a conflict into a fix: PATCH that resource.
     await m
@@ -103,9 +100,9 @@ describe("AifpMerchant error mapping", () => {
       body: { error: "AIFP-400", detail: "type must be one of page|api|dataset|mcp_tool|product" },
     }));
     const m = new AifpMerchant({ merchantId: "mrch_1", secret: SECRET, fetch: fetchImpl });
-    await expect(
-      m.createResource({ route_pattern: "/a", type: "wat" as never }),
-    ).rejects.toBeInstanceOf(AifpValidationError);
+    await expect(m.createResource({ route_pattern: "/a", type: "wat" as never })).rejects.toBeInstanceOf(
+      AifpValidationError
+    );
   });
 
   it("403 becomes an auth error and the secret never appears in it", async () => {
@@ -199,7 +196,12 @@ describe("ResourceRegistry", () => {
       if (mode === "fail") throw new Error("control plane down");
       return { status: 200, body: { resources: [resource("/api/search")] } };
     });
-    const m = new AifpMerchant({ merchantId: "mrch_1", secret: SECRET, fetch: fetchImpl, retries: 0 });
+    const m = new AifpMerchant({
+      merchantId: "mrch_1",
+      secret: SECRET,
+      fetch: fetchImpl,
+      retries: 0,
+    });
     const registry = new ResourceRegistry({ merchant: m });
 
     await registry.refresh();
@@ -216,7 +218,12 @@ describe("ResourceRegistry", () => {
     const { fetchImpl } = stubFetch(() => {
       throw new Error("never reachable");
     });
-    const m = new AifpMerchant({ merchantId: "mrch_1", secret: SECRET, fetch: fetchImpl, retries: 0 });
+    const m = new AifpMerchant({
+      merchantId: "mrch_1",
+      secret: SECRET,
+      fetch: fetchImpl,
+      retries: 0,
+    });
     const registry = new ResourceRegistry({ merchant: m });
     await registry.refresh();
     expect(registry.match("/api/search")).toBe(null);
@@ -239,15 +246,34 @@ describe("ensureResources onExisting", () => {
         return new Response(JSON.stringify({ resources: existing }), { status: 200 });
       }
       return new Response(
-        JSON.stringify({ resource: { id: "res_new", ...ROUTE, paywall_enabled: true, unit_weight: null, name: null, created_at: "", durable: true } }),
-        { status: 201 },
+        JSON.stringify({
+          resource: {
+            id: "res_new",
+            ...ROUTE,
+            paywall_enabled: true,
+            unit_weight: null,
+            name: null,
+            created_at: "",
+            durable: true,
+          },
+        }),
+        { status: 201 }
       );
     }) as typeof fetch;
     return { calls, fetchImpl };
   }
 
   it('"skip" leaves an existing route untouched and returns the stored record', async () => {
-    const stored = { id: "res_old", ...ROUTE, tier: "premium", paywall_enabled: true, unit_weight: null, name: "Panel says premium", created_at: "", durable: true };
+    const stored = {
+      id: "res_old",
+      ...ROUTE,
+      tier: "premium",
+      paywall_enabled: true,
+      unit_weight: null,
+      name: "Panel says premium",
+      created_at: "",
+      durable: true,
+    };
     const { calls, fetchImpl } = fakeApi([stored]);
     const m = new AifpMerchant({ merchantId: "mrch_t", secret: "msec_t", fetch: fetchImpl });
 

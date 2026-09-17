@@ -17,8 +17,13 @@
     "src/index.ts",
     "src/server.ts",
     "src/config.ts",
+    "src/identity.ts",
     "src/safe-fetch.ts",
+    "src/api.ts",
     "src/tools/agent-address.ts",
+    "src/tools/agent-history.ts",
+    "src/tools/agent-quota.ts",
+    "src/tools/dev-payment-quote.ts",
     "src/tools/production-control.ts"
   ]
 }

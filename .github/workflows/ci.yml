@@ -27,7 +27,7 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Check
         env:
@@ -37,6 +37,10 @@ jobs:
   node-sdk:
     name: node — @aifinpay/agent (build + test)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24, 26]
     defaults:
       run:
         working-directory: node
@@ -45,7 +49,7 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: node/package-lock.json
 
@@ -56,6 +60,9 @@ jobs:
       # which is the point.
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+
+      - name: Reject high and critical runtime dependency advisories
+        run: npm audit --omit=dev --audit-level=high
 
       # The route table is generated from a byte-for-byte copy of the canonical
       # registry artifact in AiFinPay/evm-contract, where every payment-critical
@@ -92,6 +99,10 @@ jobs:
   wallet:
     name: wallet — @aifinpay/wallet (build + test)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24, 26]
     defaults:
       run:
         working-directory: wallet
@@ -99,7 +110,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: wallet/package-lock.json
       - name: Install dependencies
@@ -118,6 +129,10 @@ jobs:
   mcp-server:
     name: mcp — @aifinpay/mcp (build)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24, 26]
     defaults:
       run:
         working-directory: mcp
@@ -126,7 +141,7 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: mcp/package-lock.json
 
@@ -136,6 +151,9 @@ jobs:
       # against the released SDK.
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+
+      - name: Reject high and critical runtime dependency advisories
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Build (tsc)
         run: npm run build
@@ -164,11 +182,15 @@ jobs:
   mcp-against-source:
     name: mcp — built against the agent in this commit
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24, 26]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: ${{ matrix.node }}
 
       - name: Build and pack the agent from source
         working-directory: node
@@ -216,7 +238,7 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: 22
 
       # Cheap parse-only gate. Examples are not built or installed in CI;
       # this only guarantees the shipped reference bridges are valid JS.

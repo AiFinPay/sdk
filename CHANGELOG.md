@@ -4,6 +4,162 @@ All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
 `1.0.0` onward the public API is stable and changes follow semver.
 
+## 2.0.2 — 2026-09-17
+
+### Added
+
+- **`@aifinpay/mcp-http`** — HTTP/Streamable transport wrapper for
+  `@aifinpay/mcp`. Exposes the AiFinPay MCP server at
+  `https://mcp.aifinpay.io/mcp` for catalogs (Smithery, mcp.so, LobeHub)
+  that require a public HTTP URL. Previously private; now published to npm.
+
+## 2.0.0 — 2026-09-16
+
+**Stable release** — Node `2.0.0`, MCP `2.0.0`, Python `2.0.0`. All RC
+features and security fixes from the `2.0.0-rc.x` lane are now stable.
+
+### Core changes
+
+- **Persistent wallet identity** — `AiFinPayAgent.fromEnvironment()` (Node)
+  and environment-based loading (Python/MCP) select exactly one wallet from
+  configured inputs: `SEED_HASH` → `./aifinpay/agents.json` →
+  `AIFINPAY_AGENT_SECRET` → `~/.aifinpay/agent.json`. Fails on missing or
+  ambiguous configuration; never creates or overwrites a wallet.
+- **Native authentication v2** — requires request-bound challenges from the
+  coordinated backend. The retired unbound proof is refused.
+- **Verified AIFP-1 settlement** — Node `fetchPaid` requires a reviewed
+  Polygon v1.3 deployment pin, fresh independent native/USD price, and
+  matching quote target/calldata before payment.
+- **Deployment registry** — v1.4 deployments for all supported EVM networks
+  (arbitrum, avalanche, base, bnb, optimism, polygon, robinhood, unichain,
+  xrplevm, plus amoy testnet). `resolveDeployment(..., "auto")` prefers v1.4
+  on base/optimism/unichain/xrplevm.
+- **Quota and history APIs** — `getQuota()`, `getDailySpendUsd()`,
+  `Aifp1ReceiptCache.summary()`, and `agent_history()` with `source`
+  parameter (`"transactions"` or `"receipts"`).
+- **Safe error handling** — `toSafeError()` boundary-safe serialization
+  (name/message + allowlisted fields only; never secrets).
+- **Deprecations** — `openSession()` / `reputation()` stubs marked
+  `@deprecated`. BOT Chain (677) deprecated in favor of Robinhood Chain (4663).
+
+### Security
+
+- Pinned `jayson`'s transitive `uuid` dependency to `^11.1.1` in
+  `@aifinpay/agent` and `@aifinpay/mcp` via `overrides`, resolving the
+  moderate `uuid` advisory (GHSA-w5hq-g745-h8pq).
+- Bound API HTTP redirects, timeouts and response sizes; pin receipt issuer.
+  MCP blocks cross-origin credentials/body leakage and private IPv4-mapped
+  IPv6 destinations.
+- Quarantine v1.4 signing until quotes include mutable fee/treasury
+  commitments. Legacy `call()` payments and unbound native v1 authentication
+  are refused; free calls remain available.
+- Pin CI Actions to commit SHAs and reject high/critical runtime dependency
+  advisories.
+
+### Migration
+
+- Upgrade from 1.x: wallet identity loading is now load-only; use
+  `AiFinPayAgent.new()` only when deliberately creating a new ephemeral
+  wallet.
+- Backend must support native auth v2 challenges.
+- Polygon AIFP-1 requires v1.3 deployment pin and fresh price feed.
+
+Read `node/PAYMENT_RECEIPTS.md` for receipt configuration and recovery.
+
+## Unreleased — Node 2.0.0-rc.16 / MCP 2.0.0-rc.14 — 2026-09-13
+
+Minimum Node engine is now 22 (`engines: >=22` in `@aifinpay/agent`,
+`@aifinpay/mcp`, `@aifinpay/wallet`, `@aifinpay/gate`, `@aifinpay/skill`,
+and the example bridges). Node 18/20 are no longer supported. CI now
+builds and tests on 22, 24 and 26. No runtime or API changes.
+
+### Deprecations
+
+- **BOT Chain (chainId: 677) is deprecated in favor of Robinhood Chain (chainId: 4663).**
+  All type definitions, exports, and configuration surfaces now carry `@deprecated`
+  JSDoc annotations. Backward compatibility is maintained — existing code using
+  `botchain` continues to work, but TypeScript will emit deprecation warnings.
+  Migration: replace `botchain` with `robinhood` in chain selections, type
+  parameters, and configuration. The `botchain` export and type entries will be
+  removed in a future major version.
+
+### Security
+
+- Pinned `jayson`'s transitive `uuid` dependency to `^11.1.1` in
+  `@aifinpay/agent` and `@aifinpay/mcp` via `overrides`, resolving the
+  moderate `uuid` advisory (GHSA-w5hq-g745-h8pq). The remaining moderate
+  `stream-json` advisory (GHSA-528h-pc64-c93x) is inherited from
+  `@solana/web3.js` → `jayson`; `jayson@4.3.0` requires `stream-json@^1.9.1`
+  and no patched 1.x release exists. It is tracked as accepted
+  transitive risk and does not meet the high/critical audit threshold.
+
+## Unreleased — Node 2.0.0-rc.15 — 2026-09-13
+
+v1.4 deployments for all supported EVM networks (from `AiFinPay/evm-contract@78240ec`):
+
+- `V14_DEPLOYMENTS` now covers 10 networks (was: amoy + polygon only) — amoy (dev) plus arbitrum, avalanche, base, bnb, optimism, polygon, robinhood, unichain, xrplevm (prod). BOT Chain (677) stays absent: no production deployment exists for it upstream.
+- New `registry/v14/*.json` vendored deployment artifacts + `registry/v14-source.json` provenance, with `scripts/generate-v14-deployments.mjs` (`npm run registry:sync:v14 -- --from <evm-contract>`); `npm run registry:check` now verifies both the v1.3 route table and the v1.4 table.
+- `resolveDeployment(..., "auto")` now prefers v1.4 on base/optimism/unichain/xrplevm (previously v1.2 fallback); botchain remains the only legacy network without v1.4.
+
+## Unreleased — Node 2.0.0-rc.14 — 2026-09-13
+
+Round 2 (medium/low, node-side):
+
+- `getQuota()` / `agent.getQuota()` — typed prepaid-batch reads (filter,
+  sort, per-merchant rollup) ported from the MCP `agent_quota` tool logic.
+- `balance()` is feed-first (env → `/api/price/native` → unknown leg
+  excluded, never fabricated); new additive `prices` / `unknown_legs`
+  fields. Shared `tokenUsd()` helper backs `nativeUsdFor()`.
+- `Aifp1ReceiptCache.summary()` + `agent.getReceiptCacheSummary()` —
+  JWT-free cache inspection for dashboards/MCP.
+- `@deprecated` on the `openSession()` / `reputation()` stubs.
+
+## Unreleased — Node 2.0.0-rc.13 — 2026-09-13
+
+Node↔MCP alignment (non-signing; no settlement semantics change):
+
+- `AiFinPayAgent.settlementRoutes()` / `requestSettlementInvoice()` — validated
+  route/invoice reads over the caller's fetch (MCP `safeFetch`), for the MCP
+  `settlement_routes` / `settlement_invoice` tools to call instead of raw fetch.
+- `toSafeError()` + `SafeErrorShape` — boundary-safe error serialization
+  (name/message + allowlisted public fields only; never secrets).
+- Exported `AGENT_RECEIPT_FIELDS` / `AGENT_TRANSACTION_FIELDS` history
+  allowlists as single source of truth.
+- `AiFinPayAgent.getDailySpendUsd()` — durable ledger read for long-lived
+  hosts; removed dead `checkBudget()` superseded by `checkPerCall`+`reserveDaily`.
+
+## Unreleased — Node/MCP 2.0.0-rc.12 · Python 2.0.0rc1 — 2026-09-12
+
+Security RC; these versions have not been published by this change.
+
+- Preserve existing wallet identity across SDK startup and concurrent MCP
+  initialization. Fail on missing, invalid or ambiguous seed configuration;
+  never overwrite an existing wallet or advertise an unsaved deposit address.
+- Fix v1.3 native/stable tuple ABI. Bind invoice/order/payment ID, independently
+  pin target bytecode, chain, economics and stable token, and wait for mined
+  success. Retain broadcast hashes when confirmation is uncertain.
+- Wire Polygon AIFP-1 `fetchPaid` to that executor. Require a reviewed
+  deployment pin and fresh independent native/USD price. Match quote target
+  and calldata before payment; preserve receipts across content-request errors.
+- Synchronize canonical deployment registry and add explicit Amoy testnet
+  opt-in. Mainnet activation is unchanged. Add matching backend routes via the
+  coordinated dev PR; older backend quotes may be refused.
+- Bound API HTTP redirects, timeouts and response sizes; pin receipt issuer.
+  MCP honors redirect modes and blocks cross-origin credentials/body leakage
+  and private IPv4-mapped IPv6 destinations. Standard x402 USD caps require a
+  known chain/USDC pair and use integer atomic amounts.
+- Quarantine v1.4 signing while quotes omit mutable fee/treasury commitments.
+  Legacy Node/Python `call()` payments and unbound native v1 authentication
+  are refused; free calls remain available. Native auth v2 requires the
+  coordinated backend update. These are intentional breaking security changes.
+- Pin CI Actions to commit SHAs and reject high/critical runtime dependency
+  advisories. Update vulnerable MCP transitive dependencies. Moderate Solana
+  dependency advisories remain tracked; no forced dependency downgrade.
+
+Read `node/PAYMENT_RECEIPTS.md` for recovery and required configuration.
+No mainnet transaction, production activation or package publication is part
+of this release candidate. Passing component tests is not paid end-to-end proof.
+
 ## aifinpay-agent 1.5.0 · @aifinpay/mcp 2.0.0-rc.3 — 2026-08-27
 
 **aifinpay-agent 1.5.0 changes where money goes. Read this before upgrading.**

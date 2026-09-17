@@ -1,0 +1,48 @@
+{
+  "$schema": "./reference/payment-deployments.schema.json",
+  "version": "1.4",
+  "description": "Solana Splitter v1.4 — Program deployment",
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-15T12:08:01.929Z",
+  "ecosystem": "solana",
+  "protocolVersion": "v1.4",
+  "source": {
+    "repo": "AiFinPay/solana-contract",
+    "commit": "e5df8f5436cf646ab495381eee04e0d1a10b4e2f",
+    "path": "deployments/splitter_v14/"
+  },
+  "deployments": [
+    {
+      "cluster": "devnet",
+      "environment": "dev",
+      "testnet": true,
+      "status": "disabled",
+      "settlementEnabled": false,
+      "disabledReason": "Backend Solana receipt verification is not implemented",
+      "programId": "8dty5bD738Z9TzEkDu8vLSnhpJNWtEGMUEcYaKCUTY6y",
+      "idl": {
+        "name": "splitter",
+        "version": "1.4.1"
+      },
+      "sourceArtifact": "deployments/splitter_v14/splitter.devnet.json"
+    },
+    {
+      "cluster": "mainnet",
+      "environment": "prod",
+      "testnet": false,
+      "status": "disabled",
+      "settlementEnabled": false,
+      "disabledReason": "Backend Solana receipt verification is not implemented and upgrade authority is not multisig",
+      "programId": "724Ut31i4ecY4dJ25z8HuZetu3A43xtNkPdk4JdbsfdD",
+      "idl": {
+        "name": "splitter",
+        "version": "1.4.1"
+      },
+      "sourceArtifact": "deployments/splitter_v14/splitter.mainnet.json"
+    }
+  ],
+  "sourceArtifact": {
+    "path": "./splitter/solana/deployments.json",
+    "retrievedAt": "2026-09-15"
+  }
+}

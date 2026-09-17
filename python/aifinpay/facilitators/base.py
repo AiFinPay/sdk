@@ -1,8 +1,11 @@
 """Facilitator protocol — the abstract interface every adapter implements."""
+
 from __future__ import annotations
 
+import ipaddress
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from urllib.parse import urlsplit
 
 import requests
 
@@ -17,10 +20,10 @@ class PayOptions:
     All fields are optional. The SDK applies sensible defaults.
     """
 
-    max_amount_usd: Optional[float] = None
+    max_amount_usd: [float] = None
     """Refuse to pay if the facilitator requires more than this. None = no cap."""
 
-    preferred_chain: Optional[str] = None
+    preferred_chain: [str] = None
     """Hint for facilitators that accept multiple chains (e.g. 'solana', 'polygon')."""
 
     facilitator: str = "auto"
@@ -28,6 +31,31 @@ class PayOptions:
 
     extra_headers: dict = field(default_factory=dict)
     """Extra headers to attach AFTER the facilitator's auth headers."""
+
+
+def canonical_origin(url: str) -> str:
+    """Normalize an http(s) origin exactly like URL.origin in the Node SDK."""
+    parsed = urlsplit(url)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        raise ValueError("expected an absolute http(s) URL without credentials")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("URL has an invalid port") from exc
+    scheme = parsed.scheme.lower()
+    host = parsed.hostname.lower()
+    if ":" in host:
+        # urllib removes IPv6 brackets; put them back so this agrees with
+        # WHATWG URL.origin.  Scope-zone URLs are deliberately unsupported.
+        if "%" in host:
+            raise ValueError("URL has an unsupported IPv6 scope zone")
+        try:
+            host = f"[{ipaddress.IPv6Address(host).compressed}]"
+        except ValueError as exc:
+            raise ValueError("URL has an invalid IPv6 host") from exc
+    if port is None or (scheme == "https" and port == 443) or (scheme == "http" and port == 80):
+        return f"{scheme}://{host}"
+    return f"{scheme}://{host}:{port}"
 
 
 @runtime_checkable
@@ -48,8 +76,9 @@ class Facilitator(Protocol):
     def build_auth(
         self,
         resp: requests.Response,
-        agent: "Agent",
+        agent: Agent,
         opts: PayOptions,
+        context: [dict[str, Any]] = None,
     ) -> dict:
         """Return the kwargs to merge into the retry request.
 

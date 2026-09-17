@@ -1,0 +1,8 @@
+# Local-only artifacts an AI agent should never read, quote, or transmit.
+node_modules/
+*.tgz
+.env
+.env.local
+*.pem
+**/agent.json
+**/agents.json

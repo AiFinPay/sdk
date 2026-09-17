@@ -1,0 +1,3 @@
+allowBuilds:
+  '@daochild/agents-config': false
+  msgpackr-extract: false

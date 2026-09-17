@@ -66,7 +66,14 @@ describe("the advertised price must be the price that is metered", () => {
       resource: undefined,
       tier: undefined, // mount defaults to standard
       registry: registryStub([
-        { id: "res_a", route_pattern: "/api/summarize", type: "api", tier: "premium", unit_weight: null, paywall_enabled: true },
+        {
+          id: "res_a",
+          route_pattern: "/api/summarize",
+          type: "api",
+          tier: "premium",
+          unit_weight: null,
+          paywall_enabled: true,
+        },
       ]),
     });
     const r = await gate(req("/api/summarize"));

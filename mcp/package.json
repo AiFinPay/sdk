@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/mcp",
-  "version": "2.0.0-rc.5",
+  "version": "2.1.0",
   "description": "AiFinPay MCP production-RC control surface for Agent Passport resolution and runtime-verified AIFP-1/AIFP-2 settlement invoices. Signing tools remain gated until @aifinpay/agent v2 release.",
   "type": "module",
   "main": "dist/index.js",
@@ -18,12 +18,22 @@
     "dist",
     "bin",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "skills",
+    "package.json",
+    "package-lock.json",
+    "smithery.yaml"
   ],
   "scripts": {
+    "sync:skills": "node scripts/sync-skills.mjs",
+    "prebuild": "npm run sync:skills",
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"**/*.{js,mjs,cjs,jsx,ts,tsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{js,mjs,cjs,jsx,ts,tsx,json,md}\""
   },
   "keywords": [
     "aifinpay",
@@ -65,18 +75,30 @@
   },
   "bugs": "https://github.com/AiFinPay/sdk/issues",
   "dependencies": {
-    "@aifinpay/agent": "^1.8.1",
+    "@aifinpay/agent": "^2.0.1",
+    "@aifinpay/skill": "^2.0.9",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "bs58": "^6.0.0",
     "tweetnacl": "^1.0.3"
   },
+  "overrides": {
+    "jayson": {
+      "uuid": "^11.1.1"
+    }
+  },
   "devDependencies": {
-    "@types/node": "^20.0.0",
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^22",
+    "eslint": "^10.10.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.0.0",
+    "prettier": "^3.9.6",
     "typescript": "^5.4.0",
+    "typescript-eslint": "^8.0.0",
     "vitest": "^4.1.5"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "publishConfig": {
     "access": "public"

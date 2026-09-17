@@ -41,12 +41,13 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, Math.
 // ── Supported EVM chains for cross-chain settlement ──────────────────────
 // EVM chain IDs (canonical, used by both viem and LiFi).
 export const EVM_CHAINS = {
-  ethereum:  1,
-  polygon:   137,
-  bsc:       56,
-  arbitrum:  42161,
-  optimism:  10,
-  base:      8453,
+  ethereum: 1,
+  polygon: 137,
+  bsc: 56,
+  arbitrum: 42161,
+  optimism: 10,
+  base: 8453,
+  robinhood: 4663,
 } as const;
 
 export type EvmChainName = keyof typeof EVM_CHAINS;
@@ -55,32 +56,33 @@ export type EvmChainName = keyof typeof EVM_CHAINS;
 // exists; bridged USDC.e listed in `USDC_BRIDGED` for legacy compatibility.
 export const USDC_NATIVE: Record<EvmChainName, `0x${string}`> = {
   ethereum: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-  polygon:  "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
-  bsc:      "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", // Binance-Peg BSC-USD; closest analogue
+  polygon: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+  bsc: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", // Binance-Peg BSC-USD; closest analogue
   arbitrum: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
   optimism: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-  base:     "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  base: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  robinhood: "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34", // USDe (Ethena); no Circle USDC on Robinhood
 };
 
 export const USDC_BRIDGED: Partial<Record<EvmChainName, `0x${string}`>> = {
-  polygon:  "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", // USDC.e PoS bridged (deprecated, kept for legacy merchants)
+  polygon: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", // USDC.e PoS bridged (deprecated, kept for legacy merchants)
   arbitrum: "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8", // USDC.e (deprecated)
 };
 
 // ── Quote types ──────────────────────────────────────────────────────────
 
 export interface BridgeQuoteOptions {
-  fromChain:    EvmChainName;
-  toChain:      EvmChainName;
-  fromToken:    `0x${string}`;         // ERC-20 address on source chain
-  toToken:      `0x${string}`;         // ERC-20 address on dest chain
-  fromAmount:   string;                 // base units as string (USDC is 6 decimals)
-  fromAddress:  `0x${string}`;          // agent's EVM address
-  toAddress?:   `0x${string}`;          // defaults to fromAddress
-  slippage?:    number;                 // 0.005 = 0.5%
+  fromChain: EvmChainName;
+  toChain: EvmChainName;
+  fromToken: `0x${string}`; // ERC-20 address on source chain
+  toToken: `0x${string}`; // ERC-20 address on dest chain
+  fromAmount: string; // base units as string (USDC is 6 decimals)
+  fromAddress: `0x${string}`; // agent's EVM address
+  toAddress?: `0x${string}`; // defaults to fromAddress
+  slippage?: number; // 0.005 = 0.5%
   // LiFi accepts `integrator` for analytics + revenue share with project
   // partners. We pass "aifinpay" so all our agent-driven volume is tagged.
-  integrator?:  string;
+  integrator?: string;
 }
 
 // Subset of LiFi's quote response shape. Their full schema is large; we
@@ -89,37 +91,37 @@ export interface BridgeQuoteOptions {
 export interface BridgeQuote {
   // Human-readable summary
   from: { chain: EvmChainName; token: `0x${string}`; amount: string };
-  to:   { chain: EvmChainName; token: `0x${string}`; amount: string; amount_min: string };
+  to: { chain: EvmChainName; token: `0x${string}`; amount: string; amount_min: string };
   fees: { bridge_usd: number; gas_usd: number; total_usd: number };
-  eta_seconds:  number;
-  bridge_tool:  string; // "stargate", "across", "circle-cctp", etc.
+  eta_seconds: number;
+  bridge_tool: string; // "stargate", "across", "circle-cctp", etc.
   // Raw LiFi response. Pass straight to `bridgeExecute()`.
-  raw_quote:    unknown;
+  raw_quote: unknown;
 }
 
 interface LifiQuoteResponse {
   estimate: {
-    fromAmount:    string;
-    toAmount:      string;
-    toAmountMin:   string;
-    feeCosts?:     Array<{ amountUSD?: string; name?: string }>;
-    gasCosts?:     Array<{ amountUSD?: string }>;
+    fromAmount: string;
+    toAmount: string;
+    toAmountMin: string;
+    feeCosts?: Array<{ amountUSD?: string; name?: string }>;
+    gasCosts?: Array<{ amountUSD?: string }>;
     executionDuration?: number;
   };
   transactionRequest: {
-    to:        `0x${string}`;
-    data:      `0x${string}`;
-    value:     string;            // hex (e.g. "0x0")
-    gasLimit:  string;            // hex
-    chainId:   number;
+    to: `0x${string}`;
+    data: `0x${string}`;
+    value: string; // hex (e.g. "0x0")
+    gasLimit: string; // hex
+    chainId: number;
   };
-  tool:        string;
+  tool: string;
   toolDetails?: { name?: string };
   action: {
     fromChainId: number;
-    toChainId:   number;
-    fromToken:   { address: `0x${string}` };
-    toToken:     { address: `0x${string}` };
+    toChainId: number;
+    fromToken: { address: `0x${string}` };
+    toToken: { address: `0x${string}` };
   };
 }
 
@@ -127,14 +129,14 @@ interface LifiQuoteResponse {
 
 export async function bridgeQuote(opts: BridgeQuoteOptions): Promise<BridgeQuote> {
   const fromChainId = EVM_CHAINS[opts.fromChain];
-  const toChainId   = EVM_CHAINS[opts.toChain];
+  const toChainId = EVM_CHAINS[opts.toChain];
 
   const url = new URL(`${LIFI_API}/quote`);
-  url.searchParams.set("fromChain",   String(fromChainId));
-  url.searchParams.set("toChain",     String(toChainId));
-  url.searchParams.set("fromToken",   opts.fromToken);
-  url.searchParams.set("toToken",     opts.toToken);
-  url.searchParams.set("fromAmount",  opts.fromAmount);
+  url.searchParams.set("fromChain", String(fromChainId));
+  url.searchParams.set("toChain", String(toChainId));
+  url.searchParams.set("fromToken", opts.fromToken);
+  url.searchParams.set("toToken", opts.toToken);
+  url.searchParams.set("fromAmount", opts.fromAmount);
   url.searchParams.set("fromAddress", opts.fromAddress);
   if (opts.toAddress) url.searchParams.set("toAddress", opts.toAddress);
   if (opts.slippage !== undefined) url.searchParams.set("slippage", String(opts.slippage));
@@ -158,34 +160,34 @@ export async function bridgeQuote(opts: BridgeQuoteOptions): Promise<BridgeQuote
   const j = (await r.json()) as LifiQuoteResponse;
 
   const bridgeUsd = (j.estimate.feeCosts ?? []).reduce((s, f) => s + Number(f.amountUSD ?? 0), 0);
-  const gasUsd    = (j.estimate.gasCosts ?? []).reduce((s, g) => s + Number(g.amountUSD ?? 0), 0);
+  const gasUsd = (j.estimate.gasCosts ?? []).reduce((s, g) => s + Number(g.amountUSD ?? 0), 0);
 
   return {
     from: { chain: opts.fromChain, token: opts.fromToken, amount: j.estimate.fromAmount },
-    to:   {
-      chain:      opts.toChain,
-      token:      opts.toToken,
-      amount:     j.estimate.toAmount,
+    to: {
+      chain: opts.toChain,
+      token: opts.toToken,
+      amount: j.estimate.toAmount,
       amount_min: j.estimate.toAmountMin,
     },
     fees: { bridge_usd: bridgeUsd, gas_usd: gasUsd, total_usd: bridgeUsd + gasUsd },
     eta_seconds: j.estimate.executionDuration ?? 0,
     bridge_tool: j.toolDetails?.name ?? j.tool,
-    raw_quote:   j,
+    raw_quote: j,
   };
 }
 
 // ── Execute ──────────────────────────────────────────────────────────────
 
 export interface BridgeReceipt {
-  source_tx:     `0x${string}`;
-  source_chain:  EvmChainName;
-  dest_chain:    EvmChainName;
-  bridge_tool:   string;
-  status:        "submitted" | "pending" | "done" | "failed";
+  source_tx: `0x${string}`;
+  source_chain: EvmChainName;
+  dest_chain: EvmChainName;
+  bridge_tool: string;
+  status: "submitted" | "pending" | "done" | "failed";
   // dest_tx is populated only after polling status until completion.
   // Call `bridgeWaitForArrival()` separately if you need it inline.
-  dest_tx?:      string;
+  dest_tx?: string;
 }
 
 /**
@@ -235,7 +237,7 @@ const MAX_BRIDGE_GAS = 3_000_000n;
 async function assertQuoteMatchesTransaction(
   quote: BridgeQuote,
   tx: { to: `0x${string}`; value?: string; gasLimit?: string },
-  publicClient: PublicClient,
+  publicClient: PublicClient
 ): Promise<void> {
   const value = BigInt(tx.value || "0x0");
   const fromToken = String(quote.from?.token ?? "").toLowerCase();
@@ -245,20 +247,20 @@ async function assertQuoteMatchesTransaction(
   if (!bridgingNative && value !== 0n) {
     throw new AiFinPayError(
       `bridgeExecute: quote bridges token ${quote.from?.token} but the transaction sends ` +
-        `${value} native units. A token bridge sends no native value — refusing to sign.`,
+        `${value} native units. A token bridge sends no native value — refusing to sign.`
     );
   }
   if (bridgingNative && value > quotedAmount) {
     throw new AiFinPayError(
       `bridgeExecute: transaction sends ${value} native units but the quote is for ` +
-        `${quotedAmount} — refusing to sign for more than was quoted.`,
+        `${quotedAmount} — refusing to sign for more than was quoted.`
     );
   }
 
   const gas = tx.gasLimit ? BigInt(tx.gasLimit) : 0n;
   if (gas > MAX_BRIDGE_GAS) {
     throw new AiFinPayError(
-      `bridgeExecute: quote asks for ${gas} gas, above the ${MAX_BRIDGE_GAS} ceiling — refusing to sign.`,
+      `bridgeExecute: quote asks for ${gas} gas, above the ${MAX_BRIDGE_GAS} ceiling — refusing to sign.`
     );
   }
 
@@ -273,21 +275,21 @@ async function assertQuoteMatchesTransaction(
   if (!code || code === "0x") {
     throw new AiFinPayError(
       `bridgeExecute: quote sends funds to ${tx.to}, which has no code. Bridge routers are ` +
-        `contracts — refusing to sign a transfer to a plain address.`,
+        `contracts — refusing to sign a transfer to a plain address.`
     );
   }
 }
 
 export async function bridgeExecute(
-  quote:          BridgeQuote,
-  walletClient:   WalletClient,
-  publicClient:   PublicClient,
+  quote: BridgeQuote,
+  walletClient: WalletClient,
+  publicClient: PublicClient
 ): Promise<BridgeReceipt> {
   const raw = quote.raw_quote as LifiQuoteResponse;
-  const tx  = raw.transactionRequest;
+  const tx = raw.transactionRequest;
   if (!tx) {
     throw new AiFinPayError(
-      `bridgeExecute: quote has no transactionRequest — likely returned by /quote/toAmount which we don't use`,
+      `bridgeExecute: quote has no transactionRequest — likely returned by /quote/toAmount which we don't use`
     );
   }
 
@@ -295,7 +297,7 @@ export async function bridgeExecute(
   const chainId = await walletClient.getChainId();
   if (chainId !== tx.chainId) {
     throw new AiFinPayError(
-      `bridgeExecute: walletClient is on chain ${chainId}, quote requires ${tx.chainId} (${quote.from.chain})`,
+      `bridgeExecute: walletClient is on chain ${chainId}, quote requires ${tx.chainId} (${quote.from.chain})`
     );
   }
 
@@ -308,11 +310,11 @@ export async function bridgeExecute(
 
   const hash = await walletClient.sendTransaction({
     account,
-    to:       tx.to,
-    data:     tx.data,
-    value:    BigInt(tx.value || "0x0"),
-    gas:      tx.gasLimit ? BigInt(tx.gasLimit) : undefined,
-    chain:    null,
+    to: tx.to,
+    data: tx.data,
+    value: BigInt(tx.value || "0x0"),
+    gas: tx.gasLimit ? BigInt(tx.gasLimit) : undefined,
+    chain: null,
   });
 
   // Wait for source-chain inclusion only. Dest-chain arrival is async —
@@ -320,20 +322,20 @@ export async function bridgeExecute(
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
   if (receipt.status !== "success") {
     return {
-      source_tx:    hash,
+      source_tx: hash,
       source_chain: quote.from.chain,
-      dest_chain:   quote.to.chain,
-      bridge_tool:  quote.bridge_tool,
-      status:       "failed",
+      dest_chain: quote.to.chain,
+      bridge_tool: quote.bridge_tool,
+      status: "failed",
     };
   }
 
   return {
-    source_tx:    hash,
+    source_tx: hash,
     source_chain: quote.from.chain,
-    dest_chain:   quote.to.chain,
-    bridge_tool:  quote.bridge_tool,
-    status:       "submitted",
+    dest_chain: quote.to.chain,
+    bridge_tool: quote.bridge_tool,
+    status: "submitted",
   };
 }
 
@@ -346,14 +348,14 @@ export async function bridgeExecute(
  * Returns once status is "DONE" or "FAILED", or throws on timeout.
  */
 export async function bridgeWaitForArrival(
-  sourceTxHash:  `0x${string}`,
+  sourceTxHash: `0x${string}`,
   opts: {
     pollIntervalMs?: number;
-    timeoutMs?:      number;
-  } = {},
+    timeoutMs?: number;
+  } = {}
 ): Promise<{ status: "done" | "failed"; dest_tx?: string; raw: unknown }> {
   const pollMs = opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-  const timeoutMs = opts.timeoutMs   ?? 30 * 60 * 1000; // 30 min ceiling
+  const timeoutMs = opts.timeoutMs ?? 30 * 60 * 1000; // 30 min ceiling
   const deadline = Date.now() + timeoutMs;
 
   let consecutiveUnreadable = 0;
@@ -385,7 +387,7 @@ export async function bridgeWaitForArrival(
     if (r.ok) {
       consecutiveUnreadable = 0;
       const j = (await r.json()) as {
-        status?:    string;
+        status?: string;
         receiving?: { txHash?: string };
       };
       if (j.status === "DONE") {
@@ -438,6 +440,6 @@ export async function bridgeWaitForArrival(
     `bridgeWaitForArrival: gave up after ${timeoutMs}ms without observing completion of ` +
       `${sourceTxHash}. The transfer may still be in flight or already done` +
       (lastStatusCode ? ` (last status response: HTTP ${lastStatusCode})` : ``) +
-      `. Check it at https://scan.li.fi/tx/${sourceTxHash}`,
+      `. Check it at https://scan.li.fi/tx/${sourceTxHash}`
   );
 }

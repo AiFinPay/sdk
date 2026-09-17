@@ -13,38 +13,35 @@
  * Responsibilities". Each check below cites the clause it implements, because
  * a check nobody can trace back to a requirement is a check somebody deletes.
  */
-import {
-  keccak256, stringToHex, parseAbi,
-  type PublicClient, type WalletClient, type Address, type Hex,
-} from "viem";
+import { keccak256, stringToHex, parseAbi, type PublicClient, type WalletClient, type Address, type Hex } from "viem";
 
 /** The Quote struct, exactly as B2BSplitterV14 declares it. Field ORDER is part
  *  of the EIP-712 hash — this mirrors _QUOTE_TYPEHASH and must not be reordered. */
 export interface V14Quote {
-  payer:       Address;
-  merchant:    Address;
-  token:       Address;   // address(0) = native
-  grossAmount: string;    // decimal wei / minor units
-  ipCreator:   Address;
-  validUntil:  string;    // unix seconds
+  payer: Address;
+  merchant: Address;
+  token: Address; // address(0) = native
+  grossAmount: string; // decimal wei / minor units
+  ipCreator: Address;
+  validUntil: string; // unix seconds
   orderIdHash: Hex;
-  nonce:       string;
-  routeId:     Hex;
+  nonce: string;
+  routeId: Hex;
 }
 
 /** What `/v1/quote` returns under `settlement_call` when settlement_version is 1.4. */
 export interface V14SettlementCall {
-  chain:             string;
-  contract:          Address;
-  splitter_version:  "1.4";
-  route:             string;
-  asset:             string;
-  function:          string;
-  arg_encoding:      "struct+signature";
-  field_order:       string[];
-  value_wei:         string;
-  args:              { quote: V14Quote; signature: Hex };
-  bound_to_payer?:   Address;
+  chain: string;
+  contract: Address;
+  splitter_version: "1.4";
+  route: string;
+  asset: string;
+  function: string;
+  arg_encoding: "struct+signature";
+  field_order: string[];
+  value_wei: string;
+  args: { quote: V14Quote; signature: Hex };
+  bound_to_payer?: Address;
   nonce_at_signing?: string;
 }
 
@@ -103,7 +100,8 @@ export interface V14ValidateOptions {
 }
 
 /**
- * Every check §8 requires, before anything is broadcast.
+ * Read-only structural checks. Success does not authenticate the signer,
+ * deployment, fees or treasury and does not authorize settlement.
  *
  * Throws on the first failure with a code, because these are not equivalent:
  * an expired quote should be re-requested, a foreign payer is a caller bug, and
@@ -111,14 +109,18 @@ export interface V14ValidateOptions {
  */
 export function validateV14SettlementCall(
   call: V14SettlementCall,
-  opts: V14ValidateOptions = {},
+  opts: V14ValidateOptions = {}
 ): { route: string; expiresInSeconds: number; orderIdChecked: boolean } {
-  const fail = (code: string, msg: string) => { throw new V14SettlementError(code, msg); };
+  const fail = (code: string, msg: string) => {
+    throw new V14SettlementError(code, msg);
+  };
 
   if (!call || typeof call !== "object") fail("V14_MALFORMED", "no settlement call");
   if (call.splitter_version !== "1.4") {
-    fail("V14_WRONG_VERSION",
-      `expected a v1.4 settlement call, got ${String(call.splitter_version)} — v1.2 and v1.3 settle through a different path`);
+    fail(
+      "V14_WRONG_VERSION",
+      `expected a v1.4 settlement call, got ${String(call.splitter_version)} — v1.2 and v1.3 settle through a different path`
+    );
   }
   const q = call.args && call.args.quote;
   const sig = call.args && call.args.signature;
@@ -135,16 +137,20 @@ export function validateV14SettlementCall(
   for (const extra of opts.allowRoutes || []) allowed[routeIdOf(extra).toLowerCase()] = extra;
   const route = allowed[lc(q.routeId)];
   if (!route) {
-    fail("V14_UNKNOWN_ROUTE",
+    fail(
+      "V14_UNKNOWN_ROUTE",
       `routeId ${q.routeId} is not one this SDK understands (${Object.values(allowed).join(", ")}). ` +
-      `A route added after this SDK shipped is expected — upgrade rather than force it.`);
+        `A route added after this SDK shipped is expected — upgrade rather than force it.`
+    );
   }
 
   // §8.2 — the contract enforces payer == msg.sender. Catching it here costs
   // nothing; catching it on-chain costs the gas of a reverted transaction.
   if (opts.payer && lc(opts.payer) !== lc(q.payer)) {
-    fail("V14_WRONG_PAYER",
-      `this quote is signed for ${q.payer} and cannot be settled by ${opts.payer} — request one for your own address`);
+    fail(
+      "V14_WRONG_PAYER",
+      `this quote is signed for ${q.payer} and cannot be settled by ${opts.payer} — request one for your own address`
+    );
   }
   if (call.bound_to_payer && lc(call.bound_to_payer) !== lc(q.payer)) {
     fail("V14_MALFORMED", "bound_to_payer disagrees with the signed quote — do not submit this");
@@ -156,8 +162,10 @@ export function validateV14SettlementCall(
   let orderIdChecked = false;
   if (opts.orderId !== undefined) {
     if (lc(keccak256(stringToHex(opts.orderId))) !== lc(q.orderIdHash)) {
-      fail("V14_ORDER_MISMATCH",
-        `this quote settles a different order: orderIdHash does not match keccak256("${opts.orderId}")`);
+      fail(
+        "V14_ORDER_MISMATCH",
+        `this quote settles a different order: orderIdHash does not match keccak256("${opts.orderId}")`
+      );
     }
     orderIdChecked = true;
   }
@@ -171,16 +179,17 @@ export function validateV14SettlementCall(
     fail("V14_EXPIRED", `quote expired ${-expiresIn}s ago — request a fresh one, do not submit this`);
   }
   if (expiresIn < need) {
-    fail("V14_EXPIRING",
+    fail(
+      "V14_EXPIRING",
       `quote expires in ${expiresIn}s, less than the ${need}s of headroom required — ` +
-      `it would likely revert SignatureExpired after you have paid gas`);
+        `it would likely revert SignatureExpired after you have paid gas`
+    );
   }
 
   // §8.5 — msg.value must equal grossAmount exactly for native. The contract
   // reverts IncorrectNativeValue on any difference, in either direction.
   if (lc(q.token) === ZERO && String(call.value_wei) !== String(q.grossAmount)) {
-    fail("V14_VALUE_MISMATCH",
-      `value_wei (${call.value_wei}) must equal the signed grossAmount (${q.grossAmount})`);
+    fail("V14_VALUE_MISMATCH", `value_wei (${call.value_wei}) must equal the signed grossAmount (${q.grossAmount})`);
   }
 
   return { route: route as string, expiresInSeconds: expiresIn, orderIdChecked };
@@ -206,91 +215,75 @@ const NONCE_ABI = parseAbi([
  */
 export async function checkV14Submittable(
   publicClient: PublicClient,
-  call: V14SettlementCall,
+  call: V14SettlementCall
 ): Promise<{ submittable: true } | { submittable: false; reason: string; code: string }> {
   const q = call.args.quote;
   const [spent, expected, paused] = await Promise.all([
-    publicClient.readContract({ address: call.contract, abi: NONCE_ABI, functionName: "consumedNonce", args: [q.payer, BigInt(q.nonce)] }),
-    publicClient.readContract({ address: call.contract, abi: NONCE_ABI, functionName: "payerNonce", args: [q.payer] }),
+    publicClient.readContract({
+      address: call.contract,
+      abi: NONCE_ABI,
+      functionName: "consumedNonce",
+      args: [q.payer, BigInt(q.nonce)],
+    }),
+    publicClient.readContract({
+      address: call.contract,
+      abi: NONCE_ABI,
+      functionName: "payerNonce",
+      args: [q.payer],
+    }),
     publicClient.readContract({ address: call.contract, abi: NONCE_ABI, functionName: "paused" }),
   ]);
 
   if (paused) {
-    return { submittable: false, code: "V14_PAUSED",
-      reason: "the splitter is paused — every settlement reverts until it is unpaused" };
+    return {
+      submittable: false,
+      code: "V14_PAUSED",
+      reason: "the splitter is paused — every settlement reverts until it is unpaused",
+    };
   }
   if (spent) {
-    return { submittable: false, code: "V14_ALREADY_SETTLED",
-      reason: `nonce ${q.nonce} has already been spent by ${q.payer} — this quote is settled, do not pay twice` };
+    return {
+      submittable: false,
+      code: "V14_ALREADY_SETTLED",
+      reason: `nonce ${q.nonce} has already been spent by ${q.payer} — this quote is settled, do not pay twice`,
+    };
   }
   if (BigInt(expected) !== BigInt(q.nonce)) {
-    return { submittable: false, code: "V14_STALE_NONCE",
-      reason: `this quote was signed at nonce ${q.nonce} but the contract now expects ${expected} — ` +
-              `another payment from this wallet settled first; request a fresh quote` };
+    return {
+      submittable: false,
+      code: "V14_STALE_NONCE",
+      reason:
+        `this quote was signed at nonce ${q.nonce} but the contract now expects ${expected} — ` +
+        `another payment from this wallet settled first; request a fresh quote`,
+    };
   }
   return { submittable: true };
 }
 
-const SETTLE_ABI = parseAbi([
-  "function settleNative((address payer,address merchant,address token,uint256 grossAmount,address ipCreator,uint256 validUntil,bytes32 orderIdHash,uint256 nonce,bytes32 routeId) quote, bytes signature) payable",
-  "function settleStable((address payer,address merchant,address token,uint256 grossAmount,address ipCreator,uint256 validUntil,bytes32 orderIdHash,uint256 nonce,bytes32 routeId) quote, bytes signature)",
-]);
-
-const asTuple = (q: V14Quote) => ({
-  payer: q.payer, merchant: q.merchant, token: q.token,
-  grossAmount: BigInt(q.grossAmount), ipCreator: q.ipCreator,
-  validUntil: BigInt(q.validUntil), orderIdHash: q.orderIdHash,
-  nonce: BigInt(q.nonce), routeId: q.routeId,
-});
-
 /**
- * Validate, check submittability, then send.
- *
- * The order matters and is not stylistic: every check that can be made without
- * the chain runs before the one that costs a round trip, and all of them run
- * before anything is broadcast. Once `writeContract` is called the agent has
- * spent gas whatever happens next.
+ * v1.4 signing is quarantined. Its current signed Quote omits mutable profile
+ * fees and treasury. RPC preflight cannot bind those values at execution time.
+ * Keep the exported API for callers to handle the refusal, but provide no
+ * bypass: re-enabling requires a contract-bound economics commitment, reviewed
+ * deployment/signer/token pins, approval handling and mined-success recovery.
+ * Validation and nonce inspection above remain read-only diagnostics.
  */
 export async function executeV14Settlement(
-  call: V14SettlementCall,
-  ctx: {
+  _call: V14SettlementCall,
+  _ctx: {
     publicClient: PublicClient;
     walletClient: WalletClient;
     account: Address;
     orderId?: string;
     minSecondsRemaining?: number;
-    /** Skip the on-chain pre-flight. Only for a caller that has just done it. */
+    /** @deprecated Cannot bypass the v1.4 settlement quarantine. */
     skipPreflight?: boolean;
-  },
+  }
 ): Promise<{ hash: Hex; route: string }> {
-  const { route } = validateV14SettlementCall(call, {
-    orderId: ctx.orderId, payer: ctx.account, minSecondsRemaining: ctx.minSecondsRemaining,
-  });
-
-  if (!ctx.skipPreflight) {
-    const pre = await checkV14Submittable(ctx.publicClient, call);
-    if (!pre.submittable) throw new V14SettlementError(pre.code, pre.reason);
-  }
-
-  const q = call.args.quote;
-  const native = lc(q.token) === ZERO;
-  if (!native) {
-    // §9.1 — settleStable needs an allowance first. Refused rather than
-    // silently attempted: approving on the agent's behalf is a decision the
-    // agent's own policy layer makes, not this function.
-    throw new V14SettlementError("V14_STABLE_NOT_SUPPORTED",
-      "stablecoin settlement requires approve(splitter, grossAmount) first and is not yet wired here — " +
-      "quote in native for now");
-  }
-
-  const hash = await ctx.walletClient.writeContract({
-    address: call.contract,
-    abi: SETTLE_ABI,
-    functionName: "settleNative",
-    args: [asTuple(q), call.args.signature],
-    value: BigInt(q.grossAmount),
-    account: ctx.account,
-    chain: null,
-  });
-  return { hash, route };
+  throw new V14SettlementError(
+    "V14_SETTLEMENT_DISABLED",
+    "v1.4 settlement is disabled: signed quotes do not bind mutable fees and treasury. " +
+      "Use a separately reviewed v1.3 route or wait for the contract and SDK upgrade; " +
+      "do not manually submit this quote or automatically fall back to another contract."
+  );
 }

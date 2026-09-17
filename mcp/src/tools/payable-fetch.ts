@@ -28,8 +28,7 @@ export function payableFetchTool() {
         },
         body: {
           type: "string",
-          description:
-            "Request body (string). Set Content-Type via headers if non-JSON.",
+          description: "Request body (string). Set Content-Type via headers if non-JSON.",
         },
         headers: {
           type: "object",
@@ -40,12 +39,11 @@ export function payableFetchTool() {
           type: "number",
           description:
             "Refuse to pay if the facilitator wants more than this. " +
-            "Defaults to AIFINPAY_MAX_USD env or no cap.",
+            "Capped by AIFINPAY_MAX_USD when the operator set one — this value can only lower it, never raise it.",
         },
         facilitator: {
           type: "string",
-          description:
-            "Force a facilitator: 'aifinpay' | 'coinbase-x402'. Default 'auto'.",
+          description: "Force a facilitator: 'aifinpay' | 'coinbase-x402'. Default 'auto'.",
         },
       },
       required: ["url"],
@@ -56,26 +54,49 @@ export function payableFetchTool() {
   };
 }
 
-export async function runPayableFetch(
-  ctx: ToolContext,
-  args: Record<string, unknown>,
-) {
+export async function runPayableFetch(ctx: ToolContext, args: Record<string, unknown>) {
   const url = String(args.url ?? "");
   if (!url) return errorResult("missing required arg: url");
   const method = String(args.method ?? "GET").toUpperCase();
   const body = args.body ? String(args.body) : undefined;
   const headers =
-    typeof args.headers === "object" && args.headers !== null
-      ? (args.headers as Record<string, string>)
-      : undefined;
+    typeof args.headers === "object" && args.headers !== null ? (args.headers as Record<string, string>) : undefined;
 
+  // The model may NARROW the operator's cap, never widen it.
+  //
+  // This read `args.max_amount_usd ?? config.maxAmountUsd`, so a tool argument
+  // replaced the operator's limit outright: AIFINPAY_MAX_USD=0.10 and a model
+  // that asked for max_amount_usd: 1000 got 1000. The cap an operator sets is
+  // the one thing in this server they cannot express any other way, and it was
+  // the one a prompt could overwrite.
+  //
+  // Latent rather than exploited — payable_fetch is not registered on the
+  // current server — but the file is what SDK 2.0 re-registers, and a spend cap
+  // that a caller can raise is not a cap.
+  //
+  // Math.min in one direction only: unset operator cap means no policy to
+  // violate, so a model-supplied value stands on its own.
+  const requestedMax =
+    typeof args.max_amount_usd === "number" && Number.isFinite(args.max_amount_usd) ? args.max_amount_usd : undefined;
+  const operatorMax = ctx.config.maxAmountUsd;
+  if (
+    args.max_amount_usd !== undefined &&
+    (typeof args.max_amount_usd !== "number" || !Number.isFinite(args.max_amount_usd) || args.max_amount_usd <= 0)
+  ) {
+    return errorResult("max_amount_usd must be a positive finite USD amount.");
+  }
+  if (operatorMax !== undefined && (!Number.isFinite(operatorMax) || operatorMax <= 0)) {
+    return errorResult("AIFINPAY_MAX_USD must be a positive finite USD amount.");
+  }
   const maxAmountUsd =
-    typeof args.max_amount_usd === "number"
-      ? args.max_amount_usd
-      : ctx.config.maxAmountUsd;
+    operatorMax === undefined
+      ? requestedMax
+      : requestedMax === undefined
+        ? operatorMax
+        : Math.min(operatorMax, requestedMax);
 
-  const forcedFacilitator =
-    typeof args.facilitator === "string" ? (args.facilitator as string) : undefined;
+  const forcedFacilitator = typeof args.facilitator === "string" ? (args.facilitator as string) : undefined;
+  const gatewayOrigins = ctx.config.gatewayOrigins ?? ["https://gateway.aifinpay.io"];
 
   try {
     // Two payment protocols answer a 402 here, and this tool used to speak only
@@ -97,14 +118,29 @@ export async function runPayableFetch(
     // stated x402 intent, so skip AIFP-1 entirely for them.
     let resp: Response | null = null;
 
-    if (!forcedFacilitator) {
-      resp = await ctx.agent.fetchPaid(url, { method, body, headers });
+    let isConfiguredGateway = false;
+    try {
+      isConfiguredGateway = gatewayOrigins.includes(new URL(url).origin);
+    } catch {
+      /* inner.pay reports malformed URLs */
+    }
+
+    if (!forcedFacilitator && isConfiguredGateway) {
+      resp = await ctx.agent.fetchPaid(
+        url,
+        { method, body, headers },
+        {
+          apiBaseUrl: ctx.config.baseUrl,
+          gatewayOrigins: ctx.config.gatewayOrigins,
+          resourcePathMode: ctx.config.gatewayPathMode,
+          maxAmountUsd,
+        }
+      );
       if (resp === null) {
         // Budget cap hit with on_limit_exceeded="skip" — do NOT then try to pay
         // the same call via x402; that would defeat the cap the caller set.
         return errorResult(
-          "payment skipped: the per-call or daily budget cap was reached " +
-            "(on_limit_exceeded is set to skip).",
+          "payment skipped: the per-call or daily budget cap was reached " + "(on_limit_exceeded is set to skip)."
         );
       }
       if (resp.status === 402) {
@@ -138,18 +174,45 @@ export async function runPayableFetch(
               body: text,
             },
             null,
-            2,
+            2
           ),
         },
       ],
     };
   } catch (e) {
-    const err = e as Error;
+    const err = e as Error & { txRef?: string; quoteId?: string; recovery?: unknown };
+    if (err.name === "Aifp1PayError" && err.recovery !== null && typeof err.recovery === "object") {
+      return errorResult(
+        `${err.name}: ${err.message}`,
+        "AIFP-1 settlement already completed on-chain; do not submit a second payment. Use the public recovery context below to retry receipt issuance.",
+        JSON.stringify({
+          txRef: err.txRef,
+          quoteId: err.quoteId,
+          recovery: err.recovery,
+        }),
+        "Docs: https://aifinpay.io/docs"
+      );
+    }
+    const isAifp1Gateway = gatewayOrigins.includes(
+      (() => {
+        try {
+          return new URL(url).origin;
+        } catch {
+          return "";
+        }
+      })()
+    );
+    const originHint =
+      !isAifp1Gateway && /AIFP-1|AIFP-402|gateway/i.test(err.message)
+        ? "This looks like an AIFP-1 gateway, but its origin is not configured; add its exact HTTPS origin to AIFINPAY_GATEWAY_ORIGINS."
+        : undefined;
     return errorResult(
-      `${err.constructor.name}: ${err.message}`,
-      `Tip: ensure agent ${ctx.agent.solanaAddress} has a funded Seat PDA, ` +
-        `or use the unified \`agent_call\` tool (Polygon settlement). ` +
-        `Docs: https://aifinpay.io/docs`,
+      `${err.name}: ${err.message}`,
+      isAifp1Gateway
+        ? `Tip: ensure Polygon EVM address ${ctx.agent.evmAddress} is funded for AIFP-1 settlement.`
+        : `Tip: ensure agent ${ctx.agent.solanaAddress} has a funded Seat PDA, or use the unified \`agent_call\` tool (Polygon settlement).`,
+      ...(originHint ? [originHint] : []),
+      "Docs: https://aifinpay.io/docs"
     );
   }
 }

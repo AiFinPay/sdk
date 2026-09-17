@@ -1,0 +1,15 @@
+# Local build output (also covered at repo root)
+dist/
+*.tsbuildinfo
+
+# Test / coverage artifacts
+coverage/
+
+# Registry inputs may carry local provenance — keep source.json tracked, ignore locals
+*.local.json
+
+# Host-local configs may carry secrets
+.mcp.json
+
+# Generated files - can be regenerated from @aifinpay/deployments
+src/generated/*.generated.ts

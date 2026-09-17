@@ -93,10 +93,13 @@ sdk/
 
 | Пакет | Шлях | Версія | Опис |
 |---|---|---|---|
-| `aifinpay-agent` | `python/` | `1.4.0` | Python SDK |
-| `@aifinpay/agent` | `node/` | `1.8.1` | Node/TypeScript SDK |
-| `@aifinpay/mcp` | `mcp/` | `1.5.1` | MCP сервер |
+| `aifinpay-agent` | `python/` | `2.0.0` | Python SDK |
+| `@aifinpay/agent` | `node/` | `2.0.0` | Node/TypeScript SDK |
+| `@aifinpay/mcp` | `mcp/` | `2.0.0` | MCP сервер |
 | `@aifinpay/mcp-http` | `mcp-http/` | `1.0.0` (private) | HTTP transport для каталогів |
+| `@aifinpay/gate` | `gate/` | `0.3.2` | Merchant paywall |
+| `@aifinpay/wallet` | `wallet/` | `1.1.0` | Light wallet / keystore |
+| `@aifinpay/deployments` | `deployments/` | `1.0.0` | Registry grabber (private) |
 
 ## 5. Key classes / API surfaces
 
@@ -131,12 +134,16 @@ sdk/
 ## 6. Підтримувані мережі
 
 ### EVM chains (direct native-token settlement)
-- Polygon (default, `payMatic` v1.1 / `payNative` v1.2)
-- Base
-- Optimism
-- Unichain
-- BOT Chain
-- XRPL EVM
+- Polygon (default, `payMatic` v1.1 / `payNative` v1.2 / v1.4)
+- Base (v1.4)
+- Optimism (v1.4)
+- Unichain (v1.4)
+- Robinhood (v1.4) — replaced BOT Chain (677, deprecated)
+- XRPL EVM (v1.4)
+- Arbitrum (v1.4)
+- Avalanche (v1.4)
+- BNB (v1.4)
+- Amoy (testnet, v1.4)
 
 ### Solana
 - Mainnet-beta Anchor program: `5g9zWHF1Vv6GiGpA2ZbJQbSCDZd5hAk9AyvabRJvKFx2`

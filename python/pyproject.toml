@@ -4,11 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aifinpay-agent"
-version = "1.5.0"
+version = "2.0.0"
 description = "Unified agent-economy SDK for autonomous AI agents — chain-opaque AiFinPayAgent surface (call/balance/verify) over Polygon and Solana execution environments. Non-custodial, x402-native."
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
   { name = "CoinSecurities (SECCO)", email = "contact@aifinpay.io" },
 ]
@@ -24,7 +25,6 @@ keywords = [
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
@@ -50,6 +50,10 @@ legacy = [
   "base58>=2.1",
   "requests>=2.28",
 ]
+dev = [
+  "ruff>=0.6",
+  "black>=24.0",
+]
 
 [project.urls]
 Homepage = "https://aifinpay.io"
@@ -60,3 +64,35 @@ Issues = "https://github.com/AiFinPay/sdk/issues"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["aifinpay*"]
+
+[tool.black]
+line-length = 120
+target-version = ["py39", "py310", "py311", "py312"]
+include = '\.pyi?$'
+extend-exclude = """
+(
+  | dist
+  | build
+  | \\.git
+  | \\.tox
+  | \\.venv
+  | __pycache__
+  | \\.egg-info
+)
+"""
+
+[tool.ruff]
+target-version = "py39"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B", "C4", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"

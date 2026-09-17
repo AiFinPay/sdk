@@ -16,7 +16,6 @@ afterAll(() => {
   for (const s of servers) s.close();
 });
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 async function listen(app: any): Promise<string> {
   const server: Server = await new Promise((resolve) => {
     const s = app.listen(0, "127.0.0.1", () => resolve(s));
@@ -37,7 +36,7 @@ async function startApp(express: any, jwks: { keys: object[] }): Promise<string>
       jwks,
       store: new MemoryStore(),
     }),
-    (req: any, res: any) => res.json({ ok: true, remaining: req.aifp?.remaining }),
+    (req: any, res: any) => res.json({ ok: true, remaining: req.aifp?.remaining })
   );
   return listen(app);
 }
@@ -88,11 +87,9 @@ for (const [label, moduleName] of majors) {
           jwks: iss.jwks,
           store: new MemoryStore(),
         }),
-        (_req: any, res: any) => res.json({ ok: true }),
+        (_req: any, res: any) => res.json({ ok: true })
       );
-      app.use((_err: unknown, _req: any, res: any, _next: any) =>
-        res.status(500).json({ boom: true }),
-      );
+      app.use((_err: unknown, _req: any, res: any, _next: any) => res.status(500).json({ boom: true }));
 
       const base = await listen(app);
       const res = await fetch(`${base}/api/search`);

@@ -2,35 +2,109 @@
 /**
  * `npx @aifinpay/wallet` — create or show an agent wallet, no heavy install.
  *
- *   npx @aifinpay/wallet          create one if absent, else show it
- *   npx @aifinpay/wallet new      create (refuses to overwrite a funded one)
- *   npx @aifinpay/wallet show     print the existing wallet's addresses
- *   npx @aifinpay/wallet export   print the seed to back up
+ *   npx @aifinpay/wallet new          create (refuses to overwrite, encrypted by default)
+ *   npx @aifinpay/wallet new --plain  create unencrypted legacy keystore
+ *   npx @aifinpay/wallet show         print the existing wallet's addresses
+ *   npx @aifinpay/wallet export       print the seed to back up
  *
  * The keystore is ~/.aifinpay/agent.json (mode 600) — the same file
  * @aifinpay/mcp reads, so `npx @aifinpay/mcp` picks up this wallet with no
  * further config.
+ *
+ * SECURITY: New wallets are encrypted by default (scrypt-aes-256-gcm).
+ * Use --plain to create legacy unencrypted keystores.
+ * Use AIFINPAY_WALLET_PASSPHRASE environment variable for non-interactive mode.
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, statSync, appendFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { pathToFileURL, fileURLToPath } from "node:url";
 import { homedir } from "node:os";
-import { newWallet, walletFromSolanaSecret, type DerivedWallet } from "./index.js";
+import { createCipheriv, createDecipheriv, scryptSync, randomBytes, randomFillSync } from "node:crypto";
+import { sha3_256 } from "@noble/hashes/sha3";
+import { newWallet, walletFromSolanaSecret, walletFromSeed, type DerivedWallet, type DerivationMode } from "./index.js";
 
-const HOME = process.env.AIFINPAY_HOME || join(homedir(), ".aifinpay");
-const KEYSTORE = join(HOME, "agent.json");
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function readStore(): { secretB58: string; seedHex?: string } | null {
+function getPaths() {
+  const HOME = process.env.AIFINPAY_HOME || join(homedir(), ".aifinpay");
+  const KEYSTORE = join(HOME, "agent.json");
+  const ENV_FILE = join(HOME, ".env");
+  const INSTRUCTIONS_FILE = join(HOME, "instructions.md");
+  const RULES_FILE = join(HOME, "rules.md");
+  const AIIGNORE_FILE = join(HOME, ".aiignore");
+  return { HOME, KEYSTORE, ENV_FILE, INSTRUCTIONS_FILE, RULES_FILE, AIIGNORE_FILE };
+}
+
+type EncryptedKeystore = {
+  enc: "scrypt-aes-256-gcm";
+  salt: string;
+  iv: string;
+  tag: string;
+  ct: string;
+};
+
+type PlainKeystore = {
+  secretB58: string;
+  seedHex?: string;
+  created?: string;
+  derivationMode?: DerivationMode;
+};
+
+type KeystoreFile = PlainKeystore | (EncryptedKeystore & { created?: string; derivationMode?: DerivationMode });
+
+function readStore(): KeystoreFile | null {
+  const { KEYSTORE } = getPaths();
   if (!existsSync(KEYSTORE)) return null;
   try {
     const p = JSON.parse(readFileSync(KEYSTORE, "utf8"));
-    return typeof p?.secretB58 === "string" ? p : null;
+    if (typeof p === "object" && p !== null) {
+      if ("enc" in p && typeof p.enc === "string") return p as EncryptedKeystore & { created?: string };
+      if (typeof (p as PlainKeystore).secretB58 === "string") return p as PlainKeystore;
+    }
+    return null;
   } catch {
     return null;
   }
 }
 
-function print(w: DerivedWallet, created: boolean) {
-  if (created) process.stdout.write(`Created ${KEYSTORE} (mode 600).\n\n`);
+function encryptSecret(secretB58: string, passphrase: string): EncryptedKeystore {
+  const salt = randomBytes(16);
+  const iv = randomBytes(12);
+  const key = scryptSync(passphrase, salt, 32, {
+    N: 1 << 15,
+    r: 8,
+    p: 1,
+    maxmem: 64 * 1024 * 1024,
+  });
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const ct = Buffer.concat([cipher.update(secretB58, "utf8"), cipher.final()]);
+  return {
+    enc: "scrypt-aes-256-gcm",
+    salt: salt.toString("base64"),
+    iv: iv.toString("base64"),
+    tag: cipher.getAuthTag().toString("base64"),
+    ct: ct.toString("base64"),
+  };
+}
+
+function decrypt(store: EncryptedKeystore, passphrase: string): string {
+  const key = scryptSync(passphrase, Buffer.from(store.salt, "base64"), 32, {
+    N: 1 << 15,
+    r: 8,
+    p: 1,
+    maxmem: 64 * 1024 * 1024,
+  });
+  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(store.iv, "base64"));
+  decipher.setAuthTag(Buffer.from(store.tag, "base64"));
+  return Buffer.concat([
+    decipher.update(Buffer.from(store.ct, "base64")),
+    decipher.final(),
+  ]).toString("utf8");
+}
+
+function print(w: DerivedWallet, created: boolean, isEncrypted: boolean = false) {
+  const { KEYSTORE } = getPaths();
+  if (created && !isEncrypted) process.stdout.write(`Created ${KEYSTORE} (mode 600).\n\n`);
   process.stdout.write(
     `Your agent's addresses — the EVM one is the same on every EVM chain:\n\n` +
       `  EVM     ${w.evmAddress}\n` +
@@ -40,39 +114,229 @@ function print(w: DerivedWallet, created: boolean) {
       `@aifinpay/mcp reads, so \`npx @aifinpay/mcp\` uses it with no config.\n\n` +
       `Back up ${KEYSTORE}. It is the only copy, and the derivation is not\n` +
       `BIP-39 — no standard wallet can recover it from a phrase.\n\n` +
-      `The addresses hold nothing yet. Send POL to the EVM address to fund it.\n`,
+      `The addresses hold nothing yet. Send POL to the EVM address to fund it.\n`
   );
 }
 
-async function create(force: boolean): Promise<DerivedWallet> {
+async function promptPassphrase(prompt: string): Promise<string> {
+  const tty = await import("node:tty");
+  const readline = await import("node:readline");
+  
+  if (!tty.isatty(0)) {
+    throw new Error("Passphrase prompt requires an interactive terminal");
+  }
+  
+  return new Promise((resolve, reject) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      terminal: true,
+    });
+    
+    (rl as any)._writeToOutput = (out: string) => {
+      if (process.stdout.isTTY) {
+        process.stdout.write("\x1B[?25l"); // hide cursor
+      }
+      process.stdout.write(out);
+    };
+    
+    const question = (q: string): Promise<string> => new Promise((res) => {
+      rl.question(q, res);
+    });
+    
+    (async () => {
+      try {
+        const pass1 = await question(prompt);
+        if (!pass1) {
+          rl.close();
+          reject(new Error("Passphrase cannot be empty"));
+          return;
+        }
+        const pass2 = await question("Confirm passphrase: ");
+        rl.close();
+        if (pass1 !== pass2) {
+          reject(new Error("Passphrases do not match"));
+          return;
+        }
+        process.stdout.write("\n");
+        resolve(pass1);
+      } catch (e) {
+        rl.close();
+        reject(e);
+      }
+    })();
+  });
+}
+
+async function create(force: boolean, useEncryption: boolean, mode?: DerivationMode): Promise<DerivedWallet> {
+  const { HOME, KEYSTORE, ENV_FILE, INSTRUCTIONS_FILE, RULES_FILE, AIIGNORE_FILE } = getPaths();
   const existing = readStore();
   if (existing && !force) {
-    // Never silently overwrite: the file may already hold funds.
-    return walletFromSolanaSecret(existing.secretB58);
+    return loadWalletFromStore(existing);
   }
   if (existing && force) {
-    process.stderr.write(
-      `Refusing: ${KEYSTORE} already exists and may hold funds. Move it aside first.\n`,
-    );
+    process.stderr.write(`Refusing: ${KEYSTORE} already exists and may hold funds. Move it aside first.\n`);
     process.exit(1);
   }
-  const w = await newWallet();
+  const w = await newWallet({ mode });
   mkdirSync(HOME, { recursive: true, mode: 0o700 });
-  writeFileSync(
-    KEYSTORE,
-    JSON.stringify({ secretB58: w.keys.solanaSecretKeyB58, seedHex: w.keys.seedHex, created: nowIso() }, null, 2) + "\n",
-    { mode: 0o600 },
-  );
+  
+  const SRC_INSTRUCTIONS = join(__dirname, "..", ".aifinpay", "instructions.md");
+  const SRC_RULES = join(__dirname, "..", ".aifinpay", "rules.md");
+  
+  if (!existsSync(INSTRUCTIONS_FILE) && existsSync(SRC_INSTRUCTIONS)) {
+    const content = readFileSync(SRC_INSTRUCTIONS, "utf8");
+    writeFileSync(INSTRUCTIONS_FILE, content, { mode: 0o644 });
+  }
+  
+  if (!existsSync(RULES_FILE) && existsSync(SRC_RULES)) {
+    const content = readFileSync(SRC_RULES, "utf8");
+    writeFileSync(RULES_FILE, content, { mode: 0o644 });
+  }
+  
+  if (!existsSync(AIIGNORE_FILE)) {
+    const aiignoreContent = `# AiFinPay agent files
+agent.json
+secrets/
+`;
+    writeFileSync(AIIGNORE_FILE, aiignoreContent, { mode: 0o644 });
+  }
+  
+  let content: string;
+  if (useEncryption) {
+    const envPass = process.env.AIFINPAY_WALLET_PASSPHRASE;
+    let passphrase: string;
+    if (envPass) {
+      passphrase = validatePassphrase(envPass);
+    } else {
+      passphrase = generateStrongPassphrase();
+      savePassphraseToEnv(passphrase, ENV_FILE);
+      process.stdout.write(`Generated strong passphrase and saved to ${ENV_FILE}\n\n`);
+    }
+    const encrypted = encryptSecret(w.keys.solanaSecretKeyB58, passphrase);
+    content = JSON.stringify({ ...encrypted, created: nowIso(), derivationMode: w.derivationMode, seedHex: w.keys.seedHex }, null, 2) + "\n";
+  } else {
+    content = JSON.stringify({ secretB58: w.keys.solanaSecretKeyB58, seedHex: w.keys.seedHex, created: nowIso(), derivationMode: w.derivationMode }, null, 2) + "\n";
+  }
+  
+  writeFileSync(KEYSTORE, content, { mode: 0o600 });
   chmodSync(KEYSTORE, 0o600);
   return w;
 }
 
-// process.env-free timestamp: Date is fine at runtime (only the workflow VM bans it).
+function loadWalletFromStore(store: KeystoreFile): DerivedWallet {
+  if ("secretB58" in store) {
+    const mode: DerivationMode = "derivationMode" in store && (store.derivationMode === "legacy-solana" || store.derivationMode === "standard") ? store.derivationMode : "standard";
+    // For legacy-solana mode, Solana secret = raw seed, so we can recover from secretB58
+    // For standard mode, we need seedHex since Solana secret is derived differently
+    if (mode === "legacy-solana") {
+      return walletFromSolanaSecret(store.secretB58, { mode });
+    }
+    // Standard mode: use seedHex
+    const seedHex = "seedHex" in store && typeof store.seedHex === "string" ? store.seedHex : undefined;
+    if (!seedHex) {
+      throw new Error("seedHex required for standard derivation mode");
+    }
+    return walletFromSeed(seedHex, { mode });
+  }
+  if ("enc" in store) {
+    const envPass = process.env.AIFINPAY_WALLET_PASSPHRASE;
+    if (!envPass) {
+      throw new Error(
+        "AIFINPAY_WALLET_PASSPHRASE is required to decrypt the keystore. " +
+        "Set it in the environment or .env file."
+      );
+    }
+    const passphrase = validatePassphrase(envPass);
+    const secretB58 = decrypt(store, passphrase);
+    const mode: DerivationMode = "derivationMode" in store && (store.derivationMode === "legacy-solana" || store.derivationMode === "standard") ? store.derivationMode : "standard";
+    // For encrypted keystores in standard mode, use seedHex
+    const seedHex = "seedHex" in store && typeof store.seedHex === "string" && store.seedHex ? store.seedHex : undefined;
+    if (mode === "standard") {
+      if (!seedHex) {
+        throw new Error("seedHex required for standard derivation mode in encrypted keystore");
+      }
+      return walletFromSeed(seedHex, { mode });
+    }
+    // legacy-solana mode: Solana secret = raw seed
+    return walletFromSolanaSecret(secretB58, { mode });
+  }
+  throw new Error("invalid keystore format.");
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
 
+export function generateStrongPassphrase(): string {
+  const randomData = new Uint8Array(64);
+  randomFillSync(randomData);
+
+  const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@$.^*_+=-";
+  let passphrase = "";
+  for (let i = 0; i < 32; i++) {
+    passphrase += charset[randomData[i] % charset.length];
+  }
+  return passphrase;
+}
+
+function validatePassphrase(passphrase: string | undefined): string {
+  if (!passphrase) {
+    throw new Error(
+      "AIFINPAY_WALLET_PASSPHRASE is required for encrypted keystore.\n\n" +
+      "Use `generateStrongPassphrase` function to get a strong password."
+    );
+  }
+  if (passphrase.length < 16) {
+    throw new Error(
+      "AIFINPAY_WALLET_PASSPHRASE must be at least 16 characters long.\n\n" +
+      "Use `generateStrongPassphrase` function to get a strong password."
+    );
+  }
+  const hasLower = /[a-z]/.test(passphrase);
+  const hasUpper = /[A-Z]/.test(passphrase);
+  const hasDigit = /[0-9]/.test(passphrase);
+  const hasSpecial = /[!@$.^*_+=-]/.test(passphrase);
+
+  if (!hasLower || !hasUpper || !hasDigit || !hasSpecial) {
+    throw new Error(
+      "AIFINPAY_WALLET_PASSPHRASE must contain: lowercase (a-z), uppercase (A-Z), digits (0-9), and special characters (!@$.^*_+=-). " +
+      "No # or other special characters allowed.\n\n" +
+      "Use `generateStrongPassphrase` function to get a strong password."
+    );
+  }
+  return passphrase;
+}
+
+function savePassphraseToEnv(passphrase: string, envFile: string): void {
+  const { HOME } = getPaths();
+  mkdirSync(HOME, { recursive: true, mode: 0o700 });
+
+  const secretsDir = join(HOME, "secrets");
+  const passphraseFile = join(secretsDir, "passphrase");
+  if (!existsSync(secretsDir)) {
+    mkdirSync(secretsDir, { recursive: true, mode: 0o700 });
+  }
+  writeFileSync(passphraseFile, passphrase, { mode: 0o600 });
+  chmodSync(passphraseFile, 0o600);
+
+  let envContent = "";
+  if (existsSync(envFile)) {
+    envContent = readFileSync(envFile, "utf8");
+    const lines = envContent.split("\n");
+    const filteredLines = lines.filter(line => !line.startsWith("AIFINPAY_WALLET_PASSPHRASE="));
+    envContent = filteredLines.join("\n").trim();
+  }
+
+  const newLine = `AIFINPAY_WALLET_PASSPHRASE=${passphrase}`;
+  const finalContent = envContent ? `${envContent}\n${newLine}\n` : `${newLine}\n`;
+
+  appendFileSync(envFile, finalContent, { mode: 0o600 });
+  chmodSync(envFile, 0o600);
+}
+
 function warnIfLoose() {
+  const { KEYSTORE } = getPaths();
   if (!existsSync(KEYSTORE)) return;
   const mode = statSync(KEYSTORE).mode & 0o777;
   if (mode & 0o077) {
@@ -81,48 +345,90 @@ function warnIfLoose() {
 }
 
 const cmd = (process.argv[2] || "").toLowerCase();
+const hasPlainFlag = process.argv.includes("--plain");
+const isEncryptedByDefault = !hasPlainFlag;
+const hasLegacyFlag = process.argv.includes("--legacy-solana");
 
 if (cmd === "-h" || cmd === "--help" || cmd === "help") {
   process.stdout.write(
-    `npx @aifinpay/wallet          create if absent, else show\n` +
-      `npx @aifinpay/wallet new      create (won't overwrite a funded wallet)\n` +
-      `npx @aifinpay/wallet show     print addresses\n` +
-      `npx @aifinpay/wallet export   print the seed to back up\n`,
+    `npx @aifinpay/wallet new                   create encrypted keystore (won't overwrite existing)\n` +
+      `npx @aifinpay/wallet new --plain           create unencrypted legacy keystore\n` +
+      `npx @aifinpay/wallet new --legacy-solana   create wallet with legacy Solana derivation (not recommended)\n` +
+      `npx @aifinpay/wallet show                  print addresses\n` +
+      `npx @aifinpay/wallet export                print the seed to back up\n` +
+      `\nLibrary usage:\n` +
+      `  import { newWallet, createWalletCLI } from "@aifinpay/wallet";\n` +
+      `  await newWallet({ mode: "legacy-solana" });\n` +
+      `  await createWalletCLI("new", ["node", "wallet", "--legacy-solana"]);\n`
   );
   process.exit(0);
 }
 
-const run = async () => {
+export const run = async (cmdArg?: string, argv?: string[], options?: { mode?: DerivationMode }) => {
   warnIfLoose();
-  if (cmd === "export") {
+  const localCmd = cmdArg ?? cmd;
+  const localPlain = (argv || process.argv).includes("--plain");
+  const localEncrypted = !localPlain;
+  const localLegacy = options?.mode === "legacy-solana" || (argv || process.argv).includes("--legacy-solana");
+  const derivationMode: DerivationMode = localLegacy ? "legacy-solana" : "standard";
+
+  if (localCmd === "export") {
     const s = readStore();
-    if (!s?.seedHex) {
-      process.stderr.write("no wallet with a stored seed — run `npx @aifinpay/wallet new` first.\n");
+    if (!s) {
+      process.stderr.write("no wallet found — run `npx @aifinpay/wallet new` first.\n");
       process.exit(1);
     }
-    process.stdout.write(s.seedHex + "\n");
+    let seedHex: string | undefined;
+    if ("seedHex" in s && s.seedHex) {
+      seedHex = s.seedHex;
+    } else if ("enc" in s) {
+      const envPass = process.env.AIFINPAY_WALLET_PASSPHRASE;
+      if (!envPass) {
+        throw new Error("AIFINPAY_WALLET_PASSPHRASE is required to decrypt the keystore.");
+      }
+      const passphrase = validatePassphrase(envPass);
+      const secretB58 = decrypt(s, passphrase);
+      const mode: DerivationMode = "derivationMode" in s && (s.derivationMode === "legacy-solana" || s.derivationMode === "standard") ? s.derivationMode : "standard";
+      const w = walletFromSolanaSecret(secretB58, { mode });
+      seedHex = w.keys.seedHex;
+    } else {
+      seedHex = s.seedHex;
+    }
+    if (!seedHex) {
+      process.stderr.write("no stored seed — may need to regenerate from secret.\n");
+      process.exit(1);
+    }
+    process.stdout.write(seedHex + "\n");
     return;
   }
-  if (cmd === "show") {
+  if (localCmd === "show") {
     const s = readStore();
     if (!s) {
       process.stderr.write("no wallet yet — run `npx @aifinpay/wallet new`.\n");
       process.exit(1);
     }
-    print(walletFromSolanaSecret(s.secretB58), false);
+    const w = loadWalletFromStore(s);
+    print(w, false, "enc" in s);
     return;
   }
-  if (cmd && cmd !== "new") {
-    process.stderr.write(`unknown command "${cmd}". Try --help.\n`);
+  if (localCmd && localCmd !== "new") {
+    process.stderr.write(`unknown command "${localCmd}". Try --help.\n`);
     process.exit(2);
   }
-  // default or "new"
+  if (!localCmd) {
+    process.stderr.write("command required — use `npx @aifinpay/wallet new`.\n");
+    process.exit(2);
+  }
+  const { KEYSTORE } = getPaths();
   const had = existsSync(KEYSTORE);
-  const w = await create(cmd === "new");
-  print(w, !had);
+  const w = await create(localCmd === "new", localEncrypted, derivationMode);
+  print(w, !had, localEncrypted);
 };
 
-run().catch((e) => {
-  process.stderr.write(`${(e as Error).message}\n`);
-  process.exit(1);
-});
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) {
+  run().catch((e) => {
+    process.stderr.write(`${(e as Error).message}\n`);
+    process.exit(1);
+  });
+}

@@ -5,6 +5,7 @@ key. Every recovery path derives the EVM key from the Solana seed, so restoring
 an agent produced a DIFFERENT EVM address and any balance funded on the
 original became unreachable. These tests fail if that regresses.
 """
+
 import pytest
 
 pytest.importorskip("web3", reason="unified extras not installed")

@@ -79,9 +79,12 @@ describe("shouldCharge — who pays on a content site", () => {
     }
     // The headed twin of the same browser is a human and stays free — the
     // marker must match "headlesschrome", never plain Chrome.
-    const headed = await gate(req("/articles", {
-      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-    }));
+    const headed = await gate(
+      req("/articles", {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+      })
+    );
     expect(headed.ok).toBe(true);
   });
 
@@ -89,10 +92,12 @@ describe("shouldCharge — who pays on a content site", () => {
     const { gate, iss } = await contentGate();
     const token = await iss.sign({ resource: "/articles", unit_quota: 3 });
     const call = () =>
-      gate(req("/articles", {
-        "User-Agent": "GPTBot/1.2",
-        "AIFP-Receipt": token,
-      }));
+      gate(
+        req("/articles", {
+          "User-Agent": "GPTBot/1.2",
+          "AIFP-Receipt": token,
+        })
+      );
 
     const first = await call();
     expect(first.ok).toBe(true);
@@ -111,8 +116,7 @@ describe("shouldCharge — who pays on a content site", () => {
     // this test fails, every such agent's calls after the first are free.
     const { gate, iss } = await contentGate();
     const token = await iss.sign({ resource: "/articles", unit_quota: 2 });
-    const call = () =>
-      gate(req("/articles", { "User-Agent": BROWSER_UA, "AIFP-Receipt": token }));
+    const call = () => gate(req("/articles", { "User-Agent": BROWSER_UA, "AIFP-Receipt": token }));
 
     const a = await call();
     expect(a.ok).toBe(true);
@@ -190,8 +194,8 @@ describe("our own clients are agents", () => {
   });
 
   it("still lets a browser through", () => {
-    expect(
-      knownAiAgent(req("/movies/x", { "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" })),
-    ).toBe(false);
+    expect(knownAiAgent(req("/movies/x", { "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" }))).toBe(
+      false
+    );
   });
 });

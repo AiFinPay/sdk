@@ -1,0 +1,1962 @@
+{
+  "address": "724Ut31i4ecY4dJ25z8HuZetu3A43xtNkPdk4JdbsfdD",
+  "metadata": {
+    "name": "splitter",
+    "version": "1.4.1",
+    "spec": "0.1.0",
+    "description": "AiFinPay Solana splitter v1.4 — signed, multi-route gross settlement"
+  },
+  "instructions": [
+    {
+      "name": "configure_route",
+      "discriminator": [
+        43,
+        191,
+        221,
+        37,
+        219,
+        56,
+        2,
+        255
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "profiles",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101,
+                  115,
+                  45,
+                  105,
+                  110,
+                  100,
+                  101,
+                  120
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "route_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "treasury_bps",
+          "type": "u16"
+        },
+        {
+          "name": "ip_creator_bps",
+          "type": "u16"
+        },
+        {
+          "name": "route_treasury",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "disable_route",
+      "discriminator": [
+        113,
+        226,
+        157,
+        91,
+        114,
+        105,
+        201,
+        208
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "profiles",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101,
+                  115,
+                  45,
+                  105,
+                  110,
+                  100,
+                  101,
+                  120
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "route_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "enable_route",
+      "discriminator": [
+        108,
+        98,
+        67,
+        179,
+        79,
+        4,
+        42,
+        84
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "profiles",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101,
+                  115,
+                  45,
+                  105,
+                  110,
+                  100,
+                  101,
+                  120
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "route_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "grant_pauser_role",
+      "discriminator": [
+        88,
+        76,
+        118,
+        27,
+        100,
+        21,
+        176,
+        100
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "pauser",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "grant_signer_role",
+      "discriminator": [
+        228,
+        184,
+        14,
+        183,
+        65,
+        234,
+        104,
+        55
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "signer",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "initialize",
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": [
+            "Only the hardcoded deployer may initialize the canonical singleton PDAs.",
+            "Enforced both via `address = DEPLOYER` constraint and a runtime check in",
+            "the handler (belt-and-braces)."
+          ],
+          "writable": true,
+          "signer": true,
+          "address": "Fz3jd5NAHQy1JbfdWFZYLYtT57BaeM4Bgx5EBnswe2Pz"
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_list",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  45,
+                  108,
+                  105,
+                  115,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "profiles",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101,
+                  115,
+                  45,
+                  105,
+                  110,
+                  100,
+                  101,
+                  120
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "InitializeParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "pause",
+      "discriminator": [
+        211,
+        22,
+        221,
+        251,
+        74,
+        121,
+        193,
+        47
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "quote_total",
+      "discriminator": [
+        64,
+        254,
+        129,
+        26,
+        113,
+        240,
+        75,
+        176
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "profiles",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101,
+                  115,
+                  45,
+                  105,
+                  110,
+                  100,
+                  101,
+                  120
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "gross_amount",
+          "type": "u64"
+        },
+        {
+          "name": "route_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "ip_creator",
+          "type": "pubkey"
+        }
+      ],
+      "returns": {
+        "defined": {
+          "name": "QuoteTotalResult"
+        }
+      }
+    },
+    {
+      "name": "rotate_admin_role",
+      "discriminator": [
+        37,
+        242,
+        88,
+        72,
+        253,
+        62,
+        42,
+        139
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "new_admin",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "rotate_pauser_role",
+      "discriminator": [
+        240,
+        142,
+        250,
+        132,
+        214,
+        119,
+        132,
+        22
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "new_pauser",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "rotate_signer_role",
+      "discriminator": [
+        221,
+        87,
+        44,
+        133,
+        28,
+        108,
+        195,
+        255
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "new_signer",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_treasury",
+      "discriminator": [
+        57,
+        97,
+        196,
+        95,
+        195,
+        206,
+        106,
+        136
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "new_treasury",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_whitelisted_tokens",
+      "discriminator": [
+        155,
+        198,
+        137,
+        222,
+        224,
+        125,
+        184,
+        198
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_list",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  45,
+                  108,
+                  105,
+                  115,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "tokens",
+          "type": {
+            "vec": "pubkey"
+          }
+        },
+        {
+          "name": "allowed",
+          "type": {
+            "vec": "bool"
+          }
+        }
+      ]
+    },
+    {
+      "name": "settle_native",
+      "discriminator": [
+        117,
+        220,
+        69,
+        41,
+        231,
+        241,
+        119,
+        57
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer_nonce",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  121,
+                  101,
+                  114,
+                  45,
+                  110,
+                  111,
+                  110,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "payer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "consumed_nonce",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  115,
+                  117,
+                  109,
+                  101,
+                  100,
+                  45,
+                  110,
+                  111,
+                  110,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "payer"
+              },
+              {
+                "kind": "arg",
+                "path": "nonce"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "merchant",
+          "writable": true
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        },
+        {
+          "name": "ip_creator",
+          "writable": true
+        },
+        {
+          "name": "profiles",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101,
+                  115,
+                  45,
+                  105,
+                  110,
+                  100,
+                  101,
+                  120
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "nonce",
+          "type": "u64"
+        },
+        {
+          "name": "quote",
+          "type": {
+            "defined": {
+              "name": "Quote"
+            }
+          }
+        },
+        {
+          "name": "signature",
+          "type": {
+            "array": [
+              "u8",
+              65
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "settle_stable",
+      "discriminator": [
+        122,
+        84,
+        19,
+        134,
+        147,
+        115,
+        154,
+        207
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer_nonce",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  121,
+                  101,
+                  114,
+                  45,
+                  110,
+                  111,
+                  110,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "payer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "consumed_nonce",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  115,
+                  117,
+                  109,
+                  101,
+                  100,
+                  45,
+                  110,
+                  111,
+                  110,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "payer"
+              },
+              {
+                "kind": "arg",
+                "path": "nonce"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_list"
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "Mint is a real SPL Mint; Anchor validates owner == token_program and",
+            "deserializes the Mint layout. SOL-HIGH-002 / SOL-LOW-003."
+          ]
+        },
+        {
+          "name": "profiles",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101,
+                  115,
+                  45,
+                  105,
+                  110,
+                  100,
+                  101,
+                  120
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "nonce",
+          "type": "u64"
+        },
+        {
+          "name": "quote",
+          "type": {
+            "defined": {
+              "name": "Quote"
+            }
+          }
+        },
+        {
+          "name": "signature",
+          "type": {
+            "array": [
+              "u8",
+              65
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "unpause",
+      "discriminator": [
+        169,
+        144,
+        4,
+        38,
+        10,
+        141,
+        188,
+        255
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Config",
+      "discriminator": [
+        155,
+        12,
+        170,
+        224,
+        30,
+        250,
+        204,
+        130
+      ]
+    },
+    {
+      "name": "ConsumedNonce",
+      "discriminator": [
+        203,
+        122,
+        100,
+        36,
+        241,
+        214,
+        161,
+        246
+      ]
+    },
+    {
+      "name": "PayerNonce",
+      "discriminator": [
+        239,
+        33,
+        176,
+        46,
+        128,
+        49,
+        65,
+        40
+      ]
+    },
+    {
+      "name": "ProfilesIndex",
+      "discriminator": [
+        226,
+        221,
+        186,
+        252,
+        104,
+        74,
+        245,
+        98
+      ]
+    },
+    {
+      "name": "TokenList",
+      "discriminator": [
+        145,
+        167,
+        153,
+        173,
+        5,
+        187,
+        157,
+        150
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "Payment",
+      "discriminator": [
+        173,
+        15,
+        163,
+        37,
+        17,
+        144,
+        245,
+        221
+      ]
+    },
+    {
+      "name": "TreasuryUpdated",
+      "discriminator": [
+        80,
+        239,
+        54,
+        168,
+        43,
+        38,
+        85,
+        145
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "Unauthorized",
+      "msg": "Caller is not authorized for this operation"
+    },
+    {
+      "code": 6001,
+      "name": "ZeroAmount",
+      "msg": "Amount must be greater than zero"
+    },
+    {
+      "code": 6002,
+      "name": "ZeroMerchant",
+      "msg": "Merchant address must be non-zero"
+    },
+    {
+      "code": 6003,
+      "name": "ZeroTreasury",
+      "msg": "Treasury address must be non-zero"
+    },
+    {
+      "code": 6004,
+      "name": "UnsupportedToken",
+      "msg": "Token is not whitelisted for stable settlement"
+    },
+    {
+      "code": 6005,
+      "name": "PaymentTooSmallForRoyalty",
+      "msg": "Gross amount is too small to produce a non-zero royalty"
+    },
+    {
+      "code": 6006,
+      "name": "PaymentTooSmallForTreasury",
+      "msg": "Gross amount is too small to produce a non-zero treasury fee"
+    },
+    {
+      "code": 6007,
+      "name": "MerchantTransferFailed",
+      "msg": "Native transfer to merchant failed"
+    },
+    {
+      "code": 6008,
+      "name": "TreasuryTransferFailed",
+      "msg": "Native transfer to treasury failed"
+    },
+    {
+      "code": 6009,
+      "name": "IPCreatorTransferFailed",
+      "msg": "Native transfer to IP creator failed"
+    },
+    {
+      "code": 6010,
+      "name": "IncorrectNativeValue",
+      "msg": "Sent lamports do not match quote gross_amount"
+    },
+    {
+      "code": 6011,
+      "name": "MissingIPCreator",
+      "msg": "Route requires an IP creator address"
+    },
+    {
+      "code": 6012,
+      "name": "IPCreatorMismatch",
+      "msg": "IP creator account does not match the quote"
+    },
+    {
+      "code": 6013,
+      "name": "InvalidSigner",
+      "msg": "Recovered signer does not hold SIGN_OPERATOR_ROLE"
+    },
+    {
+      "code": 6014,
+      "name": "InvalidSignature",
+      "msg": "Signature is malformed or recovery failed"
+    },
+    {
+      "code": 6015,
+      "name": "InvalidSignatureLength",
+      "msg": "Signature length must be 65 bytes"
+    },
+    {
+      "code": 6016,
+      "name": "SignatureExpired",
+      "msg": "Quote has expired"
+    },
+    {
+      "code": 6017,
+      "name": "InvalidPayer",
+      "msg": "Quote payer must match transaction signer"
+    },
+    {
+      "code": 6018,
+      "name": "MerchantMismatch",
+      "msg": "Quote merchant must match the provided merchant account"
+    },
+    {
+      "code": 6019,
+      "name": "InvalidNonce",
+      "msg": "Quote nonce does not match payer nonce"
+    },
+    {
+      "code": 6020,
+      "name": "NonceAlreadyConsumed",
+      "msg": "Quote nonce has already been consumed"
+    },
+    {
+      "code": 6021,
+      "name": "NonceOverflow",
+      "msg": "Nonce overflow"
+    },
+    {
+      "code": 6022,
+      "name": "InvalidTokenForNative",
+      "msg": "Native settlement requires token == Pubkey::default()"
+    },
+    {
+      "code": 6023,
+      "name": "RouteDisabled",
+      "msg": "Route is disabled"
+    },
+    {
+      "code": 6024,
+      "name": "UnknownRoute",
+      "msg": "Unknown route"
+    },
+    {
+      "code": 6025,
+      "name": "TreasuryFeeTooHigh",
+      "msg": "Treasury fee basis points exceeds maximum"
+    },
+    {
+      "code": 6026,
+      "name": "IPCreatorFeeTooHigh",
+      "msg": "IP creator fee basis points exceeds maximum"
+    },
+    {
+      "code": 6027,
+      "name": "AggregateFeeTooHigh",
+      "msg": "Aggregate fees exceed maximum"
+    },
+    {
+      "code": 6028,
+      "name": "FeeExceedsGross",
+      "msg": "Fees exceed gross amount"
+    },
+    {
+      "code": 6029,
+      "name": "ZeroSigner",
+      "msg": "Signer address must be non-zero"
+    },
+    {
+      "code": 6030,
+      "name": "ZeroPauser",
+      "msg": "Pauser address must be non-zero"
+    },
+    {
+      "code": 6031,
+      "name": "PauserEqualsSigner",
+      "msg": "Pauser and signer must be distinct"
+    },
+    {
+      "code": 6032,
+      "name": "AdminEqualsSigner",
+      "msg": "Admin and signer/pauser must be distinct"
+    },
+    {
+      "code": 6033,
+      "name": "ZeroAdmin",
+      "msg": "Admin address must be non-zero"
+    },
+    {
+      "code": 6034,
+      "name": "ZeroDeployer",
+      "msg": "Deployer address must be non-zero"
+    },
+    {
+      "code": 6035,
+      "name": "InvalidDeployer",
+      "msg": "Caller is not the authorized deployer"
+    },
+    {
+      "code": 6036,
+      "name": "ArrayLengthMismatch",
+      "msg": "Token and flag array lengths must match"
+    },
+    {
+      "code": 6037,
+      "name": "TokenListFull",
+      "msg": "Token list is full"
+    },
+    {
+      "code": 6038,
+      "name": "ProtocolPaused",
+      "msg": "Program is currently paused"
+    },
+    {
+      "code": 6039,
+      "name": "RouteTreasuryZero",
+      "msg": "Profile route_treasury must be non-zero when set"
+    },
+    {
+      "code": 6040,
+      "name": "ZeroStablecoin",
+      "msg": "Stablecoin mint address must be non-zero"
+    },
+    {
+      "code": 6041,
+      "name": "DuplicateToken",
+      "msg": "Duplicate token mint in update"
+    },
+    {
+      "code": 6042,
+      "name": "DuplicateSettlementAccount",
+      "msg": "Settlement accounts must be distinct from the payer and from each other"
+    },
+    {
+      "code": 6043,
+      "name": "ProtocolAccountMisuse",
+      "msg": "Settlement recipient is a protocol PDA; funds would be locked"
+    },
+    {
+      "code": 6044,
+      "name": "TokenAccountOwnerMismatch",
+      "msg": "Token account owner does not match expected owner"
+    },
+    {
+      "code": 6045,
+      "name": "InvalidMint",
+      "msg": "Mint account is not a valid SPL Mint owned by the token program"
+    },
+    {
+      "code": 6046,
+      "name": "DestinationNotWritable",
+      "msg": "Settlement destination account is not writable"
+    },
+    {
+      "code": 6047,
+      "name": "InvalidRecoveryId",
+      "msg": "Recovery ID out of range; expected 0 or 1"
+    }
+  ],
+  "types": [
+    {
+      "name": "Config",
+      "docs": [
+        "Global configuration and RBAC registry."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "signer",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          },
+          {
+            "name": "pauser",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          },
+          {
+            "name": "token_list",
+            "type": "pubkey"
+          },
+          {
+            "name": "profiles",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "is_paused",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConsumedNonce",
+      "docs": [
+        "Marker that a (payer, nonce) pair has been consumed."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "payer",
+            "type": "pubkey"
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "consumed",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InitializeParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "signer",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          },
+          {
+            "name": "pauser",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          },
+          {
+            "name": "stablecoins",
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "route_ids",
+            "type": {
+              "vec": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            }
+          },
+          {
+            "name": "treasury_bps",
+            "type": {
+              "vec": "u16"
+            }
+          },
+          {
+            "name": "ip_creator_bps",
+            "type": {
+              "vec": "u16"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PayerNonce",
+      "docs": [
+        "Per-payer monotonic nonce."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "payer",
+            "type": "pubkey"
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Payment",
+      "docs": [
+        "Event emitted on every successful settlement."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "payment_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "payer",
+            "type": "pubkey"
+          },
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "token",
+            "type": "pubkey"
+          },
+          {
+            "name": "gross_amount",
+            "type": "u64"
+          },
+          {
+            "name": "merchant_amount",
+            "type": "u64"
+          },
+          {
+            "name": "treasury_amount",
+            "type": "u64"
+          },
+          {
+            "name": "ip_creator_amount",
+            "type": "u64"
+          },
+          {
+            "name": "valid_until",
+            "type": "i64"
+          },
+          {
+            "name": "route_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "order_id_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProfilesIndex",
+      "docs": [
+        "Registry of all route profiles."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "entries",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "RouteProfileEntry"
+                }
+              }
+            }
+          },
+          {
+            "name": "count",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Quote",
+      "docs": [
+        "Signed quote submitted by the payer."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "payer",
+            "type": "pubkey"
+          },
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "token",
+            "type": "pubkey"
+          },
+          {
+            "name": "gross_amount",
+            "type": "u64"
+          },
+          {
+            "name": "ip_creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "valid_until",
+            "type": "i64"
+          },
+          {
+            "name": "order_id_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "route_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "QuoteTotalResult",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant_amount",
+            "type": "u64"
+          },
+          {
+            "name": "treasury_amount",
+            "type": "u64"
+          },
+          {
+            "name": "ip_creator_amount",
+            "type": "u64"
+          },
+          {
+            "name": "total_amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RouteProfileEntry",
+      "docs": [
+        "One route profile entry."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "route_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "treasury_bps",
+            "type": "u16"
+          },
+          {
+            "name": "ip_creator_bps",
+            "type": "u16"
+          },
+          {
+            "name": "enabled",
+            "type": "bool"
+          },
+          {
+            "name": "configured_at",
+            "type": "i64"
+          },
+          {
+            "name": "route_treasury",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TokenList",
+      "docs": [
+        "Whitelisted stablecoin mints."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "tokens",
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TreasuryUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "new_treasury",
+            "type": "pubkey"
+          }
+        ]
+      }
+    }
+  ]
+}

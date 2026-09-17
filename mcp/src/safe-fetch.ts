@@ -67,11 +67,21 @@ export function isBlockedAddress(addr: string): boolean {
     return BLOCKED_V4.some(([lo, hi]) => n >= lo && n <= hi);
   }
   if (family === 6) {
-    const lower = addr.toLowerCase().replace(/^\[|\]$/g, "");
+    // URL canonicalization collapses expanded zeros AND rewrites mapped dotted
+    // IPv4 into hex, e.g. ::ffff:127.0.0.1 becomes ::ffff:7f00:1.
+    let lower: string;
+    try {
+      lower = new URL(`https://[${addr}]/`).hostname.replace(/^\[|\]$/g, "");
+    } catch {
+      return true;
+    }
     // An IPv4-mapped address is an IPv4 address wearing a hat. Unwrap it, or
     // ::ffff:127.0.0.1 walks straight through an IPv6-only check.
-    const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped) return isBlockedAddress(mapped[1]);
+    const mapped = lower.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (mapped) {
+      const n = (parseInt(mapped[1], 16) * 65536 + parseInt(mapped[2], 16)) >>> 0;
+      return BLOCKED_V4.some(([lo, hi]) => n >= lo && n <= hi);
+    }
     if (lower === "::1" || lower === "::") return true;
     if (/^f[cd][0-9a-f]{2}:/.test(lower)) return true; // fc00::/7 unique-local
     if (/^fe[89ab][0-9a-f]:/.test(lower)) return true; // fe80::/10 link-local
@@ -92,7 +102,7 @@ export class BlockedRequestError extends Error {}
  */
 export async function assertRequestAllowed(
   rawUrl: string,
-  opts: { allowPrivate?: boolean; trustedHosts?: string[] } = {},
+  opts: { allowPrivate?: boolean; trustedHosts?: string[] } = {}
 ): Promise<URL> {
   let url: URL;
   try {
@@ -104,16 +114,12 @@ export async function assertRequestAllowed(
   if (opts.allowPrivate) return url; // an operator asked for this explicitly
 
   if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new BlockedRequestError(
-      `refusing ${url.protocol} — only http and https are requested by this server`,
-    );
+    throw new BlockedRequestError(`refusing ${url.protocol} — only http and https are requested by this server`);
   }
   if (url.protocol === "http:") {
     // Plaintext to a public host leaks the request and invites a redirect into
     // the private range from anyone on the path.
-    throw new BlockedRequestError(
-      `refusing http://${url.host} — payable requests must be https`,
-    );
+    throw new BlockedRequestError(`refusing http://${url.host} — payable requests must be https`);
   }
 
   const host = url.hostname.replace(/^\[|\]$/g, "");
@@ -148,9 +154,9 @@ export async function assertRequestAllowed(
     addresses = await lookup(host, { all: true });
   } catch (e) {
     throw new BlockedRequestError(
-      `cannot resolve ${host}: ${(e as Error).message}. `
-      + `If this host is reachable only through a proxy, name it in `
-      + `AIFINPAY_TRUSTED_HOSTS to skip the DNS pre-check for it alone.`,
+      `cannot resolve ${host}: ${(e as Error).message}. ` +
+        `If this host is reachable only through a proxy, name it in ` +
+        `AIFINPAY_TRUSTED_HOSTS to skip the DNS pre-check for it alone.`
     );
   }
   if (!addresses.length) {
@@ -160,9 +166,7 @@ export async function assertRequestAllowed(
   // for a host to be steering us somewhere internal.
   for (const { address } of addresses) {
     if (isBlockedAddress(address)) {
-      throw new BlockedRequestError(
-        `refusing ${host}: it resolves to ${address}, which is not a public address`,
-      );
+      throw new BlockedRequestError(`refusing ${host}: it resolves to ${address}, which is not a public address`);
     }
   }
   return url;
@@ -177,27 +181,66 @@ export async function assertRequestAllowed(
 export function makeSafeFetch(opts: { allowPrivate?: boolean; trustedHosts?: string[] } = {}): typeof fetch {
   const safeFetch = async (
     input: Parameters<typeof fetch>[0],
-    init?: Parameters<typeof fetch>[1],
+    init?: Parameters<typeof fetch>[1]
   ): Promise<Response> => {
-    let target =
-      typeof input === "string" ? input
-      : input instanceof URL ? input.toString()
-      : (input as Request).url;
-    let request = init;
+    let request = new Request(input, init);
+    const redirect = request.redirect;
 
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-      await assertRequestAllowed(target, opts);
-      const res = await globalThis.fetch(target, { ...request, redirect: "manual" });
+      await assertRequestAllowed(request.url, opts);
+      const res = await globalThis.fetch(request.clone(), { redirect: "manual" });
 
-      const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
+      const location = [301, 302, 303, 307, 308].includes(res.status) ? res.headers.get("location") : null;
       if (!location) return res;
+      if (redirect === "manual") return res;
+      await res.body?.cancel();
+      if (redirect === "error") throw new BlockedRequestError("redirect forbidden by request policy");
+      if (hop === MAX_REDIRECTS) break;
 
-      target = new URL(location, target).toString();
-      // 303, and 301/302 in practice, turn the follow-up into a GET with no
-      // body. Mirroring that keeps behaviour the same as a normal fetch.
-      if (res.status === 303 || res.status === 301 || res.status === 302) {
-        request = { ...request, method: "GET", body: undefined };
+      const next = new URL(location, request.url);
+      const crossOrigin = next.origin !== new URL(request.url).origin;
+      const dropBody =
+        (res.status === 303 && !["GET", "HEAD"].includes(request.method)) ||
+        ([301, 302].includes(res.status) && request.method === "POST");
+      if (crossOrigin && request.body && !dropBody) {
+        throw new BlockedRequestError("refusing cross-origin redirect with a request body");
       }
+      const headers = new Headers(request.headers);
+      if (crossOrigin) {
+        // Only explicitly public negotiation headers may leave the original
+        // origin. A denylist cannot anticipate every merchant's secret header.
+        const publicHeaders = new Set(["accept", "accept-language", "cache-control", "pragma"]);
+        for (const key of Array.from(headers.keys())) if (!publicHeaders.has(key)) headers.delete(key);
+      }
+      if (dropBody) {
+        for (const key of [
+          "content-type",
+          "content-length",
+          "content-encoding",
+          "content-language",
+          "content-location",
+        ])
+          headers.delete(key);
+      }
+      const redirectInit = dropBody
+        ? {
+            method: "GET",
+            signal: request.signal,
+            credentials: request.credentials,
+            cache: request.cache,
+            mode: request.mode,
+            redirect,
+            referrer: request.referrer,
+            referrerPolicy: request.referrerPolicy,
+            integrity: request.integrity,
+            keepalive: request.keepalive,
+          }
+        : request;
+      const redirected = new Request(next, redirectInit);
+      request = new Request(redirected, {
+        headers,
+        ...(crossOrigin ? { credentials: "omit", referrer: "", referrerPolicy: "no-referrer" } : {}),
+      });
     }
     throw new BlockedRequestError(`too many redirects (more than ${MAX_REDIRECTS})`);
   };

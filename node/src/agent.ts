@@ -24,6 +24,9 @@ export interface AgentOptions {
   baseUrl?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  /** Import an existing EVM wallet for standard x402; keep this key alongside
+   * the Solana secret when backing up an agent with an override. */
+  evmPrivateKey?: `0x${string}`;
 }
 
 export interface PayInit extends Omit<RequestInit, "method"> {
@@ -40,20 +43,17 @@ export class Agent {
   /** Internal — facilitators reach for this when they need to refetch from the backend. */
   readonly fetchImpl: typeof fetch;
 
-  private constructor(
-    secretKey: Uint8Array,
-    publicKey: Uint8Array,
-    opts: AgentOptions = {},
-  ) {
+  private constructor(secretKey: Uint8Array, publicKey: Uint8Array, opts: AgentOptions = {}) {
     this.secretKey = secretKey;
     this.publicKey = publicKey;
+    if (opts.evmPrivateKey !== undefined) {
+      this._evm = privateKeyToAccount(opts.evmPrivateKey);
+    }
     this.baseUrl = (opts.baseUrl || DEFAULT_BASE_URL).replace(/\/$/, "");
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.fetchImpl = opts.fetchImpl ?? globalThis.fetch;
     if (!this.fetchImpl) {
-      throw new AiFinPayError(
-        "global fetch not available. Pass opts.fetchImpl or upgrade to Node 18+.",
-      );
+      throw new AiFinPayError("global fetch not available. Pass opts.fetchImpl or upgrade to Node 18+.");
     }
   }
 
@@ -73,18 +73,13 @@ export class Agent {
     } else if (raw.length === 32) {
       kp = nacl.sign.keyPair.fromSeed(raw);
     } else {
-      throw new AiFinPayError(
-        `secret must decode to 32 or 64 bytes, got ${raw.length}`,
-      );
+      throw new AiFinPayError(`secret must decode to 32 or 64 bytes, got ${raw.length}`);
     }
     return new Agent(kp.secretKey, kp.publicKey, opts);
   }
 
   /** Load from a Solana CLI ``solana-keygen`` JSON file path (Node only). */
-  static async fromKeypairFile(
-    path: string,
-    opts: AgentOptions = {},
-  ): Promise<Agent> {
+  static async fromKeypairFile(path: string, opts: AgentOptions = {}): Promise<Agent> {
     const fs = await import("node:fs/promises");
     const raw = await fs.readFile(path, "utf8");
     const arr = JSON.parse(raw);
@@ -113,7 +108,9 @@ export class Agent {
    * The agent's EVM account (viem), derived from the same 32-byte seed as the
    * Solana key via domain-separated SHA-256 ("aifinpay:evm:v1\0" || seed) —
    * byte-for-byte identical to AiFinPayAgent's EVM address. Used by the
-   * standard x402 (EIP-3009) facilitator. Node-only (sync SHA-256).
+   * standard x402 (EIP-3009) facilitator. An explicitly imported EVM key is
+   * cached during construction and takes priority over derivation.
+   * Default derivation is Node-only (sync SHA-256).
    */
   async evmAccount(): Promise<PrivateKeyAccount> {
     if (this._evm) return this._evm;
@@ -133,17 +130,11 @@ export class Agent {
   // ── Discovery ──────────────────────────────────────────────────────────
 
   async manifesto(): Promise<Record<string, unknown>> {
-    return (await this.json("GET", "/manifesto.json")) as Record<
-      string,
-      unknown
-    >;
+    return (await this.json("GET", "/manifesto.json")) as Record<string, unknown>;
   }
 
   async wellKnown(): Promise<Record<string, unknown>> {
-    return (await this.json("GET", "/.well-known/x402.json")) as Record<
-      string,
-      unknown
-    >;
+    return (await this.json("GET", "/.well-known/x402.json")) as Record<string, unknown>;
   }
 
   // ── x402 auth (AiFinPay-native helpers, kept for backwards compat) ────
@@ -157,17 +148,9 @@ export class Agent {
 
   /** Build a fresh AiFinPay-native x402 header set. */
   async authHeaders(): Promise<Record<string, string>> {
-    const { nonce } = await this.fetchNonce();
-    const msg = new TextEncoder().encode(
-      `AiFinPay-x402:${nonce}:${this.address}`,
+    throw new AiFinPayError(
+      "authHeaders() cannot safely sign the retired unbound native auth format. Use Agent.pay(url), which retries only a request-bound v2 challenge."
     );
-    const digest = await sha256(msg);
-    const sig = nacl.sign.detached(digest, this.secretKey);
-    return {
-      "x-agent-pubkey": this.address,
-      "x-nonce": nonce,
-      "x-signature": bs58.encode(sig),
-    };
   }
 
   // ── Seat / funding ────────────────────────────────────────────────────
@@ -201,9 +184,7 @@ export class Agent {
       }
       await new Promise((res) => setTimeout(res, pollMs));
     }
-    throw new FundingTimeoutError(
-      `address ${this.address} never reached ${minUsdCents} cents on-chain`,
-    );
+    throw new FundingTimeoutError(`address ${this.address} never reached ${minUsdCents} cents on-chain`);
   }
 
   // ── Invoices ──────────────────────────────────────────────────────────
@@ -226,10 +207,7 @@ export class Agent {
       agent_pubkey: this.address,
     };
     if (asset !== "SOL") payload.asset = asset;
-    const data = (await this.json("POST", endpoint, payload)) as Record<
-      string,
-      unknown
-    >;
+    const data = (await this.json("POST", endpoint, payload)) as Record<string, unknown>;
     return {
       amountUsd,
       treasuryVault: (data.treasury_vault as string) || "",
@@ -252,13 +230,11 @@ export class Agent {
    * is rarely needed anymore. Kept for back-compat through 1.0.0.
    */
   async quoteSplit(args: {
+    /** @deprecated "botchain" is deprecated. Use "robinhood" instead. */
     chain: "solana" | "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm";
     merchantAmount: bigint | number | string;
   }): Promise<Record<string, unknown>> {
-    const param =
-      args.chain === "solana"
-        ? "merchant_amount_lamports"
-        : "merchant_amount_wei";
+    const param = args.chain === "solana" ? "merchant_amount_lamports" : "merchant_amount_wei";
     const url = new URL(`${this.baseUrl}/api/b2b/quote-split`);
     url.searchParams.set(param, String(args.merchantAmount));
     const r = await this.fetchImpl(url.toString(), {
@@ -290,6 +266,7 @@ export class Agent {
    * onboarding message).
    */
   async payWithSplitInvoice(args: {
+    /** @deprecated "botchain" is deprecated. Use "robinhood" instead. */
     chain: "solana" | "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm";
     merchantWallet: string;
     merchantAmount: bigint | number | string;
@@ -342,23 +319,24 @@ export class Agent {
    * builds the appropriate auth payload, and retries.
    */
   async pay(url: string, init: PayInit = {}): Promise<Response> {
-    const {
-      method = "GET",
-      maxRetries = 1,
-      options = {},
-      ...rest
-    } = init;
+    const { method = "GET", maxRetries = 1, options = {}, ...rest } = init;
+    let requestUrl: URL;
+    let trustedOrigin: string;
+    try {
+      requestUrl = new URL(url);
+      trustedOrigin = new URL(this.baseUrl).origin;
+    } catch {
+      throw new AiFinPayError("pay() requires an absolute URL and a valid Agent baseUrl");
+    }
     const baseHeaders = mergeHeaders(rest.headers, options.extraHeaders);
-    const send = (
-      m: string,
-      headers: Record<string, string>,
-      body?: BodyInit | null,
-    ) =>
-      this.fetchImpl(url, {
+    const send = (m: string, headers: Record<string, string>, body?: BodyInit | null) =>
+      this.fetchImpl(requestUrl.toString(), {
         ...rest,
         method: m,
         headers,
         body: body ?? rest.body,
+        // Never let an authenticated retry carry credentials through a redirect.
+        redirect: "error",
       });
 
     let resp = await send(method, { ...baseHeaders, "user-agent": SDK_UA });
@@ -366,11 +344,14 @@ export class Agent {
 
     while (resp.status === 402 && attempt < maxRetries) {
       attempt += 1;
-      const facilitator = await detectFacilitator(
-        resp,
-        options.facilitator ?? "auto",
-      );
-      const auth = await facilitator.buildAuth(resp, this, options);
+      const facilitator = await detectFacilitator(resp, options.facilitator ?? "auto");
+      const bodyDigest = facilitator.name === "aifinpay" ? await nativeBodyDigest(rest.body) : "";
+      const auth = await facilitator.buildAuth(resp, this, options, {
+        url: requestUrl,
+        method,
+        trustedOrigin,
+        bodyDigest,
+      });
       const merged = mergeHeaders(baseHeaders, auth.headers);
       merged["user-agent"] = SDK_UA;
       resp = await send(auth.method ?? method, merged, auth.body);
@@ -383,21 +364,14 @@ export class Agent {
       } catch {
         challenge = (await resp.clone().text()).slice(0, 500);
       }
-      throw new X402Error(
-        `402 Payment Required after ${attempt} retry/retries. ` +
-          `Challenge: ${challenge}`,
-      );
+      throw new X402Error(`402 Payment Required after ${attempt} retry/retries. ` + `Challenge: ${challenge}`);
     }
     return resp;
   }
 
   // ── Backwards-compat wrappers ────────────────────────────────────────
 
-  async request(
-    method: string,
-    url: string,
-    init: RequestInit = {},
-  ): Promise<Response> {
+  async request(method: string, url: string, init: RequestInit = {}): Promise<Response> {
     return this.pay(url, { ...init, method });
   }
 
@@ -411,11 +385,7 @@ export class Agent {
 
   // ── Internal helpers ──────────────────────────────────────────────────
 
-  private async json(
-    method: string,
-    path: string,
-    body?: unknown,
-  ): Promise<unknown> {
+  private async json(method: string, path: string, body?: unknown): Promise<unknown> {
     const init: RequestInit = {
       method,
       headers: {
@@ -442,9 +412,7 @@ export class Agent {
   }
 }
 
-function mergeHeaders(
-  ...sources: Array<HeadersInit | Record<string, string> | undefined>
-): Record<string, string> {
+function mergeHeaders(...sources: Array<HeadersInit | Record<string, string> | undefined>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const src of sources) {
     if (!src) continue;
@@ -457,4 +425,24 @@ function mergeHeaders(
     }
   }
   return out;
+}
+
+async function nativeBodyDigest(body: BodyInit | null | undefined): Promise<string> {
+  let bytes: Uint8Array;
+  if (body === undefined || body === null) {
+    bytes = new Uint8Array();
+  } else if (typeof body === "string" || body instanceof URLSearchParams) {
+    bytes = new TextEncoder().encode(body.toString());
+  } else if (body instanceof ArrayBuffer) {
+    bytes = new Uint8Array(body);
+  } else if (ArrayBuffer.isView(body)) {
+    bytes = new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
+  } else if (typeof Blob !== "undefined" && body instanceof Blob) {
+    bytes = new Uint8Array(await body.arrayBuffer());
+  } else {
+    throw new AiFinPayError(
+      "AiFinPay native auth v2 cannot sign this streaming or multipart request body safely. Send string or byte body data."
+    );
+  }
+  return Array.from(await sha256(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }

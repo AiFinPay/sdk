@@ -1,7 +1,7 @@
 {
   "name": "@aifinpay/gate",
-  "version": "0.3.1",
-  "description": "Merchant-side AIFP-1 paywall for your own API \u2014 402 challenge, local receipt verification, billing-unit quota metering.",
+  "version": "0.3.2",
+  "description": "Merchant-side AIFP-1 paywall for your own API — 402 challenge, local receipt verification, billing-unit quota metering.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -31,7 +31,11 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"**/*.{js,mjs,cjs,jsx,ts,tsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{js,mjs,cjs,jsx,ts,tsx,json,md}\""
   },
   "keywords": [
     "aifinpay",
@@ -76,15 +80,21 @@
     }
   },
   "devDependencies": {
+    "@eslint/js": "^9.0.0",
     "@types/express": "^5.0.0",
     "@types/node": "^20.0.0",
+    "eslint": "^10.10.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.0.0",
+    "typescript-eslint": "^8.0.0",
     "express": "^5.2.1",
     "express4": "npm:express@^4.18.0",
+    "prettier": "^3.9.6",
     "typescript": "^5.4.0",
     "vitest": "^4.1.5"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "publishConfig": {
     "access": "public"

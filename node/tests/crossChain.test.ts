@@ -1,10 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import {
-  bridgeQuote,
-  EVM_CHAINS,
-  USDC_NATIVE,
-  AiFinPayAgent,
-} from "../src/index.js";
+import { bridgeQuote, EVM_CHAINS, USDC_NATIVE, AiFinPayAgent } from "../src/index.js";
 
 // ── LiFi quote response fixture — modeled after a real Base→Polygon USDC
 //    call captured from li.quest/v1/quote. Trimmed to the fields the SDK
@@ -16,28 +11,24 @@ const fakeLifiQuote = {
     fromAmount: "1000000",
     toAmount: "993100",
     toAmountMin: "988135",
-    feeCosts: [
-      { amountUSD: "0.0069", name: "Stargate bridge fee" },
-    ],
-    gasCosts: [
-      { amountUSD: "0.0021" },
-    ],
+    feeCosts: [{ amountUSD: "0.0069", name: "Stargate bridge fee" }],
+    gasCosts: [{ amountUSD: "0.0021" }],
     executionDuration: 60,
   },
   transactionRequest: {
-    to:       "0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae",
-    data:     "0xabcdef00",
-    value:    "0x0",
+    to: "0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae",
+    data: "0xabcdef00",
+    value: "0x0",
     gasLimit: "0x186a0",
-    chainId:  EVM_CHAINS.base,
+    chainId: EVM_CHAINS.base,
   },
   tool: "stargate",
   toolDetails: { name: "Stargate" },
   action: {
     fromChainId: EVM_CHAINS.base,
-    toChainId:   EVM_CHAINS.polygon,
-    fromToken:   { address: USDC_NATIVE.base },
-    toToken:     { address: USDC_NATIVE.polygon },
+    toChainId: EVM_CHAINS.polygon,
+    fromToken: { address: USDC_NATIVE.base },
+    toToken: { address: USDC_NATIVE.polygon },
   },
 };
 
@@ -67,11 +58,11 @@ afterEach(() => {
 describe("bridgeQuote (low-level)", () => {
   it("builds the LiFi /quote URL with correct chain ids + token addresses + amount", async () => {
     await bridgeQuote({
-      fromChain:   "base",
-      toChain:     "polygon",
-      fromToken:   USDC_NATIVE.base,
-      toToken:     USDC_NATIVE.polygon,
-      fromAmount:  "1000000",
+      fromChain: "base",
+      toChain: "polygon",
+      fromToken: USDC_NATIVE.base,
+      toToken: USDC_NATIVE.polygon,
+      fromAmount: "1000000",
       fromAddress: "0x0000000000000000000000000000000000000001",
     });
 
@@ -88,11 +79,11 @@ describe("bridgeQuote (low-level)", () => {
 
   it("parses LiFi response into BridgeQuote shape with bridge + gas costs separated", async () => {
     const q = await bridgeQuote({
-      fromChain:   "base",
-      toChain:     "polygon",
-      fromToken:   USDC_NATIVE.base,
-      toToken:     USDC_NATIVE.polygon,
-      fromAmount:  "1000000",
+      fromChain: "base",
+      toChain: "polygon",
+      fromToken: USDC_NATIVE.base,
+      toToken: USDC_NATIVE.polygon,
+      fromAmount: "1000000",
       fromAddress: "0x0000000000000000000000000000000000000001",
     });
 
@@ -109,18 +100,17 @@ describe("bridgeQuote (low-level)", () => {
   });
 
   it("propagates a 4xx from LiFi as an AiFinPayError with detail", async () => {
-    globalThis.fetch = (async () =>
-      new Response("no route found", { status: 404 })) as typeof globalThis.fetch;
+    globalThis.fetch = (async () => new Response("no route found", { status: 404 })) as typeof globalThis.fetch;
 
     await expect(
       bridgeQuote({
-        fromChain:   "base",
-        toChain:     "polygon",
-        fromToken:   USDC_NATIVE.base,
-        toToken:     USDC_NATIVE.polygon,
-        fromAmount:  "1",
+        fromChain: "base",
+        toChain: "polygon",
+        fromToken: USDC_NATIVE.base,
+        toToken: USDC_NATIVE.polygon,
+        fromAmount: "1",
         fromAddress: "0x0000000000000000000000000000000000000001",
-      }),
+      })
     ).rejects.toThrow(/LiFi \/quote returned 404/);
   });
 });
@@ -130,8 +120,8 @@ describe("AiFinPayAgent.bridgeQuote (high-level USDC convenience)", () => {
     const agent = await AiFinPayAgent.new({ telemetry: false });
 
     const q = await agent.bridgeQuote({
-      fromChain:   "base",
-      toChain:     "polygon",
+      fromChain: "base",
+      toChain: "polygon",
       amount_usdc: 1.0,
     });
 
@@ -155,9 +145,9 @@ describe("AiFinPayAgent.bridgeQuote (high-level USDC convenience)", () => {
     await expect(
       agent.bridgeQuote({
         fromChain: "base",
-        toChain:   "polygon",
+        toChain: "polygon",
         // intentionally no amount
-      }),
+      })
     ).rejects.toThrow(/provide either amount_usdc OR fromAmount/);
   });
 
@@ -165,8 +155,8 @@ describe("AiFinPayAgent.bridgeQuote (high-level USDC convenience)", () => {
     const agent = await AiFinPayAgent.new({ telemetry: false });
 
     await agent.bridgeQuote({
-      fromChain:   "base",
-      toChain:     "polygon",
+      fromChain: "base",
+      toChain: "polygon",
       amount_usdc: 2.5, // → 2_500_000 base units
     });
 

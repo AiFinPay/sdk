@@ -17,7 +17,10 @@ export class AifpAuthError extends AifpGateError {}
 
 /** 409 — a resource with this route_pattern already exists. */
 export class AifpConflictError extends AifpGateError {
-  constructor(message: string, public readonly resourceId?: string) {
+  constructor(
+    message: string,
+    public readonly resourceId?: string
+  ) {
     super(message);
   }
 }
@@ -47,7 +50,7 @@ export class StoreCapacityError extends AifpMeterError {
     super(
       `MemoryStore is at capacity (${maxKeys} live counters). Refusing to evict a ` +
         `live counter: that would reset a prepaid batch's spend to zero and serve it ` +
-        `again. Raise maxKeys, or move to a shared store (redisStore).`,
+        `again. Raise maxKeys, or move to a shared store (redisStore).`
     );
   }
 }

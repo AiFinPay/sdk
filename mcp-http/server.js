@@ -17,9 +17,9 @@
 // ──────────────────────────────────────────────────────────────────────────
 import express from "express";
 import rateLimit from "express-rate-limit";
-import crypto from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
+import { isInitializeRequest, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { createServer } from "@aifinpay/mcp";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
@@ -176,7 +176,6 @@ async function buildToolspec() {
   // Pull out the registered tool handlers — the Server stores them in
   // a private _requestHandlers map keyed by method name. Easier:
   // invoke ListToolsRequest manually via the registered handler.
-  const { ListToolsRequestSchema } = await import("@modelcontextprotocol/sdk/types.js");
   const handler = server._requestHandlers?.get(ListToolsRequestSchema.shape.method.value);
   if (!handler) return [];
   const result = await handler({ method: "tools/list", params: {} }, {});
@@ -245,7 +244,7 @@ app.post("/mcp", mcpLimiter, maybeAuth, async (req, res) => {
     // No session yet AND the request is an initialize → spin up a fresh server.
     if (!session && isInitializeRequest(req.body)) {
       const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => crypto.randomUUID(),
+        sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (id) => {
           sessions.set(id, { transport, server, agent });
           sessionLog("info", `session init id=${id} agent=${agent.address}`);
@@ -371,13 +370,20 @@ app.delete("/mcp", async (req, res) => {
   await session.transport.handleRequest(req, res);
 });
 
-app.listen(PORT, () => {
-  sessionLog("info", `listening on :${PORT}, public URL ${PUBLIC_URL}`);
-  sessionLog("info", `oauth: required=${AUTH_REQUIRED} issuer=${ISSUER || "(none)"} resource=${RESOURCE}`);
-  if (AUTH_REQUIRED && !ISSUER) {
-    sessionLog("error", "AIFINPAY_AUTH_REQUIRED=true but AIFINPAY_OAUTH_ISSUER is unset — clients will 401 with nowhere to link.");
-  }
-  if (AUTH_REQUIRED && ISSUER) {
-    sessionLog("info", `Bearer gate ON — verifying JWT against ${ISSUER} JWKS (aud=${RESOURCE}${REQUIRED_SCOPE ? `, scope=${REQUIRED_SCOPE}` : ""}).`);
-  }
-});
+// Only start the server when run directly (not imported for testing).
+const _isMain = process.argv[1] &&
+  new URL(process.argv[1], "file://").href === import.meta.url.href;
+if (_isMain) {
+  app.listen(PORT, () => {
+    sessionLog("info", `listening on :${PORT}, public URL ${PUBLIC_URL}`);
+    sessionLog("info", `oauth: required=${AUTH_REQUIRED} issuer=${ISSUER || "(none)"} resource=${RESOURCE}`);
+    if (AUTH_REQUIRED && !ISSUER) {
+      sessionLog("error", "AIFINPAY_AUTH_REQUIRED=true but AIFINPAY_OAUTH_ISSUER is unset — clients will 401 with nowhere to link.");
+    }
+    if (AUTH_REQUIRED && ISSUER) {
+      sessionLog("info", `Bearer gate ON — verifying JWT against ${ISSUER} JWKS (aud=${RESOURCE}${REQUIRED_SCOPE ? `, scope=${REQUIRED_SCOPE}` : ""}).`);
+    }
+  });
+}
+
+export { app };

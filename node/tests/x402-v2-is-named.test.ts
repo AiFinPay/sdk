@@ -67,7 +67,9 @@ describe("standard x402 version 2", () => {
   it("builds the canonical v2 PAYMENT-SIGNATURE payload and CAIP-2 EIP-3009 domain", async () => {
     const captured: Array<Record<string, unknown>> = [];
     const facilitator = new StandardX402Facilitator();
-    const auth = await facilitator.buildAuth(v2Response(), fakeAgent(captured), { maxAmountUsd: 0.02 });
+    const auth = await facilitator.buildAuth(v2Response(), fakeAgent(captured), {
+      maxAmountUsd: 0.02,
+    });
 
     expect(auth.headers?.["X-PAYMENT"]).toBeUndefined();
     const header = auth.headers?.["PAYMENT-SIGNATURE"];
@@ -87,7 +89,11 @@ describe("standard x402 version 2", () => {
     expect(payload.payload.authorization.nonce).toMatch(/^0x[0-9a-f]{64}$/i);
 
     expect(captured).toHaveLength(1);
-    const typed = captured[0] as { domain: Record<string, unknown>; primaryType: string; message: Record<string, unknown> };
+    const typed = captured[0] as {
+      domain: Record<string, unknown>;
+      primaryType: string;
+      message: Record<string, unknown>;
+    };
     expect(typed.domain.chainId).toBe(84532);
     expect(typed.domain.verifyingContract).toBe(requirement.asset);
     expect(typed.domain.name).toBe("USDC");
@@ -107,25 +113,27 @@ describe("standard x402 version 2", () => {
       maxTimeoutSeconds: 60,
     };
     const facilitator = new StandardX402Facilitator();
-    await expect(facilitator.buildAuth(v2Response([svm]), fakeAgent(), {}))
-      .rejects.toThrow(UnsupportedFacilitatorError);
+    await expect(facilitator.buildAuth(v2Response([svm]), fakeAgent(), {})).rejects.toThrow(
+      UnsupportedFacilitatorError
+    );
   });
 
   it("rejects malformed CAIP-2 and invalid EVM fields", async () => {
     const malformed = { ...requirement, network: "base", payTo: "not-an-address" };
     const facilitator = new StandardX402Facilitator();
-    await expect(facilitator.buildAuth(v2Response([malformed]), fakeAgent(), {}))
-      .rejects.toThrow(/no supported EVM|invalid/i);
+    await expect(facilitator.buildAuth(v2Response([malformed]), fakeAgent(), {})).rejects.toThrow(
+      /no supported EVM|invalid/i
+    );
   });
 
   it("enforces maxAmountUsd only when it can safely identify USDC", async () => {
     const facilitator = new StandardX402Facilitator();
-    await expect(facilitator.buildAuth(v2Response(), fakeAgent(), { maxAmountUsd: 0.001 }))
-      .rejects.toThrow(/cap/i);
+    await expect(facilitator.buildAuth(v2Response(), fakeAgent(), { maxAmountUsd: 0.001 })).rejects.toThrow(/cap/i);
 
     const unknown = { ...requirement, extra: { name: "UNKNOWN", version: "1" } };
-    await expect(facilitator.buildAuth(v2Response([unknown]), fakeAgent(), { maxAmountUsd: 10 }))
-      .rejects.toThrow(/cannot be safely enforced/i);
+    await expect(facilitator.buildAuth(v2Response([unknown]), fakeAgent(), { maxAmountUsd: 10 })).rejects.toThrow(
+      /cannot be safely enforced/i
+    );
   });
 
   it("retains legacy v1 body detection for backwards compatibility", async () => {
@@ -134,6 +142,48 @@ describe("standard x402 version 2", () => {
       headers: { "content-type": "application/json" },
     });
     expect(await StandardX402Facilitator.detect(legacy)).toBe(true);
+  });
+
+  it.each([1, 2])("v%s refuses forged USDC metadata before signing", async (version) => {
+    const facilitator = new StandardX402Facilitator();
+    for (const change of [
+      { extra: { name: "USDC", version: "2", decimals: 18 }, amount: "10000000000000000" },
+      { asset: "0x1111111111111111111111111111111111111111" },
+      { network: "eip155:137" },
+    ]) {
+      const req = { ...requirement, ...change };
+      const response =
+        version === 2
+          ? v2Response([req])
+          : Response.json(
+              {
+                x402Version: 1,
+                accepts: [
+                  {
+                    ...req,
+                    network: change.network ? "polygon" : "base-sepolia",
+                    maxAmountRequired: req.amount,
+                  },
+                ],
+              },
+              { status: 402 }
+            );
+      const captured: Array<Record<string, unknown>> = [];
+      await expect(facilitator.buildAuth(response, fakeAgent(captured), { maxAmountUsd: 0.02 })).rejects.toThrow(
+        /USDC|decimals|asset/
+      );
+      expect(captured).toHaveLength(0);
+    }
+  });
+
+  it("compares signed atomic units to the exact cap without rounding up", async () => {
+    const captured: Array<Record<string, unknown>> = [];
+    await expect(
+      new StandardX402Facilitator().buildAuth(v2Response([{ ...requirement, amount: "1" }]), fakeAgent(captured), {
+        maxAmountUsd: 0.0000009999,
+      })
+    ).rejects.toThrow(/cap/);
+    expect(captured).toHaveLength(0);
   });
 
   it("does not detect a non-402 even if it carries PAYMENT-REQUIRED", async () => {

@@ -53,7 +53,7 @@ export class MemoryStore implements GateStore {
       // can find in a log flood is not a warning.
       console.warn(
         "[@aifinpay/gate] MemoryStore meters quota per process — under cluster/PM2/multiple pods " +
-          "each worker gets a full copy of every batch. Pass a shared store (redisStore) in production.",
+          "each worker gets a full copy of every batch. Pass a shared store (redisStore) in production."
       );
     }
   }

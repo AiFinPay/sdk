@@ -1,8 +1,24 @@
 import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sign, verify } from "node:crypto";
+import { aifinpayApiUrl } from "./apiUrl.js";
 
+/**
+ * Networks supported in Agent Passport.
+ * @deprecated "botchain" is deprecated. Use "robinhood" instead.
+ */
 export type AgentPassportNetwork =
-  | "polygon" | "avalanche" | "arbitrum" | "bnb" | "base" | "unichain"
-  | "optimism" | "botchain" | "xrplevm" | "solana" | "near" | "aptos" | "casper";
+  | "polygon"
+  | "avalanche"
+  | "arbitrum"
+  | "bnb"
+  | "base"
+  | "unichain"
+  | "optimism"
+  | "botchain"
+  | "xrplevm"
+  | "solana"
+  | "near"
+  | "aptos"
+  | "casper";
 
 export type AgentPassportChainFamily = "evm" | "solana" | "near" | "aptos" | "casper";
 export type AgentPassportStatus = "active" | "suspended" | "revoked";
@@ -63,7 +79,10 @@ export interface AgentPassportWalletChallenge {
 }
 
 export class AgentPassportError extends Error {
-  constructor(message: string, public readonly code = "agent_passport_error") {
+  constructor(
+    message: string,
+    public readonly code = "agent_passport_error"
+  ) {
     super(message);
     this.name = "AgentPassportError";
   }
@@ -81,7 +100,7 @@ export function normalizeAgentPassportIdentifier(identifier: string): string {
   if (!USERNAME_RE.test(username)) {
     throw new AgentPassportError(
       "identifier must be an immutable aifp_agent_* id, AIFP number, or 3-32 character @username",
-      "invalid_agent_identifier",
+      "invalid_agent_identifier"
     );
   }
   return username;
@@ -91,7 +110,10 @@ function canonicalize(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(canonicalize).join(",")}]`;
   const record = value as Record<string, unknown>;
-  return `{${Object.keys(record).sort().map((k) => `${JSON.stringify(k)}:${canonicalize(record[k])}`).join(",")}}`;
+  return `{${Object.keys(record)
+    .sort()
+    .map((k) => `${JSON.stringify(k)}:${canonicalize(record[k])}`)
+    .join(",")}}`;
 }
 
 function protectedPayload(passport: AgentPassportIdentity): Record<string, unknown> {
@@ -128,16 +150,22 @@ function protectedPayload(passport: AgentPassportIdentity): Record<string, unkno
 function validateResolvedIdentity(value: unknown): AgentPassportIdentity {
   if (!value || typeof value !== "object") throw new AgentPassportError("invalid Agent Passport response");
   const v = value as Record<string, unknown>;
-  if (typeof v.agent_id !== "string" || !AGENT_ID_RE.test(v.agent_id)) throw new AgentPassportError("invalid agent_id in Agent Passport response");
-  if (typeof v.agent_number !== "number" || !Number.isSafeInteger(v.agent_number) || v.agent_number <= 0) throw new AgentPassportError("invalid agent_number in Agent Passport response");
-  if (typeof v.agent_number_display !== "string" || !AGENT_NUMBER_RE.test(v.agent_number_display)) throw new AgentPassportError("invalid agent_number_display in Agent Passport response");
-  if (v.username !== null && (typeof v.username !== "string" || !USERNAME_RE.test(v.username))) throw new AgentPassportError("invalid username in Agent Passport response");
-  if (!v.issuer || typeof v.issuer !== "object") throw new AgentPassportError("Agent Passport response has no issuer proof");
+  if (typeof v.agent_id !== "string" || !AGENT_ID_RE.test(v.agent_id))
+    throw new AgentPassportError("invalid agent_id in Agent Passport response");
+  if (typeof v.agent_number !== "number" || !Number.isSafeInteger(v.agent_number) || v.agent_number <= 0)
+    throw new AgentPassportError("invalid agent_number in Agent Passport response");
+  if (typeof v.agent_number_display !== "string" || !AGENT_NUMBER_RE.test(v.agent_number_display))
+    throw new AgentPassportError("invalid agent_number_display in Agent Passport response");
+  if (v.username !== null && (typeof v.username !== "string" || !USERNAME_RE.test(v.username)))
+    throw new AgentPassportError("invalid username in Agent Passport response");
+  if (!v.issuer || typeof v.issuer !== "object")
+    throw new AgentPassportError("Agent Passport response has no issuer proof");
   if (!Array.isArray(v.wallets)) throw new AgentPassportError("Agent Passport response has no wallets array");
   const wallets = v.wallets.map((raw) => {
     if (!raw || typeof raw !== "object") throw new AgentPassportError("invalid wallet binding");
     const w = raw as Record<string, unknown>;
-    if (typeof w.network !== "string" || typeof w.chain_family !== "string" || typeof w.address !== "string") throw new AgentPassportError("invalid wallet binding fields");
+    if (typeof w.network !== "string" || typeof w.chain_family !== "string" || typeof w.address !== "string")
+      throw new AgentPassportError("invalid wallet binding fields");
     return raw as AgentPassportWalletBinding;
   });
   return { ...(value as AgentPassportIdentity), wallets };
@@ -146,14 +174,27 @@ function validateResolvedIdentity(value: unknown): AgentPassportIdentity {
 async function jsonRequest(url: string, init?: RequestInit, fetchImpl: typeof fetch = fetch): Promise<unknown> {
   const response = await fetchImpl(url, {
     ...init,
-    headers: { accept: "application/json", ...(init?.body ? { "content-type": "application/json" } : {}), ...(init?.headers || {}) },
+    headers: {
+      accept: "application/json",
+      ...(init?.body ? { "content-type": "application/json" } : {}),
+      ...(init?.headers || {}),
+    },
   });
   let body: unknown;
-  try { body = await response.json(); }
-  catch { throw new AgentPassportError(`Agent Passport endpoint returned non-JSON HTTP ${response.status}`, "agent_passport_non_json"); }
+  try {
+    body = await response.json();
+  } catch {
+    throw new AgentPassportError(
+      `Agent Passport endpoint returned non-JSON HTTP ${response.status}`,
+      "agent_passport_non_json"
+    );
+  }
   if (!response.ok) {
-    const rec = body && typeof body === "object" ? body as Record<string, unknown> : {};
-    throw new AgentPassportError(typeof rec.error === "string" ? rec.error : `Agent Passport HTTP ${response.status}`, typeof rec.error === "string" ? rec.error : "agent_passport_http_error");
+    const rec = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+    throw new AgentPassportError(
+      typeof rec.error === "string" ? rec.error : `Agent Passport HTTP ${response.status}`,
+      typeof rec.error === "string" ? rec.error : "agent_passport_http_error"
+    );
   }
   return body;
 }
@@ -162,10 +203,14 @@ async function jsonRequest(url: string, init?: RequestInit, fetchImpl: typeof fe
 export async function resolveAgentPassport(
   identifier: string,
   baseUrl = "https://aifinpay.io",
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = fetch
 ): Promise<AgentPassportIdentity> {
   const normalized = normalizeAgentPassportIdentifier(identifier);
-  const body = await jsonRequest(`${baseUrl.replace(/\/$/, "")}/api/agent/resolve/${encodeURIComponent(normalized)}`, undefined, fetchImpl) as Record<string, unknown>;
+  const body = (await jsonRequest(
+    aifinpayApiUrl(baseUrl, `/api/agent/resolve/${encodeURIComponent(normalized)}`),
+    undefined,
+    fetchImpl
+  )) as Record<string, unknown>;
   return validateResolvedIdentity(body.agent);
 }
 
@@ -179,21 +224,28 @@ export function generateAgentPassportHolderKeypair(): AgentPassportHolderKeypair
 }
 
 export function signAgentPassportHolderMessage(privateKeyB64: string, message: string): string {
-  const key = createPrivateKey({ key: Buffer.from(privateKeyB64, "base64"), format: "der", type: "pkcs8" });
+  const key = createPrivateKey({
+    key: Buffer.from(privateKeyB64, "base64"),
+    format: "der",
+    type: "pkcs8",
+  });
   return sign(null, Buffer.from(message, "utf8"), key).toString("base64");
 }
 
 export async function issueAgentPassport(
   input: { holder_public_key: string; username?: string; display_name?: string },
-  baseUrl = "https://aifinpay.io",
+  baseUrl = "https://aifinpay.io"
 ): Promise<AgentPassportIdentity> {
-  const body = await jsonRequest(`${baseUrl.replace(/\/$/, "")}/api/aifp3/passports`, { method: "POST", body: JSON.stringify(input) }) as Record<string, unknown>;
+  const body = (await jsonRequest(`${baseUrl.replace(/\/$/, "")}/api/aifp3/passports`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  })) as Record<string, unknown>;
   return validateResolvedIdentity(body.passport);
 }
 
 export async function createAgentPassport(
   input: { username?: string; display_name?: string } = {},
-  baseUrl = "https://aifinpay.io",
+  baseUrl = "https://aifinpay.io"
 ): Promise<{ passport: AgentPassportIdentity; holder: AgentPassportHolderKeypair }> {
   const holder = generateAgentPassportHolderKeypair();
   const passport = await issueAgentPassport({ ...input, holder_public_key: holder.public_key_b64 }, baseUrl);
@@ -203,20 +255,32 @@ export async function createAgentPassport(
 export async function requestAgentPassportWalletBinding(
   identifier: string,
   input: { network: AgentPassportNetwork; address: string; wallet_public_key?: string },
-  baseUrl = "https://aifinpay.io",
+  baseUrl = "https://aifinpay.io"
 ): Promise<AgentPassportWalletChallenge> {
   const normalized = normalizeAgentPassportIdentifier(identifier);
-  const body = await jsonRequest(`${baseUrl.replace(/\/$/, "")}/api/aifp3/passports/${encodeURIComponent(normalized)}/wallets/challenge`, { method: "POST", body: JSON.stringify(input) }) as Record<string, unknown>;
+  const body = (await jsonRequest(
+    `${baseUrl.replace(/\/$/, "")}/api/aifp3/passports/${encodeURIComponent(normalized)}/wallets/challenge`,
+    { method: "POST", body: JSON.stringify(input) }
+  )) as Record<string, unknown>;
   return body.challenge as AgentPassportWalletChallenge;
 }
 
 export async function confirmAgentPassportWalletBinding(
   identifier: string,
-  input: { challenge_id: string; holder_signature: string; wallet_signature: string; wallet_signature_encoding?: "base64" | "base58" | "hex"; wallet_public_key?: string },
-  baseUrl = "https://aifinpay.io",
+  input: {
+    challenge_id: string;
+    holder_signature: string;
+    wallet_signature: string;
+    wallet_signature_encoding?: "base64" | "base58" | "hex";
+    wallet_public_key?: string;
+  },
+  baseUrl = "https://aifinpay.io"
 ): Promise<AgentPassportIdentity> {
   const normalized = normalizeAgentPassportIdentifier(identifier);
-  const body = await jsonRequest(`${baseUrl.replace(/\/$/, "")}/api/aifp3/passports/${encodeURIComponent(normalized)}/wallets/confirm`, { method: "POST", body: JSON.stringify(input) }) as Record<string, unknown>;
+  const body = (await jsonRequest(
+    `${baseUrl.replace(/\/$/, "")}/api/aifp3/passports/${encodeURIComponent(normalized)}/wallets/confirm`,
+    { method: "POST", body: JSON.stringify(input) }
+  )) as Record<string, unknown>;
   return validateResolvedIdentity(body.passport);
 }
 
@@ -225,24 +289,41 @@ export async function confirmAgentPassportWalletBinding(
  * independently pinned AiFinPay issuer public key. Never trust only the key
  * returned inside the same passport response.
  */
-export function verifyAgentPassportIssuerSignature(passport: AgentPassportIdentity, trustedIssuerPublicKeyB64: string): boolean {
+export function verifyAgentPassportIssuerSignature(
+  passport: AgentPassportIdentity,
+  trustedIssuerPublicKeyB64: string
+): boolean {
   if (passport.integrity_state !== "ok") return false;
   if (passport.issuer.public_key !== trustedIssuerPublicKeyB64) return false;
   try {
     const canonical = canonicalize(protectedPayload(passport));
-    const hashOk = createHash("sha256").update(Buffer.from(canonical, "utf8")).digest("hex") === passport.protected_payload_hash;
+    const hashOk =
+      createHash("sha256").update(Buffer.from(canonical, "utf8")).digest("hex") === passport.protected_payload_hash;
     if (!hashOk) return false;
-    const key = createPublicKey({ key: Buffer.from(trustedIssuerPublicKeyB64, "base64"), format: "der", type: "spki" });
+    const key = createPublicKey({
+      key: Buffer.from(trustedIssuerPublicKeyB64, "base64"),
+      format: "der",
+      type: "spki",
+    });
     return verify(null, Buffer.from(canonical, "utf8"), key, Buffer.from(passport.issuer.signature, "base64"));
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
-export function agentPassportWallet(passport: AgentPassportIdentity, network: AgentPassportNetwork): AgentPassportWalletBinding {
+export function agentPassportWallet(
+  passport: AgentPassportIdentity,
+  network: AgentPassportNetwork
+): AgentPassportWalletBinding {
   if (passport.status !== "active" || passport.integrity_state !== "ok") {
-    throw new AgentPassportError(`Agent Passport is ${passport.integrity_state !== "ok" ? "integrity_failed" : passport.status}`, "agent_not_active");
+    throw new AgentPassportError(
+      `Agent Passport is ${passport.integrity_state !== "ok" ? "integrity_failed" : passport.status}`,
+      "agent_not_active"
+    );
   }
   const candidates = passport.wallets.filter((w) => w.network === network && w.status === "active");
   const selected = candidates.find((w) => w.is_primary) ?? candidates[0];
-  if (!selected) throw new AgentPassportError(`Agent Passport has no verified ${network} wallet`, "wallet_binding_missing");
+  if (!selected)
+    throw new AgentPassportError(`Agent Passport has no verified ${network} wallet`, "wallet_binding_missing");
   return selected;
 }

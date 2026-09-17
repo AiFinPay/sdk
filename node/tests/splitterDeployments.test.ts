@@ -7,19 +7,18 @@ import { getAddress } from "viem";
 import { SPLITTER_DEPLOYMENTS } from "../src/index.js";
 
 const EXPECTED_CHAIN_IDS: Record<string, number> = {
-  polygon:  137,
-  base:     8453,
+  polygon: 137,
+  base: 8453,
   optimism: 10,
   unichain: 130,
   botchain: 677,
-  xrplevm:  1440000,
+  robinhood: 4663,
+  xrplevm: 1440000,
 };
 
 describe("SPLITTER_DEPLOYMENTS registry", () => {
   it("contains exactly the verified chains", () => {
-    expect(Object.keys(SPLITTER_DEPLOYMENTS).sort()).toEqual(
-      Object.keys(EXPECTED_CHAIN_IDS).sort(),
-    );
+    expect(Object.keys(SPLITTER_DEPLOYMENTS).sort()).toEqual(Object.keys(EXPECTED_CHAIN_IDS).sort());
   });
 
   it("chainId matches the viem chain object on every entry", () => {
@@ -45,8 +44,9 @@ describe("SPLITTER_DEPLOYMENTS registry", () => {
     }
   });
 
-  it("native-only chains (botchain, xrplevm) carry no usdc entry", () => {
+  it("native-only chains (botchain, robinhood, xrplevm) carry no usdc entry", () => {
     expect(SPLITTER_DEPLOYMENTS.botchain.usdc).toBeUndefined();
+    expect(SPLITTER_DEPLOYMENTS.robinhood.usdc).toBeUndefined();
     expect(SPLITTER_DEPLOYMENTS.xrplevm.usdc).toBeUndefined();
     expect(SPLITTER_DEPLOYMENTS.polygon.usdc).toBeDefined();
     expect(SPLITTER_DEPLOYMENTS.base.usdc).toBeDefined();

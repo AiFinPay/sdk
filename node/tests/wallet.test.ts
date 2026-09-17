@@ -74,7 +74,12 @@ describe("the wallet module's import graph is free of the transaction stack", ()
           if (!p.endsWith(".js")) p += ".js";
           walk(p);
         } else {
-          pkgs.add(spec.split("/").slice(0, spec.startsWith("@") ? 2 : 1).join("/"));
+          pkgs.add(
+            spec
+              .split("/")
+              .slice(0, spec.startsWith("@") ? 2 : 1)
+              .join("/")
+          );
         }
       }
     };
@@ -88,8 +93,6 @@ describe("the wallet module's import graph is free of the transaction stack", ()
     const pkgs = graphPackages(dist);
     expect([...pkgs].sort()).not.toContain("viem");
     expect([...pkgs].sort()).not.toContain("@solana/web3.js");
-    expect([...pkgs]).toEqual(
-      expect.arrayContaining(["tweetnacl", "bs58", "@noble/hashes", "@noble/curves"]),
-    );
+    expect([...pkgs]).toEqual(expect.arrayContaining(["tweetnacl", "bs58", "@noble/hashes", "@noble/curves"]));
   });
 });

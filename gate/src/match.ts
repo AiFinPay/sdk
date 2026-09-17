@@ -17,9 +17,7 @@ export function matchResource(resources: AifpResource[], path: string): AifpReso
   for (const r of resources) {
     const pat = r.route_pattern;
     if (!pat) continue;
-    const hit = pat.endsWith("/*")
-      ? path === pat.slice(0, -2) || path.startsWith(pat.slice(0, -1))
-      : path === pat;
+    const hit = pat.endsWith("/*") ? path === pat.slice(0, -2) || path.startsWith(pat.slice(0, -1)) : path === pat;
     if (!hit) continue;
     if (!best || pat.length > best.route_pattern.length) best = r;
   }

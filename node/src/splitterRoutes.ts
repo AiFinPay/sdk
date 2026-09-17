@@ -39,28 +39,19 @@
  */
 import type { Chain } from "viem/chains";
 
-import { SPLITTER_ROUTES } from "./splitterRoutes.generated.js";
+import { SPLITTER_ROUTES } from "./generated/splitterRoutes.generated.js";
 
-export {
-  SPLITTER_ROUTES,
-  SPLITTER_GOVERNANCE,
-  SPLITTER_REGISTRY_SOURCE,
-} from "./splitterRoutes.generated.js";
+export { SPLITTER_ROUTES, SPLITTER_GOVERNANCE, SPLITTER_REGISTRY_SOURCE } from "./generated/splitterRoutes.generated.js";
 
 /** Protocol routes. A route is a fee profile fixed at construction. */
 export type SplitterRoute = "merchant-aifp1" | "agent-x402";
 
-/** Chains carrying v1.3 route splitters. */
+/** 
+ * Chains carrying v1.3 route splitters.
+ * @deprecated "botchain" is deprecated. Use "robinhood" instead.
+ */
 export type SplitterRouteChain =
-  | "polygon"
-  | "optimism"
-  | "bnb"
-  | "unichain"
-  | "botchain"
-  | "base"
-  | "arbitrum"
-  | "avalanche"
-  | "xrplevm";
+  "amoy" | "polygon" | "optimism" | "bnb" | "unichain" | "botchain" | "base" | "arbitrum" | "avalanche" | "xrplevm";
 
 /** Key into SPLITTER_ROUTES. Both halves are required. */
 export type SplitterRouteKey = `${SplitterRouteChain}:${SplitterRoute}`;
@@ -91,6 +82,8 @@ export interface SplitterRouteDeployment {
    * settlement on that exact route with verified balance deltas.
    */
   settlementEnabled: boolean;
+  /** Testnet entries require an explicit opt-in; they never activate mainnet. */
+  testnet: boolean;
   /**
    * How many independent RPC providers agreed on every field above when the
    * registry was verified. A route verified from one provider can never be
@@ -119,7 +112,7 @@ export class UnknownSplitterRouteError extends Error {
         `${Object.keys(SPLITTER_ROUTES).join(", ")}. There is deliberately no ` +
         `fallback between routes — merchant-aifp1 and agent-x402 have different ` +
         `immutable fee splits, so substituting one for the other would settle ` +
-        `at the wrong amount.`,
+        `at the wrong amount.`
     );
     this.name = "UnknownSplitterRouteError";
   }
@@ -139,11 +132,9 @@ export class SplitterRouteNotSettlingError extends Error {
  */
 export function resolveSplitterRoute(
   chain: SplitterRouteChain | string,
-  route: SplitterRoute | string,
+  route: SplitterRoute | string
 ): SplitterRouteDeployment {
-  const entry = (SPLITTER_ROUTES as Partial<Record<string, SplitterRouteDeployment>>)[
-    `${chain}:${route}`
-  ];
+  const entry = (SPLITTER_ROUTES as Partial<Record<string, SplitterRouteDeployment>>)[`${chain}:${route}`];
   if (!entry) throw new UnknownSplitterRouteError(String(chain), String(route));
   return entry;
 }
@@ -158,14 +149,18 @@ export function resolveSettlingSplitterRoute(
   chain: SplitterRouteChain | string,
   route: SplitterRoute | string,
   now: Date = new Date(),
+  options: { allowTestnet?: boolean } = {}
 ): SplitterRouteDeployment {
   const entry = resolveSplitterRoute(chain, route);
   const key = `${entry.chain}:${entry.route}`;
+  if (entry.testnet && options.allowTestnet !== true) {
+    throw new SplitterRouteNotSettlingError(key, "testnet settlement requires explicit allowTestnet opt-in");
+  }
   if (!entry.settlementEnabled) {
     throw new SplitterRouteNotSettlingError(
       key,
       "settlement is not enabled for this route yet — it is enabled only after a " +
-        "successful mainnet paid end-to-end settlement with verified balance deltas",
+        "successful mainnet paid end-to-end settlement with verified balance deltas"
     );
   }
   // Every comparison below is written as "prove it is inside the window", never
@@ -181,20 +176,19 @@ export function resolveSettlingSplitterRoute(
     throw new SplitterRouteNotSettlingError(
       key,
       `its policy window is unreadable (validFrom ${entry.validFrom}, validUntil ` +
-        `${entry.validUntil}) — a window that cannot be parsed is not a window that has opened`,
+        `${entry.validUntil}) — a window that cannot be parsed is not a window that has opened`
     );
   }
   if (!Number.isFinite(t)) {
     throw new SplitterRouteNotSettlingError(
       key,
-      "the current time was passed as an invalid Date, so the policy window cannot be evaluated",
+      "the current time was passed as an invalid Date, so the policy window cannot be evaluated"
     );
   }
   if (from >= until) {
     throw new SplitterRouteNotSettlingError(
       key,
-      `its policy window is inverted (validFrom ${entry.validFrom} is not before ` +
-        `validUntil ${entry.validUntil})`,
+      `its policy window is inverted (validFrom ${entry.validFrom} is not before ` + `validUntil ${entry.validUntil})`
     );
   }
   if (!(t >= from)) {
@@ -203,7 +197,7 @@ export function resolveSettlingSplitterRoute(
   if (!(t < until)) {
     throw new SplitterRouteNotSettlingError(
       key,
-      `its policy window expired ${entry.validUntil} and has not been re-reviewed`,
+      `its policy window expired ${entry.validUntil} and has not been re-reviewed`
     );
   }
   return entry;

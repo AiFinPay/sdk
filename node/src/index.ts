@@ -37,6 +37,7 @@ export type {
 export {
   SettlementClient,
   SettlementProtocolError,
+  SettlementConfirmationPendingError,
   validateSettlementInvoice,
   validateTrustedSettlementRoutePin,
   verifySettlementRouteOnChain,
@@ -47,6 +48,7 @@ export {
 export * from "./settlementV14.js";
 export type {
   SettlementRouteClass,
+  SettlementClientOptions,
   SettlementEvmNetwork,
   SettlementRoute,
   TrustedSettlementRoutePin,
@@ -68,13 +70,52 @@ export {
   UnknownSplitterRouteError,
   SplitterRouteNotSettlingError,
 } from "./splitterRoutes.js";
+export type { SplitterRoute, SplitterRouteChain, SplitterRouteKey, SplitterRouteDeployment } from "./splitterRoutes.js";
+/** @deprecated botchain is deprecated. Use robinhood instead. */
+export { botchain, robinhood, xrplevm } from "./chains.js";
+
+// ── Environment & protocol-version resolver (AIFINP-223) ─────────────────
+export {
+  resolveDeployment,
+  isV14Available,
+  DeploymentResolverError,
+  UnsupportedDevNetworkError,
+  VersionUnavailableError,
+  DeploymentDisabledError,
+  NoDeploymentError,
+} from "./deploymentResolver.js";
 export type {
-  SplitterRoute,
-  SplitterRouteChain,
-  SplitterRouteKey,
-  SplitterRouteDeployment,
-} from "./splitterRoutes.js";
-export { botchain, xrplevm } from "./chains.js";
+  SdkEnvironment,
+  ProtocolVersion,
+  RequestedVersion,
+  ResolveDeploymentOptions,
+  ResolvedDeployment,
+} from "./deploymentResolver.js";
+export { V14_DEPLOYMENTS, V14_DEPLOYMENTS_SOURCE, V14_DEV_NETWORKS } from "./generated/v14Deployments.generated.js";
+export type { V14Deployment, V14Asset, V14Splitter, V14Safe } from "./generated/v14Deployments.generated.js";
+
+// ── Solana environment & protocol-version resolver (AIFINP-224) ──────────
+export {
+  resolveSolanaDeployment,
+  isSolanaV14Available,
+  UnsupportedSolanaDevNetworkError,
+  SolanaVersionUnavailableError,
+  SolanaV12UnavailableError,
+  SolanaDeploymentDisabledError,
+  NoSolanaDeploymentError,
+} from "./solanaDeploymentResolver.js";
+export type {
+  SolanaProtocolVersion,
+  SolanaRequestedVersion,
+  ResolveSolanaDeploymentOptions,
+  ResolvedSolanaDeployment,
+} from "./solanaDeploymentResolver.js";
+export {
+  SOLANA_V14_DEPLOYMENTS,
+  SOLANA_V14_DEPLOYMENTS_SOURCE,
+  SOLANA_DEV_NETWORKS,
+} from "./generated/solanaV14Deployments.generated.js";
+export type { SolanaV14Deployment, SolanaNetwork } from "./generated/solanaV14Deployments.generated.js";
 
 export { AiFinPayAgent, SPLITTER_DEPLOYMENTS, paymentIdFor } from "./unifiedAgent.js";
 export type {
@@ -142,12 +183,7 @@ export {
   USDC_NATIVE,
   USDC_BRIDGED,
 } from "./crossChain.js";
-export type {
-  BridgeQuote,
-  BridgeReceipt,
-  BridgeQuoteOptions,
-  EvmChainName,
-} from "./crossChain.js";
+export type { BridgeQuote, BridgeReceipt, BridgeQuoteOptions, EvmChainName } from "./crossChain.js";
 
 // ── Legacy chain-aware public API (back-compat only) ─────────────────────
 export { Agent } from "./agent.js";
@@ -160,25 +196,17 @@ export {
   SeatNotFoundError,
   UnsupportedFacilitatorError,
   X402Error,
+  toSafeError,
 } from "./errors.js";
-export {
-  AiFinPayFacilitator,
-  CoinbaseX402Facilitator,
-  REGISTERED,
-  detectFacilitator,
-} from "./facilitators/index.js";
-export type {
-  AuthPayload,
-  Facilitator,
-  FacilitatorClass,
-  PayOptions,
-} from "./facilitators/index.js";
+export type { SafeErrorShape } from "./errors.js";
+/** @deprecated Legacy x402 facilitators — use AIFP-1/AIFP-2 settlement instead */
+export { AiFinPayFacilitator, CoinbaseX402Facilitator, REGISTERED, detectFacilitator } from "./facilitators/index.js";
+/** @deprecated Legacy x402 facilitators — use AIFP-1/AIFP-2 settlement instead */
+export type { AuthPayload, Facilitator, FacilitatorClass, PayOptions } from "./facilitators/index.js";
 
-export {
-  type SpendLedger,
-  MemorySpendLedger,
-  FileSpendLedger,
-} from "./spendLedger.js";
+export { type SpendLedger, MemorySpendLedger, FileSpendLedger } from "./spendLedger.js";
 
 export { deriveWallet, newWallet } from "./wallet.js";
+export { getAgentHistory, getQuota, AGENT_RECEIPT_FIELDS, AGENT_TRANSACTION_FIELDS } from "./agentHistory.js";
+export type { AgentHistoryOptions, QuotaOptions, QuotaBatch, QuotaSummary } from "./agentHistory.js";
 export type { DerivedWallet } from "./wallet.js";

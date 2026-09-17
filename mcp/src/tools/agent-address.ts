@@ -16,34 +16,31 @@ export function agentAddressTool() {
       type: "object",
       properties: {
         solana: { type: "string", description: "Solana base58 address" },
-        evm:    { type: "string", description: "EVM address used across EVM networks" },
+        evm: {
+          type: "string",
+          description: "EVM address used across EVM networks (Polygon, Base, Arbitrum, Optimism, BNB, Unichain, Avalanche, Robinhood, etc.)",
+        },
         casper: {
           type: "string",
           description:
             "Casper identity derived from the same seed. Read-only in this MCP RC; no payment signing tool is exposed.",
         },
-        note:   { type: "string" },
+        note: { type: "string" },
       },
       required: ["solana", "evm"],
     },
   };
 }
 
-export async function runAgentAddress(
-  ctx: ToolContext,
-  _args: Record<string, unknown>,
-) {
+export async function runAgentAddress(ctx: ToolContext, _args: Record<string, unknown>) {
   const payload = {
     solana: ctx.agent.solanaAddress,
-    evm:    ctx.agent.evmAddress,
+    evm: ctx.agent.evmAddress,
     casper: ctx.agent.casperAddress,
-    note:
-      "Read-only address discovery. Payment signing is intentionally absent from this MCP production RC until the final SDK v2 release contains independently trusted deployment pins and paid E2E evidence.",
+    note: "Read-only address discovery. Payment signing is intentionally absent from this MCP production RC until the final SDK v2 release contains independently trusted deployment pins and paid E2E evidence.",
   };
   return {
-    content: [
-      { type: "text", text: JSON.stringify(payload, null, 2) },
-    ],
+    content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
     structuredContent: payload,
   };
 }

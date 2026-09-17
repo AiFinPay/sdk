@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2
+
+- Minimum Node engine is now 22 (`engines: >=22`). Node 18/20 are no
+  longer supported. No API or behaviour change.
+
 ## 0.2.2
 
 Documentation only; no API or behaviour change.
@@ -12,7 +17,7 @@ price, 1% is withheld from it and the merchant receives 99%. AIFP-2/x402 is the
 provider-preserving route — the provider receives 100% and any fee is on top;
 that fee is 0% today.
 
-The section now also states plainly what is true *during* the migration, since
+The section now also states plainly what is true _during_ the migration, since
 the two differ for merchants integrating right now: Polygon mainnet still runs
 the previous splitter (98.99/1.00/0.01 immutable) and the backend grosses up to
 match it, so an AIFP-1 merchant is currently made whole and the agent pays a
@@ -96,7 +101,7 @@ counted it at the literal key `used:undefined` — one counter shared by every
 agent that presented one. Agents are handed one of these on **every call they
 pay for**, and they live 30 days, so the supply was effectively unlimited.
 
-The gate now checks the token's *kind* before its quota, as an allow-list: only
+The gate now checks the token's _kind_ before its quota, as an allow-list: only
 a receipt with no `typ_aifp`, or `typ_aifp: "quota"`, is spendable. Anything
 else is `403`. A receipt with no `receipt_id`, or a single-use receipt with no
 `nonce`, is refused for the same reason — the meter has exactly one key and
@@ -116,7 +121,7 @@ It now sweeps expired entries and, if that frees nothing, **throws**
 `StoreCapacityError`. Your `onStoreError` decides what happens next (default
 `"closed"` → 503) and the event is visible in your logs instead of in your
 revenue. This restores the store contract this package has always documented:
-*a backend failure must reject; never resolve with a guessed number.*
+_a backend failure must reject; never resolve with a guessed number._
 
 **Who is affected:** only processes that actually reach `maxKeys` (default
 100,000 concurrently live counters). If you set a low `maxKeys`, raise it, or

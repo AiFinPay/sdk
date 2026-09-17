@@ -5,18 +5,10 @@ Mirrors `@aifinpay/agent`'s `AiFinPayAgent` TypeScript class. One seed
 derives a Solana base58 pubkey, a Polygon EVM 0x address, and a Casper
 account hash. Casper is identity only — the address is derived and can be
 funded, but this SDK does not sign Casper deploys.
-Per-call payment via `agent.call(provider=…)` does:
-
-  1. Registry lookup at /api/providers (falls back to /providers)
-  2. POST to the bridge → expect HTTP 402
-  3. Build + sign + send the on-chain payment:
-       - Polygon  → B2BSplitter.payMatic(merchant, ipCreator, orderId)
-                    with msg.value = total_wei
-       - Solana   → b2b_pay_with_split(merchant_amount_lamports, order_id)
-                    on program 5g9zWHF1…KFx2
-  4. Retry the bridge POST with x-tx-hash + x-order-id (Polygon) or
-     x-solana-tx + x-order-id (Solana)
-  5. Return the upstream response body
+Legacy paid `agent.call(provider=…)` is fail-closed after a 402 challenge:
+free/read-only bridge responses still pass through. This Python surface has no
+paid replacement; use the Node SDK's reviewed `fetchPaid` v1.3 route with a
+fresh trusted quote/FX result.
 
 Dependencies (declared in pyproject.toml):
   • PyNaCl, base58   (already there)
@@ -26,29 +18,33 @@ Dependencies (declared in pyproject.toml):
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
-import struct
-import time
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
-import nacl.signing
-import nacl.encoding
 import base58
+import nacl.encoding
+import nacl.signing
 import requests
 
-from .errors import AiFinPayError, X402Error
 from .client import Agent  # legacy Solana-only agent (we wrap it)
 from .cross_chain import (
-    EVM_CHAINS,
     USDC_NATIVE,
     BridgeQuote,
     BridgeReceipt,
-    bridge_quote as _bridge_quote,
+)
+from .cross_chain import (
     bridge_execute as _bridge_execute,
+)
+from .cross_chain import (
+    bridge_quote as _bridge_quote,
+)
+from .cross_chain import (
     bridge_wait_for_arrival as _bridge_wait_for_arrival,
 )
+from .errors import AiFinPayError, X402Error
 
 # ── EVM imports — heavyish, lazy via top-level so missing deps fail clearly ──
 try:
@@ -65,7 +61,7 @@ except ImportError as e:  # pragma: no cover
 # POA middleware moved between web3 majors: v6 exports geth_poa_middleware,
 # v7 renamed it to ExtraDataToPOAMiddleware. Importing it inside the hard
 # block above used to make the WHOLE module unimportable on web3 v7 with a
-# misleading "install web3" error. Optional by design — Polygon RPCs work
+# misleading "install web3" error. by design — Polygon RPCs work
 # without it for our read/sign/send path.
 try:  # web3 v6
     from web3.middleware import geth_poa_middleware as _poa_middleware  # type: ignore[attr-defined]
@@ -77,17 +73,10 @@ except ImportError:
 
 # ── Solana imports — solders for tx building, nacl already in deps ──
 try:
-    from solders.pubkey import Pubkey as SolPubkey
     from solders.keypair import Keypair as SolKeypair
-    from solders.instruction import Instruction, AccountMeta
-    from solders.system_program import ID as SYSTEM_PROGRAM_ID
-    from solders.transaction import Transaction as SolTransaction
-    from solders.message import Message as SolMessage
-    from solders.hash import Hash as SolHash
 except ImportError as e:  # pragma: no cover
     raise ImportError(
-        "AiFinPayAgent requires solders. "
-        "Install with: pip install 'aifinpay-agent[unified]' or: pip install solders"
+        "AiFinPayAgent requires solders. " "Install with: pip install 'aifinpay-agent[unified]' or: pip install solders"
     ) from e
 
 
@@ -120,38 +109,42 @@ DEFAULT_REGISTRY_PATHS = ("/api/providers", "/providers")
 # host is how this went unnoticed. Keep them the same.
 DEFAULT_REGISTRY_HOST = "https://aifinpay.io"
 DEFAULT_REGISTRY_URL = DEFAULT_REGISTRY_HOST + DEFAULT_REGISTRY_PATHS[0]
-DEFAULT_POLYGON_RPC  = "https://polygon.drpc.org"
-DEFAULT_SOLANA_RPC   = "https://api.mainnet-beta.solana.com"
+DEFAULT_POLYGON_RPC = "https://polygon.drpc.org"
+DEFAULT_SOLANA_RPC = "https://api.mainnet-beta.solana.com"
 
 # B2BSplitter native-payment ABIs. v1.2 (deployed 2026-07-31 on Polygon,
 # Optimism, BOT Chain and XRPL EVM) renamed the entrypoint and added a bytes32
 # paymentId replay guard; Base and Unichain still run v1.1. The address arrives
 # from the server, so the version does too — probing the contract would be
 # fragile and guessing would produce a revert with no useful reason.
-SPLITTER_PAY_MATIC_ABI = [{
-    "type": "function",
-    "name": "payMatic",
-    "stateMutability": "payable",
-    "inputs": [
-        {"type": "address", "name": "merchant"},
-        {"type": "address", "name": "ipCreator"},
-        {"type": "string",  "name": "orderId"},
-    ],
-    "outputs": [],
-}]
+SPLITTER_PAY_MATIC_ABI = [
+    {
+        "type": "function",
+        "name": "payMatic",
+        "stateMutability": "payable",
+        "inputs": [
+            {"type": "address", "name": "merchant"},
+            {"type": "address", "name": "ipCreator"},
+            {"type": "string", "name": "orderId"},
+        ],
+        "outputs": [],
+    }
+]
 
-SPLITTER_PAY_NATIVE_ABI = [{
-    "type": "function",
-    "name": "payNative",
-    "stateMutability": "payable",
-    "inputs": [
-        {"type": "bytes32", "name": "paymentId"},
-        {"type": "address", "name": "merchant"},
-        {"type": "address", "name": "ipCreator"},
-        {"type": "string",  "name": "memo"},
-    ],
-    "outputs": [],
-}]
+SPLITTER_PAY_NATIVE_ABI = [
+    {
+        "type": "function",
+        "name": "payNative",
+        "stateMutability": "payable",
+        "inputs": [
+            {"type": "bytes32", "name": "paymentId"},
+            {"type": "address", "name": "merchant"},
+            {"type": "address", "name": "ipCreator"},
+            {"type": "string", "name": "memo"},
+        ],
+        "outputs": [],
+    }
+]
 
 
 def payment_id_for(order_id: str) -> bytes:
@@ -169,7 +162,7 @@ def payment_id_for(order_id: str) -> bytes:
 B2B_PAY_WITH_SPLIT_DISC = hashlib.sha256(b"global:b2b_pay_with_split").digest()[:8]
 
 
-def native_pay_block(challenge: dict) -> Optional[dict]:
+def native_pay_block(challenge: dict) -> [dict]:
     """The native-token payment block of a bridge 402, whichever key it used.
 
     Both names, newest first. The production bridges renamed the block
@@ -184,22 +177,23 @@ def native_pay_block(challenge: dict) -> Optional[dict]:
 
 # ── Provider / Challenge types (lightweight, dict-backed) ──────────────────
 
+
 @dataclass
 class ProviderEntry:
-    name:             str
-    service_type:     Optional[str]
-    bridge_url:       Optional[str]
-    price_usd:        Optional[float]
-    preferred_chain:  str = "polygon"
+    name: str
+    service_type: [str]
+    bridge_url: [str]
+    price_usd: [float]
+    preferred_chain: str = "polygon"
 
     @classmethod
-    def from_dict(cls, d: dict) -> "ProviderEntry":
+    def from_dict(cls, d: dict) -> ProviderEntry:
         return cls(
-            name            = d.get("name", ""),
-            service_type    = d.get("service_type"),
-            bridge_url      = d.get("bridge_url"),
-            price_usd       = d.get("price_usd"),
-            preferred_chain = d.get("preferred_chain", "polygon"),
+            name=d.get("name", ""),
+            service_type=d.get("service_type"),
+            bridge_url=d.get("bridge_url"),
+            price_usd=d.get("price_usd"),
+            preferred_chain=d.get("preferred_chain", "polygon"),
         )
 
 
@@ -208,34 +202,36 @@ class NetworkAgent:
     """A published entry in the public AiFinPay agent network — what
     ``search()`` returns and ``register()`` produces. Identity is the agent's
     EVM address. Mirrors the ``NetworkAgent`` interface in @aifinpay/agent."""
-    address:      Optional[str]
-    name:         Optional[str]
-    description:  Optional[str]
-    endpoint:     Optional[str]
+
+    address: [str]
+    name: [str]
+    description: [str]
+    endpoint: [str]
     capabilities: list[str]
-    pricing:      Optional[dict]   # {"per_call": float, "currency": str}
-    rating:       Optional[float]
-    published_at: Optional[int]
-    created_at:   Optional[int]
+    pricing: [dict]  # {"per_call": float, "currency": str}
+    rating: [float]
+    published_at: [int]
+    created_at: [int]
 
     @classmethod
-    def from_dict(cls, d: dict) -> "NetworkAgent":
+    def from_dict(cls, d: dict) -> NetworkAgent:
         return cls(
-            address      = d.get("address"),
-            name         = d.get("name"),
-            description  = d.get("description"),
-            endpoint     = d.get("endpoint"),
-            capabilities = d.get("capabilities") or [],
-            pricing      = d.get("pricing"),
-            rating       = d.get("rating"),
-            published_at = d.get("published_at"),
-            created_at   = d.get("created_at"),
+            address=d.get("address"),
+            name=d.get("name"),
+            description=d.get("description"),
+            endpoint=d.get("endpoint"),
+            capabilities=d.get("capabilities") or [],
+            pricing=d.get("pricing"),
+            rating=d.get("rating"),
+            published_at=d.get("published_at"),
+            created_at=d.get("created_at"),
         )
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
-def _normalize_pricing(p: Optional[dict]) -> Optional[dict]:
+
+def _normalize_pricing(p: [dict]) -> [dict]:
     """Accept {"per_call"|"perCall": float, "currency"?: str}; default USDC."""
     if not p:
         return None
@@ -286,9 +282,7 @@ def casper_identity_from_seed(seed: bytes) -> dict:
     signing = nacl.signing.SigningKey(casper_seed)
     pub = bytes(signing.verify_key)
     # Casper account hash: blake2b256(algorithm-name || 0x00 || public key).
-    account_hash = hashlib.blake2b(
-        b"ed25519" + b"\x00" + pub, digest_size=32
-    ).hexdigest()
+    account_hash = hashlib.blake2b(b"ed25519" + b"\x00" + pub, digest_size=32).hexdigest()
     return {
         # 01 tags ed25519; 02 would be secp256k1. Casper rejects an untagged key,
         # and the tag also feeds the hash — the wrong one derives a different,
@@ -303,11 +297,11 @@ def _signed_raw_tx(signed: Any) -> bytes:
     Support both so the pinned range web3>=6.0 actually works."""
     raw = getattr(signed, "raw_transaction", None)
     if raw is None:
-        raw = getattr(signed, "rawTransaction")
+        raw = signed.rawTransaction
     return raw
 
 
-def _guard_challenge_usd(est_usd: float, cap: Optional[float], label: str) -> None:
+def _guard_challenge_usd(est_usd: float, cap: [float], label: str) -> None:
     """Sanity-check the USD estimate of an on-chain challenge amount BEFORE
     signing. Mirrors the Node SDK's guardChallengeAmount: the estimate uses
     env-priced MATIC/SOL (AIFINPAY_MATIC_USD / AIFINPAY_SOL_USD), so a 2x +
@@ -315,6 +309,7 @@ def _guard_challenge_usd(est_usd: float, cap: Optional[float], label: str) -> No
     case — a bridge quoting $0.01 in the registry then demanding 100x in
     the 402 challenge. No cap declared → no check (caller opted out)."""
     from .errors import PaymentTooExpensiveError
+
     if cap is None or not est_usd or est_usd <= 0:
         return
     limit = max(cap * 2, cap + 0.05)
@@ -328,49 +323,50 @@ def _guard_challenge_usd(est_usd: float, cap: Optional[float], label: str) -> No
 
 # ── Main class ──────────────────────────────────────────────────────────────
 
+
 class AiFinPayAgent:
     """
     Unified, chain-opaque agent. Wraps the legacy Solana `Agent` and adds
     an EVM signer + high-level `call()` that selects + settles per call.
     """
 
-    inner:        Agent
-    evm_account:  Any            # eth_account.LocalAccount
-    sol_keypair:  SolKeypair
+    inner: Agent
+    evm_account: Any  # eth_account.LocalAccount
+    sol_keypair: SolKeypair
     registry_url: str
-    polygon_rpc:  str
-    solana_rpc:   str
+    polygon_rpc: str
+    solana_rpc: str
 
     # ── Constructors ────────────────────────────────────────────────────────
 
-    def __init__(self, inner: Agent, evm_private_key_hex: str, *,
-                 registry_url: Optional[str] = None,
-                 polygon_rpc:  Optional[str] = None,
-                 solana_rpc:   Optional[str] = None,
-                 base_url:     Optional[str] = None):
-        self.inner       = inner
+    def __init__(
+        self,
+        inner: Agent,
+        evm_private_key_hex: str,
+        *,
+        registry_url: [str] = None,
+        polygon_rpc: [str] = None,
+        solana_rpc: [str] = None,
+        base_url: [str] = None,
+    ):
+        self.inner = inner
         self.evm_account = EvmAccount.from_key(evm_private_key_hex)
         self.sol_keypair = SolKeypair.from_seed(
-            nacl.signing.SigningKey(
-                base58.b58decode(inner.secret_b58)[:32]
-            ).encode(),
+            nacl.signing.SigningKey(base58.b58decode(inner.secret_b58)[:32]).encode(),
         )
         _api_base = (base_url or "https://api.aifinpay.io").rstrip("/")
         _pinned = registry_url or os.environ.get("AIFINPAY_REGISTRY_URL")
         # An explicitly pinned URL is honoured exactly; only the default is
         # retried across candidate paths.
-        self._registry_candidates = (
-            [_pinned] if _pinned
-            else [_api_base + path for path in DEFAULT_REGISTRY_PATHS]
-        )
+        self._registry_candidates = [_pinned] if _pinned else [_api_base + path for path in DEFAULT_REGISTRY_PATHS]
         self.registry_url = self._registry_candidates[0]
         self.polygon_rpc = polygon_rpc or os.environ.get("AIFINPAY_POLYGON_RPC", DEFAULT_POLYGON_RPC)
-        self.solana_rpc  = solana_rpc  or os.environ.get("AIFINPAY_SOLANA_RPC",  DEFAULT_SOLANA_RPC)
-        self._w3: Optional[Web3] = None
-        self._registry_cache: Optional[list[ProviderEntry]] = None
+        self.solana_rpc = solana_rpc or os.environ.get("AIFINPAY_SOLANA_RPC", DEFAULT_SOLANA_RPC)
+        self._w3: [Web3] = None
+        self._registry_cache: [list[ProviderEntry]] = None
 
     @classmethod
-    def new(cls, *, evm_private_key: Optional[str] = None, **kwargs) -> "AiFinPayAgent":
+    def new(cls, *, evm_private_key: [str] = None, **kwargs) -> AiFinPayAgent:
         """
         Fresh dual-chain identity, derived from ONE random 32-byte seed.
 
@@ -391,7 +387,7 @@ class AiFinPayAgent:
         return cls.from_seed(os.urandom(32).hex(), **kwargs)
 
     @classmethod
-    def from_seed(cls, seed_hex: str, **kwargs) -> "AiFinPayAgent":
+    def from_seed(cls, seed_hex: str, **kwargs) -> AiFinPayAgent:
         """
         Derive both keypairs from one 32-byte hex seed.
           Solana key = nacl.sign.keyPair.fromSeed(seed)
@@ -412,8 +408,7 @@ class AiFinPayAgent:
         return cls(inner, "0x" + _evm_key_from_seed(seed).hex(), **kwargs)
 
     @classmethod
-    def from_solana_secret(cls, secret_b58: str, *, evm_private_key: Optional[str] = None,
-                            **kwargs) -> "AiFinPayAgent":
+    def from_solana_secret(cls, secret_b58: str, *, evm_private_key: [str] = None, **kwargs) -> AiFinPayAgent:
         """Load the Solana side from an existing secret. The EVM key is
         derived deterministically from the secret's 32-byte seed (same
         domain-separated SHA-256 as ``from_seed``) unless ``evm_private_key``
@@ -489,9 +484,7 @@ class AiFinPayAgent:
             self._registry_cache = [ProviderEntry.from_dict(p) for p in providers]
             self.registry_url = url
             return self._registry_cache
-        raise AiFinPayError(
-            "provider registry unreachable (tried " + ", ".join(attempts) + ")"
-        )
+        raise AiFinPayError("provider registry unreachable (tried " + ", ".join(attempts) + ")")
 
     def resolve_provider(self, name: str) -> ProviderEntry:
         for p in self.fetch_registry():
@@ -512,59 +505,67 @@ class AiFinPayAgent:
     # template MUST stay byte-for-byte in sync with the Node SDK and
     # routes/network-agents.js.
 
-    def register(self, *, name: str, endpoint: str,
-                 description: Optional[str] = None,
-                 capabilities: Optional[list[str]] = None,
-                 pricing: Optional[dict] = None,
-                 timeout: float = 10.0) -> NetworkAgent:
+    def register(
+        self,
+        *,
+        name: str,
+        endpoint: str,
+        description: [str] = None,
+        capabilities: [list[str]] = None,
+        pricing: [dict] = None,
+        timeout: float = 10.0,
+    ) -> NetworkAgent:
         """Publish this agent to the public AiFinPay network so other agents
         can discover and call it. ``pricing`` is a dict like
         ``{"per_call": 0.01, "currency": "USDC"}`` (``perCall`` also accepted)."""
-        base  = self.inner.base_url
-        addr  = self.evm_address.lower()
+        base = self.inner.base_url
+        addr = self.evm_address.lower()
         nonce = self._network_nonce(timeout=timeout)
         signature = self._sign_evm(f"AiFinPay-network-publish:polygon:{addr}:{nonce}")
 
         payload = {
-            "name":         name,
-            "description":  description,
-            "endpoint":     endpoint,
+            "name": name,
+            "description": description,
+            "endpoint": endpoint,
             "capabilities": capabilities or [],
-            "pricing":      _normalize_pricing(pricing),
-            "nonce":        nonce,
-            "signature":    signature,
+            "pricing": _normalize_pricing(pricing),
+            "nonce": nonce,
+            "signature": signature,
         }
         r = requests.post(
             f"{base}/api/network/agents/{addr}/publish",
-            json=payload, timeout=timeout,
+            json=payload,
+            timeout=timeout,
             headers={"content-type": "application/json"},
         )
         data = _safe_json(r)
         if not r.ok or not data.get("ok") or not data.get("agent"):
-            raise AiFinPayError(
-                f"network publish failed: {data.get('error') or r.status_code}"
-            )
+            raise AiFinPayError(f"network publish failed: {data.get('error') or r.status_code}")
         return NetworkAgent.from_dict(data["agent"])
 
     def unregister(self, *, timeout: float = 10.0) -> None:
         """Remove this agent from the public directory (same signature proof)."""
-        base  = self.inner.base_url
-        addr  = self.evm_address.lower()
+        base = self.inner.base_url
+        addr = self.evm_address.lower()
         nonce = self._network_nonce(timeout=timeout)
         signature = self._sign_evm(f"AiFinPay-network-unpublish:polygon:{addr}:{nonce}")
         r = requests.post(
             f"{base}/api/network/agents/{addr}/unpublish",
-            json={"nonce": nonce, "signature": signature}, timeout=timeout,
+            json={"nonce": nonce, "signature": signature},
+            timeout=timeout,
             headers={"content-type": "application/json"},
         )
         if not r.ok:
-            raise AiFinPayError(
-                f"network unpublish failed: {_safe_json(r).get('error') or r.status_code}"
-            )
+            raise AiFinPayError(f"network unpublish failed: {_safe_json(r).get('error') or r.status_code}")
 
-    def search(self, capability: Optional[str] = None, *,
-               q: Optional[str] = None, limit: Optional[int] = None,
-               timeout: float = 10.0) -> list[NetworkAgent]:
+    def search(
+        self,
+        capability: [str] = None,
+        *,
+        q: [str] = None,
+        limit: [int] = None,
+        timeout: float = 10.0,
+    ) -> list[NetworkAgent]:
         """Search the public network. Pass a bare capability
         (``agent.search("weather")``) or use ``q`` / ``limit`` for finer
         control. Returns directory entries; invoking one lands in a later
@@ -578,7 +579,8 @@ class AiFinPayAgent:
             params["limit"] = limit
         r = requests.get(
             f"{self.inner.base_url}/api/network/agents",
-            params=params, timeout=timeout,
+            params=params,
+            timeout=timeout,
         )
         if not r.ok:
             raise AiFinPayError(f"network search {self.inner.base_url} → {r.status_code}")
@@ -606,14 +608,12 @@ class AiFinPayAgent:
         if self._w3 is None:
             w3 = Web3(Web3.HTTPProvider(self.polygon_rpc, request_kwargs={"timeout": 30}))
             if _poa_middleware is not None:
-                try:
+                with contextlib.suppress(Exception):
                     w3.middleware_onion.inject(_poa_middleware, layer=0)
-                except Exception:
-                    pass
             self._w3 = w3
         return self._w3
 
-    def _splitter_treasury(self, splitter: str) -> Optional[str]:
+    def _splitter_treasury(self, splitter: str) -> [str]:
         """Read + cache B2BSplitter.treasury(). None on RPC failure."""
         cache = getattr(self, "_treasury_cache", None)
         if cache is None:
@@ -625,9 +625,15 @@ class AiFinPayAgent:
             w3 = self._web3()
             c = w3.eth.contract(
                 address=Web3.to_checksum_address(splitter),
-                abi=[{"type": "function", "name": "treasury",
-                      "stateMutability": "view", "inputs": [],
-                      "outputs": [{"type": "address"}]}],
+                abi=[
+                    {
+                        "type": "function",
+                        "name": "treasury",
+                        "stateMutability": "view",
+                        "inputs": [],
+                        "outputs": [{"type": "address"}],
+                    }
+                ],
             )
             treasury = c.functions.treasury().call()
             if not treasury or int(treasury, 16) == 0:
@@ -639,12 +645,21 @@ class AiFinPayAgent:
 
     # ── Public: chain-opaque call ─────────────────────────────────────────
 
-    def call(self, provider: str, body: Optional[dict] = None, *,
-             method: str = "POST", chain: Optional[str] = None,
-             cost: Optional[float] = None, timeout: float = 60.0) -> requests.Response:
+    def call(
+        self,
+        provider: str,
+        body: [dict] = None,
+        *,
+        method: str = "POST",
+        chain: [str] = None,
+        cost: [float] = None,
+        timeout: float = 60.0,
+    ) -> requests.Response:
         """
-        Make a paid call to a registered provider. Returns the upstream
-        Response after the on-chain settlement has been confirmed.
+        Call a registered provider. Free responses pass through; a paid 402
+        fails closed because this legacy settlement surface has no reviewed
+        target. The Python surface has no paid replacement; use the Node SDK's
+        reviewed fetchPaid v1.3 route for paid requests.
 
         :param provider: Registry name ("exa", "io-net", "venice", …)
         :param body: JSON-serializable body forwarded to the bridge
@@ -665,25 +680,24 @@ class AiFinPayAgent:
         # the challenge-level guard runs in the settle path with the actual
         # on-chain amount.
         from .errors import PaymentTooExpensiveError
+
         if cost is not None and p.price_usd is not None and p.price_usd > cost:
             raise PaymentTooExpensiveError(
-                f"provider {provider!r} lists ${p.price_usd:.4f} per call, "
-                f"caller cap is ${cost:.4f}"
+                f"provider {provider!r} lists ${p.price_usd:.4f} per call, " f"caller cap is ${cost:.4f}"
             )
 
         path = {
-            "search":    "/search",
+            "search": "/search",
             "inference": "/chat/completions",
-            "compute":   "/run",
+            "compute": "/run",
             "analytics": "/query",
         }.get(p.service_type or "", "/")
         full_url = url.rstrip("/") + path
 
-        picked_chain = (chain or p.preferred_chain or "polygon").lower()
-
         # 1. Initial unauthenticated POST → expect 402
         init_resp = requests.request(
-            method, full_url,
+            method,
+            full_url,
             json=body if body is not None else None,
             timeout=timeout,
             headers={"content-type": "application/json"},
@@ -693,13 +707,33 @@ class AiFinPayAgent:
             return init_resp
 
         try:
-            challenge = init_resp.json()
-        except Exception:
-            raise X402Error("bridge returned 402 with non-JSON body")
+            init_resp.json()
+        except Exception as err:
+            raise X402Error("bridge returned 402 with non-JSON body") from err
 
-        if picked_chain == "solana":
-            return self._settle_solana(full_url, challenge, method, body, timeout, cost=cost)
-        return self._settle_polygon(full_url, challenge, method, body, timeout, cost=cost)
+        # Legacy bridge settlement is fail-closed. The challenge historically
+        # supplied arbitrary splitter/program addresses and native amounts, so
+        # continuing could sign against an unreviewed target or let missing
+        # pricing bypass the budget. Free/read-only responses still pass above;
+        # every paid legacy challenge stops before signing or broadcast.
+        effective_cost = p.price_usd if cost is None else cost
+        if (
+            not isinstance(effective_cost, (int, float))
+            or not isinstance(p.price_usd, (int, float))
+            or not float(effective_cost) > 0
+            or not float(p.price_usd) > 0
+        ):
+            raise AiFinPayError(
+                f"legacy call() refused {provider!r}: no trusted positive USD price; "
+                "use the Node SDK's reviewed fetchPaid v1.3 route with fresh trusted FX instead"
+            )
+        raise AiFinPayError(
+            "legacy call() settlement is disabled: challenge targets are not trusted "
+            "for mainnet payment; use the Node SDK fetchPaid with a reviewed v1.3 settlement pin "
+            "and fresh trusted FX"
+        )
+
+        # No legacy signer is reachable after the refusal above.
 
     # ── Cross-chain orchestration (Phase 1.5a: EVM↔EVM via LiFi) ───────────
     #
@@ -717,14 +751,14 @@ class AiFinPayAgent:
     def bridge_quote(
         self,
         from_chain: str,
-        to_chain:   str,
+        to_chain: str,
         *,
-        amount_usdc: Optional[float] = None,
-        from_token:  Optional[str]   = None,
-        to_token:    Optional[str]   = None,
-        from_amount: Optional[str]   = None,
-        to_address:  Optional[str]   = None,
-        slippage:    Optional[float] = None,
+        amount_usdc: [float] = None,
+        from_token: [str] = None,
+        to_token: [str] = None,
+        from_amount: [str] = None,
+        to_address: [str] = None,
+        slippage: [float] = None,
     ) -> BridgeQuote:
         """Quote a USDC-denominated cross-chain transfer via LiFi.
 
@@ -735,7 +769,7 @@ class AiFinPayAgent:
         `fromAddress` and `toAddress` unless overridden.
         """
         ft = from_token or USDC_NATIVE.get(from_chain)
-        tt = to_token   or USDC_NATIVE.get(to_chain)
+        tt = to_token or USDC_NATIVE.get(to_chain)
         if not ft or not tt:
             raise AiFinPayError(
                 f"bridge_quote: no default USDC token for {from_chain!r}/{to_chain!r}; "
@@ -746,9 +780,7 @@ class AiFinPayAgent:
             # USDC has 6 decimals.
             amt = str(round(amount_usdc * 1_000_000))
         if not amt:
-            raise AiFinPayError(
-                "bridge_quote: provide either amount_usdc OR from_amount (base units)"
-            )
+            raise AiFinPayError("bridge_quote: provide either amount_usdc OR from_amount (base units)")
         return _bridge_quote(
             from_chain=from_chain,
             to_chain=to_chain,
@@ -787,10 +819,10 @@ class AiFinPayAgent:
 
     def bridge_wait_for_arrival(
         self,
-        source_tx_hash:   str,
+        source_tx_hash: str,
         *,
         poll_interval_ms: int = 5000,
-        timeout_ms:       int = 30 * 60 * 1000,
+        timeout_ms: int = 30 * 60 * 1000,
     ) -> dict:
         """Wait for the bridge to deliver on the destination chain.
 
@@ -806,210 +838,30 @@ class AiFinPayAgent:
 
     # ── Polygon settlement ─────────────────────────────────────────────────
 
-    def _settle_polygon(self, full_url: str, challenge: dict, method: str,
-                        body: Optional[dict], timeout: float,
-                        cost: Optional[float] = None) -> requests.Response:
-        # Both names, newest first. The production bridges renamed the block
-        # pay_matic -> pay_native on 2026-08-04 when the on-chain entrypoint
-        # became payNative, and no SDK branch followed — so reading only the
-        # old name made this method fail against every live bridge with a
-        # message blaming facilitator wiring (AIFINP-118).
-        pm = native_pay_block(challenge)
-        if not pm:
-            raise X402Error(
-                "bridge returned 402 with neither a pay_native nor a pay_matic "
-                "block — it is speaking a protocol this SDK does not implement "
-                f"(fields: {', '.join(sorted(challenge.keys()))})"
-            )
-
-        w3 = self._web3()
-        splitter_v12 = w3.eth.contract(
-            address=Web3.to_checksum_address(pm["splitter"]),
-            abi=SPLITTER_PAY_NATIVE_ABI,
-        )
-        splitter = w3.eth.contract(
-            address=Web3.to_checksum_address(pm["splitter"]),
-            abi=SPLITTER_PAY_MATIC_ABI,
-        )
-        merchant = Web3.to_checksum_address(pm["merchant_wallet"])
-        # ipCreator routing: the challenge's explicit ip_creator, or address(0).
-        #
-        # This used to fall back to the splitter's OWN treasury, justified as
-        # "passing address(0) would skip the transfer and permanently strand the
-        # 1bp inside B2BSplitter — no sweep function". That is not what the
-        # contract does. B2BSplitter._split:
-        #
-        #     if (_ipCreator != address(0)) { ipAmt = ...; }
-        #     // else: ipAmt stays 0 and is absorbed into merchantAmt below
-        #     merchantAmt = _total - treasuryAmt - ipAmt;
-        #     ...
-        #     if (ipAmt > 0) { transfer to _ipCreator }
-        #
-        # With address(0) the royalty share is not stranded — it goes to the
-        # MERCHANT, and no transfer is attempted. Nothing to sweep.
-        #
-        # The fallback therefore moved 0.01% of every unattributed payment from
-        # the merchant to us, silently, while /v1/quote published a 99/1/0 split.
-        # Observed on-chain 2026-08-27 in tx 0x6b853876…: merchant 98.99%,
-        # treasury 1.00%, ipCreator 0.01% paid to 0xD31d82…3c8e — our own Safe.
-        # AIFINP-211.
-        #
-        # Default to address(0): no royalty recipient means the merchant keeps
-        # it, which is both what the contract implements and what we publish.
-        ip_creator = pm.get("ip_creator") or ("0x" + "00" * 20)
-        ip_creator = Web3.to_checksum_address(ip_creator)
-        order_id = pm["order_id"]
-        total_wei = int(pm["total_wei"])
-
-        matic_usd = float(os.environ.get("AIFINPAY_MATIC_USD", "0.70"))
-        _guard_challenge_usd(total_wei / 1e18 * matic_usd, cost, full_url)
-
-        nonce = w3.eth.get_transaction_count(self.evm_address)
-        gas_price = w3.eth.gas_price
-        # Defaults to 1.1 so an older backend that does not send the field keeps
-        # working unchanged.
-        if str(pm.get("splitter_version", "1.1")) == "1.2":
-            fn = splitter_v12.functions.payNative(
-                payment_id_for(order_id), merchant, ip_creator, order_id
-            )
-        else:
-            fn = splitter.functions.payMatic(merchant, ip_creator, order_id)
-        tx = fn.build_transaction({
-            "from":     self.evm_address,
-            "value":    total_wei,
-            "nonce":    nonce,
-            "gasPrice": gas_price,
-            "chainId":  137,  # Polygon mainnet
-        })
-        # Estimate gas with a small buffer
-        try:
-            gas_est = w3.eth.estimate_gas(tx)
-            tx["gas"] = int(gas_est * 1.2)
-        except Exception:
-            tx["gas"] = 300_000  # safe default
-
-        signed = w3.eth.account.sign_transaction(tx, self.evm_account.key)
-        tx_hash = w3.eth.send_raw_transaction(_signed_raw_tx(signed))
-        receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
-        if receipt.status != 1:
-            raise AiFinPayError(f"Polygon tx reverted: {tx_hash.hex()}")
-
-        # Retry the bridge with payment proof
-        paid_resp = requests.request(
-            method, full_url,
-            json=body if body is not None else None,
-            timeout=timeout,
-            headers={
-                "content-type": "application/json",
-                "x-tx-hash":    tx_hash.hex(),
-                "x-order-id":   order_id,
-            },
-        )
-        if not paid_resp.ok:
-            raise AiFinPayError(
-                f"Bridge retry failed {paid_resp.status_code} after on-chain payment "
-                f"{tx_hash.hex()}: {paid_resp.text[:300]}"
-            )
-        return paid_resp
-
-    # ── Solana settlement (b2b_pay_with_split) ───────────────────────────
-
-    def _settle_solana(self, full_url: str, challenge: dict, method: str,
-                       body: Optional[dict], timeout: float,
-                       cost: Optional[float] = None) -> requests.Response:
-        ps = challenge.get("pay_solana")
-        if not ps:
-            raise X402Error(
-                f"bridge returned 402 without a pay_solana block — operator has not "
-                f"set BRIDGE_MERCHANT_SOLANA. Use chain='polygon' instead."
-            )
-
-        sol_usd = float(os.environ.get("AIFINPAY_SOL_USD", "200"))
-        lamports_est = int(ps.get("total_lamports") or ps["merchant_amount_lamports"])
-        _guard_challenge_usd(lamports_est / 1e9 * sol_usd, cost, full_url)
-
-        program_id = SolPubkey.from_string(ps["program_id"])
-        merchant   = SolPubkey.from_string(ps["merchant_wallet"])
-        treasury   = SolPubkey.from_string(ps["treasury"])
-        ip_creator = treasury  # default routing; future: per-merchant slot
-        order_id   = ps["order_id"]
-        merchant_amount_lamports = int(ps["merchant_amount_lamports"])
-
-        # PDAs derived from program_id with seeds ["config"] and ["vault"]
-        config_pda, _ = SolPubkey.find_program_address([b"config"], program_id)
-        vault_pda,  _ = SolPubkey.find_program_address([b"vault"],  program_id)
-
-        # Instruction data: discriminator + Borsh(u64 + string)
-        order_bytes = order_id.encode("utf-8")
-        if len(order_bytes) > 64:
-            raise AiFinPayError(f"order_id too long ({len(order_bytes)} bytes > 64)")
-        data = (
-            B2B_PAY_WITH_SPLIT_DISC
-            + struct.pack("<Q", merchant_amount_lamports)
-            + struct.pack("<I", len(order_bytes))
-            + order_bytes
+    def _settle_polygon(
+        self,
+        full_url: str,
+        challenge: dict,
+        method: str,
+        body: [dict],
+        timeout: float,
+        cost: [float] = None,
+    ) -> requests.Response:
+        """Retained for compatibility; legacy Polygon settlement is disabled."""
+        raise AiFinPayError(
+            "legacy Polygon settlement is disabled; use the Node SDK fetchPaid " "with a reviewed v1.3 settlement pin"
         )
 
-        agent_pubkey = self.sol_keypair.pubkey()
-        keys = [
-            AccountMeta(pubkey=config_pda,            is_signer=False, is_writable=False),
-            AccountMeta(pubkey=vault_pda,             is_signer=False, is_writable=False),
-            AccountMeta(pubkey=agent_pubkey,          is_signer=True,  is_writable=True),
-            AccountMeta(pubkey=treasury,              is_signer=False, is_writable=True),
-            AccountMeta(pubkey=ip_creator,            is_signer=False, is_writable=True),
-            AccountMeta(pubkey=merchant,              is_signer=False, is_writable=True),
-            AccountMeta(pubkey=SolPubkey.from_string(str(SYSTEM_PROGRAM_ID)), is_signer=False, is_writable=False),
-        ]
-        ix = Instruction(program_id=program_id, accounts=keys, data=data)
-
-        # Fetch recent blockhash + submit
-        rpc_req = lambda payload: requests.post(self.solana_rpc, json=payload, timeout=timeout).json()
-        bh_resp = rpc_req({"jsonrpc": "2.0", "id": 1, "method": "getLatestBlockhash",
-                           "params": [{"commitment": "confirmed"}]})
-        blockhash = SolHash.from_string(bh_resp["result"]["value"]["blockhash"])
-
-        msg = SolMessage.new_with_blockhash([ix], agent_pubkey, blockhash)
-        tx  = SolTransaction([self.sol_keypair], msg, blockhash)
-
-        # Solana RPC sendTransaction accepts base58 (deprecated) or base64 —
-        # NOT hex. The old {"encoding": "hex"} form failed on every node.
-        import base64 as _b64
-        send_resp = rpc_req({"jsonrpc": "2.0", "id": 1, "method": "sendTransaction",
-                             "params": [_b64.b64encode(bytes(tx)).decode("ascii"),
-                                        {"encoding": "base64", "preflightCommitment": "confirmed"}]})
-        if "error" in send_resp:
-            raise AiFinPayError(f"Solana send failed: {send_resp['error']}")
-        tx_sig = send_resp["result"]
-
-        # Wait for confirmation (poll up to ~30s)
-        deadline = time.time() + 30
-        confirmed = False
-        while time.time() < deadline:
-            time.sleep(2)
-            st = rpc_req({"jsonrpc": "2.0", "id": 1, "method": "getSignatureStatuses",
-                          "params": [[tx_sig], {"searchTransactionHistory": True}]})
-            value = (st.get("result", {}) or {}).get("value", [None])[0]
-            if value and value.get("confirmationStatus") in ("confirmed", "finalized"):
-                if value.get("err") is not None:
-                    raise AiFinPayError(f"Solana tx errored: {value['err']}")
-                confirmed = True
-                break
-        if not confirmed:
-            raise AiFinPayError(f"Solana tx {tx_sig} not confirmed within 30s")
-
-        paid_resp = requests.request(
-            method, full_url,
-            json=body if body is not None else None,
-            timeout=timeout,
-            headers={
-                "content-type": "application/json",
-                "x-solana-tx":  tx_sig,
-                "x-order-id":   order_id,
-            },
+    def _settle_solana(
+        self,
+        full_url: str,
+        challenge: dict,
+        method: str,
+        body: [dict],
+        timeout: float,
+        cost: [float] = None,
+    ) -> requests.Response:
+        """Retained for compatibility; legacy Solana settlement is disabled."""
+        raise AiFinPayError(
+            "legacy Solana settlement is disabled; use the Node SDK fetchPaid " "with a reviewed v1.3 settlement pin"
         )
-        if not paid_resp.ok:
-            raise AiFinPayError(
-                f"Bridge retry failed {paid_resp.status_code} after Solana payment "
-                f"{tx_sig}: {paid_resp.text[:300]}"
-            )
-        return paid_resp

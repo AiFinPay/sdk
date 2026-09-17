@@ -20,6 +20,22 @@ Quick start:
 """
 
 from .client import Agent, Invoice
+
+# Cross-chain orchestration (Phase 1.5a — EVM↔EVM via LiFi).
+# Standalone primitives — also exposed as methods on AiFinPayAgent.
+from .cross_chain import (
+    EVM_CHAINS,
+    USDC_BRIDGED,
+    USDC_NATIVE,
+    BridgeQuote,
+    BridgeQuoteFees,
+    BridgeQuoteFrom,
+    BridgeQuoteTo,
+    BridgeReceipt,
+    bridge_execute,
+    bridge_quote,
+    bridge_wait_for_arrival,
+)
 from .errors import (
     AiFinPayError,
     FacilitatorNotImplementedError,
@@ -36,21 +52,6 @@ from .facilitators import (
     PayOptions,
 )
 
-# Cross-chain orchestration (Phase 1.5a — EVM↔EVM via LiFi).
-# Standalone primitives — also exposed as methods on AiFinPayAgent.
-from .cross_chain import (
-    EVM_CHAINS,
-    USDC_NATIVE,
-    USDC_BRIDGED,
-    BridgeQuote,
-    BridgeQuoteFees,
-    BridgeQuoteFrom,
-    BridgeQuoteTo,
-    BridgeReceipt,
-    bridge_quote,
-    bridge_execute,
-    bridge_wait_for_arrival,
-)
 
 # Phase 1+ unified surface — at parity with @aifinpay/agent JS SDK.
 # Lazy import so installs without the EVM/Solana extras keep working with
@@ -58,10 +59,12 @@ from .cross_chain import (
 def __getattr__(name: str):
     if name in ("AiFinPayAgent", "NetworkAgent"):
         from . import unified_agent
+
         return getattr(unified_agent, name)
     raise AttributeError(name)
 
-__version__ = "1.0.0"
+
+__version__ = "2.0.0rc1"
 __all__ = [
     "Agent",
     "AiFinPayAgent",
