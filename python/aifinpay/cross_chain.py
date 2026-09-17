@@ -54,6 +54,10 @@ EVM_CHAINS: dict[str, int] = {
     "optimism": 10,
     "base": 8453,
     "robinhood": 4663,
+    "avalanche": 43114,
+    "unichain": 130,
+    "botchain": 677,  # deprecated, use robinhood
+    "xrplevm": 1440000,
 }
 
 # USDC token addresses per chain. Native (Circle CCTP) variant where it
@@ -66,6 +70,8 @@ USDC_NATIVE: dict[str, str] = {
     "optimism": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
     "base": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     "robinhood": "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34",  # USDe (Ethena); no Circle USDC on Robinhood
+    "avalanche": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+    "unichain": "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
 }
 
 USDC_BRIDGED: dict[str, str] = {

@@ -57,7 +57,17 @@ from .facilitators import (
 # Lazy import so installs without the EVM/Solana extras keep working with
 # the legacy Agent class.
 def __getattr__(name: str):
-    if name in ("AiFinPayAgent", "NetworkAgent"):
+    if name in (
+        "AiFinPayAgent",
+        "NetworkAgent",
+        "CHAIN_IDS",
+        "NATIVE_ASSETS",
+        "EXPECTED_BPS",
+        "SPLITTER_DEPLOYMENTS",
+        "GOVERNANCE_SAFE",
+        "V13_PAY_NATIVE_ABI",
+        "V13_PAY_STABLE_ABI",
+    ):
         from . import unified_agent
 
         return getattr(unified_agent, name)

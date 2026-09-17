@@ -146,6 +146,186 @@ SPLITTER_PAY_NATIVE_ABI = [
     }
 ]
 
+# v1.3 settlement ABIs — tuple-struct inputs (Node SDK settlement.ts V13_ABI).
+# Only v1.3 is signable; v1.4 execution is quarantined.
+V13_PAY_NATIVE_ABI = [
+    {
+        "type": "function",
+        "name": "payNative",
+        "stateMutability": "payable",
+        "inputs": [
+            {
+                "type": "tuple",
+                "name": "p",
+                "components": [
+                    {"type": "bytes32", "name": "paymentId"},
+                    {"type": "address", "name": "merchant"},
+                    {"type": "uint256", "name": "grossAmount"},
+                    {"type": "address", "name": "ipCreator"},
+                    {"type": "uint256", "name": "validUntil"},
+                    {"type": "string", "name": "orderId"},
+                ],
+            }
+        ],
+        "outputs": [],
+    }
+]
+
+V13_PAY_STABLE_ABI = [
+    {
+        "type": "function",
+        "name": "payStable",
+        "stateMutability": "nonpayable",
+        "inputs": [
+            {
+                "type": "tuple",
+                "name": "p",
+                "components": [
+                    {"type": "bytes32", "name": "paymentId"},
+                    {"type": "address", "name": "token"},
+                    {"type": "uint256", "name": "grossAmount"},
+                    {"type": "address", "name": "merchant"},
+                    {"type": "address", "name": "ipCreator"},
+                    {"type": "uint256", "name": "validUntil"},
+                    {"type": "string", "name": "orderId"},
+                ],
+            }
+        ],
+        "outputs": [],
+    }
+]
+
+# ── Settlement constants (mirrors node/src/settlement.ts) ────────────────
+
+CHAIN_IDS: dict[str, int] = {
+    "amoy": 80002,
+    "polygon": 137,
+    "avalanche": 43114,
+    "arbitrum": 42161,
+    "bnb": 56,
+    "base": 8453,
+    "unichain": 130,
+    "optimism": 10,
+    "botchain": 677,  # deprecated, use robinhood
+    "robinhood": 4663,
+    "xrplevm": 1440000,
+}
+
+NATIVE_ASSETS: dict[str, str] = {
+    "polygon": "POL",
+    "amoy": "POL",
+    "avalanche": "AVAX",
+    "arbitrum": "ETH",
+    "bnb": "BNB",
+    "base": "ETH",
+    "unichain": "ETH",
+    "optimism": "ETH",
+    "botchain": "BOT",  # deprecated
+    "robinhood": "ETH",
+    "xrplevm": "XRP",
+}
+
+# AIFP-1 = 1% inside gross (merchant 99%, AiFinPay 1%, creator 0%).
+# AIFP-2 = 0% fee (x402/provider).
+EXPECTED_BPS: dict[str, dict[str, int]] = {
+    "AIFP-1": {"treasury": 100, "creator": 0},
+    "AIFP-2": {"treasury": 0, "creator": 0},
+}
+
+# ── Per-chain splitter deployments (mirrors node/src/unifiedAgent.ts) ────
+# Version, chainId, defaultRpc, splitter address, usdc, explorer, native
+# price env var + default. The address arrives from the server, but having
+# the local copy lets us validate the server response and build txs without
+# an extra round-trip.
+
+SPLITTER_DEPLOYMENTS: dict[str, dict] = {
+    "polygon": {
+        "version": "1.2",
+        "chainId": 137,
+        "defaultRpc": "https://polygon.drpc.org",
+        "splitter": "0xbD1fa5453f212F096c0213788a645eC597FB4DDe",
+        "usdc": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+        "explorer": "https://polygonscan.com",
+        "nativeUsdEnv": "AIFINPAY_MATIC_USD",
+        "nativeUsdDefault": 0.073,
+    },
+    "base": {
+        "version": "1.1",
+        "chainId": 8453,
+        "defaultRpc": "https://mainnet.base.org",
+        "splitter": "0x8Ad9830D16b1f10333866a3f38C949CbB19f4BAD",
+        "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "explorer": "https://basescan.org",
+        "nativeUsdEnv": "AIFINPAY_ETH_USD",
+        "nativeUsdDefault": 1870,
+    },
+    "optimism": {
+        "version": "1.2",
+        "chainId": 10,
+        "defaultRpc": "https://mainnet.optimism.io",
+        "splitter": "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74",
+        "usdc": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+        "explorer": "https://optimistic.etherscan.io",
+        "nativeUsdEnv": "AIFINPAY_ETH_USD",
+        "nativeUsdDefault": 1870,
+    },
+    "unichain": {
+        "version": "1.1",
+        "chainId": 130,
+        "defaultRpc": "https://mainnet.unichain.org",
+        "splitter": "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB",
+        "usdc": "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
+        "explorer": "https://uniscan.xyz",
+        "nativeUsdEnv": "AIFINPAY_ETH_USD",
+        "nativeUsdDefault": 1870,
+    },
+    "botchain": {
+        "version": "1.2",
+        "chainId": 677,
+        "defaultRpc": "https://rpc.botchain.ai",
+        "splitter": "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
+        "explorer": "https://scan.botchain.ai",
+        "nativeUsdEnv": "AIFINPAY_BOT_USD",
+        "nativeUsdDefault": 1,
+    },
+    "xrplevm": {
+        "version": "1.2",
+        "chainId": 1440000,
+        "defaultRpc": "https://rpc.xrplevm.org",
+        "splitter": "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
+        "explorer": "https://explorer.xrplevm.org",
+        "nativeUsdEnv": "AIFINPAY_XRP_USD",
+        "nativeUsdDefault": 2,
+    },
+}
+
+# ── Governance Safe addresses (mirrors deployments/registry/splitter/) ───
+
+GOVERNANCE_SAFE = {
+    "prod": {
+        "address": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+        "version": "1.5.0",
+        "threshold": 3,
+        "owners": [
+            "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+            "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+            "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+            "0x588A80e94a762C670711ff77CC60a2e65E64F53A",
+        ],
+    },
+    "testnet": {
+        "address": "0xc9ab36c2af2888414c7ea9160d9e33b773c2b388",
+        "version": "1.4.1",
+        "threshold": 3,
+        "owners": [
+            "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+            "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+            "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+            "0x588A80e94a762C670711ff77CC60a2e65E64F53A",
+        ],
+    },
+}
+
 
 def payment_id_for(order_id: str) -> bytes:
     """Derive the on-chain paymentId from the quote's order id.
@@ -354,7 +534,7 @@ class AiFinPayAgent:
         self.sol_keypair = SolKeypair.from_seed(
             nacl.signing.SigningKey(base58.b58decode(inner.secret_b58)[:32]).encode(),
         )
-        _api_base = (base_url or "https://api.aifinpay.io").rstrip("/")
+        _api_base = (base_url or "https://aifinpay.io").rstrip("/")
         _pinned = registry_url or os.environ.get("AIFINPAY_REGISTRY_URL")
         # An explicitly pinned URL is honoured exactly; only the default is
         # retried across candidate paths.
@@ -821,7 +1001,7 @@ class AiFinPayAgent:
         self,
         source_tx_hash: str,
         *,
-        poll_interval_ms: int = 5000,
+        poll_interval_ms: int = 20_000,
         timeout_ms: int = 30 * 60 * 1000,
     ) -> dict:
         """Wait for the bridge to deliver on the destination chain.
