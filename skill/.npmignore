@@ -1,7 +1,0 @@
-# Dev-only: never ship in the published tarball, even if `files` is widened.
-scripts/
-AGENTS.md
-CHANGELOG.md
-.aiignore
-.gitignore
-*.tgz
