@@ -74,7 +74,23 @@ def __getattr__(name: str):
     raise AttributeError(name)
 
 
-__version__ = "2.0.0rc1"
+# Read from the installed package metadata rather than written here.
+#
+# The literal that used to sit on this line said "2.0.0rc1" while
+# pyproject.toml said 2.1.0 — so `pip show` and `aifinpay.__version__`
+# disagreed, and the one a user can print from their own process was the wrong
+# one. pyproject.toml is what gets built and uploaded, so it is the version.
+#
+# The fallback is for a source tree that was never installed (running tests from
+# a checkout without `pip install -e .`). It is deliberately not a version
+# number: an unknown version must look unknown rather than plausible.
+try:  # pragma: no cover - trivial
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as _pkg_version
+
+    __version__ = _pkg_version("aifinpay-agent")
+except (ImportError, PackageNotFoundError):  # pragma: no cover - trivial
+    __version__ = "0+unknown"
 __all__ = [
     "Agent",
     "AiFinPayAgent",
