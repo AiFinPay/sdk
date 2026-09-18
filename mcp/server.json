@@ -1,64 +1,63 @@
 {
-  "$schema": "https://modelcontextprotocol.io/schemas/server.json",
-  "name": "aifinpay",
-  "version": "1.0.0",
-  "description": "Stripe for AI agents. Pay for any HTTP API in stablecoins or native tokens on Polygon and Solana mainnet with one MCP call. Non-custodial, on-chain settlement.",
-  "vendor": "CoinSecurities (SECCO)",
-  "license": "MIT",
-  "homepage": "https://aifinpay.io",
-  "repository": "https://github.com/AiFinPay/sdk",
-  "icon": "https://aifinpay.io/favicon.png",
-  "categories": ["payments", "web3", "agent-tools"],
-  "tags": ["payments", "ai-agents", "x402", "polygon", "solana", "stablecoins", "usdc", "usdt", "stripe-for-ai", "non-custodial"],
-  "install": {
-    "command": "npx",
-    "args": ["@aifinpay/mcp"]
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.aifinpay/aifinpay",
+  "title": "AiFinPay",
+  "description": "Pay for any HTTP API in stablecoins on Polygon and Solana with one MCP call.",
+  "version": "2.1.0",
+  "websiteUrl": "https://aifinpay.io",
+  "repository": {
+    "url": "https://github.com/AiFinPay/sdk",
+    "source": "github",
+    "subfolder": "mcp"
   },
-  "claude_desktop_config": {
-    "mcpServers": {
-      "aifinpay": {
-        "command": "npx",
-        "args": ["@aifinpay/mcp"]
-      }
-    }
-  },
-  "env": {
-    "AIFINPAY_AGENT_SECRET": "base58 Ed25519 secret (persistent agent identity; Solana + EVM addresses both derive from it)",
-    "AIFINPAY_MAX_USD": "hard cap per paid call (agent_call + payable_fetch), default 0.10",
-    "AIFINPAY_BASE_URL": "override the AiFinPay backend endpoint, default https://aifinpay.io"
-  },
-  "tools": [
+  "icons": [
     {
-      "name": "agent_call",
-      "description": "Registry-resolved paid call to a named provider (exa, io-net, venice, ...). Settles on-chain, returns the upstream response + tx hash."
-    },
-    {
-      "name": "agent_claim_self",
-      "description": "Attach this agent to a user's AiFinPay account via magic-link + key signature."
-    },
-    {
-      "name": "payable_fetch",
-      "description": "Fetch any URL; auto-settle 402 on-chain and retry. Returns the gated response body."
-    },
-    {
-      "name": "agent_address",
-      "description": "Return the agent's wallet addresses (Polygon + Solana, for funding)."
-    },
-    {
-      "name": "agent_quote",
-      "description": "Get a price quote for a 402-gated endpoint without paying."
-    },
-    {
-      "name": "pay_with_split",
-      "description": "On-chain instructions for a payment through the splitter contract for B2B endpoints (atomic fee-on-top split)."
-    },
-    {
-      "name": "quote_split",
-      "description": "Pure-view fee breakdown for an atomic split payment."
+      "src": "https://aifinpay.io/favicon.png",
+      "mimeType": "image/png"
     }
   ],
-  "live_evidence": [
-    { "chain": "polygon", "use_case": "Exa search", "tx": "0xeb13c5ed59c8700" },
-    { "chain": "polygon", "use_case": "io.net Llama-3.3-70B, $0.025", "tx": "0x7c6ca0ff129f0a" }
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@aifinpay/mcp",
+      "version": "2.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeHint": "npx",
+      "runtimeArguments": [
+        {
+          "type": "positional",
+          "value": "@aifinpay/mcp"
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "AIFINPAY_AGENT_SECRET",
+          "description": "Base58 Ed25519 secret (persistent agent identity; Solana + EVM addresses both derive from it)",
+          "format": "string",
+          "isSecret": true,
+          "isRequired": false
+        },
+        {
+          "name": "AIFINPAY_MAX_USD",
+          "description": "Hard cap per paid call (agent_call + payable_fetch), default 0.10",
+          "format": "string",
+          "isRequired": false
+        },
+        {
+          "name": "AIFINPAY_BASE_URL",
+          "description": "Override the AiFinPay backend endpoint, default https://aifinpay.io",
+          "format": "string",
+          "isRequired": false
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.aifinpay.io/mcp"
+    }
   ]
 }
