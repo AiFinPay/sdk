@@ -1,268 +1,186 @@
-# AiFinPay — Payment Rail for AI Agents
+# AiFinPay — financial rails for AI agents
 
-**Stable 2.0.0 release** — Node/MCP `2.0.0` and Python `2.0.0` are now stable.
-Install from npm/PyPI or build from source as described in
-[Node setup](./node/README.md). Native auth requires the coordinated backend v2 update. Legacy
-`call()` payments and v1.4 execution are disabled; Node `fetchPaid` requires
-a reviewed Polygon v1.3 deployment pin and fresh trusted native/USD price.
-See [payment recovery](./node/PAYMENT_RECEIPTS.md).
+AiFinPay provides payment and monetization infrastructure for autonomous AI agents.
 
-[![npm @aifinpay/agent](https://img.shields.io/npm/v/@aifinpay/agent?label=%40aifinpay%2Fagent&color=blue)](https://www.npmjs.com/package/@aifinpay/agent)
-[![npm @aifinpay/mcp](https://img.shields.io/npm/v/@aifinpay/mcp?label=%40aifinpay%2Fmcp&color=blue)](https://www.npmjs.com/package/@aifinpay/mcp)
-[![PyPI aifinpay-agent](https://img.shields.io/pypi/v/aifinpay-agent?color=blue)](https://pypi.org/project/aifinpay-agent/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
-[![Site](https://img.shields.io/badge/site-aifinpay.io-black.svg)](https://aifinpay.io)
-[![MCP](https://img.shields.io/badge/MCP-compatible-purple.svg)](https://modelcontextprotocol.io)
+- **Agent side:** identity, wallet discovery, payment history, route discovery, quotas and settlement preparation.
+- **Merchant side:** HTTP 402 paywalls and per-request monetization for AI traffic.
+- **Non-custodial design:** private keys remain with the agent/operator. Public MCP tools do not expose seeds or private keys.
 
-**Payment tooling for autonomous AI agents.** The SDK implements AIFP-1
-gross-inclusive settlement and AIFP-2/x402 negotiation with non-custodial,
-fail-closed controls. Canonical economics: AIFP-1 charges 1% inside the quoted
-gross amount (merchant 99%, AiFinPay 1%, creator/referral 0%); AIFP-2 currently
-charges 0% at the protocol layer. A network is production-enabled only after
-its exact deployment, runtime hash, profile and paid E2E evidence are pinned.
+Canonical domain: **https://aifinpay.io**
 
-> Canonical domain: **aifinpay.io** — the legacy `aifinpay.company` host is
-> retired; ignore any cached docs or install instructions pointing there
-> (including the old `@alpha` npm tag). Registry installation examples below
-> refer to published packages, not this security candidate. Network inventory:
-> [aifinpay.io/llms.txt](https://aifinpay.io/llms.txt).
+## Current package versions
+
+| Package | Current source version | Install |
+|---|---:|---|
+| `aifinpay-agent` (Python) | `2.1.0` | `pip install aifinpay-agent` |
+| `@aifinpay/agent` (Node / TypeScript) | `2.0.1` | `npm install @aifinpay/agent` |
+| `@aifinpay/mcp` | `2.1.0` | `npx @aifinpay/mcp` |
+| `@aifinpay/mcp-http` | `2.0.2` | Streamable HTTP wrapper |
+| `@aifinpay/skill` | `2.0.9` | `npm install @aifinpay/skill` |
+| `@aifinpay/gate` | `0.3.2` | `npm install @aifinpay/gate` |
+| `@aifinpay/wallet` | `1.1.0` | `npm install @aifinpay/wallet` |
+| `@aifinpay/deployments` | `1.1.2` | deployment registry package |
+
+Package lines are versioned independently. The package manifests in this repository and the corresponding npm/PyPI registries are the source of truth.
+
+## Install
 
 ```bash
-# Python
-pip install aifinpay-agent
+# MCP
+npx @aifinpay/mcp
 
-# Node / TypeScript
+# Node / TypeScript SDK
 npm install @aifinpay/agent
 
-# MCP server (Claude Desktop, Cursor, Windsurf, Continue)
-npx @aifinpay/mcp
+# Python SDK
+pip install aifinpay-agent
+
+# Merchant paywall
+npm install @aifinpay/gate
+
+# Agent skills
+npm install @aifinpay/skill
 ```
 
-## One-click MCP for Claude Desktop / Cursor
+## MCP: current production surface
 
-Drop this block into your client config — `claude_desktop_config.json`
-(macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`)
-or Cursor's `~/.cursor/mcp.json`:
+The current `@aifinpay/mcp` source exposes the following production tools:
+
+| Tool | Purpose |
+|---|---|
+| `agent_address` | Read the current EVM, Solana and Casper public addresses. |
+| `agent_reload` | Reload configured local wallet files without starting a new conversation. |
+| `agent_quota` | Read the agent's quota. |
+| `agent_history` | Read indexed AiFinPay payment history or retained receipt history. |
+| `agent_passport_resolve` | Resolve a public Agent Passport identity and verified wallet bindings. |
+| `settlement_routes` | Read currently runtime-verified AIFP-1 / AIFP-2 settlement routes. |
+| `settlement_invoice` | Build and validate a **non-signing** EVM settlement invoice. |
+| `settlement_solana` | Build and validate a **non-signing** Solana settlement invoice. |
+| `settlement_casper` | Build and validate a **non-signing** Casper settlement invoice. |
+| `deployment_info` | Read deployment addresses, program IDs and settlement status across supported ecosystems. |
+
+With `AIFINPAY_MODE=dev`, an additional `dev_payment_quote` tool is available for dev-only quote inspection.
+
+**The public MCP surface does not sign or broadcast payments.** Creating an invoice or quote is not a completed payment.
+
+Legacy tools such as `payable_fetch`, `agent_call`, `agent_quote`, `pay_with_split`, `quote_split` and `agent_claim_self` are not registered by the current production MCP server.
+
+### MCP client configuration
 
 ```json
 {
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["@aifinpay/mcp"]
+      "args": ["-y", "@aifinpay/mcp"]
     }
   }
 }
 ```
 
-Restart the client. Your model now has seven payment tools
-(`payable_fetch`, `agent_address`, `agent_quote`, `agent_call`,
-`pay_with_split`, `quote_split`, `agent_claim_self`) and can
-autonomously settle any x402-gated API.
+For a persistent local identity, initialize the keystore once:
 
-Full client matrix (Claude Desktop, Cursor, Windsurf, Continue, LobeChat,
-Cline) lives in [`MCP_CONFIG.md`](./MCP_CONFIG.md).
+```bash
+npx @aifinpay/mcp init
+```
 
-## Packages
+Then use `agent_reload` and `agent_address` to verify the selected public wallet. Do not paste seeds or private keys into chat, issues, logs or shared configuration.
 
-| Package | Path | Install | Latest |
-|---|---|---|---|
-| **`aifinpay-agent`** (Python) | [`./python`](./python) | `pip install aifinpay-agent` | `2.0.0` |
-| **`@aifinpay/agent`** (Node / TypeScript) | [`./node`](./node) | `npm install @aifinpay/agent` | `2.0.0` |
-| **`@aifinpay/mcp`** (MCP server) | [`./mcp`](./mcp) | `npx @aifinpay/mcp` | `2.0.0` |
-| **`@aifinpay/deployments`** (registry grabber) | [`./deployments`](./deployments) | internal | `1.0.0` |
-| **`@aifinpay/gate`** (merchant paywall) | [`./gate`](./gate) | `npm install @aifinpay/gate` | `0.3.2` |
-| **`@aifinpay/wallet`** (light wallet / keystore) | [`./wallet`](./wallet) | `npm install @aifinpay/wallet` | `1.1.0` |
-| Go SDK | — | `go get github.com/AiFinPay/sdk/go` | **soon** |
-| Rust SDK | — | `cargo add aifinpay-sdk` | **soon** |
+Full client setup: [MCP_CONFIG.md](./MCP_CONFIG.md)
 
-## What this is
+## SDK payment status
 
-`agent.pay(url)` — one line of Python or TypeScript that pays any
-[x402-protected](https://www.x402.org) URL on behalf of an autonomous
-AI agent. The SDK auto-detects the facilitator flavor (AiFinPay native,
-Coinbase x402, …), signs an Ed25519 challenge, retries the request, and
-returns the response.
+The SDK surfaces have different execution status. Do not treat them as interchangeable.
 
-Same agent, drop into Claude Desktop's MCP config and the LLM gets
-seven tools (`payable_fetch`, `agent_address`, `agent_quote`,
-`agent_call`, `pay_with_split`, `quote_split`, `agent_claim_self`) for
-autonomous payment loops.
+### Node / TypeScript
 
-## Quick start
+`@aifinpay/agent` includes the reviewed AIFP-1 `fetchPaid` path. Paid execution is gated by runtime checks, including the reviewed Polygon v1.3 deployment/profile and a fresh trusted native/USD price. A quote, invoice or matching runtime hash alone is not proof that a route is production-enabled.
+
+See [node/README.md](./node/README.md) and [node/PAYMENT_RECEIPTS.md](./node/PAYMENT_RECEIPTS.md).
 
 ### Python
 
-```python
-from aifinpay import Agent
-agent = Agent.new()
-print("Fund this address with MATIC:", agent.address)
-print("Save this secret:", agent.secret_b58)
+The Python package supports identity and related SDK functions, but its legacy paid `call()` settlement path is disabled and it does not currently expose the Node `fetchPaid` executor.
 
-# Pay any x402-protected URL
-resp = agent.pay("https://api.example.com/v1/data")
+See [python/README.md](./python/README.md).
 
-# Canonical AIFP-1 settlement is gross-inclusive:
-# payer total = quote; merchant = 99%; AiFinPay = 1%; creator = 0%.
-# The legacy pay_with_split_invoice route is retired.
+## Economics
+
+Current protocol economics documented in the v2 line:
+
+- **AIFP-1:** payer pays the quoted gross amount; merchant receives **99%**; AiFinPay receives **1%**; creator/referral receives **0%**.
+- **AIFP-2 / x402:** provider receives **100%**; AiFinPay protocol fee is currently **0%**.
+
+Older 98.99% / 1% / 0.01% examples belong to a retired fee model and must not be used as current economics.
+
+## Merchant monetization
+
+For a site or API that wants to monetize AI-agent traffic:
+
+```bash
+npm install @aifinpay/gate
 ```
 
-### Node.js / TypeScript
+The merchant package can return HTTP 402 challenges, expose discovery metadata and meter paid access. See [gate/README.md](./gate/README.md) and the `aifinpay-merchant` skill in [skill/skills/aifinpay-merchant/SKILL.md](./skill/skills/aifinpay-merchant/SKILL.md).
 
-```ts
-import { Agent } from "@aifinpay/agent";
+## Deployment status
 
-const agent = Agent.new();
-console.log("Fund this address:", agent.address);
+Deployment addresses and program IDs are registry data; they are not, by themselves, proof that settlement is enabled. Use `deployment_info` or the deployment registry and check `settlementEnabled` / `status` before presenting a network as active.
 
-const res = await agent.pay("https://api.example.com/v1/data");
+### Solana
 
-// Request a canonical AIFP-1 quote and settle only through a verified
-// deployment/profile. Legacy payWithSplitInvoice routes are retired.
-```
+The old Solana program `5g9zWHF1Vv6GiGpA2ZbJQbSCDZd5hAk9AyvabRJvKFx2` was closed and is not the current program.
 
-### MCP (Claude Desktop)
+The current registry contains the redeployed v1.4.1 programs below, both currently disabled for settlement:
 
-```json
-{
-  "mcpServers": {
-    "aifinpay": {
-      "command": "npx",
-      "args": ["@aifinpay/mcp"],
-      "env": {
-        "AIFINPAY_AGENT_SECRET": "<base58 secret>",
-        "AIFINPAY_MAX_USD": "0.50"
-      }
-    }
-  }
-}
-```
+| Network | Program ID | Settlement status | Reason |
+|---|---|---|---|
+| Devnet | `8dty5bD738Z9TzEkDu8vLSnhpJNWtEGMUEcYaKCUTY6y` | Disabled | Backend receipt verification is not implemented. |
+| Mainnet | `724Ut31i4ecY4dJ25z8HuZetu3A43xtNkPdk4JdbsfdD` | Disabled | Backend receipt verification is not implemented and upgrade authority is not multisig. |
 
-Restart Claude Desktop. The model now has seven payment tools —
-`payable_fetch(url)` lets it autonomously call any x402-gated API.
-
-## How it works
-
-```mermaid
-sequenceDiagram
-    Agent->>Server: GET /api/...
-    Server-->>Agent: 402 + manifest + nonce
-    Agent->>Agent: sign SHA256("AiFinPay-x402:{nonce}:{pubkey}")
-    Agent->>Server: GET /api/... + 3 auth headers
-    Server-->>Agent: 200 + payload
-```
-
-For a partner who wants to **accept** AiFinPay payments, the simplest
-integration is a single HTTP call to `aifinpay.io/api/seat/<pubkey>`
-inside their existing API — no wallet, no chain library, no KYC. See
-[`examples/echo-x402-server`](./examples/echo-x402-server) for a working
-~70-line reference.
-
-AIFP-1 settlement uses the quoted gross amount as the payer total. The
-merchant receives 99%, AiFinPay receives 1%, and creator/referral receives 0%.
-AIFP-2/x402 currently charges 0% at the protocol layer. No SDK path may claim
-production support until the exact deployment, runtime bytecode/program hash,
-governance profile and paid E2E evidence are pinned for that release.
-
-## Deployment registry
-
-Addresses below are historical/current registry inputs, not by themselves proof of production readiness. Verify the release profile and runtime hash before signing.
-
-| | Polygon (mainnet) |
-|---|---|
-| `AiFinPayCore` | [`0x24Bee0df…1C7b`](https://polygonscan.com/address/0x24Bee0dfCD4d2f481E2f49A339F1C105a1611C7b) |
-| `AgentPassport` | [`0xB385Cc32…662a`](https://polygonscan.com/address/0xB385Cc32fe39CF5B5778DF0Df0e8E9978b5F662a) |
-| `MSECCOToken` | [`0x1Fe20213…1d55`](https://polygonscan.com/address/0x1Fe2021336596655Fac72bC7bC40F7FFFA501d55) |
-| **Legacy `AiFinPaySplitter` (not canonical AIFP-1)** | [`0xE34Fc0E6…8440`](https://polygonscan.com/address/0xE34Fc0E6694821c600Fa0955C0F74720ea6d8440) |
-| Gnosis Safe (multisig owner) | [`0xD31d82c4…3c8e`](https://polygonscan.com/address/0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e) |
-
-Solana program (Anchor): `5g9zWHF1Vv6GiGpA2ZbJQbSCDZd5hAk9AyvabRJvKFx2`.
-
-## Framework integrations
-
-Drop-in adapters for popular agent frameworks live under
-[`./examples/`](./examples). Each is a working, paste-and-run example.
-
-| Framework | Example | What it shows |
-|---|---|---|
-| **OpenAI Agents SDK** | [`examples/openai-agent`](./examples/openai-agent) | `Tool`-style integration: GPT-4 calls a tool that pays an x402 endpoint and returns the response |
-| **Claude (MCP)** | [`examples/claude-mcp`](./examples/claude-mcp) | Zero-code: just install the MCP server, talk to Claude |
-| **LangChain** | [`examples/langchain`](./examples/langchain) | `BaseTool` wrapping `agent.pay()` |
-| **CrewAI** | [`examples/crewai`](./examples/crewai) | A research crew that buys inference and search calls as it works |
-| **Flowise** | [`examples/flowise`](./examples/flowise) | Custom node JSON + import instructions |
-| **AutoGPT / AutoGen** | [`examples/autogpt`](./examples/autogpt) | Headless agent loop that funds itself once, then runs unattended |
-| Reference partner server | [`examples/echo-x402-server`](./examples/echo-x402-server) | ~70-line Node server that accepts AiFinPay payments |
-| Live bridges | [`examples/io-net-x402-bridge`](./examples/io-net-x402-bridge), [`exa-x402-bridge`](./examples/exa-x402-bridge), [`venice-x402-bridge`](./examples/venice-x402-bridge) | Production bridges in front of io.net / Exa / Venice |
+Canonical registry source: [deployments/registry/splitter/solana/deployments.json](./deployments/registry/splitter/solana/deployments.json)
 
 ## Historical mainnet evidence
 
-These transactions are historical evidence only; they do not certify the current release or fee model:
+These are **historical transactions only**. They do not certify the current release, fee model or current production readiness.
 
-| Provider | Asset | What was bought | Tx |
+| Provider | Asset | Historical use | Transaction |
 |---|---|---|---|
-| Exa Search | POL | First SDK call via Exa | [`0xeb13c5ed…59c8700`](https://polygonscan.com/tx/0xeb13c5ed59c8700) |
-| io.net | POL | Llama-3.3-70B inference, $0.025 | [`0x7c6ca0ff…129f0a`](https://polygonscan.com/tx/0x7c6ca0ff129f0a) |
+| Exa Search | POL | SDK call via Exa | [`0xeb13c5eddf645b3e5b5e5db82d8b19d301a4c0c8593f6e7dce9cd4c3359c8700`](https://polygonscan.com/tx/0xeb13c5eddf645b3e5b5e5db82d8b19d301a4c0c8593f6e7dce9cd4c3359c8700) |
+| io.net | POL | Llama-3.3-70B inference, $0.025 | [`0x7c6ca0ffcf75b1ca3ade4800fb896c4bb08bc5f1a91916dc2cf4918f16129f0a`](https://polygonscan.com/tx/0x7c6ca0ffcf75b1ca3ade4800fb896c4bb08bc5f1a91916dc2cf4918f16129f0a) |
 
-## Repo layout
+## Repository layout
 
-```
+```text
 sdk/
-├── python/                  aifinpay-agent (PyPI)
-├── node/                    @aifinpay/agent (npm)
-├── mcp/                     @aifinpay/mcp (npm)
-├── wallet/                  @aifinpay/wallet (keystore + CLI)
-├── gate/                    @aifinpay/gate (merchant paywall)
-├── deployments/             @aifinpay/deployments (registry grabber, private)
-├── docs/                    QUICKSTART.md, MCP_CONFIG.md, integrations
-└── examples/
-    ├── openai-agent/        OpenAI Agents SDK tool
-    ├── claude-mcp/          Claude Desktop MCP config + walkthrough
-    ├── langchain/           LangChain BaseTool wrapper
-    ├── crewai/              CrewAI multi-agent crew that pays
-    ├── flowise/             Flowise custom node
-    ├── autogpt/             Headless self-funding agent loop
-    ├── echo-x402-server/    reference partner integration (~70 lines)
-    ├── io-net-x402-bridge/  live io.net bridge
-    ├── exa-x402-bridge/     live Exa bridge
-    └── venice-x402-bridge/  live Venice bridge
+├── node/          @aifinpay/agent
+├── python/        aifinpay-agent
+├── mcp/           @aifinpay/mcp
+├── mcp-http/      Streamable HTTP wrapper
+├── skill/         @aifinpay/skill
+├── gate/          merchant HTTP 402 paywall
+├── wallet/        lightweight agent wallet / keystore
+├── deployments/   deployment registry
+└── examples/      integrations and reference examples
 ```
 
-## Releasing
+## Security rules
 
-All three packages are published as stable `1.0.0` on PyPI and npm under
-the default (`latest`) tag, with semver-compatible updates from here.
+- Never print, log or publish a seed, private key, keystore JSON or signing secret.
+- Public addresses and transaction hashes are safe to display.
+- Do not infer production readiness from a contract address, program ID, quote or invoice alone.
+- Retain the original quote, transaction reference and idempotency context when recovering from a settlement error to avoid accidental duplicate payment attempts.
 
-```bash
-# Python
-cd python
-python -m build
-python -m twine upload --repository pypi dist/*
+## Links
 
-# Node
-cd ../node
-npm run build
-npm publish
-
-# MCP
-cd ../mcp
-npm install                 # so it can resolve @aifinpay/agent
-npm run build
-npm publish
-```
-
-## Contributing
-
-Issues and PRs welcome. For protocol-level changes, please open an
-issue first to discuss.
+- Website: https://aifinpay.io
+- Documentation: https://aifinpay.io/docs
+- Quick start: [QUICKSTART.md](./QUICKSTART.md)
+- MCP configuration: [MCP_CONFIG.md](./MCP_CONFIG.md)
+- Issues: https://github.com/AiFinPay/sdk/issues
+- MCP specification: https://modelcontextprotocol.io
+- x402: https://www.x402.org
 
 ## License
 
 MIT — see [LICENSE](./LICENSE).
-
-## Links
-
-- Site: https://aifinpay.io
-- Docs: https://aifinpay.io/docs
-- Manifesto: https://aifinpay.io/manifesto.json
-- x402 protocol: https://www.x402.org
-- MCP spec: https://modelcontextprotocol.io
