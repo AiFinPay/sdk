@@ -1,21 +1,23 @@
 # AiFinPay × Claude Desktop (MCP)
 
-Zero-code integration. Drop one config block, restart Claude, done.
+Zero-code local MCP integration for AiFinPay identity, history, route/deployment inspection and non-signing settlement preparation.
+
+The current production MCP server does **not** sign or broadcast payments.
 
 ## Setup
 
-1. Find your config file:
+1. Find your Claude Desktop config file:
    - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
    - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 
-2. Add this server entry (or merge with your existing `mcpServers`):
+2. Add:
 
 ```json
 {
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["@aifinpay/mcp"]
+      "args": ["-y", "@aifinpay/mcp"]
     }
   }
 }
@@ -23,58 +25,55 @@ Zero-code integration. Drop one config block, restart Claude, done.
 
 3. Restart Claude Desktop.
 
+## Persistent identity
+
+Do not generate a wallet by printing a private key or paste a secret into the MCP config.
+
+Initialize the local keystore once:
+
+```bash
+npx @aifinpay/mcp init
+```
+
+Then, in Claude, ask it to call `agent_reload` and `agent_address`.
+
+If no persistent wallet is configured, the MCP server uses an ephemeral process identity. **Do not fund an ephemeral identity.**
+
 ## Verify it loaded
 
-Click the hammer icon in the chat input. You should see five tools:
-`payable_fetch`, `agent_address`, `agent_quote`, `pay_with_split`,
-`quote_split`.
+The current production source exposes:
+
+- `agent_address`
+- `agent_reload`
+- `agent_quota`
+- `agent_history`
+- `agent_passport_resolve`
+- `settlement_routes`
+- `settlement_invoice`
+- `settlement_solana`
+- `settlement_casper`
+- `deployment_info`
+
+With `AIFINPAY_MODE=dev`, `dev_payment_quote` is also available.
+
+Legacy `payable_fetch`, `agent_call`, `agent_quote`, `pay_with_split`, `quote_split` and `agent_claim_self` are not registered by the current production MCP server.
 
 ## First conversation
 
-> **You:** Use `agent_address` to show me your wallet address.
->
-> **Claude:** *(tool call)* The address is `0xAbC123…`. Fund it with a
-> few cents of MATIC + USDC on Polygon.
+> **You:** Use `agent_address` to show only the public EVM, Solana and Casper addresses.
 
-After funding:
+Then:
 
-> **You:** Use `payable_fetch` on `https://bridge.aifinpay.io/io-net/chat/completions`
-> with body `{"model":"meta-llama/Llama-3.3-70B-Instruct","messages":[{"role":"user","content":"Hello"}]}`.
->
-> **Claude:** *(tool call, settles 402 on-chain, retries, returns response)*
+> **You:** Use `deployment_info` to show which deployments are currently enabled for settlement.
 
-Claude pays the bridge, receives the inference, and shows you the
-result. The on-chain tx hash is in the tool result.
+Then:
 
-## Persistent identity
+> **You:** Use `settlement_routes` to list currently runtime-verified AIFP-1 and AIFP-2 routes.
 
-By default the MCP server generates a fresh keypair every restart —
-fine for testing, painful in real use because the new agent has no
-funds. To persist:
+A result from `settlement_invoice`, `settlement_solana` or `settlement_casper` is a **non-signing invoice**, not evidence that funds moved.
 
-1. Generate a keypair once:
-   ```bash
-   node -e "const {Agent}=require('@aifinpay/agent'); const a=Agent.new(); console.log({address:a.address, secret:a.secretB58})"
-   ```
-2. Fund the address.
-3. Paste the secret into your MCP config:
+## Other clients
 
-```json
-{
-  "mcpServers": {
-    "aifinpay": {
-      "command": "npx",
-      "args": ["@aifinpay/mcp"],
-      "env": {
-        "AIFINPAY_AGENT_SECRET": "<base58 secret>",
-        "AIFINPAY_MAX_USD": "0.50"
-      }
-    }
-  }
-}
-```
+The same command/args pattern works for MCP-aware clients that support local stdio servers.
 
-## Configs for other clients
-
-Same recipe for Cursor, Windsurf, Continue, Cline, LobeChat — see
-[`../../MCP_CONFIG.md`](../../MCP_CONFIG.md).
+See [../../MCP_CONFIG.md](../../MCP_CONFIG.md).
