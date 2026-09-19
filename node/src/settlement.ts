@@ -172,33 +172,29 @@ export class SettlementConfirmationPendingError extends SettlementProtocolError 
 }
 
 const CHAIN_IDS: Record<SettlementEvmNetwork, number> = {
-  amoy: 80002,
-  polygon: 137,
-  avalanche: 43114,
-  arbitrum: 42161,
-  bnb: 56,
-  base: 8453,
-  unichain: 130,
-  optimism: 10,
-  /** @deprecated BOT Chain (chainId: 677) is deprecated. Use robinhood (chainId: 4663) instead. */
-  botchain: 677,
-  robinhood: 4663,
-  xrplevm: 1440000,
+   amoy: 80002,
+   polygon: 137,
+   avalanche: 43114,
+   arbitrum: 42161,
+   bnb: 56,
+   base: 8453,
+   unichain: 130,
+   optimism: 10,
+   robinhood: 4663,
+   xrplevm: 1440000,
 };
 
 const NATIVE_ASSETS: Record<SettlementEvmNetwork, string> = {
-  polygon: "POL",
-  amoy: "POL",
-  avalanche: "AVAX",
-  arbitrum: "ETH",
-  bnb: "BNB",
-  base: "ETH",
-  unichain: "ETH",
-  optimism: "ETH",
-  /** @deprecated BOT Chain is deprecated. Use robinhood instead. */
-  botchain: "BOT",
-  robinhood: "ETH",
-  xrplevm: "XRP",
+   polygon: "POL",
+   amoy: "POL",
+   avalanche: "AVAX",
+   arbitrum: "ETH",
+   bnb: "BNB",
+   base: "ETH",
+   unichain: "ETH",
+   optimism: "ETH",
+   robinhood: "ETH",
+   xrplevm: "XRP",
 };
 
 const EXPECTED_BPS: Record<SettlementRouteClass, { treasury: number; creator: number }> = {

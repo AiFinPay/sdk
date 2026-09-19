@@ -257,19 +257,18 @@ describe("v1.3 contract calldata and confirmation", () => {
 
 describe("canonical v1.3 settlement invoice", () => {
   it("pins nine mainnet chain IDs and Amoy", () => {
-    expect(SETTLEMENT_CHAIN_IDS).toEqual({
-      amoy: 80002,
-      polygon: 137,
-      avalanche: 43114,
-      arbitrum: 42161,
-      bnb: 56,
-      base: 8453,
-      unichain: 130,
-      optimism: 10,
-      botchain: 677,
-      robinhood: 4663,
-      xrplevm: 1440000,
-    });
+     expect(SETTLEMENT_CHAIN_IDS).toEqual({
+       amoy: 80002,
+       polygon: 137,
+       avalanche: 43114,
+       arbitrum: 42161,
+       bnb: 56,
+       base: 8453,
+       unichain: 130,
+       optimism: 10,
+       robinhood: 4663,
+       xrplevm: 1440000,
+     });
   });
 
   it("pins AIFP-1 100/0 and AIFP-2 0/0", () => {

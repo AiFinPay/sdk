@@ -417,18 +417,29 @@ export const SPLITTER_DEPLOYMENTS: Record<SplitterChainName, SplitterDeployment>
     nativeUsdEnv: "AIFINPAY_ETH_USD",
     nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
   },
-  /** @deprecated BOT Chain (chainId: 677) is deprecated. Use robinhood (chainId: 4663) instead. */
-  botchain: {
-    version: "1.2",
-    chainId: 677,
-    chain: botchain,
-    defaultRpc: "https://rpc.botchain.ai",
-    splitter: "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
-    // no USDC on BOT Chain — native BOT only
-    explorer: "https://scan.botchain.ai",
-    nativeUsdEnv: "AIFINPAY_BOT_USD",
-    nativeUsdDefault: 1, // no reliable public feed; set the env var
-  },
+/** @deprecated BOT Chain (chainId: 677) is deprecated. Use robinhood (chainId: 4663) instead. */
+   botchain: {
+     version: "1.2",
+     chainId: 677,
+     chain: botchain,
+     defaultRpc: "https://rpc.botchain.ai",
+     splitter: "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
+     // no USDC on BOT Chain — native BOT only
+     explorer: "https://scan.botchain.ai",
+     nativeUsdEnv: "AIFINPAY_BOT_USD",
+     nativeUsdDefault: 1, // no reliable public feed; set the env var
+   },
+   robinhood: {
+     version: "1.2",
+     chainId: 4663,
+     chain: robinhood,
+     defaultRpc: "https://rpc.mainnet.chain.robinhood.com",
+     splitter: "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+     // no USDC on Robinhood Chain — native ETH only
+     explorer: "https://robinhoodchain.blockscout.com",
+     nativeUsdEnv: "AIFINPAY_ETH_USD",
+     nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
+   },
   xrplevm: {
     version: "1.2",
     chainId: 1440000,
