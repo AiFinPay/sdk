@@ -8,6 +8,7 @@ stable **2.0.0** release.
 | Example | What it shows | Stack |
 |---|---|---|
 | [`openai-agent`](./openai-agent) | OpenAI Agents SDK `Tool` that pays x402 endpoints | Node 22+, `@openai/agents` |
+| [`nano-x402`](./nano-x402) | OpenAI Agents SDK payer that settles x402 in Nano (XNO) — feeless alternative to USDC | Python 3.10+, `openai-agents-nano-x402` |
 | [`langchain`](./langchain) | LangChain `BaseTool` wrapping `agent.call()` | Node 22+, LangChain |
 | [`crewai`](./crewai) | CrewAI crew that buys inference + search calls | Node 22+, CrewAI |
 | [`flowise`](./flowise) | Flowise custom node JSON + import instructions | Node 22+, Flowise |
