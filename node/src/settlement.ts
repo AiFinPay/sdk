@@ -1,5 +1,7 @@
 import { keccak256, stringToHex, type Address, type Hex, type PublicClient, type WalletClient } from "viem";
 import { settlementHttp } from "./settlementHttp.js";
+import { SPLITTER_ROUTES } from "./generated/splitterRoutes.generated.js";
+import { V14_DEPLOYMENTS } from "./generated/v14Deployments.generated.js";
 
 export type SettlementRouteClass = "AIFP-1" | "AIFP-2";
 /**
@@ -171,18 +173,28 @@ export class SettlementConfirmationPendingError extends SettlementProtocolError 
   }
 }
 
-const CHAIN_IDS: Record<SettlementEvmNetwork, number> = {
-   amoy: 80002,
-   polygon: 137,
-   avalanche: 43114,
-   arbitrum: 42161,
-   bnb: 56,
-   base: 8453,
-   unichain: 130,
-   optimism: 10,
-   robinhood: 4663,
-   xrplevm: 1440000,
-};
+// Chain IDs are read from the generated registry tables — SPLITTER_ROUTES for
+// v1.3 route chains and V14_DEPLOYMENTS for chains that only have a v1.4
+// deployment (robinhood). botchain is deprecated and excluded.
+const CHAIN_ID_ENTRIES: Array<readonly [string, number]> = [
+  ...(Object.keys(SPLITTER_ROUTES) as Array<keyof typeof SPLITTER_ROUTES>)
+    .map((key) => {
+      const entry = SPLITTER_ROUTES[key];
+      return [entry.chain, entry.chainId] as const;
+    })
+    .filter(([chain]) => chain !== "botchain"),
+  ...Object.keys(V14_DEPLOYMENTS)
+    .filter((network) => !(Object.values(SPLITTER_ROUTES) as Array<{ chain: string }>).some((r) => r.chain === network))
+    .filter((network) => network !== "amoy") // amoy already in SPLITTER_ROUTES
+    .map((network): readonly [string, number] => {
+      const entry = V14_DEPLOYMENTS[network];
+      return [entry.network, entry.chainId] as const;
+    }),
+];
+
+const CHAIN_IDS: Record<SettlementEvmNetwork, number> = Object.fromEntries(
+  CHAIN_ID_ENTRIES
+) as Record<SettlementEvmNetwork, number>;
 
 const NATIVE_ASSETS: Record<SettlementEvmNetwork, string> = {
    polygon: "POL",

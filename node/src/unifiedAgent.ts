@@ -25,8 +25,10 @@ import {
   formatEther,
 } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
-import { polygon, base, arbitrum, optimism, bsc, mainnet, unichain, type Chain } from "viem/chains";
+import { polygon, base, arbitrum, optimism, bsc, mainnet, unichain, avalanche, type Chain } from "viem/chains";
 import { botchain, xrplevm, robinhood } from "./chains.js";
+import { V14_DEPLOYMENTS } from "./generated/v14Deployments.generated.js";
+import { SPLITTER_ROUTES } from "./generated/splitterRoutes.generated.js";
 import {
   Connection,
   Keypair,
@@ -334,10 +336,10 @@ export function paymentIdFor(orderId: string): `0x${string}` {
 // apart on a chain id or RPC.
 
 /** 
- * EVM chains with a live, on-chain-verified B2BSplitter deployment.
- * @deprecated "botchain" is deprecated and will be removed in a future version. Use "robinhood" instead.
- */
-export type SplitterChainName = "polygon" | "base" | "optimism" | "unichain" | "botchain" | "robinhood" | "xrplevm";
+   * EVM chains with a live, on-chain-verified B2BSplitter deployment.
+   * Note: The version is treated as 1.2 for compatibility with the SDK's ABI handling, even though the on-chain version may be 1.4.
+   */
+ export type SplitterChainName = "polygon" | "base" | "optimism" | "unichain" | "robinhood" | "xrplevm" | "botchain";
 
 export interface SplitterDeployment {
   chainId: number;
@@ -346,11 +348,12 @@ export interface SplitterDeployment {
   /** Public RPC used when no evmRpcUrls override is supplied. */
   defaultRpc: string;
   /**
-   * Deployed B2BSplitter version. v1.2 added a bytes32 paymentId replay guard
-   * and renamed the native entrypoint, so the ABI differs per chain — Base and
-   * Unichain were not part of the 2026-07-31 rollout and still run v1.1.
+   * Deployed B2BSplitter version. The SDK tracks the on-chain version (e.g., "1.4")
+   * but only distinguishes between v1.1 and v1.2+ for ABI compatibility.
+   * Chains with version "1.1" use the payMatic entrypoint; chains with version
+   * "1.2" or higher use the payNative entrypoint.
    */
-  version: "1.1" | "1.2";
+  version: string;
   /** B2BSplitter contract address (native-token entrypoint). */
   splitter: `0x${string}`;
   /**
@@ -371,87 +374,88 @@ export interface SplitterDeployment {
   nativeUsdEnv: string;
   nativeUsdDefault: number;
 }
+// Legacy v1.2 splitter addresses and versions. These predate the v1.3 route
+// registry and are NOT in the generated tables — the generated data covers
+// v1.3+ only. Everything else (chainId, defaultRpc, explorer, viem chain) is
+// derived from the generated registry or chains.ts so this table cannot drift
+// on transport/metadata even though the contract addresses are pinned here.
 
-export const SPLITTER_DEPLOYMENTS: Record<SplitterChainName, SplitterDeployment> = {
-  polygon: {
-    version: "1.2",
-    chainId: 137,
-    chain: polygon,
-    defaultRpc: "https://polygon.drpc.org",
-    splitter: "0xbD1fa5453f212F096c0213788a645eC597FB4DDe",
-    usdc: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
-    explorer: "https://polygonscan.com",
-    nativeUsdEnv: "AIFINPAY_MATIC_USD", // legacy name kept for back-compat
-    nativeUsdDefault: 0.073, // reference only; ~$0.073 on 2026-08-03
-  },
-  base: {
-    version: "1.1",
-    chainId: 8453,
-    chain: base,
-    defaultRpc: "https://mainnet.base.org",
-    splitter: "0x8Ad9830D16b1f10333866a3f38C949CbB19f4BAD",
-    usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-    explorer: "https://basescan.org",
-    nativeUsdEnv: "AIFINPAY_ETH_USD",
-    nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
-  },
-  optimism: {
-    version: "1.2",
-    chainId: 10,
-    chain: optimism,
-    defaultRpc: "https://mainnet.optimism.io",
-    splitter: "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74",
-    usdc: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-    explorer: "https://optimistic.etherscan.io",
-    nativeUsdEnv: "AIFINPAY_ETH_USD",
-    nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
-  },
-  unichain: {
-    version: "1.1",
-    chainId: 130,
-    chain: unichain,
-    defaultRpc: "https://mainnet.unichain.org",
-    splitter: "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB",
-    usdc: "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
-    explorer: "https://uniscan.xyz",
-    nativeUsdEnv: "AIFINPAY_ETH_USD",
-    nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
-  },
-/** @deprecated BOT Chain (chainId: 677) is deprecated. Use robinhood (chainId: 4663) instead. */
-   botchain: {
-     version: "1.2",
-     chainId: 677,
-     chain: botchain,
-     defaultRpc: "https://rpc.botchain.ai",
-     splitter: "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
-     // no USDC on BOT Chain — native BOT only
-     explorer: "https://scan.botchain.ai",
-     nativeUsdEnv: "AIFINPAY_BOT_USD",
-     nativeUsdDefault: 1, // no reliable public feed; set the env var
-   },
-   robinhood: {
-     version: "1.2",
-     chainId: 4663,
-     chain: robinhood,
-     defaultRpc: "https://rpc.mainnet.chain.robinhood.com",
-     splitter: "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
-     // no USDC on Robinhood Chain — native ETH only
-     explorer: "https://robinhoodchain.blockscout.com",
-     nativeUsdEnv: "AIFINPAY_ETH_USD",
-     nativeUsdDefault: 1870, // reference only; ~$1870 on 2026-08-03
-   },
-  xrplevm: {
-    version: "1.2",
-    chainId: 1440000,
-    chain: xrplevm,
-    defaultRpc: "https://rpc.xrplevm.org",
-    splitter: "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC",
-    // no verified USDC on XRPL EVM — native XRP only
-    explorer: "https://explorer.xrplevm.org",
-    nativeUsdEnv: "AIFINPAY_XRP_USD",
-    nativeUsdDefault: 2,
-  },
+const CHAIN_OBJECTS: Record<SplitterChainName, Chain> = {
+  polygon,
+  base,
+  optimism,
+  unichain,
+  robinhood,
+  xrplevm,
+  botchain,
 };
+
+// Legacy v1.2 splitter addresses, verified on-chain 2026-08-01. These are the
+// pre-v1.3 contracts; v1.3+ addresses live in the generated registry files.
+const LEGACY_SPLITTER: Record<SplitterChainName, { splitter: `0x${string}`; version: string; usdc?: `0x${string}` }> = {
+  polygon:   { splitter: "0xbD1fa5453f212F096c0213788a645eC597FB4DDe", version: "1.2", usdc: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" },
+  base:      { splitter: "0x8Ad9830D16b1f10333866a3f38C949CbB19f4BAD", version: "1.1", usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
+  optimism:  { splitter: "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74", version: "1.2", usdc: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85" },
+  unichain:  { splitter: "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB", version: "1.1", usdc: "0x078D782b760474a361dDA0AF3839290b0EF57AD6" },
+  robinhood: { splitter: "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB", version: "1.2" },
+  xrplevm:   { splitter: "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC", version: "1.2" },
+  botchain:  { splitter: "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC", version: "1.2" },
+};
+
+const NATIVE_USD_ENV: Record<SplitterChainName, string> = {
+  polygon: "AIFINPAY_MATIC_USD",
+  base: "AIFINPAY_ETH_USD",
+  optimism: "AIFINPAY_ETH_USD",
+  unichain: "AIFINPAY_ETH_USD",
+  robinhood: "AIFINPAY_ETH_USD",
+  xrplevm: "AIFINPAY_XRP_USD",
+  botchain: "AIFINPAY_BOT_USD",
+};
+
+const NATIVE_USD_DEFAULT: Record<SplitterChainName, number> = {
+  polygon: 0.073,
+  base: 1870,
+  optimism: 1870,
+  unichain: 1870,
+  robinhood: 1870,
+  xrplevm: 2,
+  botchain: 1,
+};
+
+// Transport overrides for chains where the legacy v1.2 RPC/explorer differs
+// from the v1.3 generated registry (polygon) or where no v1.3 route exists
+// (botchain, deprecated).
+const TRANSPORT_OVERRIDE: Partial<Record<SplitterChainName, { defaultRpc?: string; explorer?: string }>> = {
+  polygon: { defaultRpc: "https://polygon.drpc.org" },
+  botchain: { defaultRpc: "https://rpc.botchain.ai", explorer: "https://scan.botchain.ai" },
+  robinhood: { defaultRpc: "https://rpc.mainnet.chain.robinhood.com", explorer: "https://robinhoodchain.blockscout.com" },
+};
+
+function buildSplitterDeployments(): Record<SplitterChainName, SplitterDeployment> {
+  const result = {} as Record<SplitterChainName, SplitterDeployment>;
+  for (const name of Object.keys(CHAIN_OBJECTS) as SplitterChainName[]) {
+    const legacy = LEGACY_SPLITTER[name];
+    // botchain is deprecated and has no v1.3 route entry; every other chain
+    // resolves transport metadata from the generated route table.
+    const route = SPLITTER_ROUTES[`${name}:merchant-aifp1` as keyof typeof SPLITTER_ROUTES];
+    const chainObj = CHAIN_OBJECTS[name];
+    const override = TRANSPORT_OVERRIDE[name];
+    result[name] = {
+      version: legacy.version,
+      chainId: route?.chainId ?? chainObj.id,
+      chain: chainObj,
+      defaultRpc: override?.defaultRpc ?? route?.defaultRpc ?? (chainObj.rpcUrls?.default?.http?.[0] ?? ""),
+      splitter: legacy.splitter,
+      usdc: legacy.usdc,
+      explorer: override?.explorer ?? route?.explorer ?? "",
+      nativeUsdEnv: NATIVE_USD_ENV[name],
+      nativeUsdDefault: NATIVE_USD_DEFAULT[name],
+    };
+  }
+  return result;
+}
+
+export const SPLITTER_DEPLOYMENTS: Record<SplitterChainName, SplitterDeployment> = buildSplitterDeployments();
 
 // ── EVM chain object lookup — viem chains keyed by our EvmChainName ─────
 
@@ -482,8 +486,9 @@ function evmChainObject(name: AnyEvmChainName): Chain | undefined {
 // Mainnet USDC SPL mint on Solana (Circle native, not Wormhole-wrapped USDCet)
 const USDC_SOLANA_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
-// Native Polygon USDC ERC20 (Circle-native, not bridged USDC.e)
-const USDC_POLYGON_ERC20 = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" as const;
+// Native Polygon USDC ERC20 — read from the generated v1.4 deployment table
+// (Circle-native, not bridged USDC.e).
+const USDC_POLYGON_ERC20 = V14_DEPLOYMENTS.polygon.splitter.usdc;
 
 // Minimal ERC20 balanceOf ABI fragment
 const ERC20_BALANCE_OF_ABI = [

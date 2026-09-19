@@ -1,5 +1,6 @@
 import type { Agent } from "../agent.js";
 import { PaymentTooExpensiveError, UnsupportedFacilitatorError } from "../errors.js";
+import { V14_DEPLOYMENTS } from "../generated/v14Deployments.generated.js";
 import type { AuthPayload, Facilitator, PayOptions } from "./base.js";
 
 /**
@@ -30,19 +31,27 @@ const LEGACY_CHAIN_IDS: Record<string, number> = {
 };
 
 // Circle-issued USDC, independently pinned by chain and contract. A server's
-// token name or decimals are not evidence of dollar value. Source (2026-09-12):
-// https://developers.circle.com/stablecoins/usdc-contract-addresses
-// Testnet entries are protocol test units, not real dollars.
+// token name or decimals are not evidence of dollar value. Values are read
+// from the generated v1.4 deployment registry where a deployment exists;
+// ethereum mainnet and testnet entries stay pinned here (no splitter deployed
+// there, so they are not in the registry).
+const ZERO = "0x0000000000000000000000000000000000000000";
+
+function v14Usdc(chain: string): string | undefined {
+  const addr = V14_DEPLOYMENTS[chain]?.splitter.usdc;
+  return addr && addr !== ZERO ? addr.toLowerCase() : undefined;
+}
+
 const USDC_BY_CHAIN: Readonly<Record<number, string>> = Object.freeze({
   1: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-  10: "0x0b2c639c533813f4aa9d7837caf62653d097ff85",
-  137: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
-  130: "0x078d782b760474a361dda0af3839290b0ef57ad6",
-  8453: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
-  42161: "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
-  43114: "0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e",
+  10: v14Usdc("optimism")!,
+  137: v14Usdc("polygon")!,
+  130: v14Usdc("unichain")!,
+  8453: v14Usdc("base")!,
+  42161: v14Usdc("arbitrum")!,
+  43114: v14Usdc("avalanche")!,
   84532: "0x036cbd53842c5426634e7929541ec2318f3dcf7e",
-  80002: "0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582",
+  80002: v14Usdc("amoy")!,
 });
 
 const TRANSFER_WITH_AUTHORIZATION_TYPES = {

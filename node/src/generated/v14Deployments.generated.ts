@@ -208,7 +208,7 @@ export const V14_DEPLOYMENTS: Record<string, V14Deployment> = {
     },
     "runtimeCodeHash": "0x974b871ac79082d92a7e3bba89ba52794f7906f99119dfad7959017e5b0bf038",
     "safe": {
-      "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+      "address": "0x01b80329ff81ce1d22a9e2e8807df5f92414c3c3",
       "version": "1.5.0",
       "threshold": 3,
       "owners": [

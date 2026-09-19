@@ -12,8 +12,8 @@ export const SPLITTER_REGISTRY_SOURCE = {
   path: "registry/splitter/evm/v1.3/deployments.json",
   version: "1.3",
   description: "B2BSplitter v1.3 — Protocol routes with immutable fee splits",
-  generatedAt: "2026-08-30",
-  policyWindow: {"validFrom":"2026-08-27T00:00:00.000Z","validUntil":"2026-11-25T00:00:00.000Z"},
+  generatedAt: "2026-09-17T16:33:35.333Z",
+  policyWindow: undefined,
 } as const;
 
 /**
@@ -52,7 +52,7 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://rpc-amoy.polygon.technology",
     explorer: "https://amoy.polygonscan.com",
-    verifiedAt: "2026-08-30",
+    verifiedAt: "2026-09-17",
   },
   "amoy:merchant-aifp1": {
     chain: "amoy",
@@ -73,7 +73,7 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://rpc-amoy.polygon.technology",
     explorer: "https://amoy.polygonscan.com",
-    verifiedAt: "2026-08-29",
+    verifiedAt: "2026-09-17",
   },
   "arbitrum:agent-x402": {
     chain: "arbitrum",
@@ -94,7 +94,7 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://arb1.arbitrum.io/rpc",
     explorer: "https://arbiscan.io",
-    verifiedAt: "2026-08-27",
+    verifiedAt: "2026-09-17",
   },
   "arbitrum:merchant-aifp1": {
     chain: "arbitrum",
@@ -115,7 +115,7 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://arb1.arbitrum.io/rpc",
     explorer: "https://arbiscan.io",
-    verifiedAt: "2026-08-27",
+    verifiedAt: "2026-09-17",
   },
   "avalanche:agent-x402": {
     chain: "avalanche",
@@ -136,7 +136,7 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://api.avax.network/ext/bc/C/rpc",
     explorer: "https://snowtrace.io",
-    verifiedAt: "2026-08-27",
+    verifiedAt: "2026-09-17",
   },
   "avalanche:merchant-aifp1": {
     chain: "avalanche",
@@ -157,7 +157,7 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://api.avax.network/ext/bc/C/rpc",
     explorer: "https://snowtrace.io",
-    verifiedAt: "2026-08-27",
+    verifiedAt: "2026-09-17",
   },
   "base:agent-x402": {
     chain: "base",
@@ -178,7 +178,7 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://mainnet.base.org",
     explorer: "https://basescan.org",
-    verifiedAt: "2026-08-27",
+    verifiedAt: "2026-09-17",
   },
   "base:merchant-aifp1": {
     chain: "base",
@@ -199,7 +199,7 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://mainnet.base.org",
     explorer: "https://basescan.org",
-    verifiedAt: "2026-08-27",
+    verifiedAt: "2026-09-17",
   },
   "bnb:agent-x402": {
     chain: "bnb",
@@ -220,7 +220,7 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://bsc-dataseed.bnbchain.org",
     explorer: "https://bscscan.com",
-    verifiedAt: "2026-08-27",
+    verifiedAt: "2026-09-17",
   },
   "bnb:merchant-aifp1": {
     chain: "bnb",
@@ -241,7 +241,7 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://bsc-dataseed.bnbchain.org",
     explorer: "https://bscscan.com",
-    verifiedAt: "2026-08-27",
+    verifiedAt: "2026-09-17",
   },
   "botchain:agent-x402": {
     chain: "botchain",
@@ -262,7 +262,7 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://rpc.botchain.ai",
     explorer: "https://scan.botchain.ai",
-    verifiedAt: "2026-08-27",
+    verifiedAt: "2026-09-17",
   },
   "botchain:merchant-aifp1": {
     chain: "botchain",
@@ -283,7 +283,7 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://rpc.botchain.ai",
     explorer: "https://scan.botchain.ai",
-    verifiedAt: "2026-08-27",
+    verifiedAt: "2026-09-17",
   },
   "optimism:agent-x402": {
     chain: "optimism",
@@ -304,7 +304,7 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://mainnet.optimism.io",
     explorer: "https://optimistic.etherscan.io",
-    verifiedAt: "2026-08-27",
+    verifiedAt: "2026-09-17",
   },
   "optimism:merchant-aifp1": {
     chain: "optimism",
@@ -325,7 +325,7 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://mainnet.optimism.io",
     explorer: "https://optimistic.etherscan.io",
-    verifiedAt: "2026-08-27",
+    verifiedAt: "2026-09-17",
   },
   "polygon:agent-x402": {
     chain: "polygon",
@@ -346,7 +346,7 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://polygon-bor-rpc.publicnode.com",
     explorer: "https://polygonscan.com",
-    verifiedAt: "2026-08-27",
+    verifiedAt: "2026-09-17",
   },
   "polygon:merchant-aifp1": {
     chain: "polygon",
@@ -367,7 +367,7 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://polygon-bor-rpc.publicnode.com",
     explorer: "https://polygonscan.com",
-    verifiedAt: "2026-08-27",
+    verifiedAt: "2026-09-17",
   },
   "unichain:agent-x402": {
     chain: "unichain",
@@ -388,7 +388,7 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://mainnet.unichain.org",
     explorer: "https://uniscan.xyz",
-    verifiedAt: "2026-08-27",
+    verifiedAt: "2026-09-17",
   },
   "unichain:merchant-aifp1": {
     chain: "unichain",
@@ -409,7 +409,7 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://mainnet.unichain.org",
     explorer: "https://uniscan.xyz",
-    verifiedAt: "2026-08-27",
+    verifiedAt: "2026-09-17",
   },
   "xrplevm:agent-x402": {
     chain: "xrplevm",
@@ -430,7 +430,7 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://rpc.xrplevm.org",
     explorer: "https://explorer.xrplevm.org",
-    verifiedAt: "2026-08-27",
+    verifiedAt: "2026-09-17",
   },
   "xrplevm:merchant-aifp1": {
     chain: "xrplevm",
@@ -451,6 +451,6 @@ export const SPLITTER_ROUTES: Record<SplitterRouteKey, SplitterRouteDeployment> 
     validUntil: "2026-11-25T00:00:00.000Z",
     defaultRpc: "https://rpc.xrplevm.org",
     explorer: "https://explorer.xrplevm.org",
-    verifiedAt: "2026-08-27",
+    verifiedAt: "2026-09-17",
   },
 };

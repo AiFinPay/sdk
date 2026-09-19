@@ -15,6 +15,7 @@
 // ──────────────────────────────────────────────────────────────────────────
 import type { PublicClient, WalletClient } from "viem";
 import { AiFinPayError } from "./errors.js";
+import { V14_DEPLOYMENTS } from "./generated/v14Deployments.generated.js";
 
 const LIFI_API = "https://li.quest/v1";
 
@@ -52,16 +53,25 @@ export const EVM_CHAINS = {
 
 export type EvmChainName = keyof typeof EVM_CHAINS;
 
-// USDC token addresses per chain. Native (Circle CCTP) variant where it
-// exists; bridged USDC.e listed in `USDC_BRIDGED` for legacy compatibility.
+// USDC token addresses per chain, read from the generated v1.4 deployment
+// table. Native (Circle CCTP) variant where it exists; bridged USDC.e listed
+// in `USDC_BRIDGED` for legacy compatibility. Ethereum mainnet USDC is not in
+// the deployment registry (no splitter deployed there) so it stays pinned here.
+const ZERO = "0x0000000000000000000000000000000000000000" as const;
+
+function v14Usdc(chain: string): `0x${string}` | undefined {
+  const addr = V14_DEPLOYMENTS[chain]?.splitter.usdc;
+  return addr && addr !== ZERO ? (addr as `0x${string}`) : undefined;
+}
+
 export const USDC_NATIVE: Record<EvmChainName, `0x${string}`> = {
   ethereum: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-  polygon: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
-  bsc: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", // Binance-Peg BSC-USD; closest analogue
-  arbitrum: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
-  optimism: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-  base: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-  robinhood: "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34", // USDe (Ethena); no Circle USDC on Robinhood
+  polygon: v14Usdc("polygon")!,
+  bsc: v14Usdc("bnb")!,
+  arbitrum: v14Usdc("arbitrum")!,
+  optimism: v14Usdc("optimism")!,
+  base: v14Usdc("base")!,
+  robinhood: v14Usdc("robinhood")!,
 };
 
 export const USDC_BRIDGED: Partial<Record<EvmChainName, `0x${string}`>> = {
