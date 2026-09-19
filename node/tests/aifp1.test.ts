@@ -1522,9 +1522,13 @@ describe("authenticated receipt recovery", () => {
       const server = mockServer();
       const base = server.fetch;
       let payAttempts = 0;
+      const receiptKeys = new Set<string | null>();
+      const receiptTransactions = new Set<string>();
       server.fetch = (async (input, init) => {
         if (String(input).endsWith("/v1/pay")) {
           payAttempts++;
+          receiptKeys.add(new Headers(init?.headers).get("Idempotency-Key"));
+          receiptTransactions.add(JSON.parse(String(init?.body)).tx_ref);
           expect(init?.redirect).toBe("error");
           if (fault === "redirect")
             return new Response(null, {
@@ -1551,7 +1555,14 @@ describe("authenticated receipt recovery", () => {
         recovery: { txRef: "0x" + "ab".repeat(32) },
       });
       expect(Date.now() - started).toBeLessThan(800);
-      expect(payAttempts).toBe(1);
+      // A timer can wake just before the deadline, allowing another 425
+      // receipt poll. It must still recover the same purchase, never pay again.
+      if (fault === "not yet indexed") expect(payAttempts).toBeGreaterThanOrEqual(1);
+      else expect(payAttempts).toBe(1);
+      expect(receiptKeys.size).toBe(1);
+      expect(receiptKeys.has(null)).toBe(false);
+      expect([...receiptTransactions]).toEqual(["0x" + "ab".repeat(32)]);
+      expect(server.quotes).toBe(1);
       expect(settlements).toHaveLength(1);
     }
   );
