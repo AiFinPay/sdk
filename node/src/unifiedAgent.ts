@@ -49,10 +49,14 @@ import {
   type SettlementRoute,
   type SettlementRouteClass,
 } from "./settlement.js";
+import { executeV14Settlement, type V14SettlementCall } from "./settlementV14.js";
 import { getQuota, type QuotaSummary } from "./agentHistory.js";
 import { type SpendLedger, MemorySpendLedger, FileSpendLedger } from "./spendLedger.js";
 import {
   aifp1Fetch,
+  recoverAifp1Payment,
+  type Aifp1PaymentRecovery,
+  type Aifp1PayResult,
   Aifp1ReceiptCache,
   type Aifp1CachedReceipt,
   type Aifp1Deps,
@@ -192,9 +196,9 @@ export interface AiFinPayAgentOptions extends AgentOptions {
   spendLedger?: SpendLedger;
   solanaRpc?: string; // default: env AIFINPAY_SOLANA_RPC or mainnet-beta
   /** RPC overrides for non-Polygon EVM chains — both bridge-flow chains
-    *  and splitter-settlement chains (base, optimism, unichain, botchain (deprecated),
-    *  xrplevm). Splitter chains fall back to the public RPC listed in
-    *  SPLITTER_DEPLOYMENTS when no override is given. */
+   *  and splitter-settlement chains (base, optimism, unichain, botchain (deprecated),
+   *  xrplevm). Splitter chains fall back to the public RPC listed in
+   *  SPLITTER_DEPLOYMENTS when no override is given. */
   evmRpcUrls?: Partial<Record<AnyEvmChainName, string>>;
 }
 
@@ -335,11 +339,12 @@ export function paymentIdFor(orderId: string): `0x${string}` {
 // They live in ./chains.js so this module and splitterRoutes.ts cannot drift
 // apart on a chain id or RPC.
 
-/** 
-   * EVM chains with a live, on-chain-verified B2BSplitter deployment.
-   * Note: The version is treated as 1.2 for compatibility with the SDK's ABI handling, even though the on-chain version may be 1.4.
-   */
- export type SplitterChainName = "polygon" | "base" | "optimism" | "unichain" | "robinhood" | "xrplevm" | "botchain";
+/**
+ * EVM chains with a live, on-chain-verified B2BSplitter deployment.
+ * @deprecated "botchain" is deprecated and will be removed in a future version. Use "robinhood" instead.
+ */
+// Legacy deployments only. Robinhood is supported by the v1.4 registry, not this retired table.
+export type SplitterChainName = "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm";
 
 export interface SplitterDeployment {
   chainId: number;
@@ -1570,9 +1575,26 @@ export class AiFinPayAgent {
       creatorWei: bigint;
       validUntil: bigint;
       orderId: string;
+      settlementCall?: import("./aifp1.js").Aifp1Quote["settlement_call"];
+      onPrepared?: (tx: { hash: `0x${string}`; serializedTransaction: `0x${string}` }) => Promise<void>;
     },
     opts: Aifp1FetchOptions
   ): Promise<`0x${string}`> {
+    if (opts.v14) {
+      if (p.settlementCall?.splitter_version !== "1.4") throw new AiFinPayError("expected signed v1.4 settlement call");
+      const { publicClient, walletClient } = this.polygonClients();
+      const result = await executeV14Settlement(p.settlementCall as V14SettlementCall, {
+        publicClient,
+        walletClient,
+        account: this.evmAddress as `0x${string}`,
+        orderId: p.orderId,
+        expectedMerchant: p.merchantWallet,
+        expectedGrossAmount: p.grossWei,
+        maxGasWei: opts.v14.maxGasWei,
+        onPrepared: p.onPrepared,
+      });
+      return result.hash;
+    }
     const pin = opts.settlementPin;
     if (!pin || pin.route_class !== "AIFP-1" || pin.chain !== "polygon" || pin.testnet) {
       throw new AiFinPayError(
@@ -1641,6 +1663,22 @@ export class AiFinPayAgent {
       },
     };
     return aifp1Fetch(deps, url, init, opts);
+  }
+
+  /** Recover receipt issuance for an existing payment; never sends a transaction. */
+  async recoverPaidPayment(
+    recovery: Aifp1PaymentRecovery,
+    opts: Pick<Aifp1FetchOptions, "settlementConfirmMs" | "apiTimeoutMs" | "paymentIssuer"> = {}
+  ): Promise<Aifp1PayResult> {
+    return recoverAifp1Payment(
+      recovery,
+      {
+        payerAddress: this.evmAddress,
+        signPaymentAuthorization: (message) => this.evmAccount.signMessage({ message }),
+        fetchImpl: this.inner.fetchImpl,
+      },
+      opts
+    );
   }
 
   /**

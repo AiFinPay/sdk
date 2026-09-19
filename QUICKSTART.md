@@ -1,166 +1,175 @@
-# QUICKSTART — first paid call in 60 seconds
+# QUICKSTART — install and verify AiFinPay
 
-This walks you from a clean machine to your first verified on-chain
-payment via the AiFinPay SDK. No KYC, no API key, no custodian.
+This guide reflects the current v2 package surfaces. It intentionally separates identity/control-plane functions from payment execution so a developer does not mistake a quote or invoice for a completed payment.
 
-**Stable 2.0.0 release** — install from npm/PyPI or build from source.
+## Current package line
 
-There are three paths. Pick whichever matches what you're building:
+- Python SDK: `aifinpay-agent 2.1.0`
+- Node / TypeScript SDK: `@aifinpay/agent 2.0.1`
+- MCP: `@aifinpay/mcp 2.1.0`
 
-1. **Python or Node SDK** — programmatic use from your own agent code.
-2. **Claude Desktop / Cursor (MCP)** — zero-code; the LLM gets payment
-   tools automatically.
-3. **Framework adapter** (LangChain, CrewAI, OpenAI Agents, AutoGPT…) —
-   plug `agent.call()` into your existing pipeline.
+## Path 1 — MCP
 
-## Path 1 — Python SDK
+Install / launch:
 
 ```bash
-pip install aifinpay-agent
+npx @aifinpay/mcp
 ```
 
-```python
-import secrets
-from aifinpay import AiFinPayAgent
-
-# ONE seed → both addresses, deterministically. Back up this seed and you can
-# restore the same Solana AND EVM address on any machine.
-#
-# `AiFinPayAgent.new()` also works and is now equally recoverable — it derives
-# both keys from a random seed. Starting from an explicit seed just makes the
-# backup artifact obvious.
-seed = secrets.token_hex(32)
-print("BACK UP THIS SEED — it is the only way to recover the wallet:", seed)
-
-agent = AiFinPayAgent.from_seed(seed)     # later: AiFinPayAgent.from_seed(seed)
-print("Fund THIS address (USDC or POL on Polygon):", agent.evm_address)
-print("Solana id (leaderboard / Seat PDA):        ", agent.solana_address)
-
-# Once the EVM address is funded, this autonomously settles the 402 challenge
-# on-chain and returns the gated body. `provider` is a registry slug — no
-# hardcoded bridge URL.
-resp = agent.call("io-net", {
-    "model": "meta-llama/Llama-3.3-70B-Instruct",
-    "messages": [{"role": "user", "content": "Hello"}],
-})
-print(resp.json()["choices"][0]["message"]["content"])
-print("receipt:", resp.headers.get("x-payment-receipt"))
-```
-
-## Path 2 — Node / TypeScript SDK
-
-```bash
-npm install @aifinpay/agent
-```
-
-```ts
-import { randomBytes } from "node:crypto";
-import { AiFinPayAgent } from "@aifinpay/agent";
-
-// ONE seed → both addresses, deterministically. Back up this seed and you can
-// restore the same Solana AND EVM address on any machine.
-//
-// `AiFinPayAgent.new()` also works and is now equally recoverable — it derives
-// both keys from a random seed. Starting from an explicit seed just makes the
-// backup artifact obvious.
-const seed = randomBytes(32).toString("hex");
-console.log("BACK UP THIS SEED — it is the only way to recover the wallet:", seed);
-
-const agent = await AiFinPayAgent.fromSeed(seed);   // later: fromSeed(seed)
-console.log("Fund THIS address (USDC or POL on Polygon):", agent.evmAddress);
-console.log("Solana id (leaderboard / Seat PDA):        ", agent.solanaAddress);
-
-// `provider` is a registry slug — no hardcoded bridge URL. Returns null if a
-// budget cap is hit before paying.
-const res = await agent.call({
-  provider: "io-net",
-  body: { model: "meta-llama/Llama-3.3-70B-Instruct",
-          messages: [{ role: "user", content: "Hello" }] },
-});
-if (!res) throw new Error("budget cap hit before paying");
-const data = await res.json();
-console.log(data.choices[0].message.content);
-```
-
-## Path 3 — MCP (Claude Desktop / Cursor / Windsurf)
-
-Drop this into `claude_desktop_config.json` (or your client's MCP
-config):
+Client config:
 
 ```json
 {
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["@aifinpay/mcp"]
+      "args": ["-y", "@aifinpay/mcp"]
     }
   }
 }
 ```
 
-Restart the client and ask: *"What's your wallet address?"* — the
-`agent_address` tool returns it. Fund it. Then ask: *"Pay the io.net
-bridge for a one-line completion."* — the model handles the rest.
+For a persistent local wallet, initialize once:
 
-Full client matrix in [`MCP_CONFIG.md`](./MCP_CONFIG.md).
+```bash
+npx @aifinpay/mcp init
+```
 
-## Path 4 — agent frameworks
+Then ask the MCP client to call `agent_reload` and `agent_address`.
 
-Working examples for each framework live under
-[`./examples/`](./examples). Each is a single file, paste-and-run:
+### Current production MCP tools
 
-- [`examples/openai-agent`](./examples/openai-agent) — OpenAI Agents SDK
-- [`examples/langchain`](./examples/langchain) — LangChain `BaseTool`
-- [`examples/crewai`](./examples/crewai) — CrewAI crew that buys
-  inference + search calls
-- [`examples/flowise`](./examples/flowise) — Flowise custom node
-- [`examples/autogpt`](./examples/autogpt) — headless self-funding loop
+- `agent_address`
+- `agent_reload`
+- `agent_quota`
+- `agent_history`
+- `agent_passport_resolve`
+- `settlement_routes`
+- `settlement_invoice`
+- `settlement_solana`
+- `settlement_casper`
+- `deployment_info`
 
-## How a payment actually settles
+`dev_payment_quote` is available only when `AIFINPAY_MODE=dev`.
 
-1. Your code calls `agent.call({ provider })` (or `agent.pay(url)` on the
-   legacy `Agent`).
-2. The server returns **HTTP 402** with a JSON `accepts[]` block (or our
-   `pay_matic` block). It lists: chain, asset, payTo, amount,
-   `nonce`.
-3. The SDK signs an Ed25519 challenge (Solana-style identity) or
-   submits a `payMatic`/`payStable` tx on Polygon, depending on what the
-   server accepts.
-4. The SDK retries the request with the proof header(s).
-5. The server verifies on-chain (via the Polygon facilitator or our
-   indexer), forwards to the upstream service, and returns the
-   response.
+The production MCP tools above do **not** sign or broadcast a payment. Settlement invoice tools prepare and validate non-signing instructions only.
 
-You see one function call. Under the hood: one tx on mainnet, atomic
-99/1 split (merchant 98.99% / treasury 1% / IP-creator 0.01%), no
-custodian holds funds at any point.
+Legacy `payable_fetch`, `agent_call`, `agent_quote`, `pay_with_split`, `quote_split` and `agent_claim_self` are not registered by the current production MCP server.
 
-## What this is for
+Full client matrix: [MCP_CONFIG.md](./MCP_CONFIG.md)
 
-- **AI agents that need to buy compute / data / inference**, e.g. an
-  autonomous research crew that pays per call to Exa, io.net, Venice.
-- **Anyone with an existing API** who wants to charge per call — wrap
-  it once with the [`echo-x402-server`](./examples/echo-x402-server)
-  recipe and you have an x402-payable endpoint.
-- **MCP-aware LLM clients** (Claude Desktop, Cursor, Windsurf…) that
-  should be able to buy paid services without a hardcoded API key.
+## Path 2 — Node / TypeScript SDK
 
-## What this is not
+Install:
 
-- Not a custodian. We never hold your agent's funds.
-- Not a chain. Settlement is on Polygon and Solana mainnet.
-- Not an investment. mSECCO is a non-transferable internal accounting
-  unit.
+```bash
+npm install @aifinpay/agent
+```
 
-## Live proofs (Polygonscan)
+Load an existing configured wallet without printing private material:
 
-- First Exa search via SDK:
-  [`0xeb13c5ed…59c8700`](https://polygonscan.com/tx/0xeb13c5ed59c8700)
-- Llama-3.3-70B inference via io.net, $0.025:
-  [`0x7c6ca0ff…129f0a`](https://polygonscan.com/tx/0x7c6ca0ff129f0a)
+```ts
+import { AiFinPayAgent } from "@aifinpay/agent";
+
+const agent = await AiFinPayAgent.fromEnvironment();
+
+console.log({
+  evm: agent.evmAddress,
+  solana: agent.solanaAddress,
+  casper: agent.casperAddress,
+});
+```
+
+`fromEnvironment()` is load-only. It does not create or overwrite a wallet.
+
+Paid AIFP-1 execution is available only through the reviewed Node `fetchPaid` path and remains gated by runtime checks including the reviewed Polygon v1.3 deployment/profile and a fresh trusted native/USD price.
+
+Read before using paid execution:
+
+- [node/README.md](./node/README.md)
+- [node/PAYMENT_RECEIPTS.md](./node/PAYMENT_RECEIPTS.md)
+- [examples/agent-snippets](./examples/agent-snippets)
+
+Do not retry a paid request blindly after a settlement/receipt error; retain the original quote, transaction reference and idempotency context and use the recovery path.
+
+## Path 3 — Python SDK
+
+Install:
+
+```bash
+pip install aifinpay-agent
+```
+
+Load an existing seed from the environment without printing it:
+
+```python
+import os
+from aifinpay import AiFinPayAgent
+
+agent = AiFinPayAgent.from_seed(os.environ["SEED_HASH"])
+
+print({
+    "evm": agent.evm_address,
+    "solana": agent.solana_address,
+})
+```
+
+The Python package does not currently expose the Node `fetchPaid` executor. Legacy paid `call()` settlement is disabled; do not present Python as a one-line production paid-settlement path.
+
+See [python/README.md](./python/README.md).
+
+## Merchant side
+
+Install the merchant paywall:
+
+```bash
+npm install @aifinpay/gate
+```
+
+Use it to challenge AI-agent requests with HTTP 402, publish discovery metadata and meter paid access.
+
+See [gate/README.md](./gate/README.md).
+
+## Economics
+
+Current v2 economics:
+
+- **AIFP-1:** payer total equals the quoted gross amount; merchant receives **99%**; AiFinPay receives **1%**; creator/referral receives **0%**.
+- **AIFP-2 / x402:** provider receives **100%**; AiFinPay protocol fee is currently **0%**.
+
+The older 98.99% / 1% / 0.01% split is retired and must not be used as current economics.
+
+## Solana status
+
+The old Solana program `5g9zWHF1Vv6GiGpA2ZbJQbSCDZd5hAk9AyvabRJvKFx2` was closed and is not current.
+
+Registry programs:
+
+- Devnet: `8dty5bD738Z9TzEkDu8vLSnhpJNWtEGMUEcYaKCUTY6y` — settlement disabled.
+- Mainnet: `724Ut31i4ecY4dJ25z8HuZetu3A43xtNkPdk4JdbsfdD` — settlement disabled.
+
+Check [deployments/registry/splitter/solana/deployments.json](./deployments/registry/splitter/solana/deployments.json) or use MCP `deployment_info` for the current status.
+
+## Historical on-chain evidence
+
+Historical evidence only; these transactions do not certify the current release or current network readiness.
+
+- Exa Search:
+  [`0xeb13c5eddf645b3e5b5e5db82d8b19d301a4c0c8593f6e7dce9cd4c3359c8700`](https://polygonscan.com/tx/0xeb13c5eddf645b3e5b5e5db82d8b19d301a4c0c8593f6e7dce9cd4c3359c8700)
+- io.net inference:
+  [`0x7c6ca0ffcf75b1ca3ade4800fb896c4bb08bc5f1a91916dc2cf4918f16129f0a`](https://polygonscan.com/tx/0x7c6ca0ffcf75b1ca3ade4800fb896c4bb08bc5f1a91916dc2cf4918f16129f0a)
+
+## Security
+
+- Never print or log seeds, private keys, keystore JSON or signing secrets.
+- Do not paste recovery material into chat, GitHub issues or shared configs.
+- An invoice, quote, address or deployment ID is not proof that a payment occurred.
+- Verify settlement status and runtime/deployment checks before moving funds.
 
 ## Next
 
-- Full API surface: [`https://aifinpay.io/docs`](https://aifinpay.io/docs)
-- x402 discovery doc: [`https://api.aifinpay.io/.well-known/x402.json`](https://api.aifinpay.io/.well-known/x402.json)
-- Issues / questions: [GitHub Issues](https://github.com/AiFinPay/sdk/issues)
+- Documentation: https://aifinpay.io/docs
+- MCP configuration: [MCP_CONFIG.md](./MCP_CONFIG.md)
+- Node SDK: [node/README.md](./node/README.md)
+- Python SDK: [python/README.md](./python/README.md)
+- Issues: https://github.com/AiFinPay/sdk/issues

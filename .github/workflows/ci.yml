@@ -16,6 +16,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Stable required-check names predate the Node matrix. These summaries pass
+  # only when every matrix leg succeeds; cancelled/skipped/failed legs fail.
+  node-sdk-required:
+    name: node — @aifinpay/agent (build + test)
+    if: ${{ always() }}
+    needs: [node-sdk]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every supported Node version
+        env:
+          MATRIX_RESULT: ${{ needs.node-sdk.result }}
+        run: test "$MATRIX_RESULT" = success
+
+  mcp-server-required:
+    name: mcp — @aifinpay/mcp (build)
+    if: ${{ always() }}
+    needs: [mcp-server, mcp-against-source]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require published and source SDK matrices
+        env:
+          PUBLISHED_RESULT: ${{ needs.mcp-server.result }}
+          SOURCE_RESULT: ${{ needs.mcp-against-source.result }}
+        run: |
+          test "$PUBLISHED_RESULT" = success
+          test "$SOURCE_RESULT" = success
+
   version-gate:
     name: version bumped when published files change
     runs-on: ubuntu-latest
@@ -64,26 +91,18 @@ jobs:
       - name: Reject high and critical runtime dependency advisories
         run: npm audit --omit=dev --audit-level=high
 
-      # The route table is generated from a byte-for-byte copy of the canonical
-      # registry artifact in AiFinPay/evm-contract, where every payment-critical
-      # field was read from the chain. This regenerates it and compares, so a
-      # hand-edited payout address, fee split or settlement flag turns CI red
-      # instead of shipping. It also re-hashes the vendored artifact against its
-      # recorded provenance, so editing the copy fails the same way.
-      #
-      # Offline and deterministic on purpose: this job must not depend on a
-      # network read of another repository to know whether it is in sync.
-      - name: Registry — SPLITTER_ROUTES matches the canonical registry
+      # Installed canonical npm inputs must reproduce all SDK tables (offline).
+      - name: Registry — generated tables match installed canonical registries
         run: npm run registry:check
 
-      # The check above is offline and self-consistent: a writer who can change
-      # this repository can change the artifact, its recorded provenance and the
-      # generated table together, and the offline check would bless the set.
-      # This step breaks that loop by fetching the artifact from the OTHER
-      # repository at the exact commit provenance names and requiring the bytes
-      # to match. Both repositories are public, so no token is involved and
-      # there is nothing here for a compromised writer to forge.
-      - name: Registry — vendored artifact is byte-identical to evm-contract at the recorded commit
+      - name: Test registry package provenance gate
+        run: node --test scripts/check-registry-provenance.test.mjs
+
+      # Inputs are transformed aggregates, not vendored upstream contract files.
+      # Verify the exact canonical npm tarball against locked SHA-512 and compare
+      # all three generator inputs byte-for-byte. Fail closed on npm outage/drift.
+      # Contract-source reproducibility and on-chain attestation are separate.
+      - name: Registry — installed inputs match canonical npm package integrity
         run: node scripts/check-registry-provenance.mjs
 
       - name: Build (tsc)

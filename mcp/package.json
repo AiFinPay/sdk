@@ -1,8 +1,8 @@
 {
   "name": "@aifinpay/mcp",
-  "version": "2.1.1",
+  "version": "2.2.1",
   "mcpName": "io.github.aifinpay/aifinpay",
-  "description": "AiFinPay MCP production-RC control surface for Agent Passport resolution and runtime-verified AIFP-1/AIFP-2 settlement invoices. Signing tools remain gated until @aifinpay/agent v2 release.",
+  "description": "AiFinPay MCP: persistent agent wallets, discovery and owner-enabled verified native Polygon v1.4 payments with durable receipt recovery.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -76,8 +76,8 @@
   },
   "bugs": "https://github.com/AiFinPay/sdk/issues",
   "dependencies": {
-    "@aifinpay/agent": "^2.0.3",
-    "@aifinpay/skill": "^2.0.9",
+    "@aifinpay/agent": "2.1.1",
+    "@aifinpay/skill": "2.0.15",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "bs58": "^6.0.0",
     "tweetnacl": "^1.0.3"

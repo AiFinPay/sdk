@@ -210,3 +210,13 @@ export { deriveWallet, newWallet } from "./wallet.js";
 export { getAgentHistory, getQuota, AGENT_RECEIPT_FIELDS, AGENT_TRANSACTION_FIELDS } from "./agentHistory.js";
 export type { AgentHistoryOptions, QuotaOptions, QuotaBatch, QuotaSummary } from "./agentHistory.js";
 export type { DerivedWallet } from "./wallet.js";
+
+// Verified native v1.4 execution and read-only quote inspection.
+export {
+  executeV14Settlement,
+  validateV14SettlementCall,
+  checkV14Submittable,
+  V14SettlementError,
+  routeIdOf,
+} from "./settlementV14.js";
+export type { V14ExecutionContext, V14SettlementCall, V14Quote, V14ValidateOptions } from "./settlementV14.js";

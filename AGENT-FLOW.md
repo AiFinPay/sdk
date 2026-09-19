@@ -4,6 +4,38 @@ How an AI agent goes from "hit a paywall" to "got the data", and where the
 wallet, identity and money live along the way. Written against the audit of six
 questions; each section says what the code actually does today.
 
+## Current public client support — verified 2026-09-19
+
+Start with `npx skills add AiFinPay/skill`: choose `aifinpay` for the paying
+agent or `aifinpay-merchant` for a site owner. The [skill source](https://github.com/AiFinPay/skill)
+and npm `@aifinpay/skill` provide instructions, not an executor.
+
+- MCP **2.1.0** registers wallet, history, quota and non-signing preparation
+  tools. It does not register `payable_fetch`, `agent_call` or `agent_quote`.
+- Node **2.0.3** AIFP-1 `fetchPaid` requires an independently trusted Polygon
+  **v1.3** deployment pin, a fresh independent native/USD price, and compatible
+  quote instructions. It refuses the legacy v1.2 terms currently offered by
+  Raters. `agent.pay` handles different protocol paths, not this fallback.
+- In published Node 2.0.3, `executeV14Settlement` is quarantined and throws `V14_SETTLEMENT_DISABLED`.
+  A deployed contract does not imply an enabled client executor.
+
+The complete public-client paid flow is blocked until a compatible reviewed
+route and client are released. A successful custom integration is not proof
+that these published clients perform that flow.
+
+## Source candidate — not yet published
+
+Node2.1.0 and MCP2.2.0 implement native Polygon v1.4 purchases using the existing
+accepted administrative-profile model; no contract redeployment is required.
+The merchant explicitly selects v1.4 through authenticated settings. The MCP
+owner enables payments, exact origins and purchase/daily/gas limits. See
+[mcp/README.md](mcp/README.md) for the complete generic configuration and
+[node/PAYMENT_RECEIPTS.md](node/PAYMENT_RECEIPTS.md) for SDK journal/recovery.
+
+Candidate tests are not proof of a completed production release. Public package
+installation, dev funded acceptance and the final Raters purchase/dashboard run
+remain release gates. The custom demo scripts are not an acceptance substitute.
+
 ---
 
 ## 1. Which package to install — `agent` vs `mcp`
@@ -11,10 +43,10 @@ questions; each section says what the code actually does today.
 They are **two different products**, installed separately depending on who you
 are.
 
-| you are… | install | why |
-|---|---|---|
-| a developer writing agent code | `@aifinpay/agent` | the library you `import` and call directly |
-| running Claude / GPT with a connector | `@aifinpay/mcp` | an MCP server the client launches; you never call it in code |
+| you are…                              | install           | why                                                          |
+| ------------------------------------- | ----------------- | ------------------------------------------------------------ |
+| a developer writing agent code        | `@aifinpay/agent` | the library you `import` and call directly                   |
+| running Claude / GPT with a connector | `@aifinpay/mcp`   | an MCP server the client launches; you never call it in code |
 
 `@aifinpay/mcp` **depends on** `@aifinpay/agent` — installing the MCP server
 pulls the agent library in for you. The reverse is not true and should not be:
@@ -47,50 +79,55 @@ file. Mount `aifpDiscovery` **once, at the root**, next to your gates
 (`@aifinpay/gate@0.3.0+`):
 
 ```js
-app.use(aifpDiscovery({
-  merchantId: "mrch_…",
-  resources: [
-    { resource: "/api/agent/genres", tier: "standard" },
-    { resource: "/api/agent/*", tier: "standard", scope: "prefix" },
-  ],
-}));
+app.use(
+  aifpDiscovery({
+    merchantId: "mrch_…",
+    resources: [
+      { resource: "/api/agent/genres", tier: "standard" },
+      { resource: "/api/agent/*", tier: "standard", scope: "prefix" },
+    ],
+  }),
+);
 ```
 
 This serves `GET /.well-known/x402.json` — the list of paid routes, their
 prices and scopes, and where to settle. The agent hits the domain, reads that
-file, and knows the routes. No hand-written file, and it can't drift from what
-you actually gate because it's built from the same list.
+file, and knows the routes. The helper renders the resource array you pass;
+it does not scan the router or save that list in the dashboard. Use the same
+configuration for your gates and discovery to prevent drift.
 
 > **Next.js / non-Express?** `aifpDiscovery` is Express middleware. On Next,
 > import `buildDiscoveryDocument({...})` and return its JSON from a route
 > handler at `app/.well-known/x402.json/route.ts`. Same document, framework-free.
 
 The `/api/agent` catalog and `/llms.txt` are additional discovery surfaces an
-agent may read; `/.well-known/x402.json` is the standard one.
+agent may read. Link them on the SAME ORIGIN as the gated site, including on
+staging. A staging llms.txt that points to an undeployed production catalog
+leads to a 404. Keep discovery and parameter catalogs publicly readable.
+
+Gate 0.3.3 adds `instructions_url`, `merchant_instructions_url` and
+`documentation_url` to discovery and 402 responses. Older gates need an
+update and redeploy. The linked raw skills can change independently; installed
+skill copies and the MCP `aifinpay://skill` resource need package updates.
 
 ---
 
 ## 3. The wallet: what `init` prints, and where the key lives
 
-`npx @aifinpay/mcp init` creates a **persistent** wallet and writes it to
-`~/.aifinpay/agent.json` (mode 600). What it prints to the terminal:
+`npx @aifinpay/mcp init` selects an existing configured identity or creates
+`~/.aifinpay/agent.json` (mode 600). Wallet priority is `SEED_HASH`, project
+`aifinpay/agents.json`, legacy `AIFINPAY_AGENT_SECRET`, then the keystore.
+Existing or invalid configured identities are not silently overwritten.
 
-- the agent's **addresses** (EVM, Solana, Casper) — public, safe to share
-- **not** the private key — the secret never goes to stdout, and deliberately
-  **not** into the MCP config block, because config files get pasted into chats
-  and committed to git
+It prints public addresses and client configuration. A newly created
+**plaintext wallet on an interactive terminal also prints a one-time recovery
+key**. Do not record or share that output. To avoid a plaintext backup display,
+configure `AIFINPAY_WALLET_PASSPHRASE` privately before creating an encrypted
+wallet. Piped output and encrypted-wallet init do not print the recovery key.
 
-If you run the MCP server **without** `init` (no `AIFINPAY_AGENT_SECRET`, no
-keystore), it generates an **ephemeral** identity and says so loudly:
-
-```
-no AIFINPAY_AGENT_SECRET set — generated an EPHEMERAL, NON-RECOVERABLE agent.
-  >> DO NOT FUND these addresses. This identity is lost when the process exits.
-```
-
-An ephemeral key is held in memory only — it is not written anywhere, and it is
-gone on exit. That is the intended behaviour for a throwaway run; fund nothing
-until you have run `init`.
+With no configured identity, the server uses an ephemeral wallet. Do not fund
+it. After persistent init, `agent_reload` reloads files in the connected MCP
+session; changes to launch environment require reconnecting the process.
 
 ---
 
@@ -124,17 +161,18 @@ chains, not many wallets from one seed.
 
 ## 5. Double-payment protection
 
-Yes — an agent cannot pay twice for one quote, enforced at three levels and
-checked by the SDK **before** it broadcasts:
+`Idempotency-Key` on `/v1/pay` deduplicates receipt issuance for a settled
+transaction. It does not submit an on-chain transaction and cannot prevent a
+client from sending another transaction independently.
 
-- **`orderIdHash`** — binds the signed quote to one order id
-- **`nonce`** — per-payer and sequential; the contract rejects a reused one
-- **`consumedNonce`** — the set of spent nonces on-chain
+On-chain replay protection depends on the exact contract generation. Use a
+supported executor with independently trusted deployment metadata and persist
+pending transaction state before broadcast. If a response is lost, recover the
+same transaction and receipt before considering another payment.
 
-`executeV14Settlement` reads these and refuses with `V14_ALREADY_SETTLED` (nonce
-spent) or `V14_STALE_NONCE` (another payment settled first) rather than sending
-a doomed transaction. For AIFP-1, the `Idempotency-Key` on `/v1/pay` means a
-retried pay call returns the same receipt instead of a second settlement.
+The published Node 2.0.3 v1.4 executor is disabled; it does **not** perform the
+previously documented preflight and broadcast flow. Never treat a nonce check
+or a quoted invoice as evidence that this executor is available.
 
 ---
 

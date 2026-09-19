@@ -14,7 +14,9 @@ import { devPaymentQuoteTool, runDevPaymentQuote } from "./tools/dev-payment-quo
 import { agentAddressTool, runAgentAddress } from "./tools/agent-address.js";
 import { agentQuotaTool, runAgentQuota } from "./tools/agent-quota.js";
 import { makeSafeFetch } from "./safe-fetch.js";
-import { loadConfigFromEnv } from "./config.js";
+import { loadConfigFromEnv, validatePaymentConfig } from "./config.js";
+import { PaymentStateStore } from "./payment-state.js";
+import { payableFetchTool, runPayableFetch } from "./tools/payable-fetch.js";
 import {
   agentPassportResolveTool,
   runAgentPassportResolve,
@@ -39,20 +41,8 @@ const safeFetch = makeSafeFetch({
   trustedHosts: loadConfigFromEnv().trustedHosts,
 });
 
-/**
- * Production-RC MCP surface.
- *
- * IMPORTANT: the old agent_call, payable_fetch, pay_with_split, quote_split,
- * agent_claim_self and agent_quote tools are deliberately NOT registered.
- * They depend on @aifinpay/agent 1.x legacy splitter/x402 semantics and must not
- * be available to a model after the 0% AIFP-2 / gross-inclusive AIFP-1 change.
- *
- * This server remains useful before the SDK 2.0 package is published: it can
- * expose the wallet address, resolve Agent Passport identity, read verified
- * v1.3 routes, and construct a non-signing settlement invoice. Signing/moving
- * value returns only after MCP depends on the published v2 executor and its E2E
- * release gate has passed.
- */
+/** Read-only by default. Explicit owner configuration enables the reviewed
+ * native Polygon v1.4 payable_fetch path; legacy signing tools stay retired. */
 export async function createServer(config: McpConfig = {}) {
   const log = config.logFn ?? defaultLog;
 
@@ -80,6 +70,12 @@ export async function createServer(config: McpConfig = {}) {
       "warn",
       "[aifinpay-mcp] EPHEMERAL wallet — DO NOT FUND. Run `npx @aifinpay/mcp init`, then agent_reload in this connection."
     );
+  let paymentState: PaymentStateStore | undefined;
+  if (config.paymentsEnabled) {
+    validatePaymentConfig(config);
+    if (!configured) throw new Error("Payments require a persistent configured wallet; run init first");
+    paymentState = new PaymentStateStore(agent.evmAddress, config.walletHome);
+  }
   // Keep the legacy agent budget configured even though this RC exposes no
   // signing tool. It remains an additional defence for downstream/private code
   // and for the subsequent v2 MCP executor integration.
@@ -131,6 +127,7 @@ export async function createServer(config: McpConfig = {}) {
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       },
+      ...(paymentState ? [payableFetchTool()] : []),
       agentQuotaTool(),
       agentHistoryTool(),
       ...(config.devMode ? [devPaymentQuoteTool()] : []),
@@ -145,7 +142,7 @@ export async function createServer(config: McpConfig = {}) {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    const ctx = { agent, config, log };
+    const ctx = { agent, config, log, paymentState };
     switch (name) {
       case "agent_reload":
         try {
@@ -154,6 +151,11 @@ export async function createServer(config: McpConfig = {}) {
             throw new Error("No persistent wallet configured; run init or configure the project wallet first");
           if (config.maxAmountUsd !== undefined && Number.isFinite(config.maxAmountUsd)) {
             replacement.loaded.setBudget({ per_call_usd: config.maxAmountUsd });
+          }
+          if (paymentState && replacement.loaded.evmAddress.toLowerCase() !== agent.evmAddress.toLowerCase()) {
+            throw new Error(
+              "Reconnect to switch payment wallets; pending state must remain associated with its original wallet"
+            );
           }
           agent = replacement.loaded;
           identitySource = replacement.source;
@@ -177,6 +179,8 @@ export async function createServer(config: McpConfig = {}) {
             content: [{ type: "text", text: `Wallet reload failed: ${(error as Error).message}` }],
           };
         }
+      case "payable_fetch":
+        return runPayableFetch(ctx, args ?? {});
       case "agent_address":
         return runAgentAddress(ctx, args ?? {});
       case "agent_quota":
@@ -216,6 +220,7 @@ export async function createServer(config: McpConfig = {}) {
 export interface ToolContext {
   agent: AiFinPayAgent;
   config: McpConfig;
+  paymentState?: PaymentStateStore;
   log: (level: "info" | "warn" | "error", msg: string) => void;
 }
 

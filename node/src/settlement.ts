@@ -9,7 +9,17 @@ export type SettlementRouteClass = "AIFP-1" | "AIFP-2";
  * @deprecated "botchain" is deprecated and will be removed in a future version. Use "robinhood" instead.
  */
 export type SettlementEvmNetwork =
-  "polygon" | "avalanche" | "arbitrum" | "bnb" | "base" | "unichain" | "optimism" | "robinhood" | "xrplevm" | "amoy";
+  | "polygon"
+  | "botchain"
+  | "avalanche"
+  | "arbitrum"
+  | "bnb"
+  | "base"
+  | "unichain"
+  | "optimism"
+  | "robinhood"
+  | "xrplevm"
+  | "amoy";
 
 export interface SettlementRoute {
   route_class: SettlementRouteClass;
