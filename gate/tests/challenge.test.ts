@@ -25,6 +25,9 @@ describe("the 402 body", () => {
     expect(Object.keys(body).sort()).toEqual(
       [
         "detail",
+        "documentation_url",
+        "instructions_url",
+        "merchant_instructions_url",
         "error",
         "how_to_pay",
         "merchant_id",

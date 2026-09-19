@@ -13,7 +13,23 @@
  * Responsibilities". Each check below cites the clause it implements, because
  * a check nobody can trace back to a requirement is a check somebody deletes.
  */
-import { keccak256, stringToHex, parseAbi, type PublicClient, type WalletClient, type Address, type Hex } from "viem";
+import {
+  keccak256,
+  stringToHex,
+  parseAbi,
+  encodeFunctionData,
+  encodeAbiParameters,
+  decodeEventLog,
+  recoverTypedDataAddress,
+  isAddress,
+  type PublicClient,
+  type WalletClient,
+  type Address,
+  type Hex,
+} from "viem";
+
+import { V14_DEPLOYMENTS } from "./generated/v14Deployments.generated.js";
+import { SettlementConfirmationPendingError } from "./settlement.js";
 
 /** The Quote struct, exactly as B2BSplitterV14 declares it. Field ORDER is part
  *  of the EIP-712 hash — this mirrors _QUOTE_TYPEHASH and must not be reordered. */
@@ -260,30 +276,319 @@ export async function checkV14Submittable(
   return { submittable: true };
 }
 
+const QUOTE_FIELDS = [
+  { name: "payer", type: "address" },
+  { name: "merchant", type: "address" },
+  { name: "token", type: "address" },
+  { name: "grossAmount", type: "uint256" },
+  { name: "ipCreator", type: "address" },
+  { name: "validUntil", type: "uint256" },
+  { name: "orderIdHash", type: "bytes32" },
+  { name: "nonce", type: "uint256" },
+  { name: "routeId", type: "bytes32" },
+] as const;
+const NATIVE_FUNCTION = "settleNative((address,address,address,uint256,address,uint256,bytes32,uint256,bytes32),bytes)";
+const EXECUTION_ABI = parseAbi([
+  "event Payment(bytes32 indexed paymentId,address indexed payer,address indexed merchant,address token,uint256 grossAmount,uint256 merchantAmount,uint256 treasuryAmount,uint256 ipCreatorAmount,uint256 validUntil,bytes32 routeId,bytes32 orderIdHash)",
+  "function settleNative((address payer,address merchant,address token,uint256 grossAmount,address ipCreator,uint256 validUntil,bytes32 orderIdHash,uint256 nonce,bytes32 routeId) quote,bytes signature) payable",
+  "function profiles() view returns (address)",
+  "function tokenList() view returns (address)",
+  "function treasury() view returns (address)",
+  "function hasRole(bytes32,address) view returns (bool)",
+]);
+const PROFILE_ABI = parseAbi([
+  "function getProfile(bytes32) view returns ((uint16 treasuryBps,uint16 ipCreatorBps,bool enabled,uint64 configuredAt,address routeTreasury))",
+]);
+
+export interface V14ExecutionContext {
+  publicClient: PublicClient;
+  walletClient: WalletClient;
+  account: Address;
+  orderId?: string;
+  minSecondsRemaining?: number;
+  /** Independently authorized purchase, not defaults copied from settlement_call. */
+  expectedMerchant?: Address;
+  expectedGrossAmount?: bigint;
+  /** Maximum gas * maxFeePerGas, in native wei (in addition to purchase gross). */
+  maxGasWei?: bigint;
+  /** Persist before broadcast. A failed write prevents transmission. Never log the raw transaction. */
+  onPrepared?: (tx: { hash: Hex; serializedTransaction: Hex }) => Promise<void>;
+  /** @deprecated Preflight is mandatory; true is rejected. */
+  skipPreflight?: boolean;
+}
+
 /**
- * v1.4 signing is quarantined. Its current signed Quote omits mutable profile
- * fees and treasury. RPC preflight cannot bind those values at execution time.
- * Keep the exported API for callers to handle the refusal, but provide no
- * bypass: re-enabling requires a contract-bound economics commitment, reviewed
- * deployment/signer/token pins, approval handling and mined-success recovery.
- * Validation and nonce inspection above remain read-only diagnostics.
+ * Execute the existing v1.4 native ABI using independently pinned deployments.
+ * Profiles/treasury remain administratively mutable by the accepted v1.4 trust
+ * model; preflight checks their current values, not an immutable fee guarantee.
+ * All legacy calls lacking explicit purchase authorization remain disabled.
+ * Only local signing is supported so an exact transaction hash can be persisted
+ * before transmission, including when the RPC loses the broadcast response.
  */
 export async function executeV14Settlement(
-  _call: V14SettlementCall,
-  _ctx: {
-    publicClient: PublicClient;
-    walletClient: WalletClient;
-    account: Address;
-    orderId?: string;
-    minSecondsRemaining?: number;
-    /** @deprecated Cannot bypass the v1.4 settlement quarantine. */
-    skipPreflight?: boolean;
-  }
+  call: V14SettlementCall,
+  ctx: V14ExecutionContext
 ): Promise<{ hash: Hex; route: string }> {
-  throw new V14SettlementError(
-    "V14_SETTLEMENT_DISABLED",
-    "v1.4 settlement is disabled: signed quotes do not bind mutable fees and treasury. " +
-      "Use a separately reviewed v1.3 route or wait for the contract and SDK upgrade; " +
-      "do not manually submit this quote or automatically fall back to another contract."
+  const fail = (code: string, message: string): never => {
+    throw new V14SettlementError(code, message);
+  };
+  if (
+    !ctx.orderId ||
+    !ctx.expectedMerchant ||
+    typeof ctx.expectedGrossAmount !== "bigint" ||
+    ctx.expectedGrossAmount <= 0n ||
+    typeof ctx.maxGasWei !== "bigint" ||
+    ctx.maxGasWei <= 0n ||
+    typeof ctx.onPrepared !== "function" ||
+    ctx.skipPreflight
+  ) {
+    fail(
+      "V14_SETTLEMENT_DISABLED",
+      "Native v1.4 execution requires an authorized order, merchant, exact gross, gas cap and durable prepared-transaction journal; preflight cannot be skipped."
+    );
+  }
+  // Copy the untrusted call before awaiting: callers cannot change checked data
+  // while RPC requests are in flight.
+  call = structuredClone(call);
+  const q = call?.args?.quote;
+  if (!q) fail("V14_MALFORMED", "missing quote");
+  for (const address of [call.contract, q.payer, q.merchant, q.token, q.ipCreator, ctx.account, ctx.expectedMerchant]) {
+    if (!address || !isAddress(address, { strict: false })) fail("V14_MALFORMED", "invalid address");
+  }
+  for (const value of [q.grossAmount, q.validUntil, q.nonce, call.value_wei]) {
+    if (typeof value !== "string" || !/^(0|[1-9][0-9]*)$/.test(value) || BigInt(value) >= 2n ** 256n) {
+      fail("V14_MALFORMED", "invalid uint256");
+    }
+  }
+  if (!/^0x[0-9a-fA-F]{64}$/.test(q.orderIdHash) || !/^0x[0-9a-fA-F]{64}$/.test(q.routeId)) {
+    fail("V14_MALFORMED", "invalid bytes32");
+  }
+  if (
+    ctx.minSecondsRemaining !== undefined &&
+    (!Number.isFinite(ctx.minSecondsRemaining) || ctx.minSecondsRemaining < 30)
+  ) {
+    fail("V14_MALFORMED", "expiry headroom must be at least 30 seconds");
+  }
+  const validated = validateV14SettlementCall(call, {
+    orderId: ctx.orderId,
+    payer: ctx.account,
+    minSecondsRemaining: ctx.minSecondsRemaining,
+  });
+  if (
+    call.route !== validated.route ||
+    call.arg_encoding !== "struct+signature" ||
+    call.function !== NATIVE_FUNCTION ||
+    JSON.stringify(call.field_order) !== JSON.stringify(QUOTE_FIELDS.map((f) => f.name))
+  ) {
+    fail("V14_CALL_MISMATCH", "route, method or quote field order disagrees with the supported ABI");
+  }
+  if (lc(q.token) !== ZERO || call.asset !== "POL" || lc(q.ipCreator) !== ZERO) {
+    fail("V14_UNSUPPORTED_ASSET", "This executor supports native POL without creator payments only");
+  }
+  if (
+    lc(q.merchant) === ZERO ||
+    lc(q.merchant) !== lc(ctx.expectedMerchant!) ||
+    BigInt(q.grossAmount) !== ctx.expectedGrossAmount
+  ) {
+    fail("V14_PURCHASE_MISMATCH", "signed merchant or gross does not match the authorized purchase");
+  }
+  if (call.nonce_at_signing !== undefined && call.nonce_at_signing !== q.nonce)
+    fail("V14_MALFORMED", "nonce metadata disagrees with signed quote");
+  const deployment = V14_DEPLOYMENTS[call.chain];
+  if (
+    !["polygon", "amoy"].includes(call.chain) ||
+    !deployment ||
+    deployment.status !== "enabled" ||
+    !deployment.settlementEnabled ||
+    lc(call.contract) !== lc(deployment.splitter.address)
+  ) {
+    fail("V14_UNTRUSTED_DEPLOYMENT", "settlement target is not an enabled pinned native deployment");
+  }
+  const { publicClient, walletClient } = ctx;
+  const account = walletClient.account;
+  if (!account || account.type !== "local" || lc(account.address) !== lc(ctx.account) || !account.signTransaction) {
+    fail("V14_LOCAL_SIGNER_REQUIRED", "A matching local signer is required for recoverable broadcast");
+  }
+  const [rpcChain, walletChain, code] = await Promise.all([
+    publicClient.getChainId(),
+    walletClient.getChainId(),
+    publicClient.getBytecode({ address: call.contract }),
+  ]);
+  if (
+    rpcChain !== deployment.chainId ||
+    walletChain !== deployment.chainId ||
+    (walletClient.chain && walletClient.chain.id !== deployment.chainId)
+  )
+    fail("V14_CHAIN_MISMATCH", "wallet or RPC chain differs from pinned deployment");
+  if (!code || code === "0x" || keccak256(code) !== deployment.runtimeCodeHash)
+    fail("V14_RUNTIME_MISMATCH", "splitter bytecode does not match independently pinned runtime");
+  const message = {
+    ...q,
+    grossAmount: BigInt(q.grossAmount),
+    validUntil: BigInt(q.validUntil),
+    nonce: BigInt(q.nonce),
+  };
+  let signer: Address;
+  try {
+    signer = await recoverTypedDataAddress({
+      domain: {
+        name: "B2BSplitterV14",
+        version: "1",
+        chainId: deployment.chainId,
+        verifyingContract: deployment.splitter.address,
+      },
+      types: { Quote: QUOTE_FIELDS },
+      primaryType: "Quote",
+      message,
+      signature: call.args.signature,
+    });
+  } catch {
+    fail("V14_BAD_SIGNATURE", "quote signature cannot be recovered");
+  }
+  if (lc(signer!) !== lc(deployment.splitter.signer))
+    fail("V14_UNTRUSTED_SIGNER", "quote signer does not match independent deployment pin");
+  const [profiles, tokenList, treasury, signerHasRole, profile, preflight] = await Promise.all([
+    publicClient.readContract({ address: call.contract, abi: EXECUTION_ABI, functionName: "profiles" }),
+    publicClient.readContract({ address: call.contract, abi: EXECUTION_ABI, functionName: "tokenList" }),
+    publicClient.readContract({ address: call.contract, abi: EXECUTION_ABI, functionName: "treasury" }),
+    publicClient.readContract({
+      address: call.contract,
+      abi: EXECUTION_ABI,
+      functionName: "hasRole",
+      args: [keccak256(stringToHex("SIGN_OPERATOR_ROLE")), deployment.splitter.signer],
+    }),
+    publicClient.readContract({
+      address: deployment.splitter.profiles,
+      abi: PROFILE_ABI,
+      functionName: "getProfile",
+      args: [q.routeId],
+    }),
+    checkV14Submittable(publicClient, call),
+  ]);
+  if (
+    lc(profiles) !== lc(deployment.splitter.profiles) ||
+    lc(tokenList) !== lc(deployment.splitter.tokenList) ||
+    lc(treasury) !== lc(deployment.splitter.treasury) ||
+    !signerHasRole
+  )
+    fail("V14_DEPLOYMENT_STATE_MISMATCH", "satellite, treasury or signer role differs from deployment pin");
+  const effectiveTreasury = lc(profile.routeTreasury) === ZERO ? treasury : profile.routeTreasury;
+  if (
+    !profile.enabled ||
+    profile.treasuryBps !== (validated.route === "merchant-aifp1" ? 100 : 0) ||
+    profile.ipCreatorBps !== 0 ||
+    lc(effectiveTreasury) !== lc(deployment.splitter.treasury)
+  ) {
+    fail("V14_PROFILE_MISMATCH", "current profile differs from accepted route economics");
+  }
+  if (!preflight.submittable) fail(preflight.code, preflight.reason);
+  const args = [message, call.args.signature] as const;
+  await publicClient.simulateContract({
+    address: call.contract,
+    abi: EXECUTION_ABI,
+    functionName: "settleNative",
+    args,
+    account: ctx.account,
+    value: message.grossAmount,
+  });
+  const data = encodeFunctionData({ abi: EXECUTION_ABI, functionName: "settleNative", args });
+  const [estimatedGas, fees, nonce, balance] = await Promise.all([
+    publicClient.estimateGas({ account: ctx.account, to: call.contract, data, value: message.grossAmount }),
+    publicClient.estimateFeesPerGas({ type: "eip1559", chain: publicClient.chain }),
+    publicClient.getTransactionCount({ address: ctx.account, blockTag: "pending" }),
+    publicClient.getBalance({ address: ctx.account, blockTag: "pending" }),
+  ]);
+  const gas = (estimatedGas * 120n + 99n) / 100n;
+  if (
+    gas <= 0n ||
+    fees.maxFeePerGas <= 0n ||
+    fees.maxPriorityFeePerGas < 0n ||
+    fees.maxPriorityFeePerGas > fees.maxFeePerGas ||
+    gas * fees.maxFeePerGas > ctx.maxGasWei!
+  ) {
+    fail("V14_GAS_BUDGET_EXCEEDED", "estimated maximum transaction fee exceeds the operator gas budget");
+  }
+  if (balance < message.grossAmount + gas * fees.maxFeePerGas)
+    fail("V14_INSUFFICIENT_BALANCE", "balance cannot cover authorized gross and maximum gas");
+  // Check deadline again after slow RPCs, before signing or persisting anything.
+  validateV14SettlementCall(call, {
+    orderId: ctx.orderId,
+    payer: ctx.account,
+    minSecondsRemaining: ctx.minSecondsRemaining,
+  });
+  const serializedTransaction = await account!.signTransaction!({
+    type: "eip1559",
+    chainId: deployment.chainId,
+    to: call.contract,
+    value: message.grossAmount,
+    data,
+    gas,
+    maxFeePerGas: fees.maxFeePerGas,
+    maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
+    nonce,
+  });
+  const hash = keccak256(serializedTransaction);
+  await ctx.onPrepared!({ hash, serializedTransaction });
+  // Once transmission is attempted every unknown result refers to this exact
+  // signed transaction. A caller must recover it, never request a new quote.
+  try {
+    const returnedHash = await publicClient.sendRawTransaction({ serializedTransaction });
+    if (lc(returnedHash) !== lc(hash)) throw new Error("RPC returned a different transaction hash");
+  } catch {
+    throw new SettlementConfirmationPendingError(hash, "settlement");
+  }
+  let receipt;
+  try {
+    receipt = await publicClient.waitForTransactionReceipt({ hash, confirmations: 1 });
+  } catch {
+    throw new SettlementConfirmationPendingError(hash, "settlement");
+  }
+  if (lc(receipt.transactionHash) !== lc(hash)) throw new SettlementConfirmationPendingError(hash, "settlement");
+  if (receipt.status !== "success" && receipt.status !== "reverted")
+    throw new SettlementConfirmationPendingError(hash, "settlement");
+  if (receipt.status === "reverted")
+    fail("V14_TRANSACTION_REVERTED", `transaction ${hash} reverted; gas may have been charged`);
+  const paymentId = keccak256(
+    encodeAbiParameters(QUOTE_FIELDS, [
+      q.payer,
+      q.merchant,
+      q.token,
+      message.grossAmount,
+      q.ipCreator,
+      message.validUntil,
+      q.orderIdHash,
+      message.nonce,
+      q.routeId,
+    ])
   );
+  const payment = receipt.logs
+    .filter((log) => lc(log.address) === lc(call.contract))
+    .flatMap((log) => {
+      try {
+        const event = decodeEventLog({ abi: EXECUTION_ABI, data: log.data, topics: log.topics });
+        return event.eventName === "Payment" ? [event.args] : [];
+      } catch {
+        return [];
+      }
+    });
+  if (
+    payment.length !== 1 ||
+    !payment.some(
+      (p) =>
+        lc(p.paymentId) === lc(paymentId) &&
+        lc(p.payer) === lc(q.payer) &&
+        lc(p.merchant) === lc(q.merchant) &&
+        lc(p.token) === ZERO &&
+        p.grossAmount === message.grossAmount &&
+        p.validUntil === message.validUntil &&
+        lc(p.routeId) === lc(q.routeId) &&
+        lc(p.orderIdHash) === lc(q.orderIdHash) &&
+        p.merchantAmount + p.treasuryAmount + p.ipCreatorAmount === message.grossAmount
+    )
+  ) {
+    // Confirmation exists but payment evidence is inconclusive; retain the
+    // prepared hash and prevent the purchase layer from starting another payment.
+    throw new SettlementConfirmationPendingError(hash, "settlement");
+  }
+  return { hash, route: validated.route };
 }

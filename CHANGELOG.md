@@ -1,8 +1,28 @@
+## Unreleased — Node 2.1.0 / MCP 2.2.0
+
+- Native v1.4 executor uses independent release pins, EIP-712 signer validation,
+  current profile checks, purchase/gas limits, simulation and exact Payment evidence.
+- Preserve the signed quote through `fetchPaid`; require durable preparation
+  before broadcast and verify receipt signatures/purchase bindings.
+- Owner-enabled generic MCP `payable_fetch` supports Polygon AIFP-1 GET resources,
+  private durable recovery/cache, per-payment/daily limits and exact origin policy.
+- Preserve the accepted administrative profile model; no contract redeployment,
+  legacy activation or stable-token executor included.
+- Correct pre-existing legacy registry TypeScript drift without inventing a
+  legacy Robinhood deployment (Robinhood remains in the v1.4 registry).
+
 # Changelog
 
 All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
 `1.0.0` onward the public API is stable and changes follow semver.
+
+## @aifinpay/gate 0.3.3 — 2026-09-19
+
+- Link both discovery and HTTP 402 responses to the public payer skill,
+  merchant skill and payment-flow documentation.
+- Correct wallet onboarding text: creating a wallet does not enable a payment
+  executor. No changes to receipt verification, quotas or settlement.
 
 ## 2.0.2 — 2026-09-17
 

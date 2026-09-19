@@ -33,9 +33,10 @@
 // AiFinPayAgent, but nothing else here does, and a test should be able to drive
 // the whole protocol without an RPC endpoint.
 // ──────────────────────────────────────────────────────────────────────────
-import { createHash } from "node:crypto";
+import { createHash, createPublicKey, verify as verifySignature } from "node:crypto";
 import { keccak256, stringToHex } from "viem";
 import { AiFinPayError } from "./errors.js";
+import { validateV14SettlementCall, type V14SettlementCall } from "./settlementV14.js";
 import { SettlementConfirmationPendingError } from "./settlement.js";
 import { settlementHttp, SettlementHttpError } from "./settlementHttp.js";
 
@@ -149,23 +150,25 @@ export interface Aifp1Quote {
   accepted_chains: string[];
   pay_to: Record<string, string>;
   /** The target and calldata the receipt verifier expects for this quote. */
-  settlement_call?: {
-    chain: string;
-    contract: string;
-    splitter_version: string;
-    asset: string;
-    function: string;
-    arg_encoding: string;
-    value_wei: string;
-    args: {
-      payment_id: string;
-      merchant: string;
-      gross_amount: string;
-      ip_creator: string;
-      valid_until: number;
-      order_id: string;
-    };
-  };
+  settlement_call?:
+    | V14SettlementCall
+    | {
+        chain: string;
+        contract: string;
+        splitter_version: string;
+        asset: string;
+        function: string;
+        arg_encoding: string;
+        value_wei: string;
+        args: {
+          payment_id: string;
+          merchant: string;
+          gross_amount: string;
+          ip_creator: string;
+          valid_until: number;
+          order_id: string;
+        };
+      };
   /** Native Polygon v1.3 gross settlement, when enabled by backend readiness. */
   native_settlement?: {
     asset: string; // "POL"
@@ -575,12 +578,20 @@ export class Aifp1ReceiptCache {
 // ── Options ───────────────────────────────────────────────────────────────
 
 export interface Aifp1FetchOptions {
+  /** Explicit native v1.4 authorization. Deployment/signer pins come from the
+   * SDK registry, never from a merchant response. The journal must be durable
+   * before broadcast; a prepared transaction must be recovered, never replaced. */
+  v14?: {
+    maxGasWei: bigint;
+    onPrepared: (payment: Aifp1PaymentRecovery & { serializedTransaction: `0x${string}` }) => Promise<void>;
+  };
+
   /** Reviewed v1.3 deployment pin, supplied independently of the quote server.
    * The receipt flow currently verifies Polygon native settlements only. */
   settlementPin?: import("./settlement.js").TrustedSettlementRoutePin;
   /** Independent native/USD observation from the caller's trusted price source,
    * never copied from the payment quote. Required with settlementPin; <=60s old. */
-  nativeUsdPrice?: { usd: number; observedAtMs: number };
+  nativeUsdPrice?: { usd: number; observedAtMs: number } | (() => Promise<{ usd: number; observedAtMs: number }>);
   /**
    * How wide a batch to buy. Default "prefix" — see the comment on
    * resolveScope() for why the default is not "exact".
@@ -716,6 +727,8 @@ export interface Aifp1Deps {
     creatorWei: bigint;
     validUntil: bigint;
     orderId: string;
+    settlementCall?: Aifp1Quote["settlement_call"];
+    onPrepared?: (tx: { hash: `0x${string}`; serializedTransaction: `0x${string}` }) => Promise<void>;
   }): Promise<`0x${string}`>;
   /** Per-call cap. false ⇒ the caller asked to skip rather than throw. */
   checkPerCall(usd: number): boolean;
@@ -797,11 +810,13 @@ export async function aifp1Fetch(
   init: RequestInit = {},
   opts: Aifp1FetchOptions = {}
 ): Promise<Response | null> {
-  if (opts.maxAmountUsd !== undefined && (!Number.isFinite(opts.maxAmountUsd) || opts.maxAmountUsd <= 0)) {
-    throw new Aifp1QuoteError("maxAmountUsd must be a positive finite USD amount");
+  if (opts.maxAmountUsd !== undefined && (!Number.isFinite(opts.maxAmountUsd) || opts.maxAmountUsd < 0)) {
+    throw new Aifp1QuoteError("maxAmountUsd must be nonnegative and finite");
   }
   const direct = opts.resourcePathMode === "direct";
-  let { site, restPath } = parseGatewayUrl(url, opts.gatewayOrigins ?? DEFAULT_GATEWAY_ORIGINS, opts.resourcePathMode);
+  const parsed = parseGatewayUrl(url, opts.gatewayOrigins ?? DEFAULT_GATEWAY_ORIGINS, opts.resourcePathMode);
+  let site = parsed.site;
+  const restPath = parsed.restPath;
   let directMerchant: string | undefined;
 
   // A paid flow sends the request twice, so the body has to survive being sent
@@ -834,9 +849,9 @@ export async function aifp1Fetch(
       // The receipt is a bearer token. fetch follows redirects by default and
       // only strips authorization/cookie/host on a cross-origin hop — a custom
       // header rides along, so one 302 from a merchant upstream would hand the
-      // batch to another host. Direct probes also stop here: a redirect must
+      // batch to another host. All initial probes also stop here: a redirect must
       // not turn an untrusted origin's 402 into an authorized purchase.
-      ...(receiptJwt || direct ? { redirect: "manual" as const } : {}),
+      redirect: "manual",
     });
   };
 
@@ -928,6 +943,8 @@ export async function aifp1Fetch(
   // spend it, and if it does not they buy their own, which is a different
   // batch rather than a duplicate.
   const buyBatch = async (): Promise<Response | null> => {
+    if (opts.maxAmountUsd === 0)
+      throw new Aifp1QuoteError("No payment budget remains; cached access can still be used");
     if (typeof deps.signPaymentAuthorization !== "function" || !/^0x[0-9a-fA-F]{40}$/.test(deps.payerAddress || "")) {
       throw new Aifp1QuoteError("a settlement wallet signer is required to receive a payment receipt");
     }
@@ -963,6 +980,17 @@ export async function aifp1Fetch(
       );
     }
 
+    if (
+      opts.v14 &&
+      (quote.scope !== scope ||
+        quote.resource !== (resource ?? "*") ||
+        quote.currency !== "USD" ||
+        (quote.network_mode ?? "live") !== "live" ||
+        !Number.isSafeInteger(quote.unit_quota) ||
+        quote.unit_quota <= 0)
+    ) {
+      throw new Aifp1QuoteError("v1.4 quote does not match the requested scope, resource or live currency");
+    }
     validateCanonicalQuoteEconomics(quote);
     const quoteExpiryMs = Date.parse(quote.expires_at);
     if (!Number.isFinite(quoteExpiryMs) || quoteExpiryMs <= Date.now()) {
@@ -975,8 +1003,8 @@ export async function aifp1Fetch(
     if (!Number.isFinite(amountUsd) || amountUsd < 0) {
       throw new Aifp1QuoteError(`quote ${quote.quote_id} has an unusable amount "${quote.amount}"`);
     }
-    if (opts.settlementPin) {
-      const price = opts.nativeUsdPrice;
+    if (opts.settlementPin || opts.v14) {
+      const price = typeof opts.nativeUsdPrice === "function" ? await opts.nativeUsdPrice() : opts.nativeUsdPrice;
       const age = price ? Date.now() - price.observedAtMs : NaN;
       if (
         !price ||
@@ -1006,15 +1034,32 @@ export async function aifp1Fetch(
       // turn into a cumulative bypass of the user's daily USD budget.
       amountUsd = Math.max(amountUsd, debitUsd);
       const call = quote.settlement_call;
-      const args = call?.args;
+      const args = call?.args as
+        Exclude<Aifp1Quote["settlement_call"], V14SettlementCall | undefined>["args"] | undefined;
       if (native.asset !== "POL" || native.decimals !== 18 || !quote.accepted_assets.includes("POL")) {
         throw new Aifp1QuoteError("native receipt settlement requires accepted POL with 18 decimals");
       }
-      if (
+      if (opts.v14) {
+        if (!call || call.splitter_version !== "1.4") {
+          throw new Aifp1SettlementUnsupportedError("v1.4 authorization requires a v1.4 quote; no legacy fallback");
+        }
+        const signed = call as V14SettlementCall;
+        validateV14SettlementCall(signed, { orderId: quote.quote_id, payer: deps.payerAddress as `0x${string}` });
+        if (
+          signed.chain !== "polygon" ||
+          signed.asset !== "POL" ||
+          signed.route !== "merchant-aifp1" ||
+          signed.args.quote.merchant.toLowerCase() !== quote.pay_to.polygon?.toLowerCase() ||
+          signed.args.quote.grossAmount !== native.total_wei ||
+          BigInt(signed.args.quote.validUntil) !== BigInt(Math.floor(quoteExpiryMs / 1000))
+        ) {
+          throw new Aifp1QuoteError("signed v1.4 call disagrees with the requested merchant, debit or expiry");
+        }
+      } else if (
         !call ||
         call.chain !== "polygon" ||
         call.splitter_version !== "1.3" ||
-        call.contract?.toLowerCase() !== opts.settlementPin.splitter.toLowerCase() ||
+        call.contract?.toLowerCase() !== opts.settlementPin!.splitter.toLowerCase() ||
         call.asset !== "POL" ||
         call.function !== "payNative((bytes32,address,uint256,address,uint256,string))" ||
         call.arg_encoding !== "tuple" ||
@@ -1119,6 +1164,21 @@ export async function aifp1Fetch(
           // The binding the server verifies on-chain: the Payment event's orderId
           // must equal the quote id, or /v1/pay answers order_id_mismatch.
           orderId: quote.quote_id,
+          settlementCall: quote.settlement_call,
+          ...(opts.v14
+            ? {
+                onPrepared: async (tx: { hash: `0x${string}`; serializedTransaction: `0x${string}` }) => {
+                  await opts.v14!.onPrepared({
+                    apiBaseUrl: apiBase,
+                    quote,
+                    txRef: tx.hash,
+                    asset: native.asset,
+                    paymentIssuer: opts.paymentIssuer,
+                    serializedTransaction: tx.serializedTransaction,
+                  });
+                },
+              }
+            : {}),
         });
       } catch (error) {
         if (error instanceof SettlementConfirmationPendingError && error.stage === "settlement") {
@@ -1396,6 +1456,21 @@ async function submitPayment(
       if (!paid.receipt) {
         throw failure(`/v1/pay → 200 without a receipt: ${text.slice(0, 300)}`);
       }
+      if (quote.settlement_call?.splitter_version === "1.4") {
+        try {
+          await verifyPaidReceipt(
+            paid,
+            quote,
+            txRef,
+            deps.payerAddress,
+            opts.paymentIssuer ?? DEFAULT_API_BASE,
+            deps.fetchImpl,
+            opts.apiTimeoutMs
+          );
+        } catch {
+          throw failure("receipt signature or purchase binding could not be verified; recover the existing payment");
+        }
+      }
       return paid;
     }
     lastDetail = text.slice(0, 400);
@@ -1408,6 +1483,99 @@ async function submitPayment(
     }
     await sleep(Math.min(1000 * 2 ** attempt, 8000, Math.max(0, deadline - Date.now())));
   }
+}
+
+/** Only the configured issuer supplies keys; JWT headers cannot select a URL.
+ * v1.4 native purchases accept Ed25519 receipts bound to the exact purchase. */
+async function verifyPaidReceipt(
+  paid: Aifp1PayResult,
+  quote: Aifp1Quote,
+  txRef: string,
+  payer: string,
+  issuer: string,
+  fetchImpl: typeof fetch,
+  timeoutMs?: number
+): Promise<void> {
+  const reject = () => {
+    throw new Aifp1Error("invalid payment receipt");
+  };
+  if (typeof paid.receipt !== "string" || paid.receipt.length > 32768) reject();
+  const parts = paid.receipt.split(".");
+  if (parts.length !== 3 || parts.some((p) => !/^[A-Za-z0-9_-]+$/.test(p))) reject();
+  const [headerPart, payloadPart, signaturePart] = parts as [string, string, string];
+  const header = JSON.parse(Buffer.from(headerPart, "base64url").toString("utf8"));
+  if (header.alg !== "EdDSA" || header.typ !== "JWT" || typeof header.kid !== "string" || header.crit !== undefined)
+    reject();
+  const { response, text } = await settlementHttp(
+    fetchImpl,
+    `${issuer.replace(/\/$/, "")}/.well-known/jwks.json`,
+    {},
+    timeoutMs
+  );
+  if (!response.ok) reject();
+  const jwks = JSON.parse(text);
+  if (!Array.isArray(jwks.keys)) reject();
+  const keys = jwks.keys.filter(
+    (key: Record<string, unknown>) =>
+      key.kid === header.kid &&
+      key.kty === "OKP" &&
+      key.crv === "Ed25519" &&
+      key.d === undefined &&
+      (key.alg === undefined || key.alg === "EdDSA") &&
+      (key.use === undefined || key.use === "sig")
+  );
+  if (
+    keys.length !== 1 ||
+    (keys[0].key_ops !== undefined && (!Array.isArray(keys[0].key_ops) || !keys[0].key_ops.includes("verify")))
+  )
+    reject();
+  const signature = Buffer.from(signaturePart, "base64url");
+  if (
+    signature.length !== 64 ||
+    !verifySignature(
+      null,
+      Buffer.from(`${headerPart}.${payloadPart}`),
+      createPublicKey({ key: keys[0], format: "jwk" }),
+      signature
+    )
+  )
+    reject();
+  const claims = JSON.parse(Buffer.from(payloadPart, "base64url").toString("utf8"));
+  const now = Math.floor(Date.now() / 1000);
+  if (
+    claims.iss !== issuer ||
+    claims.aud !== quote.merchant_id ||
+    typeof claims.sub !== "string" ||
+    claims.sub.toLowerCase() !== payer.toLowerCase() ||
+    claims.tx_ref !== txRef ||
+    claims.scope !== quote.scope ||
+    claims.resource !== quote.resource ||
+    claims.chain !== "polygon" ||
+    claims.asset !== "POL" ||
+    claims.currency !== "USD" ||
+    (claims.network_mode ?? "live") !== "live" ||
+    Number(claims.amount) !== Number(quote.amount) ||
+    claims.unit_quota !== quote.unit_quota ||
+    !Number.isSafeInteger(claims.exp) ||
+    claims.exp <= now ||
+    (claims.nbf !== undefined && (!Number.isSafeInteger(claims.nbf) || claims.nbf > now)) ||
+    !Number.isSafeInteger(claims.iat) ||
+    claims.iat > now + 30 ||
+    typeof claims.receipt_id !== "string" ||
+    !claims.receipt_id ||
+    paid.receipt_id !== claims.receipt_id ||
+    paid.merchant_id !== claims.aud ||
+    paid.tx_ref !== claims.tx_ref ||
+    paid.scope !== claims.scope ||
+    paid.resource !== claims.resource ||
+    paid.unit_quota !== claims.unit_quota ||
+    paid.chain !== claims.chain ||
+    paid.asset !== claims.asset ||
+    paid.currency !== claims.currency ||
+    Number(paid.amount) !== Number(claims.amount) ||
+    Math.floor(Date.parse(paid.expires_at) / 1000) !== claims.exp
+  )
+    reject();
 }
 
 /** Fixed, domain-separated receipt claim; sign with the wallet that settled. */

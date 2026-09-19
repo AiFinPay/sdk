@@ -369,3 +369,29 @@ and understand that you are trading exact metering for generosity.
   for agents that pay through an MCP host.
 
 MIT © CoinSecurities (SECCO)
+
+## Agent instructions and route discovery
+
+Use the [payer skill](https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md)
+for an agent buying access, or the
+[merchant skill](https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md)
+for a site owner integrating the gate. Skills are instructions; they do not
+install or enable a payment executor.
+
+Starting with 0.3.3, both `buildDiscoveryDocument` and HTTP 402 challenges
+include `instructions_url`, `merchant_instructions_url` and `documentation_url`.
+A partner on an older package must update and redeploy to expose these fields.
+The skill at a stable linked URL can then be updated independently; installed
+skill copies need updating in the agent client.
+
+Publish `/.well-known/x402.json` on **each origin that serves gated resources**.
+The helper generates it from the `resources` array supplied by your app; it
+does not inspect your router or register that catalog in a central database.
+Use the same resource configuration for discovery and gates to prevent drift.
+Keep discovery and an API parameter catalog publicly readable. Link them from
+`/llms.txt` using the same origin (or relative URLs), including on staging.
+A production URL in a staging `llms.txt` can send agents to a missing catalog.
+
+The discovery file lists resource prices and scopes. A fresh quote supplies
+settlement terms; discovery is neither a receipt nor proof that a particular
+client can execute the offered route.

@@ -1,12 +1,15 @@
 # @aifinpay/agent (Node / TypeScript)
 
-Stable `2.0.0` release. New AIFP-1
-payments require a reviewed Polygon v1.3 deployment pin and fresh independent
-native/USD price; see [receipt configuration and recovery](./PAYMENT_RECEIPTS.md).
-Legacy `call()` payments and v1.4 submission are disabled. Native authentication
-requires a request-bound v2 challenge from the coordinated backend release;
-`authHeaders()` cannot issue the retired unbound proof. No automatic fallback
-or deployment activation is performed.
+Source candidate **2.1.0** adds native Polygon/Amoy v1.4 execution with pinned
+runtime, signer and current profile checks. `fetchPaid` supports Polygon v1.4
+receipts through explicit `v14` authorization, a durable pre-broadcast journal,
+fresh independent POL/USD pricing and a separate gas cap. Stable-token v1.4
+execution and legacy `call()` remain unavailable. This source is not evidence
+of a published release or a completed funded acceptance run.
+
+The accepted v1.4 contract model allows administrators to change profile fees
+and treasury. Preflight verifies current values; it does not make them immutable.
+See [receipt configuration and recovery](./PAYMENT_RECEIPTS.md).
 
 Non-custodial payment client for autonomous AI agents on
 [AiFinPay](https://aifinpay.io). AIFP-1 is gross-inclusive: payer total equals
@@ -43,7 +46,7 @@ npm pack
 Install the resulting tarball in your application:
 
 ```bash
-npm install /absolute/path/to/sdk/node/aifinpay-agent-2.0.0.tgz
+npm install /absolute/path/to/sdk/node/aifinpay-agent-2.1.0.tgz
 ```
 
 ## Quick start
