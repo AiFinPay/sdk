@@ -4,12 +4,50 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Stable `2.0.0` release. This release does not expose payment-signing tools. Returning a
-wallet address or preparing an invoice does not authorize or execute a payment.
-Signing remains gated on the verified SDK v2 executor and its release evidence.
-Local MCP tools for wallet discovery, payment history, quotas and non-signing
-payment preparation. Read the bundled [skill](skills/SKILL.md), also exposed
-as the MCP resource `aifinpay://skill`.
+Source candidate **2.2.0**, paired with Node SDK **2.1.0**. The published
+MCP 2.1.0 remains read-only; publish the coordinated dependencies before using
+this candidate through npm. Source builds support owner-enabled native Polygon
+v1.4 purchases with `payable_fetch`. Without payment configuration, the server
+keeps its inspection-only tool inventory.
+
+## Enable native paid GET requests
+
+Use a persistent wallet created with public `npx @aifinpay/mcp init` or an
+existing configured identity. Keep its passphrase private. The owner must set:
+
+```json
+{
+  "AIFINPAY_PAYMENTS_ENABLED": "1",
+  "AIFINPAY_GATEWAY_ORIGINS": "https://merchant.example",
+  "AIFINPAY_GATEWAY_PATH_MODE": "direct",
+  "AIFINPAY_MAX_USD": "0.12",
+  "AIFINPAY_DAILY_USD": "1.00",
+  "AIFINPAY_MAX_GAS_POL": "0.05"
+}
+```
+
+Limits are examples, not authorization. USD limits cover purchases; gas has its
+own per-transaction POL cap. Origins are exact HTTPS origins authorized by the
+owner. `direct` uses the full path for self-hosted sites; `gateway` uses the
+merchant slug on the hosted gateway. Restart/reconnect the MCP process after
+changing its environment.
+
+Call `payable_fetch({"url":"https://merchant.example/api/data"})`. The tool
+uses the original signed v1.4 quote, independent fresh POL/USD pricing, SDK
+runtime/signer verification and owner limits. It persists the prepared transaction
+before sending, verifies the receipt, and reuses the purchased batch. No special
+merchant script, alternate contract or facilitator fallback is used. GET, native
+POL, Polygon live mode only; Amoy payment receipts and stable-token execution are
+not part of this candidate.
+
+Private recovery state lives at `AIFINPAY_HOME/payments/<evm-address>/state.json`
+(default home `~/.aifinpay`). State is mode600 in mode700 directories, atomically
+written and fsynced. One operation lock serializes the wallet across processes.
+A retry recovers a pending receipt before allowing another purchase. A process
+crash leaves the lock for owner reconciliation; it is never stolen automatically.
+If a prepared transaction was never broadcast or reverted, reconcile its exact
+hash before clearing anything. Never put raw transactions, receipt JWTs or the
+state file in chat. Unconfirmed payments consume the budget conservatively.
 
 ## Tools
 
@@ -22,8 +60,9 @@ as the MCP resource `aifinpay://skill`.
 | `settlement_routes`      | Read the available verified settlement routes.           |
 | `settlement_invoice`     | Prepare a non-signing settlement invoice.                |
 
-Legacy `payable_fetch`, `agent_call`, `agent_quote`, `pay_with_split`,
-`quote_split` and `agent_claim_self` tools are not registered by this RC.
+`payable_fetch` appears only with valid owner payment configuration and a persistent wallet.
+Legacy `agent_call`, `agent_quote`, `pay_with_split`, `quote_split` and
+`agent_claim_self` remain unregistered.
 
 ## Persistent wallet selection
 
@@ -49,9 +88,8 @@ wallet. With no configured wallet at all the server has an ephemeral identity:
 
 ## Initialize and connect
 
-This release does not register payment-signing tools. Its legacy SDK dependency
-supplies wallet derivation only; installing this MCP does not enable v2
-settlement. An invoice or quote is not a completed payment.
+A quote or invoice is not a completed payment. Enable the owner-configured
+`payable_fetch` tool only after installing the coordinated candidate dependencies.
 
 ## Local configuration
 
@@ -66,7 +104,7 @@ See the skill for the exact project-file schema and multi-agent selection.
 `init` prints the selected wallet's public addresses. If a seed or project wallet
 is already configured, it does not create a second legacy wallet. With no
 wallet, it creates the legacy keystore with mode `600`; existing keystores are
-retained. Back up that file privately. Use the published `2.0.0` release or
+retained. Back up that file privately. Use the published release or
 build this source checkout.
 
 Use an absolute `AIFINPAY_AGENTS_FILE` path when the host's working directory
@@ -78,7 +116,7 @@ A client configuration can use the keystore without embedding its secret:
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["-y", "@aifinpay/mcp@2.0.0"],
+      "args": ["-y", "@aifinpay/mcp@2.2.0"],
       "env": {
         "AIFINPAY_AGENTS_FILE": "/absolute/project/aifinpay/agents.json",
         "AIFINPAY_AGENT_ID": "research-agent"
@@ -89,7 +127,8 @@ A client configuration can use the keystore without embedding its secret:
 ```
 
 The release above must be published before this npx command can install it.
-For a source checkout, run `npm ci && npm run build` in mcp/ and configure
+After the pinned dependencies are published, source checkouts can run
+`npm ci && npm run build` in mcp/ and configure
 `node /absolute/path/to/mcp/bin/aifinpay-mcp.js` instead.
 
 If using the legacy keystore, run `npx @aifinpay/mcp init` once and omit the
@@ -151,8 +190,8 @@ The mode is process-wide, does not broaden the trusted-origin allowlist, and
 does not enable the retired signing tools in the production RC.
 
 Dev quoting does not bypass wallet signatures, issuer verification or
-receipt metering. See the bundled skill for backend prerequisites and the
-remaining Amoy executor requirement.
+receipt metering. See the bundled skill for backend prerequisites. The low-level SDK has an Amoy
+executor; this MCP candidate does not expose Amoy paid receipt purchases.
 
 ## License
 

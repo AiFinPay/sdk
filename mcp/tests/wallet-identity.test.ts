@@ -28,6 +28,41 @@ afterEach(() => {
 });
 
 describe("persistent wallet identity", () => {
+  it("registers generic payment only with explicit owner limits and persistent wallet", async () => {
+    const f = fixture();
+    const config = {
+      seedHash: seedA,
+      walletHome: f.home,
+      paymentsEnabled: true,
+      maxAmountUsd: 0.1,
+      dailyAmountUsd: 1,
+      maxGasPol: "0.05",
+      gatewayOrigins: ["https://merchant.example"],
+      logFn: () => {},
+    };
+    const active = await createServer(config);
+    const client = new Client({ name: "payment-surface-test", version: "1" });
+    const [left, right] = InMemoryTransport.createLinkedPair();
+    await active.server.connect(right);
+    await client.connect(left);
+    try {
+      const tools = (await client.listTools()).tools;
+      const payment = tools.find((tool) => tool.name === "payable_fetch");
+      expect(payment).toBeDefined();
+      expect(payment?.annotations?.destructiveHint).toBe(true);
+      expect(tools.some((tool) => tool.name === "agent_call")).toBe(false);
+      expect(
+        (await client.callTool({ name: "payable_fetch", arguments: { url: "https://unapproved.example/data" } }))
+          .isError
+      ).toBe(true);
+    } finally {
+      await client.close();
+      await active.server.close();
+    }
+    await expect(createServer({ ...config, dailyAmountUsd: undefined })).rejects.toThrow(/DAILY_USD/);
+    await expect(createServer({ ...config, seedHash: undefined })).rejects.toThrow(/persistent/);
+  });
+
   it("reads SEED_HASH from the process configuration", () => {
     vi.stubEnv("SEED_HASH", seedA);
     expect(loadConfigFromEnv()).toMatchObject({ seedHash: seedA });
