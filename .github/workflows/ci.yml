@@ -16,6 +16,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Stable required-check names predate the Node matrix. These summaries pass
+  # only when every matrix leg succeeds; cancelled/skipped/failed legs fail.
+  node-sdk-required:
+    name: node — @aifinpay/agent (build + test)
+    if: ${{ always() }}
+    needs: [node-sdk]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every supported Node version
+        env:
+          MATRIX_RESULT: ${{ needs.node-sdk.result }}
+        run: test "$MATRIX_RESULT" = success
+
+  mcp-server-required:
+    name: mcp — @aifinpay/mcp (build)
+    if: ${{ always() }}
+    needs: [mcp-server, mcp-against-source]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require published and source SDK matrices
+        env:
+          PUBLISHED_RESULT: ${{ needs.mcp-server.result }}
+          SOURCE_RESULT: ${{ needs.mcp-against-source.result }}
+        run: |
+          test "$PUBLISHED_RESULT" = success
+          test "$SOURCE_RESULT" = success
+
   version-gate:
     name: version bumped when published files change
     runs-on: ubuntu-latest
