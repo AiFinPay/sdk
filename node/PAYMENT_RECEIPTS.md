@@ -1,3 +1,52 @@
+# Native v1.4 candidate (2.1.0)
+
+The existing v1.3 documentation below remains applicable to explicitly pinned
+v1.3 callers. The new native v1.4 path uses the original backend-signed quote:
+
+```ts
+const response = await agent.fetchPaid(
+  url,
+  {},
+  {
+    gatewayOrigins: ["https://merchant.example"],
+    resourcePathMode: "direct",
+    scope: "exact",
+    maxAmountUsd: ownerLimitUsd,
+    nativeUsdPrice: readFreshIndependentPolPrice,
+    v14: {
+      maxGasWei: ownerGasLimitWei,
+      onPrepared: persistPrivatePaymentJournal,
+    },
+  }
+);
+```
+
+`nativeUsdPrice` may return `{ usd, observedAtMs }` asynchronously and is called
+only when buying, not when reusing a receipt. `onPrepared` receives the original
+quote, API/issuer, transaction hash and serialized signed transaction. It MUST
+atomically persist and fsync private state before resolving. A failed callback
+prevents broadcast. Keep a per-wallet operation lock and refuse another purchase
+while a prepared payment is unresolved. Never log the raw transaction or receipt.
+
+After a transport error, call `agent.recoverPaidPayment(recovery)` with the saved
+recovery object. It only retries receipt issuance, verifies the issuer's Ed25519
+signature and purchase bindings, and returns the existing receipt. It never sends
+a new transaction. Persist the receipt and restore `agent.aifp1Receipts` before
+another `fetchPaid`. A prepared-but-unbroadcast or reverted transaction requires
+owner reconciliation; receipt recovery is not a replacement broadcast.
+
+The public MCP candidate implements this private journal/cache/lock integration.
+Applications using the SDK directly own persistence and process coordination.
+The low-level executor supports native Polygon and Amoy; `fetchPaid` receipts
+currently support Polygon live mode only. No legacy or stable-token fallback.
+
+A successful executor result requires a mined success receipt with the matching
+Payment event. Unknown broadcast/confirmation yields the original hash. Profile
+fees/treasury remain administratively mutable under the existing v1.4 contract
+model. Separate funded acceptance and release approval are still required.
+
+---
+
 # Authorize and recover payment receipts
 
 AIFP-1 receipt issuance uses a signature from the wallet that sent the payment.

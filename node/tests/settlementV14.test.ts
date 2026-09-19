@@ -202,7 +202,7 @@ describe("§8.6 — never re-broadcast", () => {
   });
 });
 
-describe("execute — v1.4 is quarantined until signed economics are immutable", () => {
+describe("execute — legacy calls without purchase authorization remain disabled", () => {
   it.each([
     { name: "native", over: {}, quote: {} },
     { name: "stable", over: { value_wei: "0" }, quote: { token: MERCHANT } },
@@ -224,7 +224,7 @@ describe("execute — v1.4 is quarantined until signed economics are immutable",
         publicClient: clients as never,
         walletClient: clients as never,
         account: PAYER,
-        // Even the old skip flag must not bypass the quarantine.
+        // The old skip flag must not bypass required purchase authorization.
         skipPreflight: true,
       })
     ).rejects.toMatchObject({ code: "V14_SETTLEMENT_DISABLED" });

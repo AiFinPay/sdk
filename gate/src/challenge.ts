@@ -39,6 +39,10 @@ export function buildChallenge(args: {
     error: "AIFP-402",
     detail: args.detail || "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
     protocol: "AIFP-1",
+    documentation_url: "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+    instructions_url: "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+    merchant_instructions_url:
+      "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
     merchant_id: merchantId,
     resource,
     tier,
@@ -79,11 +83,9 @@ export function buildChallenge(args: {
       `POST ${api}/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} -> quota receipt (wallet-signature-v1)`,
       "retry this request with header: AIFP-Receipt: <receipt JWT>",
     ],
-    // The 402 is the only documentation an agent is guaranteed to read, and
-    // "your own wallet" above is a dead end for an agent that has none. This
-    // line is the way out — the SDKs create a local wallet and run the whole
-    // quote→settle→receipt→retry loop from one call.
+    // Wallet creation does not imply an enabled payment executor. Keep the
+    // current client capabilities in the linked skill, not a stale promise.
     no_wallet:
-      "npx @aifinpay/mcp init — creates a local wallet; then agent.pay(url) handles this 402 end-to-end (npm @aifinpay/agent · pypi aifinpay-agent)",
+      "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement.",
   };
 }

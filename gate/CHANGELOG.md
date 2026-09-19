@@ -1,5 +1,12 @@
 # Changelog
 
+## @aifinpay/gate 0.3.3 — 2026-09-19
+
+- Link both discovery and HTTP 402 responses to the public payer skill,
+  merchant skill and payment-flow documentation.
+- Correct wallet onboarding text: creating a wallet does not enable a payment
+  executor. No changes to receipt verification, quotas or settlement.
+
 ## 0.3.2
 
 - Minimum Node engine is now 22 (`engines: >=22`). Node 18/20 are no

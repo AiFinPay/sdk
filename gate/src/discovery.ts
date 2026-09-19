@@ -59,6 +59,10 @@ export function buildDiscoveryDocument(opts: DiscoveryOptions): object {
     // How an agent with no wallet gets one — the single most useful line for a
     // first-time agent, and the reason the 402 carries it too.
     onboarding: "npx @aifinpay/mcp init",
+    documentation_url: "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+    instructions_url: "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+    merchant_instructions_url:
+      "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
     resources: opts.resources.map((r) => ({
       resource: r.resource,
       ...(r.name ? { name: r.name } : {}),

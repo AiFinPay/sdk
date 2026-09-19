@@ -123,9 +123,11 @@ export interface GateErrorBody {
    *  challenge that listed them would sometimes promise a settlement the quote
    *  refuses. */
   settlement_terms_from?: string;
+  documentation_url?: string;
+  instructions_url?: string;
+  merchant_instructions_url?: string;
   how_to_pay?: string[];
-  /** Escape hatch for walletless agents: the one-command SDK path to a wallet
-   *  that then resolves this very 402 automatically. */
+  /** Wallet setup guidance; executor availability is documented separately. */
   no_wallet?: string;
 }
 
