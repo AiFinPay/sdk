@@ -17,6 +17,11 @@ export interface McpConfig {
   /** Request timeout in ms. */
   timeoutMs?: number;
 
+  /** Owner opt-in; never accepted from tool arguments. */
+  paymentsEnabled?: boolean;
+  dailyAmountUsd?: number;
+  maxGasPol?: string;
+
   /** Hard cap on a single payment to prevent runaway agents. */
   maxAmountUsd?: number;
 
@@ -57,7 +62,13 @@ export function loadConfigFromEnv(): McpConfig {
   if (process.env.AIFINPAY_MODE && !["live", "dev"].includes(process.env.AIFINPAY_MODE)) {
     throw new Error("AIFINPAY_MODE must be live or dev");
   }
+  if (process.env.AIFINPAY_PAYMENTS_ENABLED && !["0", "1"].includes(process.env.AIFINPAY_PAYMENTS_ENABLED)) {
+    throw new Error("AIFINPAY_PAYMENTS_ENABLED must be 0 or 1");
+  }
   return {
+    paymentsEnabled: process.env.AIFINPAY_PAYMENTS_ENABLED === "1",
+    dailyAmountUsd: process.env.AIFINPAY_DAILY_USD ? Number(process.env.AIFINPAY_DAILY_USD) : undefined,
+    maxGasPol: process.env.AIFINPAY_MAX_GAS_POL || undefined,
     devMode: process.env.AIFINPAY_MODE === "dev",
     seedHash: process.env.SEED_HASH,
     agentsFile: process.env.AIFINPAY_AGENTS_FILE || undefined,
@@ -128,4 +139,38 @@ function splitOrigins(raw: string | undefined): string[] | undefined {
     }
   }
   return list;
+}
+
+/** Signing is available only after the owner configures all spending boundaries. */
+export function validatePaymentConfig(config: McpConfig): bigint {
+  if (!config.paymentsEnabled) throw new Error("Payments disabled; owner must set AIFINPAY_PAYMENTS_ENABLED=1");
+  if (config.devMode) throw new Error("MCP receipt payments currently support Polygon live mode only");
+  for (const [name, value] of [
+    ["AIFINPAY_MAX_USD", config.maxAmountUsd],
+    ["AIFINPAY_DAILY_USD", config.dailyAmountUsd],
+  ] as const) {
+    if (typeof value !== "number" || !Number.isFinite(value) || value <= 0)
+      throw new Error(`${name} must be a positive finite owner limit`);
+  }
+  if (
+    !config.gatewayOrigins?.length ||
+    config.gatewayOrigins.some((origin) => {
+      try {
+        const u = new URL(origin);
+        return (
+          u.protocol !== "https:" || u.origin !== origin || !!u.username || !!u.password || u.hostname.includes("*")
+        );
+      } catch {
+        return true;
+      }
+    })
+  )
+    throw new Error("Payments require explicit exact HTTPS AIFINPAY_GATEWAY_ORIGINS");
+  const gas = config.maxGasPol;
+  if (typeof gas !== "string" || !/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,18})?$/.test(gas))
+    throw new Error("AIFINPAY_MAX_GAS_POL must be a positive decimal with at most 18 places");
+  const [whole, fraction = ""] = gas.split(".");
+  const wei = BigInt(whole) * 10n ** 18n + BigInt(fraction.padEnd(18, "0"));
+  if (wei <= 0n || wei >= 2n ** 256n) throw new Error("AIFINPAY_MAX_GAS_POL is outside the supported range");
+  return wei;
 }

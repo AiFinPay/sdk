@@ -1,225 +1,277 @@
+import { Aifp1SettlementUnsupportedError, parseGatewayUrl, type Aifp1CachedReceipt } from "@aifinpay/agent";
 import type { ToolContext } from "../server.js";
+import { validatePaymentConfig } from "../config.js";
+import { PaymentStateError, type PaymentState } from "../payment-state.js";
 
 export function payableFetchTool() {
   return {
     name: "payable_fetch",
     description:
-      "USE THIS TOOL to fetch any URL that may require payment (HTTP 402). " +
-      "DO NOT use WebFetch for URLs that might be paid endpoints — WebFetch " +
-      "cannot sign x402 payment headers and will only see the 402 challenge " +
-      "without being able to settle it. " +
-      "Natural-language triggers: 'fetch <paid URL>', 'pay for <url>', " +
-      "'try this URL — it might be paid', 'pay the 402 and get the response'. " +
-      "The agent automatically detects the protocol — the AIFP-1 gateway " +
-      "(gateway.aifinpay.io) or an x402 facilitator (AiFinPay or Coinbase " +
-      "x402) — pays from the agent's wallet, retries, and returns the response " +
-      "status, headers, and body. For known " +
-      "AiFinPay-registered providers (exa, io-net, venice, ...), prefer " +
-      "`agent_call` instead — it's higher-level and resolves the bridge URL " +
-      "from the registry.",
+      "Fetch a GET resource from an owner-approved AiFinPay merchant. Buys a prepaid batch through verified native Polygon v1.4 within owner limits, then reuses its receipt. Pending payments are recovered without sending another transaction. Other payment protocols are unsupported.",
     inputSchema: {
       type: "object",
       properties: {
-        url: { type: "string", description: "Target URL (https)." },
-        method: {
-          type: "string",
-          enum: ["GET", "POST", "PUT", "PATCH", "DELETE"],
-          default: "GET",
-        },
-        body: {
-          type: "string",
-          description: "Request body (string). Set Content-Type via headers if non-JSON.",
-        },
-        headers: {
-          type: "object",
-          additionalProperties: { type: "string" },
-          description: "Extra request headers.",
-        },
+        url: { type: "string", description: "HTTPS resource on an owner-configured exact gateway origin." },
         max_amount_usd: {
           type: "number",
-          description:
-            "Refuse to pay if the facilitator wants more than this. " +
-            "Capped by AIFINPAY_MAX_USD when the operator set one — this value can only lower it, never raise it.",
-        },
-        facilitator: {
-          type: "string",
-          description: "Force a facilitator: 'aifinpay' | 'coinbase-x402'. Default 'auto'.",
+          exclusiveMinimum: 0,
+          description: "Optional tighter per-payment USD limit; cannot increase the owner's cap.",
         },
       },
       required: ["url"],
+      additionalProperties: false,
     },
-    // Auto-pays a 402 challenge for an arbitrary URL → write + open-world + irreversible.
     annotations: { readOnlyHint: false, openWorldHint: true, destructiveHint: true },
-    outputSchema: { type: "object" },
   };
 }
 
+/** Never expose bearer receipts, raw signed transactions, or exception response bodies. */
 export async function runPayableFetch(ctx: ToolContext, args: Record<string, unknown>) {
-  const url = String(args.url ?? "");
-  if (!url) return errorResult("missing required arg: url");
-  const method = String(args.method ?? "GET").toUpperCase();
-  const body = args.body ? String(args.body) : undefined;
-  const headers =
-    typeof args.headers === "object" && args.headers !== null ? (args.headers as Record<string, string>) : undefined;
-
-  // The model may NARROW the operator's cap, never widen it.
-  //
-  // This read `args.max_amount_usd ?? config.maxAmountUsd`, so a tool argument
-  // replaced the operator's limit outright: AIFINPAY_MAX_USD=0.10 and a model
-  // that asked for max_amount_usd: 1000 got 1000. The cap an operator sets is
-  // the one thing in this server they cannot express any other way, and it was
-  // the one a prompt could overwrite.
-  //
-  // Latent rather than exploited — payable_fetch is not registered on the
-  // current server — but the file is what SDK 2.0 re-registers, and a spend cap
-  // that a caller can raise is not a cap.
-  //
-  // Math.min in one direction only: unset operator cap means no policy to
-  // violate, so a model-supplied value stands on its own.
-  const requestedMax =
-    typeof args.max_amount_usd === "number" && Number.isFinite(args.max_amount_usd) ? args.max_amount_usd : undefined;
-  const operatorMax = ctx.config.maxAmountUsd;
-  if (
-    args.max_amount_usd !== undefined &&
-    (typeof args.max_amount_usd !== "number" || !Number.isFinite(args.max_amount_usd) || args.max_amount_usd <= 0)
-  ) {
-    return errorResult("max_amount_usd must be a positive finite USD amount.");
-  }
-  if (operatorMax !== undefined && (!Number.isFinite(operatorMax) || operatorMax <= 0)) {
-    return errorResult("AIFINPAY_MAX_USD must be a positive finite USD amount.");
-  }
-  const maxAmountUsd =
-    operatorMax === undefined
-      ? requestedMax
-      : requestedMax === undefined
-        ? operatorMax
-        : Math.min(operatorMax, requestedMax);
-
-  const forcedFacilitator = typeof args.facilitator === "string" ? (args.facilitator as string) : undefined;
-  const gatewayOrigins = ctx.config.gatewayOrigins ?? ["https://gateway.aifinpay.io"];
-
+  let state: PaymentState | undefined;
   try {
-    // Two payment protocols answer a 402 here, and this tool used to speak only
-    // one of them.
-    //
-    //   AIFP-1 gateway (gateway.aifinpay.io/{slug}/…): quote → settle on-chain →
-    //     receipt → retry. Lives on the unified agent as fetchPaid().
-    //   x402 facilitators (AiFinPay / Coinbase): the X-PAYMENT header flow, on
-    //     the wrapped Solana-side agent as inner.pay().
-    //
-    // Before this, payable_fetch called inner.pay() only, so an MCP agent
-    // pointed at a gateway URL got stuck on the 402 it could not read — the
-    // single most common paid surface we run (AIFINP-118 neighbour).
-    //
-    // Routing, safe by construction: fetchPaid() is documented to return a
-    // non-AIFP-1 402 UNTOUCHED and cost nothing, so trying it first can pay an
-    // AIFP-1 URL but can never mis-pay an x402 one. Anything it hands back still
-    // 402 falls through to the x402 path. A caller who forces a facilitator has
-    // stated x402 intent, so skip AIFP-1 entirely for them.
-    let resp: Response | null = null;
-
-    let isConfiguredGateway = false;
+    let maxGasWei: bigint;
     try {
-      isConfiguredGateway = gatewayOrigins.includes(new URL(url).origin);
-    } catch {
-      /* inner.pay reports malformed URLs */
+      maxGasWei = validatePaymentConfig(ctx.config);
+    } catch (error) {
+      return errorResult((error as Error).message);
     }
-
-    if (!forcedFacilitator && isConfiguredGateway) {
-      resp = await ctx.agent.fetchPaid(
-        url,
-        { method, body, headers },
-        {
-          apiBaseUrl: ctx.config.baseUrl,
-          gatewayOrigins: ctx.config.gatewayOrigins,
-          resourcePathMode: ctx.config.gatewayPathMode,
-          maxAmountUsd,
-        }
-      );
-      if (resp === null) {
-        // Budget cap hit with on_limit_exceeded="skip" — do NOT then try to pay
-        // the same call via x402; that would defeat the cap the caller set.
-        return errorResult(
-          "payment skipped: the per-call or daily budget cap was reached " + "(on_limit_exceeded is set to skip)."
-        );
-      }
-      if (resp.status === 402) {
-        // Not an AIFP-1 gateway 402 — fetchPaid passed it through. Try x402.
-        resp = null;
-      }
-    }
-
-    if (resp === null) {
-      resp = await ctx.agent.inner.pay(url, {
-        method,
-        body,
-        headers,
-        options: { maxAmountUsd, facilitator: forcedFacilitator },
-      });
-    }
-
-    const respHeaders: Record<string, string> = {};
-    resp.headers.forEach((v, k) => (respHeaders[k] = v));
-    const text = await resp.text();
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(
-            {
-              status: resp.status,
-              ok: resp.ok,
-              headers: respHeaders,
-              body: text,
-            },
-            null,
-            2
-          ),
-        },
-      ],
-    };
-  } catch (e) {
-    const err = e as Error & { txRef?: string; quoteId?: string; recovery?: unknown };
-    if (err.name === "Aifp1PayError" && err.recovery !== null && typeof err.recovery === "object") {
-      return errorResult(
-        `${err.name}: ${err.message}`,
-        "AIFP-1 settlement already completed on-chain; do not submit a second payment. Use the public recovery context below to retry receipt issuance.",
-        JSON.stringify({
-          txRef: err.txRef,
-          quoteId: err.quoteId,
-          recovery: err.recovery,
-        }),
-        "Docs: https://aifinpay.io/docs"
-      );
-    }
-    const isAifp1Gateway = gatewayOrigins.includes(
-      (() => {
-        try {
-          return new URL(url).origin;
-        } catch {
-          return "";
-        }
-      })()
+    const store = ctx.paymentState;
+    if (!store || store.address !== ctx.agent.evmAddress.toLowerCase())
+      return errorResult("A persistent matching wallet is required for payments.");
+    if (Object.keys(args).some((k) => !["url", "max_amount_usd"].includes(k)))
+      return errorResult("Only url and max_amount_usd are supported; no facilitator fallback.");
+    if (typeof args.url !== "string") return errorResult("url must be an HTTPS resource URL.");
+    const url = new URL(args.url);
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.hash ||
+      !ctx.config.gatewayOrigins!.includes(url.origin)
+    )
+      return errorResult("The URL must use an owner-approved exact HTTPS origin without credentials or fragment.");
+    if (
+      args.max_amount_usd !== undefined &&
+      (typeof args.max_amount_usd !== "number" || !Number.isFinite(args.max_amount_usd) || args.max_amount_usd <= 0)
+    )
+      return errorResult("max_amount_usd must be a positive finite amount.");
+    const maximum = Math.min(
+      ctx.config.maxAmountUsd!,
+      typeof args.max_amount_usd === "number" ? args.max_amount_usd : Infinity
     );
-    const originHint =
-      !isAifp1Gateway && /AIFP-1|AIFP-402|gateway/i.test(err.message)
-        ? "This looks like an AIFP-1 gateway, but its origin is not configured; add its exact HTTPS origin to AIFINPAY_GATEWAY_ORIGINS."
-        : undefined;
+    const parsed = parseGatewayUrl(url.href, ctx.config.gatewayOrigins, ctx.config.gatewayPathMode);
+    return await store.exclusive(async () => {
+      state = store.read();
+      for (const entry of ctx.agent.aifp1Receipts.list()) ctx.agent.aifp1Receipts.evict(entry);
+      for (const entry of state.receipts) ctx.agent.aifp1Receipts.put(entry);
+      if (state.pending) {
+        const pending = state.pending;
+        // Always recover the existing operation first, even if the caller asks
+        // for another resource. This method cannot broadcast a transaction.
+        const configuredApi = (ctx.config.baseUrl ?? "https://api.aifinpay.io").replace(/\/+$/, "");
+        const call = pending.recovery.quote.settlement_call;
+        if (
+          pending.recovery.apiBaseUrl.replace(/\/+$/, "") !== configuredApi ||
+          (pending.recovery.paymentIssuer ?? configuredApi).replace(/\/+$/, "") !== configuredApi ||
+          pending.recovery.quote.payer?.toLowerCase() !== ctx.agent.evmAddress.toLowerCase() ||
+          call?.chain !== "polygon" ||
+          call.splitter_version !== "1.4" ||
+          pending.recovery.asset !== "POL"
+        ) {
+          throw new Error("Pending payment does not match configured wallet/API/native Polygon route");
+        }
+        const paid = await ctx.agent.recoverPaidPayment(pending.recovery, { paymentIssuer: configuredApi });
+        const receipt: Aifp1CachedReceipt = {
+          site: pending.site,
+          merchantId: paid.merchant_id,
+          receiptId: paid.receipt_id,
+          jwt: paid.receipt,
+          scope: paid.scope,
+          resource: paid.resource,
+          unitQuota: paid.unit_quota,
+          remaining: paid.unit_quota,
+          expiresAt: Date.parse(paid.expires_at),
+          amountUsd: pending.amountUsd,
+        };
+        if (!Number.isFinite(receipt.expiresAt)) throw new Error("Invalid recovered receipt expiry");
+        ctx.agent.aifp1Receipts.put(receipt);
+        state.receipts = ctx.agent.aifp1Receipts.list();
+        delete state.pending;
+        store.save(state);
+      }
+      const spent = store.spent24h(state);
+      const priorReceiptIds = new Set(state.receipts.map((entry) => entry.receiptId));
+      let price: { usd: number; observedAtMs: number } | undefined;
+      try {
+        const response = await ctx.agent.fetchPaid(
+          url.href,
+          { method: "GET", redirect: "manual" },
+          {
+            apiBaseUrl: ctx.config.baseUrl,
+            paymentIssuer: ctx.config.baseUrl ?? "https://api.aifinpay.io",
+            gatewayOrigins: ctx.config.gatewayOrigins,
+            resourcePathMode: ctx.config.gatewayPathMode,
+            scope: "exact",
+            maxAmountUsd: Math.min(maximum, Math.max(0, ctx.config.dailyAmountUsd! - spent)),
+            nativeUsdPrice: async () => {
+              // Independent public price origin, never the quote API's rate.
+              const response = await ctx.agent.inner.fetchImpl("https://api.coinbase.com/v2/prices/POL-USD/spot", {
+                signal: AbortSignal.timeout(10_000),
+                redirect: "manual",
+              });
+              if (!response.ok) throw new Error("Independent native price unavailable");
+              const priceBody = await boundedBody(response, 16 * 1024);
+              if (priceBody.truncated) throw new Error("Independent price response exceeds limit");
+              const data = JSON.parse(priceBody.body) as {
+                data?: { base?: string; currency?: string; amount?: string };
+              };
+              const usd = Number(data.data?.amount);
+              if (data.data?.base !== "POL" || data.data?.currency !== "USD" || !Number.isFinite(usd) || usd <= 0)
+                throw new Error("Invalid independent native price");
+              price = { usd, observedAtMs: Date.now() };
+              return price;
+            },
+            v14: {
+              maxGasWei,
+              onPrepared: async (prepared) => {
+                if (state!.pending) throw new Error("A payment is already pending");
+                if (!price || Date.now() - price.observedAtMs > 60_000)
+                  throw new Error("Independent price expired before preparation");
+                const native = prepared.quote.native_settlement;
+                const usd = Math.max(
+                  Number(prepared.quote.amount),
+                  (Number(BigInt(native!.total_wei)) / 1e18) * price.usd
+                );
+                if (
+                  !Number.isFinite(usd) ||
+                  usd <= 0 ||
+                  usd > maximum ||
+                  store.spent24h(state!) + usd > ctx.config.dailyAmountUsd!
+                )
+                  throw new Error("Owner spending limit reached");
+                const site =
+                  ctx.config.gatewayPathMode === "direct"
+                    ? `direct:${JSON.stringify([url.origin, prepared.quote.merchant_id])}`
+                    : parsed.site;
+                state!.pending = {
+                  recovery: {
+                    apiBaseUrl: prepared.apiBaseUrl,
+                    quote: prepared.quote,
+                    txRef: prepared.txRef,
+                    asset: prepared.asset,
+                    paymentIssuer: prepared.paymentIssuer,
+                  },
+                  serializedTransaction: prepared.serializedTransaction,
+                  site,
+                  amountUsd: usd,
+                };
+                state!.spend.push({ at: Date.now(), usd, tx: prepared.txRef });
+                // Atomic fsync completes BEFORE the SDK is allowed to broadcast.
+                store.save(state!);
+              },
+            },
+          }
+        );
+        if (response === null) return errorResult("Payment skipped: owner budget reached.");
+        const redact = (value: string): string => {
+          for (const entry of ctx.agent.aifp1Receipts.list()) {
+            if (entry.jwt) value = value.replaceAll(entry.jwt, "[redacted receipt]");
+          }
+          return value.replace(/\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[redacted token]");
+        };
+        const headers: Record<string, string> = {};
+        for (const name of ["content-type", "aifp-quota-remaining", "aifp-quota-total"]) {
+          const value = response.headers.get(name);
+          if (value !== null) headers[name] = redact(value);
+        }
+        const bounded = await boundedBody(response);
+        const body = redact(bounded.body);
+        const truncated = bounded.truncated;
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                status: response.status,
+                ok: response.ok,
+                headers,
+                body,
+                truncated,
+                receipts: ctx.agent.getReceiptCacheSummary(),
+              }),
+            },
+          ],
+        };
+      } finally {
+        // Receipt caching precedes content retry in the SDK. Retain it even
+        // when that content request fails; never discard already bought access.
+        state.receipts = ctx.agent.aifp1Receipts.list();
+        if (
+          state.pending &&
+          state.receipts.some(
+            (entry) =>
+              !priorReceiptIds.has(entry.receiptId) &&
+              entry.site === state!.pending!.site &&
+              entry.merchantId === state!.pending!.recovery.quote.merchant_id
+          )
+        ) {
+          delete state.pending;
+        }
+        store.save(state);
+      }
+    });
+  } catch (error) {
+    if (error instanceof PaymentStateError) return errorResult(error.message);
+    if (!state?.pending && error instanceof Aifp1SettlementUnsupportedError) {
+      return errorResult(
+        "The merchant must offer a signed native Polygon v1.4 quote. Its current settlement route is unsupported; no legacy or alternate-protocol payment was attempted."
+      );
+    }
+    if (!state?.pending && error instanceof Error && error.name === "V14SettlementError") {
+      const code = (error as Error & { code?: string }).code;
+      const messages: Record<string, string> = {
+        V14_INSUFFICIENT_BALANCE: "The wallet needs enough POL for the quoted purchase plus the owner-capped gas fee.",
+        V14_GAS_BUDGET_EXCEEDED:
+          "Estimated gas exceeds AIFINPAY_MAX_GAS_POL. The owner can review the limit; the agent cannot raise it.",
+        V14_PAUSED: "The approved payment deployment is paused. No payment was sent.",
+        V14_EXPIRED: "The signed quote expired before submission. Request a fresh quote.",
+        V14_EXPIRING: "The signed quote expires too soon to submit safely. Request a fresh quote.",
+        V14_STALE_NONCE: "The signed quote uses a stale wallet nonce. Request a fresh quote.",
+      };
+      return errorResult(
+        messages[code ?? ""] ??
+          "Payment verification refused this deployment, signer or quote. The merchant must offer a verified native Polygon v1.4 route; no fallback was attempted."
+      );
+    }
     return errorResult(
-      `${err.name}: ${err.message}`,
-      isAifp1Gateway
-        ? `Tip: ensure Polygon EVM address ${ctx.agent.evmAddress} is funded for AIFP-1 settlement.`
-        : `Tip: ensure agent ${ctx.agent.solanaAddress} has a funded Seat PDA, or use the unified \`agent_call\` tool (Polygon settlement).`,
-      ...(originHint ? [originHint] : []),
-      "Docs: https://aifinpay.io/docs"
+      state?.pending
+        ? `Payment pending (${state.pending.recovery.txRef}). Its private recovery journal is retained. Retry to recover the receipt; no replacement payment will be submitted. If submission never occurred or reverted, the owner must reconcile the journal.`
+        : "Payment request failed before completion. Check owner configuration, wallet, supported route, network and spending limits. No fallback payment was attempted."
     );
   }
 }
 
-function errorResult(...lines: string[]) {
-  return {
-    isError: true,
-    content: lines.map((line) => ({ type: "text", text: line })),
-  };
+async function boundedBody(response: Response, limit = 64 * 1024): Promise<{ body: string; truncated: boolean }> {
+  if (!response.body) return { body: "", truncated: false };
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return { body: Buffer.concat(chunks).toString("utf8"), truncated: false };
+      const room = limit - size;
+      chunks.push(value.subarray(0, room));
+      size += Math.min(room, value.length);
+      if (value.length > room || size === limit) {
+        await reader.cancel();
+        return { body: Buffer.concat(chunks).toString("utf8"), truncated: true };
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+function errorResult(message: string) {
+  return { isError: true, content: [{ type: "text", text: message }] };
 }

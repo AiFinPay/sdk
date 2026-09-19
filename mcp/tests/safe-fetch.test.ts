@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { isBlockedAddress, assertRequestAllowed, makeSafeFetch } from "../src/safe-fetch.js";
 
+// DNS is an I/O boundary too: unit tests must not depend on live resolution.
+vi.mock("node:dns/promises", () => ({
+  lookup: vi.fn(async (host: string) => {
+    if (host === "aifinpay.io") return [{ address: "93.184.216.34", family: 4 }];
+    if (host === "localhost") return [{ address: "127.0.0.1", family: 4 }];
+    throw new Error("No test DNS fixture for host");
+  }),
+}));
+
 // payable_fetch handed a caller-supplied URL to the agent, which requested it
 // and, on a 402, paid and requested it again. Nothing checked the URL, and it
 // is the tool exposed over HTTP today. A caller — or a prompt injection that
