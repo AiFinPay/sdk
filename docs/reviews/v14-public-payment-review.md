@@ -65,7 +65,7 @@ indexed-history or analytics support.
 
 ## Release sequence
 
-1. Human review of this concrete high-risk candidate; CI on review branches.
+1. User approved this concrete release on2026-09-19; CI on review branches.
 2. Integrate backend into dev and verify quote, signed instructions, receipt
    recovery and merchant history against the existing v1.4 route.
 3. Publish exact Node and skill artifacts; check registry integrity; then clean
@@ -98,13 +98,19 @@ traceability:
     architecture: standing_user_decision_2026_09_12
     implementation: pass
     testing: local_pass_live_acceptance_pending
-    security: independent_review_complete_human_signoff_pending
-    code_review: independent_review_complete_human_signoff_pending
+    security: independent_review_complete_user_approved_2026_09_19
+    code_review: independent_review_complete_user_approved_2026_09_19
     deployment: pending
     definition_of_done: pending
   risk_class: high
   human_approvals:
     - {gate: contract_model, approver: user, date: 2026-09-12}
+    - {gate: release_scope, approver: user, date: 2026-09-19}
   deployment: {env: none, ref: null, artifacts: [agent2.1.0, mcp2.2.0, skill2.0.15]}
   metrics: {test_coverage_pct: null, human_review_minutes: null}
 ```
+
+Release progress: skill and docs merged; npm publication awaits CLI browser authentication.
+Backend/dashboard Actions cannot start due organization billing. SDK registry
+provenance CI must follow the canonical npm deployment package, replacing its
+reference to a removed vendored-registry checker. No production payment yet.
