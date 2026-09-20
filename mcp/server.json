@@ -3,7 +3,7 @@
   "name": "io.github.aifinpay/aifinpay",
   "title": "AiFinPay",
   "description": "Pay for any HTTP API in stablecoins on Polygon and Solana with one MCP call.",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "websiteUrl": "https://aifinpay.io",
   "repository": {
     "url": "https://github.com/AiFinPay/sdk",
@@ -20,7 +20,7 @@
     {
       "registryType": "npm",
       "identifier": "@aifinpay/mcp",
-      "version": "2.1.0",
+      "version": "2.1.1",
       "transport": {
         "type": "stdio"
       },
