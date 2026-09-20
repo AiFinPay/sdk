@@ -217,6 +217,7 @@ const NATIVE_ASSETS: Record<SettlementEvmNetwork, string> = {
    optimism: "ETH",
    robinhood: "ETH",
    xrplevm: "XRP",
+   botchain: "BOT",
 };
 
 const EXPECTED_BPS: Record<SettlementRouteClass, { treasury: number; creator: number }> = {

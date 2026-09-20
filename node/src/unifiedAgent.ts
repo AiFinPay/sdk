@@ -344,7 +344,7 @@ export function paymentIdFor(orderId: string): `0x${string}` {
  * @deprecated "botchain" is deprecated and will be removed in a future version. Use "robinhood" instead.
  */
 // Legacy deployments only. Robinhood is supported by the v1.4 registry, not this retired table.
-export type SplitterChainName = "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm";
+export type SplitterChainName = "polygon" | "base" | "optimism" | "unichain" | "robinhood" | "botchain" | "xrplevm";
 
 export interface SplitterDeployment {
   chainId: number;

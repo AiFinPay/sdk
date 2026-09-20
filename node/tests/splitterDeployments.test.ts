@@ -11,6 +11,7 @@ const EXPECTED_CHAIN_IDS: Record<string, number> = {
   base: 8453,
   optimism: 10,
   unichain: 130,
+  robinhood: 4663,
   botchain: 677,
   xrplevm: 1440000,
 };
@@ -50,5 +51,6 @@ describe("SPLITTER_DEPLOYMENTS registry", () => {
     expect(SPLITTER_DEPLOYMENTS.base.usdc).toBeDefined();
     expect(SPLITTER_DEPLOYMENTS.optimism.usdc).toBeDefined();
     expect(SPLITTER_DEPLOYMENTS.unichain.usdc).toBeDefined();
+    expect(SPLITTER_DEPLOYMENTS.robinhood.usdc).toBeUndefined();
   });
 });
