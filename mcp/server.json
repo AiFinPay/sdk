@@ -1,9 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.aifinpay/aifinpay",
+  "name": "io.github.daochild/aifinpay",
   "title": "AiFinPay",
   "description": "Pay for any HTTP API in stablecoins on Polygon and Solana with one MCP call.",
-  "version": "2.1.1",
+  "version": "2.2.2",
   "websiteUrl": "https://aifinpay.io",
   "repository": {
     "url": "https://github.com/AiFinPay/sdk",
@@ -20,7 +20,7 @@
     {
       "registryType": "npm",
       "identifier": "@aifinpay/mcp",
-      "version": "2.1.1",
+      "version": "2.2.2",
       "transport": {
         "type": "stdio"
       },
