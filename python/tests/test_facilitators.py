@@ -147,8 +147,13 @@ def test_native_auth_response_default_port_is_same_origin():
 
 
 @pytest.mark.parametrize("expiry", [lambda now: now - 1, lambda now: now + 5 * 60_000 + 1])
-def test_aifinpay_inband_challenge_rejects_stale_or_implausible_expiry(expiry):
-    now = int(time.time() * 1000)
+def test_aifinpay_inband_challenge_rejects_stale_or_implausible_expiry(expiry, monkeypatch):
+    # Frozen clock: the code reads time.time() again after this test did, so
+    # "now + 5 min + 1 ms" became plausible whenever a millisecond passed in
+    # between — a flake that failed roughly two full runs in five.
+    frozen = time.time()
+    monkeypatch.setattr(time, "time", lambda: frozen)
+    now = int(frozen * 1000)
     resp = _resp(
         402,
         body={

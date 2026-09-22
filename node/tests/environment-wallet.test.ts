@@ -82,7 +82,11 @@ function encrypted(secret: string, passphrase: string) {
   };
 }
 
-describe("load-only environment wallet", () => {
+// Every case spawns one or two fresh Node processes that import dist/. That
+// takes 5-6s on a Linux CI runner, over vitest's 5s default, which is why the
+// last case was skipped as "always error on linux" (2026-09-20) and the first
+// one failed intermittently here. The timeout was the defect, not the wallet.
+describe("load-only environment wallet", { timeout: 30_000 }, () => {
   it("reuses the test5-shaped configured wallet across separate processes without replacing it", async () => {
     const wallet = await fixture();
     const path = store({ secretB58: wallet.secret });
@@ -209,8 +213,7 @@ describe("load-only environment wallet", () => {
     expect(rejected.stdout + rejected.stderr).not.toContain(passphrase);
   });
 
-  // Note: skipped cause always error on linux.
-  it.skip("does not create a wallet or read .env when no identity is configured", async () => {
+  it("does not create a wallet or read .env when no identity is configured", async () => {
     writeFileSync(join(dir, ".env"), `SEED_HASH=${"11".repeat(32)}\n`);
     const result = await load();
     expect(result.value.error).toMatch(/No persistent wallet configured/);
