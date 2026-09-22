@@ -1,5 +1,23 @@
 # Changelog
 
+## @aifinpay/gate 0.3.4 — 2026-09-22
+
+From an external QA pass on a Next.js merchant (Raters).
+
+- README: the Next.js example used `aifpGate`, which is Express middleware and
+  does not run in `middleware.ts`. It now builds on `createGate` and copies
+  `result.headers` onto the response on both branches — the hand-written
+  adapters we replaced dropped them, so paid 200s carried no
+  `AIFP-Quota-Remaining`.
+- README: states that `knownAiAgent` decides who is asked to pay and is not
+  enforcement; a client that sends a browser User-Agent reads pages free.
+- 402 `how_to_pay`: the quote example now includes `scope`, `requests` and
+  `payer` (required for v1.4), and the pay step names the `Idempotency-Key`
+  and says to retry rather than pay again. No change to verification,
+  metering or settlement.
+- Tests: the hosted-gate parity test pointed at a path that no longer exists
+  and had been skipping everywhere; it now reads `backend/app/aifp/gate.js`.
+
 ## @aifinpay/gate 0.3.3 — 2026-09-19
 
 - Link both discovery and HTTP 402 responses to the public payer skill,

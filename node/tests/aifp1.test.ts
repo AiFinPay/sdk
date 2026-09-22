@@ -25,6 +25,7 @@ import {
   recoverAifp1Payment,
   idempotencyKeyFor,
   scopeCovers,
+  patternCovers,
   prefixHint,
   parseGatewayUrl,
   defaultUnitsFor,
@@ -59,8 +60,11 @@ interface MockServer {
   idempotencyKeys: string[];
   /** Every gateway hit: path + whether a receipt rode along. */
   gatewayHits: Array<{ path: string; receipt: string | null }>;
-  /** Route weights, merchant-relative path → billing units. Default 1. */
+  /** Route weights, merchant-relative path (or pattern) → billing units. Default 1. */
   weights: Record<string, number>;
+  /** Registered wildcard resources ("/movies/*"). A path they cover is
+   *  challenged as the PATTERN, the way a registry-mode gate (Raters) does. */
+  patterns: string[];
   /** slug → merchant_id. */
   merchants: Record<string, string>;
   /** Number of AIFP-425 answers /v1/pay gives before settling. */
@@ -79,6 +83,12 @@ function json(body: unknown, status = 200, headers: Record<string, string> = {})
   });
 }
 
+/** Mirror of backend/aifp/scope.js patternCovers(). */
+function serverPatternCovers(pattern: string, path: string): boolean {
+  if (!pattern.endsWith("/*")) return path === pattern;
+  return path === pattern.slice(0, -2) || path.startsWith(pattern.slice(0, -1));
+}
+
 /** Mirror of backend/aifp/scope.js — the server-side coverage test. */
 function serverScopeCovers(scope: string, resource: string, path: string): boolean {
   if (scope === "merchant") return true;
@@ -88,7 +98,7 @@ function serverScopeCovers(scope: string, resource: string, path: string): boole
     const boundary = resource.endsWith("/") ? resource : resource + "/";
     return path.startsWith(boundary);
   }
-  return path === resource;
+  return serverPatternCovers(resource, path);
 }
 
 function mockServer(): MockServer {
@@ -105,6 +115,7 @@ function mockServer(): MockServer {
     idempotencyKeys: [],
     gatewayHits: [],
     weights: {},
+    patterns: [],
     merchants: { acme: "mrch_acme", other: "mrch_other" },
     payNotConfirmedTimes: 0,
     receipts: new Map(),
@@ -309,7 +320,8 @@ function mockServer(): MockServer {
 
       const merchantId = s.merchants[slug];
       if (!merchantId) return json({ error: "AIFP-404", detail: "unknown gateway slug" }, 404);
-      const weight = s.weights[restPath] ?? 1;
+      const resource = s.patterns.find((p) => serverPatternCovers(p, restPath)) ?? restPath;
+      const weight = s.weights[resource] ?? 1;
 
       const challenge = (detail: string) =>
         json(
@@ -318,10 +330,10 @@ function mockServer(): MockServer {
             detail,
             protocol: "AIFP-1",
             merchant_id: merchantId,
-            resource: restPath,
+            resource,
             unit_weight: weight,
             base_unit_price_usd: "0.0005",
-            how_to_pay: [`POST ${API}/v1/quote {"merchant_id":"${merchantId}","resource":"${restPath}","units":200}`],
+            how_to_pay: [`POST ${API}/v1/quote {"merchant_id":"${merchantId}","resource":"${resource}","units":200}`],
             scopes: { note: "a batch can cover more than this one path", examples: [] },
           },
           402
@@ -1109,6 +1121,13 @@ describe("aifp1: scope + url helpers match the server", () => {
     expect(scopeCovers("exact", "/a", "/a")).toBe(true);
     expect(scopeCovers("exact", "/a", "/a/b")).toBe(false);
     expect(scopeCovers(undefined, "/a", "/a/b")).toBe(false); // unrecognised → exact
+    // A registered wildcard is ONE resource: the receipt names the pattern.
+    expect(scopeCovers("exact", "/movies/*", "/movies/11/that-70s-show")).toBe(true);
+    expect(scopeCovers("exact", "/movies/*", "/movies")).toBe(true);
+    expect(scopeCovers("exact", "/movies/*", "/movies-internal")).toBe(false);
+    expect(scopeCovers("exact", "/movies/*", "/api/agent/movies/search")).toBe(false);
+    expect(patternCovers("/movies/*", "/movies/")).toBe(true);
+    expect(patternCovers("/movies", "/movies/11")).toBe(false); // no star, no wildcard
   });
 
   it("derives the same prefix hint the gateway suggests", () => {
@@ -1225,6 +1244,35 @@ describe("aifp1: concurrency", () => {
     expect(second!.status).toBe(200);
     expect(settlements).toHaveLength(1);
     expect(server.quotes).toBe(1);
+    expect(server.gatewayHits.filter((hit) => hit.receipt)).toHaveLength(2);
+  });
+
+  it("buys one batch for a direct wildcard page resource and spends it across pages", async () => {
+    // The Raters shape (QA 2026-09-22): the 402 on /movies/11/that-70s-show
+    // names the registered pattern "/movies/*", not the URL. The SDK used to
+    // refuse that before quoting, so the only working path was hand-written.
+    const server = mockServer();
+    server.patterns = ["/movies/*"];
+    server.weights["/movies/*"] = 10;
+    const directOrigin = "https://raters.example";
+    const base = server.fetch;
+    server.fetch = (async (input, init) => {
+      const url = new URL(String(input));
+      return base(url.origin === directOrigin ? `${GATEWAY}/acme${url.pathname}` : input, init);
+    }) as typeof fetch;
+    const { agent, settlements } = await agentFor(server);
+    const options = { gatewayOrigins: [directOrigin], resourcePathMode: "direct" as const };
+    const first = await agent.fetchPaid(`${directOrigin}/movies/11/that-70s-show`, {}, options);
+    const second = await agent.fetchPaid(`${directOrigin}/movies/12/newlyweds`, {}, options);
+    expect(first!.status).toBe(200);
+    expect(second!.status).toBe(200);
+    expect(settlements).toHaveLength(1);
+    expect(server.quotes).toBe(1);
+    const receipts = [...server.receipts.values()];
+    expect(receipts).toHaveLength(1);
+    // The default prefix scope turns the pattern into its section.
+    expect([receipts[0]!.scope, receipts[0]!.resource]).toEqual(["prefix", "/movies/"]);
+    expect(receipts[0]!.used).toBe(20); // two premium pages, one batch
     expect(server.gatewayHits.filter((hit) => hit.receipt)).toHaveLength(2);
   });
 

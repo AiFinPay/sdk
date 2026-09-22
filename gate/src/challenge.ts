@@ -77,10 +77,14 @@ export function buildChallenge(args: {
     // honest answer; inlining a guess would be a 402 that promises chains the
     // quote will refuse.
     settlement_terms_from: `POST ${api}/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry`,
+    // Every field a first-time agent needs is in the example. An external QA
+    // agent (2026-09-22) found `payer` only by being refused — v1.4 settlement
+    // requires it — and could not tell that `requests` buys more than the
+    // minimum, so the cheap mistake is six minimum batches instead of one.
     how_to_pay: [
-      `POST ${api}/v1/quote {"merchant_id":"${merchantId}","resource":"${resource}","tier":"${tier}"}`,
+      `POST ${api}/v1/quote {"merchant_id":"${merchantId}","resource":"${resource}","tier":"${tier}","scope":"${args.scope ?? "exact"}","requests":${args.minRequests ?? minRequestsForTier(tier)},"payer":"<your wallet address>"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying`,
       "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
-      `POST ${api}/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} -> quota receipt (wallet-signature-v1)`,
+      `POST ${api}/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again`,
       "retry this request with header: AIFP-Receipt: <receipt JWT>",
     ],
     // Wallet creation does not imply an enabled payment executor. Keep the

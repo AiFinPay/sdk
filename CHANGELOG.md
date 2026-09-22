@@ -1,3 +1,13 @@
+## Node 2.1.3 / gate 0.3.4 — 2026-09-22
+
+- `@aifinpay/agent`: `scopeCovers` understands registered wildcard resources
+  (`/movies/*`), matching the server and `@aifinpay/gate`. Direct mode
+  (`resourcePathMode: "direct"`) accepts a 402 whose resource is a pattern
+  covering the URL; it still refuses one that does not. Before this, a direct
+  merchant page such as `/movies/11/…` answered with `/movies/*` was refused
+  before quoting.
+- `@aifinpay/gate`: see gate/CHANGELOG.md.
+
 ## Unreleased — Node 2.1.0 / MCP 2.2.0
 
 - Native v1.4 executor uses independent release pins, EIP-712 signer validation,

@@ -11,7 +11,9 @@ import {
 // The hosted gate lives in a sibling repo, which is present on a developer
 // machine and absent in a package-only CI checkout. Skipping loudly beats
 // either a false pass or a red build nobody can fix from here.
-const REFERENCE = fileURLToPath(new URL("../../../aifinpay-web/backend/aifp/gate.js", import.meta.url));
+// Until 2026-09-22 this pointed at backend/aifp/, which moved to backend/app/aifp/
+// — so on every machine the "loud" skip was the only thing that ran.
+const REFERENCE = fileURLToPath(new URL("../../../aifinpay-web/backend/app/aifp/gate.js", import.meta.url));
 
 describe("parity with the hosted gate", () => {
   it("answers a refusal with the same sentence the hosted gateway does", () => {
