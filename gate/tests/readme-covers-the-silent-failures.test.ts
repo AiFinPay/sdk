@@ -29,6 +29,27 @@ describe("the README covers what silently costs merchants money", () => {
     expect(section).toMatch(/human|Googlebot|browser/i);
   });
 
+  it("builds the Next.js middleware on createGate and forwards the gate's headers", () => {
+    // The example used to be `export default aifpGate({...})` — Express
+    // middleware, which Next does not run. Every Next merchant hand-wrote the
+    // adapter, and the obvious version drops result.headers: Raters' paid 200s
+    // (QA 2026-09-22) carried no AIFP-Quota-Remaining, so agents could not see
+    // their batch draining.
+    const section = README.slice(README.indexOf("## 1b"), README.indexOf("## 2."));
+    const code = section.slice(section.indexOf("// middleware.ts"), section.indexOf("export const config"));
+    expect(code).toMatch(/createGate\(/);
+    expect(code).not.toMatch(/aifpGate\(/);
+    expect(code).toMatch(/result\.headers/);
+  });
+
+  it("does not present a User-Agent exemption as enforcement", () => {
+    // knownAiAgent reads a header the client writes. Saying so is what stops a
+    // merchant believing a page is paywalled against a scraper that lies.
+    const section = README.slice(README.indexOf("## 1b"), README.indexOf("## 2."));
+    expect(section).toMatch(/not enforcement/i);
+    expect(section).toMatch(/browser's\s+User-Agent reads your pages free/);
+  });
+
   it("says what a throwing predicate does", () => {
     // It charges. A reader who assumes the opposite writes a predicate that
     // fails open and serves crawlers free.

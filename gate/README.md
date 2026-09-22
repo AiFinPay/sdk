@@ -48,21 +48,38 @@ costs money if you get it wrong.
 
 ## 1b. Next.js, and the two ways it silently earns you nothing
 
-Next.js runs middleware only on paths matched by `config.matcher`, and
-`aifpGate` charges every request unless you tell it not to. Both defaults are
-reasonable on their own and together they produce the two failure modes we see
-most often in real integrations — each of which leaves the dashboard showing
+Next.js runs middleware only on paths matched by `config.matcher`, and the gate
+charges every request unless you tell it not to. Both defaults are reasonable on
+their own and together they produce the two failure modes we see most often in
+real integrations — each of which leaves the dashboard showing
 `paywall_enabled: true` while the truth is very different.
+
+`aifpGate` is Express middleware and does not run in `middleware.ts`. Use
+`createGate` and turn its decision into a `NextResponse` yourself:
 
 ```ts
 // middleware.ts
-import { aifpGate, knownAiAgent } from "@aifinpay/gate";
+import { NextResponse, type NextRequest } from "next/server";
+import { createGate, knownAiAgent } from "@aifinpay/gate";
 
-export default aifpGate({
-  merchantId: process.env.AIFP_MERCHANT_ID,
+const gate = createGate({
+  merchantId: process.env.AIFP_MERCHANT_ID!,
   registry,
+  store, // shared, e.g. redisStore(redis) — see §3
   shouldCharge: knownAiAgent, // ← see below
 });
+
+export async function middleware(req: NextRequest) {
+  const result = await gate({
+    path: req.nextUrl.pathname,
+    header: (name) => req.headers.get(name) ?? undefined,
+  });
+  const res = result.ok ? NextResponse.next() : NextResponse.json(result.body, { status: result.status });
+  // On BOTH branches. A paid 200 carries AIFP-Quota-Remaining here, and an
+  // agent that cannot see it cannot tell a working batch from an empty one.
+  for (const [name, value] of Object.entries(result.headers)) res.headers.set(name, value);
+  return res;
+}
 
 export const config = {
   matcher: [
@@ -87,6 +104,15 @@ readers and your search ranking.
 `knownAiAgent` returns true for the self-identifying AI crawlers — GPTBot,
 ClaudeBot, PerplexityBot, CCBot, Bytespider, Google-Extended and the rest — plus
 anything already speaking AIFP. A browser passes through free.
+
+That is a decision about **who is asked** to pay, not enforcement. The
+User-Agent is whatever the client says it is: a scraper that sends a browser's
+User-Agent reads your pages free, exactly like a human. What it cannot do is
+get a paid API route (no `shouldCharge`) without a receipt. So put the content
+you must be paid for behind API routes that charge everyone, and use pages for
+what you are content to show a browser. If you need pages enforced, the signal
+has to come from something a client cannot simply claim — your edge's bot
+verification, a signed agent request — added to the predicate below.
 
 Extend it rather than replacing it when you have your own signal:
 

@@ -319,7 +319,23 @@ export function scopeCovers(scope: string | undefined, resource: string, path: s
     const boundary = resource.endsWith("/") ? resource : resource + "/";
     return path.startsWith(boundary);
   }
-  return path === resource; // 'exact', and anything unrecognised
+  return patternCovers(resource, path); // 'exact', and anything unrecognised
+}
+
+/**
+ * Mirror of scope.js patternCovers(): a merchant registers "/movies/*" as ONE
+ * resource, and both the 402 and the receipt name that pattern rather than the
+ * URL. It covers "/movies" and everything under "/movies/".
+ *
+ * This port stopped at `path === resource` while the server and @aifinpay/gate
+ * learnt wildcards, so a direct Raters page (402 for "/movies/*" on
+ * "/movies/11/that-70s-show") was refused before quoting, and a receipt bought
+ * for the pattern was never found in the cache for the next page.
+ */
+export function patternCovers(pattern: string, path: string): boolean {
+  const pat = String(pattern || "");
+  if (!pat.endsWith("/*")) return path === pat;
+  return path === pat.slice(0, -2) || path.startsWith(pat.slice(0, -1));
 }
 
 /**
@@ -866,8 +882,11 @@ export async function aifp1Fetch(
       .json()
       .catch(() => null);
     if (isAifp1Challenge(probe)) {
-      if (probe.resource !== restPath) {
-        throw new Aifp1QuoteError("direct AIFP-1 challenge resource must match the full URL pathname");
+      // The resource may be the merchant's pattern ("/movies/*") rather than
+      // the URL, but it must cover the URL: never buy a batch for a path other
+      // than the one that refused us.
+      if (!patternCovers(probe.resource, restPath)) {
+        throw new Aifp1QuoteError("direct AIFP-1 challenge resource must cover the full URL pathname");
       }
       directMerchant = probe.merchant_id;
       site = `direct:${JSON.stringify([site, directMerchant])}`;
@@ -925,7 +944,7 @@ export async function aifp1Fetch(
     .json()
     .catch(() => null);
   if (!isAifp1Challenge(challenge)) return resp;
-  if (direct && (challenge.merchant_id !== directMerchant || challenge.resource !== restPath)) {
+  if (direct && (challenge.merchant_id !== directMerchant || !patternCovers(challenge.resource, restPath))) {
     throw new Aifp1QuoteError("direct AIFP-1 resource or merchant changed during receipt verification");
   }
 

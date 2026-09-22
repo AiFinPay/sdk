@@ -81,6 +81,26 @@ describe("the 402 body", () => {
     expect(body.how_to_pay?.[3]).toContain("AIFP-Receipt");
   });
 
+  it("names every field a first quote needs — payer, scope and volume", () => {
+    // QA 2026-09-22: the quote example lacked `payer` (required for v1.4) and
+    // any way to buy more than the minimum, and /v1/pay never mentioned the
+    // Idempotency-Key a safe retry depends on.
+    const body = buildChallenge({
+      merchantId: "mrch_raters",
+      resource: "/movies/*",
+      scope: "prefix",
+      tier: "premium",
+      weight: 10,
+    });
+    const quote = body.how_to_pay![0]!;
+    expect(quote).toContain('"resource":"/movies/*"');
+    expect(quote).toContain('"scope":"prefix"');
+    expect(quote).toContain('"requests":20');
+    expect(quote).toContain('"payer":');
+    expect(body.how_to_pay![2]).toContain("Idempotency-Key");
+    expect(body.how_to_pay![2]).toMatch(/never pay again/);
+  });
+
   it("lets a merchant with overridden prices pass its own numbers through", () => {
     const body = buildChallenge({
       merchantId: "mrch_acme",
