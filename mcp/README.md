@@ -94,8 +94,13 @@ A quote or invoice is not a completed payment. Enable the owner-configured
 ## Local configuration
 
 ```bash
-npx @aifinpay/mcp init
+AIFINPAY_WALLET_PASSPHRASE='<a long passphrase>' npx @aifinpay/mcp init
 ```
+
+The keystore is encrypted at rest and the MCP server needs the same
+`AIFINPAY_WALLET_PASSPHRASE` to load it. For a disposable test wallet only,
+`npx @aifinpay/mcp init --plaintext` writes it unencrypted (mode 600); without
+either, `init` refuses rather than create an unencrypted wallet you might fund.
 
 Select the wallet in this order: `SEED_HASH` → `./aifinpay/agents.json` →
 legacy `AIFINPAY_AGENT_SECRET` → `~/.aifinpay/agent.json`.
