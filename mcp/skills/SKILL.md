@@ -200,8 +200,7 @@ Use agent_history. Do not guess /v1/history, /v1/payments or /v1/wallet/tx.
 
 Canonical AIFP-1 economics are gross-inclusive: the agent pays the quoted
 price, AiFinPay takes **1 %** (100 bps) from it, and the merchant receives
-**99 %**. No fixed fee is implied; a merchant on an AiFinPay pilot may be
-quoted 0 % (the quote's `fee_bps` and `fee_waiver` say so). AIFP-1 settles live
+**99 %**. No fixed fee is implied. AIFP-1 settles live
 on Polygon (splitter v1.4); Solana settlement is disabled. The smallest batch is
 $0.10 plus gas.
 
