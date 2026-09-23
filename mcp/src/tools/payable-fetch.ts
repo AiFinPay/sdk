@@ -2,6 +2,7 @@ import { Aifp1SettlementUnsupportedError, parseGatewayUrl, type Aifp1CachedRecei
 import type { ToolContext } from "../server.js";
 import { validatePaymentConfig } from "../config.js";
 import { PaymentStateError, type PaymentState } from "../payment-state.js";
+import { independentPolUsd } from "../native-price.js";
 
 export function payableFetchTool() {
   return {
@@ -114,21 +115,14 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
             scope: "exact",
             maxAmountUsd: Math.min(maximum, Math.max(0, ctx.config.dailyAmountUsd! - spent)),
             nativeUsdPrice: async () => {
-              // Independent public price origin, never the quote API's rate.
-              const response = await ctx.agent.inner.fetchImpl("https://api.coinbase.com/v2/prices/POL-USD/spot", {
-                signal: AbortSignal.timeout(10_000),
-                redirect: "manual",
+              // Independent public price, never the quote API's rate: Chainlink
+              // over the agent's own Polygon RPC first (no extra host), then
+              // Coinbase, then CoinGecko. See ../native-price.ts.
+              const found = await independentPolUsd({
+                fetchImpl: (input, init) => ctx.agent.inner.fetchImpl(input, init),
+                polygonRpc: (ctx.agent as { polygonRpc?: string }).polygonRpc,
               });
-              if (!response.ok) throw new Error("Independent native price unavailable");
-              const priceBody = await boundedBody(response, 16 * 1024);
-              if (priceBody.truncated) throw new Error("Independent price response exceeds limit");
-              const data = JSON.parse(priceBody.body) as {
-                data?: { base?: string; currency?: string; amount?: string };
-              };
-              const usd = Number(data.data?.amount);
-              if (data.data?.base !== "POL" || data.data?.currency !== "USD" || !Number.isFinite(usd) || usd <= 0)
-                throw new Error("Invalid independent native price");
-              price = { usd, observedAtMs: Date.now() };
+              price = { usd: found.usd, observedAtMs: found.observedAtMs };
               return price;
             },
             v14: {

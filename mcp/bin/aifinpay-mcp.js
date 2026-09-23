@@ -274,7 +274,14 @@ if (arg === "init") {
       `Back up ${KEYSTORE}. It is the only copy. The derivation is not\n` +
       `BIP-39, so no standard wallet can recover this from a phrase.\n\n` +
       `The EVM address is used for Polygon payments. Check its balance before\n` +
-      `funding it or paying for calls.\n`
+      `funding it or paying for calls.\n\n` +
+      `To let it pay, fund the EVM address with POL on Polygon (the smallest\n` +
+      `batch is $0.10 plus gas) and add to the env block above:\n` +
+      `  AIFINPAY_PAYMENTS_ENABLED=1  AIFINPAY_MAX_USD=0.15  AIFINPAY_DAILY_USD=1.00\n` +
+      `  AIFINPAY_MAX_GAS_POL=0.05     AIFINPAY_GATEWAY_ORIGINS=https://<site it may pay>\n\n` +
+      `See its balance, payments and receipts in your dashboard:\n` +
+      `  https://dash.aifinpay.io → My Agents → Claim via MCP, then give the\n` +
+      `  one-time URL to the agent (tool agent_claim_self).\n`
   );
   process.exit(0);
 }

@@ -1,32 +1,21 @@
 # aifinpay-agent (Python)
 
-Stable `2.0.0` release. Native auth now
-requires a request-bound v2 challenge from the coordinated backend update.
-`auth_headers()` refuses the retired unbound proof, and legacy paid `call()`
-settlement is disabled; free provider responses still pass through. Python
-does not yet expose Node's verified v1.3 `fetchPaid` executor.
+Version `2.1.1`: agent identity (EVM and Solana addresses from one seed), native
+request authentication, and linking an agent to its owner's dashboard.
 
-Non-custodial **multi-facilitator** x402 payment client for autonomous
-AI agents on [AiFinPay](https://aifinpay.io) — canonical domain
-**aifinpay.io** (the legacy `aifinpay.company` host is retired). SDK
-wallet derivation supports EVM and Solana identities; a wallet address alone
-does not mean a payment route is enabled.
+> **Python cannot pay AiFinPay merchants yet.** Live AIFP-1 payments settle on
+> the Polygon v1.4 splitter, and that executor exists only in the Node SDK
+> (`@aifinpay/agent`, `fetchPaid`) and the MCP server (`@aifinpay/mcp`,
+> `payable_fetch`). To pay from a Python agent, run the MCP server or call the
+> Node SDK. Legacy paid `call()` is disabled.
 
-`agent.pay(url)` works against:
-
-- **AiFinPay** native flow (Solana Seat PDA + Ed25519)
-- **Coinbase x402** spec — detection + parsing today; on-chain
-  settlement coming in 0.3.x
-
-The Ed25519 keypair is generated locally and never leaves your process.
-The SDK auto-detects the facilitator flavor on a 402 response and builds
-the right auth payload (three-headers for AiFinPay, base64
-`PAYMENT-SIGNATURE` for Coinbase x402).
+Canonical domain **aifinpay.io** (`aifinpay.company` only redirects there). A
+wallet address alone does not mean a payment route is enabled. The keypair is
+generated locally and never leaves your process.
 
 ## Install
 
 ```bash
-# install stable
 pip install aifinpay-agent
 ```
 
@@ -41,34 +30,24 @@ pip install -r requirements.txt -e .
 ## Quick start
 
 ```python
-from aifinpay import Agent, PayOptions
+from aifinpay.unified_agent import AiFinPayAgent
 
-# Generate a fresh keypair locally — never transmitted
-agent = Agent.new()
-print("Fund this address:", agent.address)
-print("Save this secret:", agent.secret_b58)  # store securely!
-
-# Wait until the wallet has at least $0.01 worth on-chain
-agent.wait_for_funding(min_usd_cents=1)
-
-# Request an invoice for a Seat (USDC on Solana)
-invoice = agent.reserve_seat_invoice(amount_usd=1.00, asset="USDC")
-print("Invoice:", invoice.raw)
-# Build + sign + submit the Solana transaction with @solana/web3.js, anchorpy,
-# or solana-py — the invoice contains program_id, treasury_vault, mints, etc.
-
-# Generic x402 — auto-detects facilitator, signs, retries
-resp = agent.pay("https://aifinpay.io/api/stats")
-print(resp.json())
-
-# Pay any third-party x402 endpoint (e.g. Coinbase x402-protected API)
-resp = agent.pay(
-    "https://api.example.com/v1/data",
-    method="POST",
-    json={"q": "hello"},
-    options=PayOptions(max_amount_usd=0.10),  # refuse if cost > $0.10
-)
+agent = AiFinPayAgent.from_seed(SEED_HEX)  # 32-byte seed you keep private
+print("EVM address:", agent.evm_address)   # fund with POL on Polygon to pay (via MCP/Node)
 ```
+
+## Link the agent to its owner's dashboard
+
+At https://dash.aifinpay.io → My Agents → Add agent by address the owner gets a
+challenge. Sign it and hand back the signature:
+
+```python
+signature = agent.sign_dashboard_claim(challenge)
+```
+
+`sign_dashboard_claim` signs only `AiFinPay-claim:polygon:<this address>:<nonce>`
+and refuses any other text. The owner then sees the agent's balance, payments
+and receipts.
 
 ## Loading an existing keypair
 
@@ -94,18 +73,17 @@ agent = Agent.from_secret_b58("3RvZm7Gw...")
      computes `SHA-256("AiFinPay-x402:{nonce}:{pubkey}")`, signs with
      Ed25519, sets `x-agent-pubkey`, `x-nonce`, `x-signature` headers
    - Coinbase x402 → builds a `PaymentPayload`, base64-encodes, sets
-     `PAYMENT-SIGNATURE` (settlement coming in 0.3)
+     `PAYMENT-SIGNATURE` (detection and parsing only; Python does not settle)
 4. Retries the original request with the auth attached.
 
-The server verifies the signature, checks the agent's on-chain payment
-proof (Seat PDA for AiFinPay, settled tx for Coinbase x402), and serves
-the resource.
+The server verifies the signature and serves the resource if the agent is
+entitled to it. Paying for access is a separate step (see the note at the top).
 
 ## Privacy
 
 - **The server never sees your private key.** Period.
 - Nonces are consumed on use; replay-resistant.
-- All transactions are public and on-chain — Solana + Polygon mainnet.
+- All payments are public and on-chain (Polygon mainnet).
 
 ## License
 

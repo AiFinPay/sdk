@@ -4,11 +4,9 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Source candidate **2.2.0**, paired with Node SDK **2.1.0**. The published
-MCP 2.1.0 remains read-only; publish the coordinated dependencies before using
-this candidate through npm. Source builds support owner-enabled native Polygon
-v1.4 purchases with `payable_fetch`. Without payment configuration, the server
-keeps its inspection-only tool inventory.
+Version **2.2.4**. Owner-enabled native Polygon v1.4 purchases with
+`payable_fetch` are released (since 2.2.0). Without payment configuration the
+server keeps its inspection-only tool inventory.
 
 ## Enable native paid GET requests
 
@@ -20,7 +18,7 @@ existing configured identity. Keep its passphrase private. The owner must set:
   "AIFINPAY_PAYMENTS_ENABLED": "1",
   "AIFINPAY_GATEWAY_ORIGINS": "https://merchant.example",
   "AIFINPAY_GATEWAY_PATH_MODE": "direct",
-  "AIFINPAY_MAX_USD": "0.12",
+  "AIFINPAY_MAX_USD": "0.15",
   "AIFINPAY_DAILY_USD": "1.00",
   "AIFINPAY_MAX_GAS_POL": "0.05"
 }
@@ -38,7 +36,24 @@ runtime/signer verification and owner limits. It persists the prepared transacti
 before sending, verifies the receipt, and reuses the purchased batch. No special
 merchant script, alternate contract or facilitator fallback is used. GET, native
 POL, Polygon live mode only; Amoy payment receipts and stable-token execution are
-not part of this candidate.
+not supported. The smallest batch is $0.10 plus gas, so keep `AIFINPAY_MAX_USD`
+a little above the batch you expect to buy.
+
+### Network access
+
+A sandbox that allowlists outbound hosts must allow `api.aifinpay.io` (quotes and
+receipts) and a Polygon RPC. The independent POL/USD rate comes from Chainlink
+on Polygon over that same RPC, then `api.coinbase.com`, then `api.coingecko.com`;
+one of them is enough. If none answers, `payable_fetch` stops before paying and
+the error names each host it tried.
+
+## Link the agent to its owner's dashboard
+
+The owner sees the agent's balance, payments and receipts at
+https://dash.aifinpay.io → My Agents. There, **Claim via MCP** generates a
+one-time URL; pass it to `agent_claim_self`. The tool contacts only AiFinPay
+origins, signs only the claim challenge for this agent's own address, and moves
+no funds. Offer this to the owner after `init`.
 
 Private recovery state lives at `AIFINPAY_HOME/payments/<evm-address>/state.json`
 (default home `~/.aifinpay`). State is mode600 in mode700 directories, atomically
@@ -54,6 +69,7 @@ state file in chat. Unconfirmed payments consume the budget conservatively.
 | Tool                     | Purpose                                                  |
 | ------------------------ | -------------------------------------------------------- |
 | `agent_address`          | Read the current Solana, EVM and Casper addresses.       |
+| `agent_claim_self`       | Link this agent to its owner's dashboard (one-time URL). |
 | `agent_reload`           | Reload local wallet files in the current MCP connection. |
 | `agent_quota`            | Read the agent's quota.                                  |
 | `agent_passport_resolve` | Resolve the global Agent Passport identity.              |
@@ -61,8 +77,8 @@ state file in chat. Unconfirmed payments consume the budget conservatively.
 | `settlement_invoice`     | Prepare a non-signing settlement invoice.                |
 
 `payable_fetch` appears only with valid owner payment configuration and a persistent wallet.
-Legacy `agent_call`, `agent_quote`, `pay_with_split`, `quote_split` and
-`agent_claim_self` remain unregistered.
+Legacy `agent_call`, `agent_quote`, `pay_with_split` and `quote_split` remain
+unregistered.
 
 ## Persistent wallet selection
 
@@ -88,8 +104,8 @@ wallet. With no configured wallet at all the server has an ephemeral identity:
 
 ## Initialize and connect
 
-A quote or invoice is not a completed payment. Enable the owner-configured
-`payable_fetch` tool only after installing the coordinated candidate dependencies.
+A quote or invoice is not a completed payment. `payable_fetch` pays only with the
+owner configuration above.
 
 ## Local configuration
 
@@ -196,7 +212,7 @@ does not enable the retired signing tools in the production RC.
 
 Dev quoting does not bypass wallet signatures, issuer verification or
 receipt metering. See the bundled skill for backend prerequisites. The low-level SDK has an Amoy
-executor; this MCP candidate does not expose Amoy paid receipt purchases.
+executor; this MCP does not expose Amoy paid receipt purchases.
 
 ## License
 

@@ -6,8 +6,9 @@ import { detectFacilitator } from "./facilitators/detect.js";
 import type { PayOptions } from "./facilitators/base.js";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 
-// Canonical domain is aifinpay.io. The legacy aifinpay.company host is
-// fully retired (DNS removed) — do not use it.
+// Canonical domain is aifinpay.io. The legacy aifinpay.company host still
+// answers, with a 301 to aifinpay.io — do not use it: a client that follows a
+// 301 may re-send a POST as a GET and lose the body.
 const DEFAULT_BASE_URL = "https://aifinpay.io";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const SDK_UA = "aifinpay-agent-node/0.3.0";

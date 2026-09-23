@@ -29,22 +29,20 @@ export function agentClaimSelfTool() {
   return {
     name: "agent_claim_self",
     description:
-      "Attach this agent to a user's AiFinPay account autonomously. " +
-      "Requires a magic-link URL the user got after signing in at " +
-      "https://aifinpay.io/login. The tool will use the link to " +
-      "establish a session, request a claim challenge for this agent's " +
-      "EVM address, sign it with the agent's key, and submit the proof. " +
-      "After this completes, the user's /me page lists this agent and " +
-      "they can view its activity at /agents/<evm-address>.",
+      "Link this agent to its owner's AiFinPay dashboard, so the owner sees the agent's " +
+      "balance, payments and receipts. Offer this after creating a wallet. The owner " +
+      "generates a one-time URL at https://dash.aifinpay.io → My Agents → Claim via MCP " +
+      "and pastes it here; the tool signs only an AiFinPay claim challenge for this " +
+      "agent's own address and moves no funds.",
     inputSchema: {
       type: "object",
       properties: {
         magic_link_url: {
           type: "string",
           description:
-            "The URL the user received in the sign-in email. Looks like " +
-            "https://aifinpay.io/api/auth/verify?token=… — one-shot, " +
-            "expires 15 minutes after the user requested it.",
+            "The one-time URL from My Agents → Claim via MCP. Looks like " +
+            "https://dash.aifinpay.io/api/auth/verify?token=… — single use, " +
+            "expires 15 minutes after it was generated.",
         },
         label: {
           type: "string",
@@ -265,46 +263,34 @@ export async function runAgentClaimSelf(ctx: ToolContext, args: Record<string, u
   // ── 4. Balance check (best-effort) — drives funded-vs-unfunded copy ─
   // Never block the claim flow on a balance check; if the RPC is down or
   // balance() throws, fall back to the standard funding recommendation.
-  let polygonUsdc = 0;
-  let solanaUsdc = 0;
+  // payable_fetch settles AIFP-1 v1.4 in native POL, so POL is what counts.
+  let polygonPol = 0;
+  let polUsd: number | null = null;
   try {
     const bal = await ctx.agent.balance();
-    polygonUsdc = bal.chains.polygon.usdc ?? 0;
-    solanaUsdc = bal.chains.solana.usdc ?? 0;
+    polygonPol = bal.chains.polygon.matic ?? 0;
+    polUsd = Number.isFinite(bal.prices?.pol?.usd) ? bal.prices.pol.usd : null;
   } catch {
     /* swallow — keep funding_recommendation as-is */
   }
 
   // ── 5. Report ──────────────────────────────────────────────────────
   try {
-    // Dashboard URLs live at dashboard.aifinpay.io regardless of
-    // which host the user used for magic-link sign-in. apiBase is correct
-    // only for /me (which lives at whichever host the user signed in via).
-    const DASHBOARD_BASE = "https://dashboard.aifinpay.io";
+    // The dashboard is dash.aifinpay.io; /me redirects to My Agents.
+    // (dashboard.aifinpay.io only 301s here.)
+    const DASHBOARD_BASE = "https://dash.aifinpay.io";
 
-    // Funded threshold: 0.10 USDC (~4 io-net calls). Below this we still
-    // show the funding tip; at-or-above we show a "Funded" status so the
-    // agent doesn't tell the user to send money they already sent.
-    const FUNDED_USDC_THRESHOLD = 0.1;
-    const polygonFunded = polygonUsdc >= FUNDED_USDC_THRESHOLD;
-
-    const fundingFields: Record<string, string> = polygonFunded
-      ? {
-          funding_status: `Funded — $${polygonUsdc.toFixed(2)} USDC available on Polygon`,
-        }
-      : {
-          // Live bridges (io.net, Exa, Venice) settle on Polygon — fund
-          // the Polygon address with USDC for autonomous calls today.
-          // Solana is claimed for visibility; SOL-native settlement is
-          // available on bridges that advertise pay_solana in their 402.
-          funding_recommendation: `Send USDC on Polygon to ${evmAddr} (~0.5 USDC ≈ 20 calls). Optionally fund the Solana address with SOL to use Solana-native bridges.`,
-        };
-
-    // Surface Solana USDC status when balance() exposes a non-zero value;
-    // schema doesn't currently include solana.usdc but future-proof here.
-    if (solanaUsdc >= FUNDED_USDC_THRESHOLD) {
-      fundingFields.funding_status_solana = `Funded — $${solanaUsdc.toFixed(2)} USDC available on Solana`;
-    }
+    // Funded threshold: $0.20 of POL — the smallest batch ($0.10) plus gas.
+    // At or above it we say so, so the agent does not ask for money it has.
+    const FUNDED_USD_THRESHOLD = 0.2;
+    const polValueUsd = polUsd === null ? null : polygonPol * polUsd;
+    const fundingFields: Record<string, string> =
+      polValueUsd !== null && polValueUsd >= FUNDED_USD_THRESHOLD
+        ? { funding_status: `Funded — ${polygonPol.toFixed(4)} POL (≈ $${polValueUsd.toFixed(2)}) on Polygon` }
+        : {
+            // AIFP-1 v1.4 settles in native POL on Polygon, and gas is POL too.
+            funding_recommendation: `Send POL on Polygon to ${evmAddr}. The smallest batch is $0.10 plus gas; 2–3 POL covers many batches.`,
+          };
 
     return {
       content: [
@@ -319,7 +305,7 @@ export async function runAgentClaimSelf(ctx: ToolContext, args: Record<string, u
               solana_claim: solRes.ok ? "ok" : `skipped (${solRes.reason})`,
               label: label || null,
               ...fundingFields,
-              next: `Visit ${DASHBOARD_BASE}/agents/${evmAddr} (Polygon view) or ${DASHBOARD_BASE}/agents/${solAddr} (Solana view). Watchlist: ${apiBase}/me.`,
+              next: `Open ${DASHBOARD_BASE}/me (My Agents) to see this agent's balance, payments and receipts. Public page: ${DASHBOARD_BASE}/agents/${evmAddr}.`,
             },
             null,
             2

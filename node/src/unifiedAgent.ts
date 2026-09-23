@@ -924,6 +924,29 @@ export class AiFinPayAgent {
    * signing a one-time nonce with the agent's own key (EIP-191) — no partner
    * account needed.
    */
+  /**
+   * Sign the challenge that links this agent to its owner's dashboard
+   * (https://dash.aifinpay.io → My Agents → Add agent by address).
+   *
+   * Signs ONLY `AiFinPay-claim:polygon:<this agent's address>:<32 hex nonce>`
+   * — the exact message the dashboard issues — and refuses anything else, so it
+   * cannot be used to obtain this key's signature over arbitrary text. The
+   * owner pastes the returned signature into the dashboard.
+   */
+  async signDashboardClaim(challenge: string): Promise<`0x${string}`> {
+    const prefix = `AiFinPay-claim:polygon:${this.evmAddress.toLowerCase()}:`;
+    const message = String(challenge ?? "").trim();
+    if (
+      !message.toLowerCase().startsWith(prefix.toLowerCase()) ||
+      !/^[0-9a-f]{32}$/.test(message.slice(prefix.length))
+    ) {
+      throw new AiFinPayError(
+        `not a dashboard claim challenge for this agent — expected "${prefix}<nonce>" from dash.aifinpay.io`
+      );
+    }
+    return this.evmAccount.signMessage({ message });
+  }
+
   async register(opts: {
     name: string;
     endpoint: string;
