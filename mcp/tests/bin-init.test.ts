@@ -74,8 +74,29 @@ function run(args: string[], extraEnv: Record<string, string> = {}, nodeArgs: st
 const EVM = /0x[a-fA-F0-9]{40}/;
 
 describe("aifinpay-mcp init", () => {
+  it("refuses to create an unencrypted wallet unless asked by name", () => {
+    let err: (Error & { status?: number }) | null = null;
+    try {
+      run(["init"]);
+    } catch (e) {
+      err = e as Error & { status?: number };
+    }
+    expect(err?.status).toBe(2);
+    expect(String(err?.message)).toMatch(/AIFINPAY_WALLET_PASSPHRASE/);
+    expect(String(err?.message)).toMatch(/--plaintext/);
+    expect(existsSync(join(home, "agent.json"))).toBe(false);
+  });
+
+  it("creates an encrypted wallet when a passphrase is set, without the flag", () => {
+    const out = run(["init"], { AIFINPAY_WALLET_PASSPHRASE: "fixture-passphrase" });
+    expect(out).toMatch(/ENCRYPTED/);
+    const store = JSON.parse(readFileSync(join(home, "agent.json"), "utf8"));
+    expect(store.enc).toBe("scrypt-aes-256-gcm");
+    expect(store.secretB58).toBeUndefined();
+  });
+
   it("creates a keystore and prints all three addresses", () => {
-    const out = run(["init"]);
+    const out = run(["init", "--plaintext"]);
     const keystore = join(home, "agent.json");
 
     expect(existsSync(keystore)).toBe(true);
@@ -85,7 +106,7 @@ describe("aifinpay-mcp init", () => {
   });
 
   it("writes the keystore mode 600", () => {
-    run(["init"]);
+    run(["init", "--plaintext"]);
     // A secret readable by other users on the box is a secret that leaks
     // through a backup, a container image or a shared CI runner.
     const mode = statSync(join(home, "agent.json")).mode & 0o777;
@@ -93,10 +114,10 @@ describe("aifinpay-mcp init", () => {
   });
 
   it("does not regenerate on a second init", () => {
-    const first = run(["init"]);
+    const first = run(["init", "--plaintext"]);
     const secret = JSON.parse(readFileSync(join(home, "agent.json"), "utf8")).secretB58;
 
-    const second = run(["init"]);
+    const second = run(["init", "--plaintext"]);
     const after = JSON.parse(readFileSync(join(home, "agent.json"), "utf8")).secretB58;
 
     expect(after === secret).toBe(true);
@@ -108,7 +129,7 @@ describe("aifinpay-mcp init", () => {
   });
 
   it("keeps the secret out of the printed MCP config", () => {
-    const out = run(["init"]);
+    const out = run(["init", "--plaintext"]);
     const secret = JSON.parse(readFileSync(join(home, "agent.json"), "utf8")).secretB58;
     const block = out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1);
     expect(block).toContain("mcpServers");
@@ -116,7 +137,7 @@ describe("aifinpay-mcp init", () => {
   });
 
   it("pins the printed MCP config to the version that initialized the wallet", () => {
-    const out = run(["init"]);
+    const out = run(["init", "--plaintext"]);
     const block = out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1);
     const config = JSON.parse(block);
     const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
@@ -151,7 +172,7 @@ syncBuiltinESMExports();
       );
       const children: ReturnType<typeof spawn>[] = [];
       const launch = (writer: string) => {
-        const child = spawn(process.execPath, ["--import", barrier, BIN, "init"], {
+        const child = spawn(process.execPath, ["--import", barrier, BIN, "init", "--plaintext"], {
           cwd: home,
           env: isolatedEnv({
             AIFP_TEST_WRITER: writer,
@@ -204,7 +225,7 @@ syncBuiltinESMExports();
 
 describe("aifinpay-mcp server", () => {
   it("loads the keystore without AIFINPAY_AGENT_SECRET being set", () => {
-    const init = run(["init"]);
+    const init = run(["init", "--plaintext"]);
     const expected = init.match(EVM)?.[0];
 
     // Explicitly blank the env var: the point is that the file alone suffices.
@@ -241,7 +262,7 @@ describe("aifinpay-mcp flags", () => {
   // repeat init, and encrypted wallets must never expose the secret.
 
   it("keeps the recovery key out of noninteractive init output", () => {
-    const out = run(["init"]);
+    const out = run(["init", "--plaintext"]);
     const secret = JSON.parse(readFileSync(join(home, "agent.json"), "utf8")).secretB58 as string;
     expect(out.includes("RECOVERY KEY")).toBe(false);
     expect(out.includes(secret)).toBe(false);
@@ -253,12 +274,12 @@ describe("aifinpay-mcp flags", () => {
     writeFileSync(tty, "Object.defineProperty(process.stdout, 'isTTY', { value: true });\n", {
       mode: 0o600,
     });
-    const out = run(["init"], {}, ["--import", tty]);
+    const out = run(["init", "--plaintext"], {}, ["--import", tty]);
     const secret = JSON.parse(readFileSync(join(home, "agent.json"), "utf8")).secretB58 as string;
     // Keep even a failing assertion from printing the captured recovery key.
     expect(out.includes("RECOVERY KEY")).toBe(true);
     expect(out.includes(secret)).toBe(true);
-    const second = run(["init"], {}, ["--import", tty]);
+    const second = run(["init", "--plaintext"], {}, ["--import", tty]);
     expect(second.includes("RECOVERY KEY")).toBe(false);
     expect(second.includes(secret)).toBe(false);
   });
@@ -266,8 +287,8 @@ describe("aifinpay-mcp flags", () => {
   it("does NOT reprint the recovery key on a second init", () => {
     // Shown once means once. A second init keeps the wallet and must not surface
     // the secret again — that would turn "shown once" into "shown every run".
-    run(["init"]);
-    const second = run(["init"]);
+    run(["init", "--plaintext"]);
+    const second = run(["init", "--plaintext"]);
     expect(second).toContain("keeping it");
     expect(second).not.toContain("RECOVERY KEY");
   });
@@ -328,7 +349,7 @@ describe("aifinpay-mcp flags", () => {
   });
 
   it("without a passphrase, behaviour is unchanged — plaintext, and it says so", () => {
-    const out = run(["init"]);
+    const out = run(["init", "--plaintext"]);
     const parsed = JSON.parse(readFileSync(join(home, "agent.json"), "utf8"));
     expect(typeof parsed.secretB58).toBe("string");
     expect(parsed.enc).toBeUndefined();

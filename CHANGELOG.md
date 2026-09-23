@@ -1,3 +1,10 @@
+## MCP 2.2.3 — 2026-09-23
+
+- `npx @aifinpay/mcp init` no longer creates an unencrypted wallet by default.
+  Without `AIFINPAY_WALLET_PASSPHRASE` it exits 2 and explains the two options:
+  set a passphrase (encrypted keystore), or pass `--plaintext` for a disposable
+  test wallet. Existing keystores, encrypted or not, keep working unchanged.
+
 ## Node 2.1.3 / gate 0.3.4 — 2026-09-22
 
 - `@aifinpay/agent`: `scopeCovers` understands registered wildcard resources

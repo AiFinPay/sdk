@@ -68,7 +68,8 @@ const arg = (process.argv[2] || "").toLowerCase();
 if (arg === "--help" || arg === "-h" || arg === "help") {
   process.stdout.write(`aifinpay-mcp ${VERSION}
 
-  npx @aifinpay/mcp init     create a persistent wallet and print the config
+  npx @aifinpay/mcp init     create a persistent wallet (encrypted: set AIFINPAY_WALLET_PASSPHRASE;
+                             unencrypted test wallet: add --plaintext) and print the config
   npx @aifinpay/mcp          start the MCP server (stdio)
 
 Run init once. It writes ${KEYSTORE} with mode 600 and the server picks
@@ -171,6 +172,20 @@ if (arg === "init") {
 
   let store = readKeystore();
   let freshlyCreated = false;
+  // A new wallet is encrypted at rest unless the owner asks otherwise, by name.
+  // It used to be written in plaintext whenever AIFINPAY_WALLET_PASSPHRASE was
+  // unset — which is the default — so the documented one-liner produced an
+  // unencrypted key for a wallet people then funded. Existing keystores are
+  // untouched; only creating a new plaintext one needs the flag.
+  if (!store && !PASSPHRASE && !process.argv.includes("--plaintext")) {
+    process.stderr.write(
+      `No wallet at ${KEYSTORE}, and none will be created unencrypted by default.\n\n` +
+        `  Encrypted (recommended):  AIFINPAY_WALLET_PASSPHRASE='<a long passphrase>' npx @aifinpay/mcp init\n` +
+        `  Disposable test wallet:   npx @aifinpay/mcp init --plaintext\n\n` +
+        `Keep the passphrase: an encrypted wallet cannot be recovered without it.\n`
+    );
+    process.exit(2);
+  }
   if (!store) {
     mkdirSync(HOME, { recursive: true, mode: 0o700 });
     const secretB58 = Agent.new().secretB58;
@@ -208,7 +223,7 @@ if (arg === "init") {
     process.stdout.write(
       PASSPHRASE
         ? `Created ${KEYSTORE} (mode 600, ENCRYPTED). Keep AIFINPAY_WALLET_PASSPHRASE — the wallet is unrecoverable without it.\n\n`
-        : `Created ${KEYSTORE} (mode 600, plaintext). For at-rest encryption, set AIFINPAY_WALLET_PASSPHRASE before init.\n\n`
+        : `Created ${KEYSTORE} (mode 600, PLAINTEXT — --plaintext). Use it for testing only; for a funded wallet, re-create it with AIFINPAY_WALLET_PASSPHRASE set.\n\n`
     );
   } else {
     process.stdout.write(`Existing wallet found at ${KEYSTORE} — keeping it.\n\n`);
