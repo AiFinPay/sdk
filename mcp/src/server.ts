@@ -12,6 +12,7 @@ import { loadWalletIdentity } from "./identity.js";
 import { agentHistoryTool, runAgentHistory } from "./tools/agent-history.js";
 import { devPaymentQuoteTool, runDevPaymentQuote } from "./tools/dev-payment-quote.js";
 import { agentAddressTool, runAgentAddress } from "./tools/agent-address.js";
+import { agentClaimSelfTool, runAgentClaimSelf } from "./tools/agent-claim-self.js";
 import { agentQuotaTool, runAgentQuota } from "./tools/agent-quota.js";
 import { makeSafeFetch } from "./safe-fetch.js";
 import { loadConfigFromEnv, validatePaymentConfig } from "./config.js";
@@ -120,6 +121,9 @@ export async function createServer(config: McpConfig = {}) {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       agentAddressTool(),
+      // Links the agent to its owner's dashboard. Signs only an AiFinPay claim
+      // challenge for this agent's own address, on allowed origins; no funds.
+      agentClaimSelfTool(),
       {
         name: "agent_reload",
         description:
@@ -183,6 +187,8 @@ export async function createServer(config: McpConfig = {}) {
         return runPayableFetch(ctx, args ?? {});
       case "agent_address":
         return runAgentAddress(ctx, args ?? {});
+      case "agent_claim_self":
+        return runAgentClaimSelf(ctx, args ?? {});
       case "agent_quota":
         return runAgentQuota(ctx, args ?? {});
       case "agent_history":

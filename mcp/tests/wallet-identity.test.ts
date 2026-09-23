@@ -135,7 +135,13 @@ describe("persistent wallet identity", () => {
         uri: "aifinpay://skill",
         mimeType: "text/markdown",
       });
-      expect(String((skill.contents[0] as { text?: string }).text)).toContain("does not register payable_fetch");
+      // The bundled skill must describe the payments this server ships. It used
+      // to say MCP was read-only and payments were "release pending" — this line
+      // asserted exactly that — and agents following it refused to pay.
+      const skillText = String((skill.contents[0] as { text?: string }).text);
+      expect(skillText).toContain("payable_fetch");
+      expect(skillText).toContain("agent_claim_self");
+      expect(skillText).not.toMatch(/Published MCP 2\.1\.0 is read-only|not yet released/);
       f.write([{ id: "one", seed_hash: seedB }]);
       const result = await client.callTool({ name: "agent_reload", arguments: {} });
       expect(result.isError).not.toBe(true);

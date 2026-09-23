@@ -21,8 +21,9 @@ from .errors import (
 from .facilitators import PayOptions, detect_facilitator
 from .facilitators.base import canonical_origin
 
-# Canonical domain is aifinpay.io. The legacy aifinpay.company host is
-# fully retired (DNS removed) — do not use it.
+# Canonical domain is aifinpay.io. The legacy aifinpay.company host still
+# answers, with a 301 to aifinpay.io — do not use it: a client that follows a
+# 301 may re-send a POST as a GET and lose the body.
 DEFAULT_BASE_URL = "https://aifinpay.io"
 DEFAULT_TIMEOUT = 30  # seconds
 

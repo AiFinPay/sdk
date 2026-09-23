@@ -18,6 +18,7 @@ Dependencies (declared in pyproject.toml):
 
 from __future__ import annotations
 
+import re
 import contextlib
 import hashlib
 import os
@@ -82,8 +83,9 @@ except ImportError as e:  # pragma: no cover
 
 # ── Constants ───────────────────────────────────────────────────────────────
 
-# Canonical domain is aifinpay.io. The legacy aifinpay.company host is
-# fully retired (DNS removed) — do not use it.
+# Canonical domain is aifinpay.io. The legacy aifinpay.company host still
+# answers, with a 301 to aifinpay.io — do not use it: a client that follows a
+# 301 may re-send a POST as a GET and lose the body.
 # Which path serves the registry depends on the host, and the two disagree:
 #
 #   aifinpay.io/api/providers      -> JSON
@@ -774,6 +776,25 @@ class AiFinPayAgent:
         if not nonce:
             raise AiFinPayError("network nonce: empty response")
         return nonce
+
+    def sign_dashboard_claim(self, challenge: str) -> str:
+        """Sign the challenge that links this agent to its owner's dashboard
+        (https://dash.aifinpay.io -> My Agents -> Add agent by address).
+
+        Signs ONLY ``AiFinPay-claim:polygon:<this agent's address>:<32 hex nonce>``
+        -- the exact message the dashboard issues -- and refuses anything else,
+        so it cannot be used to get this key's signature over arbitrary text.
+        The owner pastes the returned signature into the dashboard.
+        """
+        prefix = f"AiFinPay-claim:polygon:{self.evm_address.lower()}:"
+        message = str(challenge or "").strip()
+        nonce = message[len(prefix):]
+        if not message.lower().startswith(prefix.lower()) or not re.fullmatch(r"[0-9a-f]{32}", nonce):
+            raise AiFinPayError(
+                f'not a dashboard claim challenge for this agent -- expected "{prefix}<nonce>" '
+                "from dash.aifinpay.io"
+            )
+        return self._sign_evm(message)
 
     def _sign_evm(self, message: str) -> str:
         """EIP-191 personal_sign with the agent's own EVM key — produces a

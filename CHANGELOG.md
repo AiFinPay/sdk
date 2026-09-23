@@ -1,3 +1,24 @@
+## MCP 2.2.4 / Node 2.1.4 / Python 2.1.1 — 2026-09-23
+
+- MCP `payable_fetch`: the independent POL/USD rate no longer depends on one
+  host. It reads Chainlink POL/USD on Polygon over the agent's own RPC, then
+  api.coinbase.com, then api.coingecko.com (`polygon-ecosystem-token`), each
+  with a freshness check. A sandbox that blocked Coinbase stopped every payment
+  before it began; now the error, if every source fails, names each host tried.
+- MCP: `agent_claim_self` is registered. The owner generates a one-time URL at
+  dash.aifinpay.io → My Agents → Claim via MCP and the agent links itself; the
+  tool still contacts only AiFinPay origins and signs only its own claim
+  challenge. Its reply points at dash.aifinpay.io (was dashboard.aifinpay.io)
+  and recommends funding POL, which is what `payable_fetch` settles in.
+- MCP: `agent_address` no longer says payment signing is absent, and offers the
+  dashboard link; `init` prints the payment settings and the dashboard step.
+- Node `signDashboardClaim(challenge)` / Python `sign_dashboard_claim(challenge)`:
+  sign the dashboard's "Add agent by address" challenge — only
+  `AiFinPay-claim:polygon:<own address>:<nonce>`, nothing else.
+- READMEs: released status instead of "source candidate"; network access for
+  sandboxes; Python states plainly that it cannot pay AIFP-1 v1.4 yet and no
+  longer describes the closed Solana Seat flow.
+
 ## MCP 2.2.3 — 2026-09-23
 
 - `npx @aifinpay/mcp init` no longer creates an unencrypted wallet by default.

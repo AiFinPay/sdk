@@ -1,11 +1,28 @@
 # @aifinpay/agent (Node / TypeScript)
 
-Source candidate **2.1.0** adds native Polygon/Amoy v1.4 execution with pinned
-runtime, signer and current profile checks. `fetchPaid` supports Polygon v1.4
+Version **2.1.4**. Native Polygon v1.4 execution with pinned runtime, signer and
+current profile checks is released (since 2.1.0). `fetchPaid` buys Polygon v1.4
 receipts through explicit `v14` authorization, a durable pre-broadcast journal,
-fresh independent POL/USD pricing and a separate gas cap. Stable-token v1.4
-execution and legacy `call()` remain unavailable. This source is not evidence
-of a published release or a completed funded acceptance run.
+a fresh independent POL/USD rate you supply (`nativeUsdPrice`) and a separate
+gas cap. Stable-token v1.4 execution and legacy `call()` remain unavailable.
+
+For `nativeUsdPrice`, any source independent of the quote works: Chainlink
+POL/USD on Polygon (`0xAB594600376Ec9fD91F8e885dADF0CE036862dE0`, 8 decimals),
+Coinbase `POL-USD`, or CoinGecko id `polygon-ecosystem-token` (not the retired
+`matic-network`, which stopped updating in February 2026).
+
+### Link the agent to its owner's dashboard
+
+At https://dash.aifinpay.io → My Agents → Add agent by address the owner gets a
+challenge. Sign it and hand back the signature:
+
+```ts
+const signature = await agent.signDashboardClaim(challenge);
+```
+
+`signDashboardClaim` signs only `AiFinPay-claim:polygon:<this address>:<nonce>`
+and refuses any other text. The owner then sees the agent's balance, payments
+and receipts.
 
 The accepted v1.4 contract model allows administrators to change profile fees
 and treasury. Preflight verifies current values; it does not make them immutable.
