@@ -28,7 +28,7 @@ import json
 import os
 import time
 from calendar import timegm
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_CEILING, Decimal, InvalidOperation
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlsplit
 
@@ -105,7 +105,34 @@ def default_units_for(challenge: Dict[str, Any]) -> int:
         return FALLBACK_UNITS
     if not base.is_finite() or base <= 0:
         return FALLBACK_UNITS
-    return max(1, int(-(-DEFAULT_BATCH_USD // base)))
+    return max(1, int((DEFAULT_BATCH_USD / base).to_integral_value(rounding=ROUND_CEILING)))
+
+
+# ── Scope, ported from backend/aifp/scope.js (same as node/src/aifp1.ts) ────
+
+
+def pattern_covers(pattern: str, path: str) -> bool:
+    pat = str(pattern or "")
+    if not pat.endswith("/*"):
+        return path == pat
+    return path == pat[:-2] or path.startswith(pat[:-1])
+
+
+def scope_covers(scope: Optional[str], resource: str, path: str) -> bool:
+    if scope == "merchant":
+        return True
+    if scope == "prefix":
+        if resource == "/" or path == resource:
+            return True
+        # The trailing slash is what stops /articles covering /articles-internal.
+        return path.startswith(resource if resource.endswith("/") else resource + "/")
+    return pattern_covers(resource, path)
+
+
+def prefix_hint(path: str) -> str:
+    """/articles/2026/thing → /articles/; a single-segment path → "/" (the whole site)."""
+    segs = [s for s in str(path or "/").split("/") if s]
+    return f"/{segs[0]}/" if len(segs) > 1 else "/"
 
 
 def _micro_usd(amount: Any) -> int:
@@ -439,14 +466,23 @@ def aifp1_fetch(
     ledger: SpendLedger,
     max_gas_wei: int,
     on_prepared: Callable[[Dict[str, Any]], None],
-    receipts: Dict[Tuple[str, str], Dict[str, Any]],
+    receipts: Dict[str, List[Dict[str, Any]]],
     asset: str = "POL",
+    scope: str = "prefix",
     api_base: str = DEFAULT_API_BASE,
     issuer: str = DEFAULT_API_BASE,
     units: Optional[int] = None,
     agent_id: Optional[str] = None,
 ) -> requests.Response:
-    """GET ``url``; on an AIFP-1 402 buy one batch and retry with its receipt."""
+    """GET ``url``; on an AIFP-1 402 buy one batch and retry with its receipt.
+
+    ``receipts`` maps merchant_id → receipts bought from it; one that covers the
+    challenged resource is tried before anything new is bought. ``scope`` is
+    "prefix" by default for the same reason as in Node: an "exact" batch per URL
+    costs the $0.10 floor and a transaction for every distinct page.
+    """
+    if scope not in ("exact", "prefix", "merchant"):
+        raise Aifp1QuoteError(f"unknown scope {scope!r}")
     if not url.startswith("https://") or _origin(url) not in allowed_origins:
         raise Aifp1QuoteError("the URL must use an owner-approved exact HTTPS origin")
     response = session.get(url, timeout=30, allow_redirects=False)
@@ -459,19 +495,28 @@ def aifp1_fetch(
     merchant_id, resource = challenge.get("merchant_id"), challenge.get("resource")
     if challenge.get("protocol") != "AIFP-1" or not merchant_id or not resource:
         return response  # not an AIFP-1 challenge; never fall through to another protocol
-    key = (merchant_id, resource)
-    cached = receipts.get(key)
-    if cached and cached["expires_at"] > time.time():
+    held = receipts.setdefault(merchant_id, [])
+    held[:] = [e for e in held if e["expires_at"] > time.time()]
+    for cached in list(held):
+        if not scope_covers(cached["scope"], cached["resource"], resource):
+            continue
         retry = session.get(url, headers={"AIFP-Receipt": cached["jwt"]}, timeout=30, allow_redirects=False)
         if retry.status_code != 402:
             return retry
-        receipts.pop(key, None)
+        held.remove(cached)  # spent or revoked; buy a new batch
+    if scope == "merchant":
+        want_resource = "*"
+    elif scope == "prefix":
+        want_resource = prefix_hint(resource)
+    else:
+        want_resource = resource
 
     stable = asset != "POL"
     if stable:
         _pinned_stable(asset)
     r = session.post(f"{api_base.rstrip('/')}/v1/quote", json={
-        "merchant_id": merchant_id, "payer": account.address, "resource": resource, "scope": "exact",
+        "merchant_id": merchant_id, "payer": account.address, "scope": scope,
+        **({} if scope == "merchant" else {"resource": want_resource}),
         "units": units or default_units_for(challenge), **({"agent_id": agent_id} if agent_id else {}),
         **({"asset": asset} if stable else {}),
     }, timeout=15, allow_redirects=False)
@@ -481,8 +526,9 @@ def aifp1_fetch(
     auth = quote.get("payment_authorization") or {}
     if (
         quote.get("merchant_id") != merchant_id
-        or quote.get("resource") != resource
-        or quote.get("scope") != "exact"
+        or quote.get("resource") != want_resource
+        or quote.get("scope") != scope
+        or not scope_covers(scope, want_resource, resource)
         or quote.get("currency") != "USD"
         or (quote.get("network_mode") or "live") != "live"
         or (quote.get("payer") and str(quote["payer"]).lower() != account.address.lower())
@@ -526,6 +572,6 @@ def aifp1_fetch(
     ledger.record(amount_usd)
     recovery["tx_ref"] = result["hash"]
     paid = submit_payment(session, account, recovery, agent_id=agent_id)
-    receipts[key] = {"jwt": paid["receipt"], "expires_at": _iso_to_unix(paid["expires_at"]),
-                     "receipt_id": paid["receipt_id"], "unit_quota": paid["unit_quota"]}
+    held.append({"jwt": paid["receipt"], "expires_at": _iso_to_unix(paid["expires_at"]), "scope": paid["scope"],
+                 "resource": paid["resource"], "receipt_id": paid["receipt_id"], "unit_quota": paid["unit_quota"]})
     return session.get(url, headers={"AIFP-Receipt": paid["receipt"]}, timeout=30, allow_redirects=False)
