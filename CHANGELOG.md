@@ -1,3 +1,12 @@
+## MCP 2.3.1 — unreleased
+
+- `aifinpay://skill` is current again. 2.3.0 shipped the skill as of 2.1.0 —
+  it named MCP 2.2.4 as current, said Python cannot pay and did not mention
+  USDC — because `prebuild` copies the installed `@aifinpay/skill` and the
+  lockfile still resolved `^2.1.0` to 2.1.0. Depends on `@aifinpay/skill`
+  ^2.4.0 now, and a test fails the build when the bundled copy differs from
+  the installed skill or names another MCP release line as current.
+
 ## Python 2.2.1 — unreleased
 
 - `fetch_paid` default `max_gas_pol` is 0.5 POL, up from 0.05. The cap bounds

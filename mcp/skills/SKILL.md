@@ -5,7 +5,7 @@ description: Pay for x402-gated APIs and sites as an agent (AIFP-1 on Polygon,
   and read wallet, payment history, prepaid quotas and Agent Passport records
   through the AiFinPay MCP server or SDK.
 license: MIT
-version: 2.1.0
+version: 2.4.0
 author: AiFinPay Support
 metadata:
   hermes:
@@ -41,7 +41,7 @@ metadata:
 wallet, within limits its owner sets, and gets a receipt that unlocks a batch of
 requests. Settlement is non-custodial: the agent's private key signs locally and
 no AiFinPay-controlled custodian touches funds. MCP `payable_fetch` (2.2.0+) and
-Node `fetchPaid` (2.1.0+) execute payments; the Python SDK does not yet.
+Node `fetchPaid` (2.1.0+) and Python `fetch_paid` (2.2.0+) execute payments.
 
 ## Prerequisites — required packages
 
@@ -60,20 +60,20 @@ your language. There is no "install together" scenario.
 
 ## Version and release status
 
-Released and current: MCP **2.2.4**, Node SDK **2.1.4**, Python **2.1.1**.
+Released and current: MCP **2.3.0**, Node SDK **2.2.0**, Python **2.2.1**.
 Payments are released — `payable_fetch` has shipped since MCP 2.2.0. An older
 copy of this skill that calls MCP "read-only" or payments "release pending" is
 out of date; follow this one. Install the `latest` release.
 
 | Surface | Can it pay? |
 |---|---|
-| MCP `@aifinpay/mcp` 2.2.x | Yes — `payable_fetch`, once the owner enables payments |
-| Node `@aifinpay/agent` 2.1.x | Yes — `fetchPaid` with a v14 journal, gas cap and your own POL/USD rate |
-| Python `aifinpay-agent` | No — use MCP or Node to pay |
+| MCP `@aifinpay/mcp` 2.3.x | Yes — `payable_fetch`, once the owner enables payments; POL, or USDC with `AIFINPAY_PAY_ASSET=USDC` |
+| Node `@aifinpay/agent` 2.2.x | Yes — `fetchPaid` with a v14 journal and gas cap; POL (with your own POL/USD rate) or USDC (`v14.asset: "USDC"`) |
+| Python `aifinpay-agent` 2.2.x | Yes — `agent.fetch_paid(url, allowed_origins=…, max_amount_usd=…, daily_amount_usd=…)`; POL (priced independently) or USDC (`asset="USDC"`); recover an unconfirmed payment with `agent.recover_paid(journal_path)` |
 
 # AiFinPay agent workflow
 
-Use the tools actually returned by MCP tools/list. MCP 2.2.4 exposes
+Use the tools actually returned by MCP tools/list. MCP 2.3.0 exposes
 agent_address, agent_reload, agent_claim_self, agent_history, agent_quota,
 agent_passport_resolve, settlement_routes, settlement_invoice and
 deployment_info; `payable_fetch` appears when the owner has enabled payments.
@@ -95,14 +95,18 @@ The owner configures these MCP environment values (example limits only):
 }
 ```
 
-The smallest batch is **$0.10 plus gas**, paid in **POL on Polygon**; keep
-`AIFINPAY_MAX_USD` a little above the batch you expect to buy. Use an existing
-persistent wallet or create one with `npx @aifinpay/mcp init` (a passphrase is
-required); fund its EVM address with POL. Funding a wallet does not establish
+The smallest batch is **$0.10 plus gas** on **Polygon**; keep `AIFINPAY_MAX_USD`
+a little above the batch you expect to buy. It is paid in **POL** by default.
+To pay in **USDC** instead, the owner also sets `"AIFINPAY_PAY_ASSET": "USDC"`:
+the wallet then needs USDC for the batch plus a little POL (about 0.05) for gas,
+because the tool approves exactly the batch amount and then settles — two
+transactions, both within `AIFINPAY_MAX_GAS_POL`. Use an existing persistent
+wallet or create one with `npx @aifinpay/mcp init` (a passphrase is required);
+fund its EVM address on Polygon with POL, or with USDC plus some POL. Funding a wallet does not establish
 unlimited spend authority. Use the owner's actual approved limits and origins,
 then call `payable_fetch({"url":"https://merchant.example/api/data"})`.
 
-It supports GET resources and native Polygon AIFP-1 v1.4 payments. It verifies
+It supports GET resources and Polygon AIFP-1 v1.4 payments in POL or USDC. It verifies
 the quote, price, deployment, signer and receipt, saves the transaction before
 broadcasting, and reuses the purchased batch. No custom merchant script is
 needed. Other protocol/version/asset paths fail closed.
@@ -115,7 +119,8 @@ owner reconciliation. Raw transactions and receipt JWTs remain private.
 ### Network access
 
 In a sandbox that allowlists outbound hosts, allow `api.aifinpay.io` and a
-Polygon RPC. For the independent POL/USD check MCP 2.2.4 reads Chainlink on
+Polygon RPC. USDC payments need nothing else. For the independent POL/USD check
+on POL payments MCP 2.3.0 reads Chainlink on
 Polygon over that RPC, then `api.coinbase.com`, then `api.coingecko.com` — one
 is enough. (MCP 2.2.3 used only `api.coinbase.com`.) If no rate is available,
 `payable_fetch` stops before paying and nothing is spent; tell the owner which
