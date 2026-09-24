@@ -75,7 +75,12 @@ async function fixture() {
     routeId: routeIdOf("merchant-aifp1"),
   } as const;
   const message = { ...q, grossAmount: GROSS, validUntil: BigInt(q.validUntil), nonce: 0n };
-  const domain = { name: "B2BSplitterV14", version: "1", chainId: dep.chainId, verifyingContract: dep.splitter.address };
+  const domain = {
+    name: "B2BSplitterV14",
+    version: "1",
+    chainId: dep.chainId,
+    verifyingContract: dep.splitter.address,
+  };
   const signature = await signer.signTypedData({ domain, types: { Quote: fields }, primaryType: "Quote", message });
   const call: V14SettlementCall = {
     chain: "polygon",
@@ -91,13 +96,29 @@ async function fixture() {
     args: { quote: { ...q }, signature },
   };
   const paymentId = keccak256(
-    encodeAbiParameters(fields, [q.payer, q.merchant, q.token, GROSS, q.ipCreator, message.validUntil, q.orderIdHash, 0n, q.routeId])
+    encodeAbiParameters(fields, [
+      q.payer,
+      q.merchant,
+      q.token,
+      GROSS,
+      q.ipCreator,
+      message.validUntil,
+      q.orderIdHash,
+      0n,
+      q.routeId,
+    ])
   );
   const paymentLog = (token: `0x${string}` = USDC) => ({
     address: dep.splitter.address,
-    topics: encodeEventTopics({ abi: paymentAbi, eventName: "Payment", args: { paymentId, payer: q.payer, merchant: q.merchant } }),
+    topics: encodeEventTopics({
+      abi: paymentAbi,
+      eventName: "Payment",
+      args: { paymentId, payer: q.payer, merchant: q.merchant },
+    }),
     data: encodeAbiParameters(
-      ["address", "uint256", "uint256", "uint256", "uint256", "uint256", "bytes32", "bytes32"].map((type) => ({ type })),
+      ["address", "uint256", "uint256", "uint256", "uint256", "uint256", "bytes32", "bytes32"].map((type) => ({
+        type,
+      })),
       [token, GROSS, 99000n, 1000n, 0n, message.validUntil, q.routeId, q.orderIdHash]
     ),
   });
@@ -142,7 +163,11 @@ async function fixture() {
     waitForTransactionReceipt: vi.fn(async ({ hash }: { hash: Hex }) => {
       const index = sent.findIndex((s) => keccak256(s) === hash);
       const isApprove = parseTransaction(sent[index]).to?.toLowerCase() === USDC.toLowerCase();
-      return { status: isApprove ? approveStatus : "success", transactionHash: hash, logs: isApprove ? [] : [settleLog] };
+      return {
+        status: isApprove ? approveStatus : "success",
+        transactionHash: hash,
+        logs: isApprove ? [] : [settleLog],
+      };
     }),
   };
   const wallet = {
@@ -205,7 +230,11 @@ describe("v1.4 settleStable execution", () => {
   it.each([
     ["an unpinned token", (f: any) => (f.call.args.quote.token = merchant), "V14_PURCHASE_MISMATCH"],
     ["an asset label that is not the pinned symbol", (f: any) => (f.call.asset = "USDT"), "V14_UNSUPPORTED_ASSET"],
-    ["an approval larger than the gross", (f: any) => (f.call.approval.amount = String(GROSS * 1000n)), "V14_APPROVAL_MISMATCH"],
+    [
+      "an approval larger than the gross",
+      (f: any) => (f.call.approval.amount = String(GROSS * 1000n)),
+      "V14_APPROVAL_MISMATCH",
+    ],
     ["an approval to another spender", (f: any) => (f.call.approval.spender = merchant), "V14_APPROVAL_MISMATCH"],
     ["no approval block", (f: any) => delete f.call.approval, "V14_APPROVAL_MISMATCH"],
     ["value on a token quote", (f: any) => (f.call.value_wei = String(GROSS)), "V14_VALUE_MISMATCH"],
