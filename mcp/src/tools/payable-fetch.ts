@@ -8,7 +8,7 @@ export function payableFetchTool() {
   return {
     name: "payable_fetch",
     description:
-      "Fetch a GET resource from an owner-approved AiFinPay merchant. Buys a prepaid batch through verified native Polygon v1.4 within owner limits, then reuses its receipt. Pending payments are recovered without sending another transaction. Other payment protocols are unsupported.",
+      "Fetch a GET resource from an owner-approved AiFinPay merchant. Buys a prepaid batch through verified Polygon v1.4 — in native POL, or in the stablecoin the owner set in AIFINPAY_PAY_ASSET (e.g. USDC; gas is still POL) — within owner limits, then reuses its receipt. Pending payments are recovered without sending another transaction. Other payment protocols are unsupported.",
     inputSchema: {
       type: "object",
       properties: {
@@ -61,6 +61,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
       typeof args.max_amount_usd === "number" ? args.max_amount_usd : Infinity
     );
     const parsed = parseGatewayUrl(url.href, ctx.config.gatewayOrigins, ctx.config.gatewayPathMode);
+    const payAsset = ctx.config.payAsset ?? "POL";
     return await store.exclusive(async () => {
       state = store.read();
       for (const entry of ctx.agent.aifp1Receipts.list()) ctx.agent.aifp1Receipts.evict(entry);
@@ -77,9 +78,11 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
           pending.recovery.quote.payer?.toLowerCase() !== ctx.agent.evmAddress.toLowerCase() ||
           call?.chain !== "polygon" ||
           call.splitter_version !== "1.4" ||
-          pending.recovery.asset !== "POL"
+          // Native calls from earlier versions may lack the field; they were POL.
+          ((call as { asset?: string }).asset ?? "POL") !== pending.recovery.asset ||
+          !["POL", payAsset].includes(pending.recovery.asset)
         ) {
-          throw new Error("Pending payment does not match configured wallet/API/native Polygon route");
+          throw new Error("Pending payment does not match configured wallet/API/Polygon v1.4 route and asset");
         }
         const paid = await ctx.agent.recoverPaidPayment(pending.recovery, { paymentIssuer: configuredApi });
         const receipt: Aifp1CachedReceipt = {
@@ -126,16 +129,23 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
               return price;
             },
             v14: {
+              ...(payAsset !== "POL" ? { asset: payAsset } : {}),
               maxGasWei,
               onPrepared: async (prepared) => {
                 if (state!.pending) throw new Error("A payment is already pending");
-                if (!price || Date.now() - price.observedAtMs > 60_000)
-                  throw new Error("Independent price expired before preparation");
-                const native = prepared.quote.native_settlement;
-                const usd = Math.max(
-                  Number(prepared.quote.amount),
-                  (Number(BigInt(native!.total_wei)) / 1e18) * price.usd
-                );
+                // A stablecoin batch is dollars already: the SDK bound the signed
+                // gross to the quoted USD amount exactly. Only a native batch
+                // needs the independent POL price.
+                let usd: number;
+                if (payAsset !== "POL") {
+                  if (prepared.asset !== payAsset) throw new Error("Prepared payment is not in the configured asset");
+                  usd = Number(prepared.quote.amount);
+                } else {
+                  if (!price || Date.now() - price.observedAtMs > 60_000)
+                    throw new Error("Independent price expired before preparation");
+                  const native = prepared.quote.native_settlement;
+                  usd = Math.max(Number(prepared.quote.amount), (Number(BigInt(native!.total_wei)) / 1e18) * price.usd);
+                }
                 if (
                   !Number.isFinite(usd) ||
                   usd <= 0 ||

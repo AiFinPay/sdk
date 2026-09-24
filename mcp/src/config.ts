@@ -21,6 +21,9 @@ export interface McpConfig {
   paymentsEnabled?: boolean;
   dailyAmountUsd?: number;
   maxGasPol?: string;
+  /** What payable_fetch pays with: "POL" (default) or a stablecoin the SDK
+   *  pins for Polygon v1.4, e.g. "USDC". Gas is paid in POL either way. */
+  payAsset?: string;
 
   /** Hard cap on a single payment to prevent runaway agents. */
   maxAmountUsd?: number;
@@ -69,6 +72,7 @@ export function loadConfigFromEnv(): McpConfig {
     paymentsEnabled: process.env.AIFINPAY_PAYMENTS_ENABLED === "1",
     dailyAmountUsd: process.env.AIFINPAY_DAILY_USD ? Number(process.env.AIFINPAY_DAILY_USD) : undefined,
     maxGasPol: process.env.AIFINPAY_MAX_GAS_POL || undefined,
+    payAsset: process.env.AIFINPAY_PAY_ASSET || undefined,
     devMode: process.env.AIFINPAY_MODE === "dev",
     seedHash: process.env.SEED_HASH,
     agentsFile: process.env.AIFINPAY_AGENTS_FILE || undefined,
@@ -166,6 +170,8 @@ export function validatePaymentConfig(config: McpConfig): bigint {
     })
   )
     throw new Error("Payments require explicit exact HTTPS AIFINPAY_GATEWAY_ORIGINS");
+  if (config.payAsset !== undefined && !/^[A-Z][A-Z0-9.]{1,11}$/.test(config.payAsset))
+    throw new Error('AIFINPAY_PAY_ASSET must be "POL" or a stablecoin symbol such as "USDC"');
   const gas = config.maxGasPol;
   if (typeof gas !== "string" || !/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,18})?$/.test(gas))
     throw new Error("AIFINPAY_MAX_GAS_POL must be a positive decimal with at most 18 places");
