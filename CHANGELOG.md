@@ -1,3 +1,13 @@
+## Deployments 1.1.3 — unreleased
+
+- Polygon v1.4 pins USDT0 (`0xc2132D05D31c914a87C6611C10748AEb04B58e8F`) as
+  asset `USDT`, from AiFinPay/evm-contract#39. A stablecoin quote in it is
+  signed only once the Polygon TokenList also allows it (Safe transaction in
+  that PR); until then the backend refuses with `V14_TOKEN_NOT_ALLOWED`.
+- `source.commit` names the evm-contract commit the data came from, and the
+  generator now writes the note that Polygon uses a separate Safe — both were
+  hand-edits the previous regeneration would have dropped.
+
 ## MCP 2.3.1 — unreleased
 
 - `aifinpay://skill` is current again. 2.3.0 shipped the skill as of 2.1.0 —
