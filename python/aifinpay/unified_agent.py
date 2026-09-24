@@ -855,7 +855,7 @@ class AiFinPayAgent:
         allowed_origins: list[str],
         max_amount_usd: float,
         daily_amount_usd: float,
-        max_gas_pol: float = 0.05,
+        max_gas_pol: float = 0.5,
         journal_dir: [str] = None,
         asset: str = "POL",
         scope: str = "prefix",
@@ -872,6 +872,12 @@ class AiFinPayAgent:
         ``max_amount_usd`` and the rolling-24h ``daily_amount_usd``. POL is
         priced against an independent POL/USD source (Chainlink over
         ``polygon_rpc``, then Coinbase, then CoinGecko), never the quote.
+
+        ``max_gas_pol`` caps the WORST-CASE fee (gas bound x (2 x base fee +
+        tip)) of the approval and the settlement together, and the wallet must
+        hold that much POL; what is actually spent is far less (~0.04 POL at a
+        250 gwei base fee). A cap below the worst case refuses before signing
+        with ``V14_GAS_BUDGET_EXCEEDED``.
 
         Receipts are kept on this agent and reused while their scope covers
         the path. Every prepared settlement is written to ``journal_dir``

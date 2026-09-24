@@ -1,3 +1,11 @@
+## Python 2.2.1 — unreleased
+
+- `fetch_paid` default `max_gas_pol` is 0.5 POL, up from 0.05. The cap bounds
+  the worst-case fee of approval plus settlement at twice the base fee plus the
+  tip; with Polygon's base fee around 250 gwei (2026-09-24) a USDC purchase
+  needs ~0.19 POL of headroom, so 0.05 refused every payment with
+  `V14_GAS_BUDGET_EXCEEDED` before signing. Actual spend is ~0.04 POL.
+
 ## Python 2.2.0 — unreleased
 
 - `AiFinPayAgent.fetch_paid(url, allowed_origins=…, max_amount_usd=…,

@@ -84,3 +84,15 @@ def test_a_pay_error_points_at_its_journal_and_recovery_resumes_it(agent, tmp_pa
     assert submitted["recovery"]["tx_ref"] == tx and submitted["account"] is agent.evm_account
     assert paid["receipt_id"] == "rcpt_1"
     assert agent._aifp1_receipts["mrch_acme"][0]["jwt"] == "h.p.s"
+
+
+def test_the_default_gas_cap_covers_a_usdc_purchase_at_a_250_gwei_base_fee(agent, tmp_path, monkeypatch):
+    from aifinpay.settlement_v14 import STABLE_SETTLE_GAS_BOUND
+
+    seen = {}
+    monkeypatch.setattr(a, "aifp1_fetch", lambda url, **kw: seen.update(kw) or "ok")
+    agent.fetch_paid("https://shop.example/x", allowed_origins=["https://shop.example"],
+                     max_amount_usd=1, daily_amount_usd=1, journal_dir=str(tmp_path))
+    worst_fee = 2 * 250 * 10**9 + 30 * 10**9  # 2 x base fee + tip, in wei per gas
+    approval_bound = 70_000
+    assert seen["max_gas_wei"] >= (approval_bound + STABLE_SETTLE_GAS_BOUND) * worst_fee
