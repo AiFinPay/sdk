@@ -282,3 +282,72 @@ describe("reviewed AIFP-1 payable_fetch", () => {
     expect(f.store.read().spend).toHaveLength(1);
   });
 });
+
+// ── Paying in a stablecoin (AIFINPAY_PAY_ASSET) ─────────────────────────────
+const usdcPrepared = {
+  ...prepared,
+  quote: {
+    payer: address,
+    settlement_call: { chain: "polygon", splitter_version: "1.4", asset: "USDC" },
+    quote_id: "quote_usdc",
+    merchant_id: "merchant_one",
+    amount: "0.1",
+  },
+  asset: "USDC",
+};
+
+describe("payable_fetch in USDC", () => {
+  it("asks the SDK for a USDC purchase and budgets it from the quoted dollars, without a POL price", async () => {
+    const f = fixture();
+    f.ctx.config.payAsset = "USDC";
+    f.fetchPaid.mockImplementationOnce(async (_url, _init, options) => {
+      expect(options.v14.asset).toBe("USDC");
+      await options.v14.onPrepared(usdcPrepared);
+      expect(f.store.read().pending?.recovery.asset).toBe("USDC");
+      return new Response("content");
+    });
+    const result = await runPayableFetch(f.ctx, args);
+    expect(result.isError).not.toBe(true);
+    expect(f.store.read().spend.map((s) => s.usd)).toEqual([0.1]);
+    expect(f.price).not.toHaveBeenCalled();
+  });
+
+  it("refuses to record a prepared payment in another asset than the owner configured", async () => {
+    const f = fixture();
+    f.ctx.config.payAsset = "USDC";
+    f.fetchPaid.mockImplementationOnce(async (_url, _init, options) => {
+      await options.v14.onPrepared(prepared); // POL
+      return new Response("content");
+    });
+    expect((await runPayableFetch(f.ctx, args)).isError).toBe(true);
+    expect(f.store.read().pending).toBeUndefined();
+    expect(f.store.read().spend ?? []).toHaveLength(0);
+  });
+
+  it("rejects a malformed AIFINPAY_PAY_ASSET before anything runs", async () => {
+    for (const bad of ["usdc", "USDC; rm", ""]) {
+      const f = fixture();
+      f.ctx.config.payAsset = bad;
+      expect((await runPayableFetch(f.ctx, args)).isError).toBe(true);
+      expect(f.fetchPaid).not.toHaveBeenCalled();
+    }
+  });
+
+  it("recovers a pending USDC payment only while the owner still pays in USDC", async () => {
+    const pendingUsdc = { recovery: usdcPrepared, serializedTransaction: "0xdeadbeef", site, amountUsd: 0.1 };
+    const f = fixture();
+    f.ctx.config.payAsset = "USDC";
+    const s = f.store.read();
+    s.pending = pendingUsdc;
+    f.store.save(s);
+    expect((await runPayableFetch(f.ctx, args)).isError).not.toBe(true);
+    expect(f.recoverPaidPayment).toHaveBeenCalledOnce();
+
+    const g = fixture();
+    const t = g.store.read();
+    t.pending = pendingUsdc;
+    g.store.save(t);
+    expect((await runPayableFetch(g.ctx, args)).isError).toBe(true);
+    expect(g.recoverPaidPayment).not.toHaveBeenCalled();
+  });
+});

@@ -30,13 +30,18 @@ owner. `direct` uses the full path for self-hosted sites; `gateway` uses the
 merchant slug on the hosted gateway. Restart/reconnect the MCP process after
 changing its environment.
 
+To pay in USDC instead of native POL, the owner also sets
+`"AIFINPAY_PAY_ASSET": "USDC"`. The wallet then needs USDC for the batch and a
+little POL for gas (an exact-amount token approval plus the settlement, both
+within `AIFINPAY_MAX_GAS_POL` together). Unset or `"POL"` keeps native POL.
+
 Call `payable_fetch({"url":"https://merchant.example/api/data"})`. The tool
 uses the original signed v1.4 quote, independent fresh POL/USD pricing, SDK
 runtime/signer verification and owner limits. It persists the prepared transaction
 before sending, verifies the receipt, and reuses the purchased batch. No special
-merchant script, alternate contract or facilitator fallback is used. GET, native
-POL, Polygon live mode only; Amoy payment receipts and stable-token execution are
-not supported. The smallest batch is $0.10 plus gas, so keep `AIFINPAY_MAX_USD`
+merchant script, alternate contract or facilitator fallback is used. GET,
+Polygon live mode only, in POL or the configured stablecoin; Amoy payment
+receipts are not supported. The smallest batch is $0.10 plus gas, so keep `AIFINPAY_MAX_USD`
 a little above the batch you expect to buy.
 
 ### Network access

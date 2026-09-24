@@ -1,3 +1,11 @@
+## MCP 2.3.0 / Node 2.2.0 — unreleased
+
+- MCP `payable_fetch` can pay in USDC: the owner sets `AIFINPAY_PAY_ASSET=USDC`
+  (unset or `POL` keeps native). The tool asks the SDK for a stablecoin
+  purchase, budgets it from the quoted USD amount (no POL price needed), refuses
+  a prepared payment in any other asset, and recovers a pending payment only in
+  POL or the configured asset. Requires `@aifinpay/agent` 2.2.0.
+
 ## Node 2.2.0 — unreleased
 
 - `fetchPaid` can pay a v1.4 quote in a stablecoin: `v14: { asset: "USDC", ... }`.
