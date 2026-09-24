@@ -1,3 +1,22 @@
+## Node 2.2.0 — unreleased
+
+- `fetchPaid` can pay a v1.4 quote in a stablecoin: `v14: { asset: "USDC", ... }`.
+  The asset must be one the SDK's own Polygon v1.4 pin lists; the quote is asked
+  for in that asset and must accept only it. A token quote needs no
+  `nativeUsdPrice`: the signed gross must equal the quote's settlement units and
+  its USD amount in 6-decimal micro-dollars, and the call's `approval` must be
+  exactly that gross to the pinned splitter.
+- `executeV14Settlement` settles `settleStable`: it checks the token is pinned,
+  still allowed by the splitter's tokenList, 6-decimal and fully held; approves
+  exactly the gross when the allowance is short (not journaled — an approval
+  moves no funds and is safe to repeat); then journals and sends settleStable
+  with value 0, and accepts only a Payment event in that token. `maxGasWei`
+  covers the approval and the settlement together. New refusal codes:
+  `V14_APPROVAL_MISMATCH`, `V14_TOKEN_NOT_ALLOWED`, `V14_TOKEN_DECIMALS`,
+  `V14_APPROVAL_FAILED`, `V14_APPROVAL_PENDING`.
+- Receipt verification checks the receipt's asset against the one paid.
+- Requires a backend that signs v1.4 token quotes (`/v1/quote` with `asset`).
+
 ## MCP 2.2.4 / Node 2.1.4 / Python 2.1.1 — 2026-09-23
 
 - MCP `payable_fetch`: the independent POL/USD rate no longer depends on one

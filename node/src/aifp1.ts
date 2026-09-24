@@ -34,7 +34,8 @@
 // the whole protocol without an RPC endpoint.
 // ──────────────────────────────────────────────────────────────────────────
 import { createHash, createPublicKey, verify as verifySignature } from "node:crypto";
-import { keccak256, stringToHex } from "viem";
+import { keccak256, parseUnits, stringToHex } from "viem";
+import { V14_DEPLOYMENTS } from "./generated/v14Deployments.generated.js";
 import { AiFinPayError } from "./errors.js";
 import { validateV14SettlementCall, type V14SettlementCall } from "./settlementV14.js";
 import { SettlementConfirmationPendingError } from "./settlement.js";
@@ -598,6 +599,13 @@ export interface Aifp1FetchOptions {
    * SDK registry, never from a merchant response. The journal must be durable
    * before broadcast; a prepared transaction must be recovered, never replaced. */
   v14?: {
+    /**
+     * Pay in a stablecoin the pinned Polygon deployment lists (e.g. "USDC")
+     * instead of native POL. Priced in dollars already, so no nativeUsdPrice
+     * is needed; gas is still paid in POL and counted against maxGasWei, which
+     * then covers the token approval as well as the settlement.
+     */
+    asset?: string;
     maxGasWei: bigint;
     onPrepared: (payment: Aifp1PaymentRecovery & { serializedTransaction: `0x${string}` }) => Promise<void>;
   };
@@ -744,6 +752,8 @@ export interface Aifp1Deps {
     validUntil: bigint;
     orderId: string;
     settlementCall?: Aifp1Quote["settlement_call"];
+    /** The token a stablecoin purchase was authorized in; omitted = native. */
+    token?: `0x${string}`;
     onPrepared?: (tx: { hash: `0x${string}`; serializedTransaction: `0x${string}` }) => Promise<void>;
   }): Promise<`0x${string}`>;
   /** Per-call cap. false ⇒ the caller asked to skip rather than throw. */
@@ -968,6 +978,7 @@ export async function aifp1Fetch(
       throw new Aifp1QuoteError("a settlement wallet signer is required to receive a payment receipt");
     }
     // 2. Quote.
+    const stableAsset = pinnedStableAsset(opts.v14?.asset);
     const apiBase = (opts.apiBaseUrl ?? DEFAULT_API_BASE).replace(/\/$/, "");
     const { scope, resource } = resolveScope(opts, challenge);
     const quote = await requestQuote(
@@ -980,6 +991,7 @@ export async function aifp1Fetch(
         scope,
         units: opts.units ?? defaultUnitsFor(challenge),
         agent_id: deps.agentId,
+        ...(stableAsset ? { asset: stableAsset } : {}),
       },
       opts.apiTimeoutMs
     );
@@ -1022,7 +1034,9 @@ export async function aifp1Fetch(
     if (!Number.isFinite(amountUsd) || amountUsd < 0) {
       throw new Aifp1QuoteError(`quote ${quote.quote_id} has an unusable amount "${quote.amount}"`);
     }
-    if (opts.settlementPin || opts.v14) {
+    if (stableAsset) {
+      validateStableV14Quote(quote, stableAsset, deps.payerAddress as `0x${string}`, quoteExpiryMs);
+    } else if (opts.settlementPin || opts.v14) {
       const price = typeof opts.nativeUsdPrice === "function" ? await opts.nativeUsdPrice() : opts.nativeUsdPrice;
       const age = price ? Date.now() - price.observedAtMs : NaN;
       if (
@@ -1107,79 +1121,111 @@ export async function aifp1Fetch(
     let settled = false;
     try {
       // 4. Settle on-chain, then exchange the tx for a receipt.
-      const native = quote.native_settlement;
-      if (!native) {
-        throw new Aifp1SettlementUnsupportedError(
-          `quote ${quote.quote_id} carries no native_settlement — the backend had no live POL rate, ` +
-            `and the deployed B2BSplitter has no ERC-20 entrypoint, so this SDK cannot settle ` +
-            `${quote.accepted_assets.join("/")}. Retry when a POL rate is available or settle the quote yourself.`
-        );
-      }
-      if (!quote.accepted_chains.includes("polygon") || !quote.pay_to.polygon) {
-        throw new Aifp1SettlementUnsupportedError(
-          `quote ${quote.quote_id} does not accept polygon (accepts ${quote.accepted_chains.join(", ")}) — ` +
-            `AIFP-1 settlement verification is Polygon-only server-side (aifp/verify-settlement.js)`
-        );
-      }
+      let settleParams: {
+        merchantWallet: `0x${string}`;
+        grossWei: bigint;
+        merchantWei: bigint;
+        treasuryWei: bigint;
+        creatorWei: bigint;
+        validUntil: bigint;
+        token?: `0x${string}`;
+      };
+      let paidAsset: string;
+      if (stableAsset) {
+        // Every figure here was checked against the signed quote, the pinned
+        // token and the USD amount in validateStableV14Quote before budgeting.
+        const signed = (quote.settlement_call as V14SettlementCall).args.quote;
+        const gross = BigInt(signed.grossAmount);
+        const treasury = gross / 100n;
+        settleParams = {
+          merchantWallet: quote.pay_to.polygon as `0x${string}`,
+          grossWei: gross,
+          merchantWei: gross - treasury,
+          treasuryWei: treasury,
+          creatorWei: 0n,
+          validUntil: BigInt(signed.validUntil),
+          token: signed.token as `0x${string}`,
+        };
+        paidAsset = stableAsset;
+      } else {
+        const native = quote.native_settlement;
+        if (!native) {
+          throw new Aifp1SettlementUnsupportedError(
+            `quote ${quote.quote_id} carries no native_settlement — the backend had no live POL rate, ` +
+              `and the deployed B2BSplitter has no ERC-20 entrypoint, so this SDK cannot settle ` +
+              `${quote.accepted_assets.join("/")}. Retry when a POL rate is available or settle the quote yourself.`
+          );
+        }
+        if (!quote.accepted_chains.includes("polygon") || !quote.pay_to.polygon) {
+          throw new Aifp1SettlementUnsupportedError(
+            `quote ${quote.quote_id} does not accept polygon (accepts ${quote.accepted_chains.join(", ")}) — ` +
+              `AIFP-1 settlement verification is Polygon-only server-side (aifp/verify-settlement.js)`
+          );
+        }
 
-      // The caps above were checked in USD; the wallet is about to be debited in
-      // wei. Nothing tied the two together, so a quote could pass a $0.10 cap and
-      // spend any amount of POL — the client had no reason to notice, because it
-      // never converted one into the other.
-      //
-      // The quote states the rate it used and fixes it for its lifetime
-      // (routes/aifp.js: rate_fixed_at, "a quote that repriced itself would let a
-      // payment that was correct when sent become underpaid"). So the three
-      // numbers must agree, and if they do not, the safe reading is not "trust
-      // the USD" — it is that this quote is not what it says it is.
-      const quotedRate = Number(native.rate_usd);
-      const weiUsd =
-        Number.isFinite(quotedRate) && quotedRate > 0 ? (Number(BigInt(native.total_wei)) / 1e18) * quotedRate : NaN;
-      if (!Number.isFinite(weiUsd)) {
-        throw new Aifp1QuoteError(
-          `quote ${quote.quote_id} states total_wei ${native.total_wei} at rate "${native.rate_usd}" — ` +
-            `unusable, and the caps were checked against $${amountUsd}`
-        );
-      }
-      // 2% covers native conversion rounding and a
-      // rate printed to six places; anything wider is a disagreement, not drift.
-      if (Math.abs(weiUsd - amountUsd) > Math.max(0.02 * amountUsd, 1e-6)) {
-        throw new Aifp1QuoteError(
-          `quote ${quote.quote_id} would debit ${native.total_wei} wei ≈ $${weiUsd.toFixed(6)} ` +
-            `but states $${amountUsd} — refusing to sign a payment the budget caps did not see`
-        );
-      }
+        // The caps above were checked in USD; the wallet is about to be debited in
+        // wei. Nothing tied the two together, so a quote could pass a $0.10 cap and
+        // spend any amount of POL — the client had no reason to notice, because it
+        // never converted one into the other.
+        //
+        // The quote states the rate it used and fixes it for its lifetime
+        // (routes/aifp.js: rate_fixed_at, "a quote that repriced itself would let a
+        // payment that was correct when sent become underpaid"). So the three
+        // numbers must agree, and if they do not, the safe reading is not "trust
+        // the USD" — it is that this quote is not what it says it is.
+        const quotedRate = Number(native.rate_usd);
+        const weiUsd =
+          Number.isFinite(quotedRate) && quotedRate > 0 ? (Number(BigInt(native.total_wei)) / 1e18) * quotedRate : NaN;
+        if (!Number.isFinite(weiUsd)) {
+          throw new Aifp1QuoteError(
+            `quote ${quote.quote_id} states total_wei ${native.total_wei} at rate "${native.rate_usd}" — ` +
+              `unusable, and the caps were checked against $${amountUsd}`
+          );
+        }
+        // 2% covers native conversion rounding and a
+        // rate printed to six places; anything wider is a disagreement, not drift.
+        if (Math.abs(weiUsd - amountUsd) > Math.max(0.02 * amountUsd, 1e-6)) {
+          throw new Aifp1QuoteError(
+            `quote ${quote.quote_id} would debit ${native.total_wei} wei ≈ $${weiUsd.toFixed(6)} ` +
+              `but states $${amountUsd} — refusing to sign a payment the budget caps did not see`
+          );
+        }
 
-      const nativeGross = BigInt(native.gross_wei ?? native.total_wei);
-      const nativeMerchant = BigInt(native.merchant_wei);
-      const nativeTreasury = BigInt(native.treasury_wei);
-      const nativeCreator = BigInt(native.creator_wei);
-      if (
-        native.settlement_semantics !== "gross-inclusive" ||
-        BigInt(native.payer_total_wei ?? native.total_wei) !== nativeGross ||
-        BigInt(native.total_wei) !== nativeGross ||
-        nativeCreator !== 0n ||
-        nativeTreasury !== nativeGross / 100n ||
-        nativeMerchant !== nativeGross - nativeTreasury
-      ) {
-        throw new Aifp1QuoteError(
-          `quote ${quote.quote_id} native settlement does not match canonical AIFP-1 gross split`
-        );
-      }
-      const validUntil = BigInt(native.valid_until ?? Math.floor(quoteExpiryMs / 1000));
-      if (validUntil !== BigInt(Math.floor(quoteExpiryMs / 1000))) {
-        throw new Aifp1QuoteError(`quote ${quote.quote_id} valid_until does not match expires_at`);
-      }
-
-      let txRef: `0x${string}`;
-      try {
-        txRef = await deps.settle({
+        const nativeGross = BigInt(native.gross_wei ?? native.total_wei);
+        const nativeMerchant = BigInt(native.merchant_wei);
+        const nativeTreasury = BigInt(native.treasury_wei);
+        const nativeCreator = BigInt(native.creator_wei);
+        if (
+          native.settlement_semantics !== "gross-inclusive" ||
+          BigInt(native.payer_total_wei ?? native.total_wei) !== nativeGross ||
+          BigInt(native.total_wei) !== nativeGross ||
+          nativeCreator !== 0n ||
+          nativeTreasury !== nativeGross / 100n ||
+          nativeMerchant !== nativeGross - nativeTreasury
+        ) {
+          throw new Aifp1QuoteError(
+            `quote ${quote.quote_id} native settlement does not match canonical AIFP-1 gross split`
+          );
+        }
+        const validUntil = BigInt(native.valid_until ?? Math.floor(quoteExpiryMs / 1000));
+        if (validUntil !== BigInt(Math.floor(quoteExpiryMs / 1000))) {
+          throw new Aifp1QuoteError(`quote ${quote.quote_id} valid_until does not match expires_at`);
+        }
+        settleParams = {
           merchantWallet: quote.pay_to.polygon as `0x${string}`,
           grossWei: nativeGross,
           merchantWei: nativeMerchant,
           treasuryWei: nativeTreasury,
           creatorWei: nativeCreator,
           validUntil,
+        };
+        paidAsset = native.asset;
+      }
+
+      let txRef: `0x${string}`;
+      try {
+        txRef = await deps.settle({
+          ...settleParams,
           // The binding the server verifies on-chain: the Payment event's orderId
           // must equal the quote id, or /v1/pay answers order_id_mismatch.
           orderId: quote.quote_id,
@@ -1191,7 +1237,7 @@ export async function aifp1Fetch(
                     apiBaseUrl: apiBase,
                     quote,
                     txRef: tx.hash,
-                    asset: native.asset,
+                    asset: paidAsset,
                     paymentIssuer: opts.paymentIssuer,
                     serializedTransaction: tx.serializedTransaction,
                   });
@@ -1208,7 +1254,7 @@ export async function aifp1Fetch(
             apiBaseUrl: apiBase,
             quote,
             txRef: error.txHash,
-            asset: native.asset,
+            asset: paidAsset,
             paymentIssuer: opts.paymentIssuer,
           };
           try {
@@ -1246,13 +1292,13 @@ export async function aifp1Fetch(
             apiBaseUrl: apiBase,
             quote,
             txRef,
-            asset: native.asset,
+            asset: paidAsset,
             paymentIssuer: opts.paymentIssuer,
           }
         );
       }
 
-      const paid = await submitPayment(deps, apiBase, quote, txRef, native.asset, opts);
+      const paid = await submitPayment(deps, apiBase, quote, txRef, paidAsset, opts);
 
       // 6. Keep the batch. This is the whole point of the design: the next call
       // this receipt covers costs a header, not a transaction.
@@ -1298,7 +1344,7 @@ export async function aifp1Fetch(
             apiBaseUrl: apiBase,
             quote,
             txRef,
-            asset: native.asset,
+            asset: paidAsset,
             paymentIssuer: opts.paymentIssuer,
           }
         );
@@ -1337,6 +1383,79 @@ export async function aifp1Fetch(
 }
 
 // ── /v1/quote ─────────────────────────────────────────────────────────────
+
+/**
+ * The stablecoin a v1.4 purchase may be made in: null for native POL, the
+ * pinned symbol otherwise. Only symbols the SDK's own Polygon deployment pin
+ * lists are accepted — never one a merchant or quote suggests.
+ */
+function pinnedStableAsset(asset: string | undefined): string | null {
+  if (asset === undefined || asset === "POL") return null;
+  const pinned = V14_DEPLOYMENTS.polygon?.splitter.assets.find((a) => a.symbol === asset);
+  if (!pinned) {
+    throw new Aifp1QuoteError(
+      `v14.asset "${asset}" is not a stablecoin pinned for Polygon v1.4 ` +
+        `(${(V14_DEPLOYMENTS.polygon?.splitter.assets ?? []).map((a) => a.symbol).join(", ") || "none"})`
+    );
+  }
+  return pinned.symbol;
+}
+
+/**
+ * Check a v1.4 stablecoin quote before any budget is reserved. A token quote
+ * has no FX to cross-check, so the binding is exact instead: the signed gross
+ * equals the stated settlement units, which equal the stated USD amount in
+ * 6-decimal micro-dollars; the token is the pinned one; the approval is for
+ * exactly that gross; and the quote accepts nothing else.
+ */
+function validateStableV14Quote(
+  quote: Aifp1Quote,
+  asset: string,
+  payer: `0x${string}`,
+  quoteExpiryMs: number
+): void {
+  const call = quote.settlement_call;
+  if (!call || call.splitter_version !== "1.4") {
+    throw new Aifp1SettlementUnsupportedError("a stablecoin purchase requires a signed v1.4 quote; no legacy fallback");
+  }
+  const signed = call as V14SettlementCall;
+  validateV14SettlementCall(signed, { orderId: quote.quote_id, payer });
+  const token = V14_DEPLOYMENTS.polygon?.splitter.assets.find((a) => a.symbol === asset)?.address;
+  const q = signed.args.quote;
+  let micro: bigint;
+  try {
+    micro = parseUnits(String(quote.amount), 6);
+  } catch {
+    throw new Aifp1QuoteError(`quote ${quote.quote_id} has an unusable amount "${quote.amount}"`);
+  }
+  const units = (quote as { settlement?: { total_units?: string } }).settlement?.total_units;
+  if (
+    signed.chain !== "polygon" ||
+    signed.asset !== asset ||
+    signed.route !== "merchant-aifp1" ||
+    !token ||
+    q.token.toLowerCase() !== token.toLowerCase() ||
+    !quote.accepted_chains.includes("polygon") ||
+    !quote.pay_to.polygon ||
+    q.merchant.toLowerCase() !== quote.pay_to.polygon.toLowerCase() ||
+    quote.native_settlement !== undefined ||
+    quote.accepted_assets.length !== 1 ||
+    quote.accepted_assets[0] !== asset ||
+    units === undefined ||
+    q.grossAmount !== units ||
+    BigInt(q.grossAmount) !== micro ||
+    micro <= 0n ||
+    !signed.approval ||
+    signed.approval.token.toLowerCase() !== token.toLowerCase() ||
+    signed.approval.spender.toLowerCase() !== signed.contract.toLowerCase() ||
+    String(signed.approval.amount) !== q.grossAmount ||
+    BigInt(q.validUntil) !== BigInt(Math.floor(quoteExpiryMs / 1000))
+  ) {
+    throw new Aifp1QuoteError(
+      "signed v1.4 stablecoin call disagrees with the requested asset, merchant, amount, approval or expiry"
+    );
+  }
+}
 
 async function requestQuote(
   deps: Aifp1Deps,
@@ -1480,6 +1599,7 @@ async function submitPayment(
           await verifyPaidReceipt(
             paid,
             quote,
+            asset,
             txRef,
             deps.payerAddress,
             opts.paymentIssuer ?? DEFAULT_API_BASE,
@@ -1509,6 +1629,7 @@ async function submitPayment(
 async function verifyPaidReceipt(
   paid: Aifp1PayResult,
   quote: Aifp1Quote,
+  asset: string,
   txRef: string,
   payer: string,
   issuer: string,
@@ -1570,7 +1691,7 @@ async function verifyPaidReceipt(
     claims.scope !== quote.scope ||
     claims.resource !== quote.resource ||
     claims.chain !== "polygon" ||
-    claims.asset !== "POL" ||
+    claims.asset !== asset ||
     claims.currency !== "USD" ||
     (claims.network_mode ?? "live") !== "live" ||
     Number(claims.amount) !== Number(quote.amount) ||

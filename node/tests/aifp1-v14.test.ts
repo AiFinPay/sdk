@@ -299,3 +299,80 @@ describe("public native v1.4 purchase", () => {
     expect(f.deps.fetchImpl).not.toHaveBeenCalledWith(expect.stringContaining("attacker.example"), expect.anything());
   });
 });
+
+// ── Stablecoin purchase ──────────────────────────────────────────────────────
+// The same fixture, turned into the USDC quote the backend now signs: one
+// asset, no native amounts, settleStable with value 0 and an exact approval.
+const USDC = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
+function stableFixture() {
+  const f = fixture();
+  const q = f.call.args.quote as { token: string; grossAmount: string };
+  q.token = USDC;
+  q.grossAmount = "100000";
+  f.call.asset = "USDC";
+  f.call.function = "settleStable((address,address,address,uint256,address,uint256,bytes32,uint256,bytes32),bytes)";
+  f.call.value_wei = "0";
+  f.call.approval = { token: USDC, spender: f.call.contract, amount: "100000" };
+  f.quote.accepted_assets = ["USDC"];
+  delete (f.quote as { native_settlement?: unknown }).native_settlement;
+  f.claims.asset = "USDC";
+  f.responseOverrides.asset = "USDC";
+  f.opts.v14 = { ...f.opts.v14!, asset: "USDC" };
+  delete f.opts.nativeUsdPrice;
+  return f;
+}
+
+describe("public v1.4 stablecoin purchase", () => {
+  it("asks for a USDC quote, settles the signed token call without any POL price, and verifies a USDC receipt", async () => {
+    const f = stableFixture();
+    expect((await aifp1Fetch(f.deps, url, {}, f.opts))?.status).toBe(200);
+    const quoteCall = (f.deps.fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls.find(([u]) =>
+      String(u).endsWith("/v1/quote")
+    )!;
+    expect(JSON.parse(String(quoteCall[1]!.body)).asset).toBe("USDC");
+    expect(f.deps.settle).toHaveBeenCalledWith(
+      expect.objectContaining({ settlementCall: f.call, grossWei: 100000n, token: USDC })
+    );
+    expect(f.prepared).toHaveBeenCalledWith(expect.objectContaining({ asset: "USDC" }));
+    expect(f.price).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a quote that also accepts POL", (f: any) => (f.quote.accepted_assets = ["USDC", "POL"])],
+    [
+      // The cap is raised so that only the amount binding can catch this.
+      "a stated amount that is not the signed gross",
+      (f: any) => {
+        f.quote.amount = "0.2";
+        f.opts.maxAmountUsd = 1;
+      },
+    ],
+    ["settlement units that are not the signed gross", (f: any) => (f.quote.settlement.total_units = "200000")],
+    ["an approval larger than the gross", (f: any) => (f.call.approval.amount = "100000000")],
+    ["an approval to another spender", (f: any) => (f.call.approval.spender = merchant)],
+    ["an unpinned token", (f: any) => (f.call.args.quote.token = merchant)],
+    ["a signed call in another asset", (f: any) => (f.call.asset = "USDC.e")],
+    ["native amounts beside a token quote", (f: any) => (f.quote.native_settlement = { asset: "POL" })],
+  ])("refuses %s before reserving budget or settling", async (_name, mutate) => {
+    const f = stableFixture();
+    (mutate as (fx: typeof f) => void)(f);
+    await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toThrow();
+    expect(f.deps.reserveDaily).not.toHaveBeenCalled();
+    expect(f.deps.settle).not.toHaveBeenCalled();
+  });
+
+  it("refuses an asset the SDK does not pin before asking for a quote", async () => {
+    const f = stableFixture();
+    f.opts.v14 = { ...f.opts.v14!, asset: "DAI" };
+    await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toThrow(/not a stablecoin pinned/);
+    const calls = (f.deps.fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls.map(([u]) => String(u));
+    expect(calls.some((u) => u.endsWith("/v1/quote"))).toBe(false);
+  });
+
+  it("does not accept a receipt that names another asset", async () => {
+    const f = stableFixture();
+    f.claims.asset = "POL";
+    f.responseOverrides.asset = "POL";
+    await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toThrow(/recover the existing payment/);
+  });
+});

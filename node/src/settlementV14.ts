@@ -59,6 +59,8 @@ export interface V14SettlementCall {
   args: { quote: V14Quote; signature: Hex };
   bound_to_payer?: Address;
   nonce_at_signing?: string;
+  /** settleStable only: what to approve first — exactly the signed gross. */
+  approval?: { token: Address; spender: Address; amount: string; function?: string };
 }
 
 export class V14SettlementError extends Error {
@@ -207,6 +209,10 @@ export function validateV14SettlementCall(
   if (lc(q.token) === ZERO && String(call.value_wei) !== String(q.grossAmount)) {
     fail("V14_VALUE_MISMATCH", `value_wei (${call.value_wei}) must equal the signed grossAmount (${q.grossAmount})`);
   }
+  // settleStable is not payable: any value would revert, after gas.
+  if (lc(q.token) !== ZERO && String(call.value_wei) !== "0") {
+    fail("V14_VALUE_MISMATCH", `value_wei must be 0 for a token quote, got ${call.value_wei}`);
+  }
 
   return { route: route as string, expiresInSeconds: expiresIn, orderIdChecked };
 }
@@ -288,9 +294,25 @@ const QUOTE_FIELDS = [
   { name: "routeId", type: "bytes32" },
 ] as const;
 const NATIVE_FUNCTION = "settleNative((address,address,address,uint256,address,uint256,bytes32,uint256,bytes32),bytes)";
+const STABLE_FUNCTION = "settleStable((address,address,address,uint256,address,uint256,bytes32,uint256,bytes32),bytes)";
+/**
+ * Gas reserved for settleStable while it cannot be estimated yet: the
+ * estimate needs the allowance that the approval is about to create. Measured
+ * at 161–179k on a Polygon fork (2026-09-24); the real estimate replaces this
+ * bound before the settlement is signed.
+ */
+const STABLE_SETTLE_GAS_BOUND = 300_000n;
+const ERC20_ABI = parseAbi([
+  "function balanceOf(address) view returns (uint256)",
+  "function allowance(address,address) view returns (uint256)",
+  "function approve(address,uint256) returns (bool)",
+  "function decimals() view returns (uint8)",
+]);
+const TOKENLIST_ABI = parseAbi(["function isAllowed(address) view returns (bool)"]);
 const EXECUTION_ABI = parseAbi([
   "event Payment(bytes32 indexed paymentId,address indexed payer,address indexed merchant,address token,uint256 grossAmount,uint256 merchantAmount,uint256 treasuryAmount,uint256 ipCreatorAmount,uint256 validUntil,bytes32 routeId,bytes32 orderIdHash)",
   "function settleNative((address payer,address merchant,address token,uint256 grossAmount,address ipCreator,uint256 validUntil,bytes32 orderIdHash,uint256 nonce,bytes32 routeId) quote,bytes signature) payable",
+  "function settleStable((address payer,address merchant,address token,uint256 grossAmount,address ipCreator,uint256 validUntil,bytes32 orderIdHash,uint256 nonce,bytes32 routeId) quote,bytes signature)",
   "function profiles() view returns (address)",
   "function tokenList() view returns (address)",
   "function treasury() view returns (address)",
@@ -309,6 +331,8 @@ export interface V14ExecutionContext {
   /** Independently authorized purchase, not defaults copied from settlement_call. */
   expectedMerchant?: Address;
   expectedGrossAmount?: bigint;
+  /** The token the purchase was authorized in; address(0) or omitted = native POL. */
+  expectedToken?: Address;
   /** Maximum gas * maxFeePerGas, in native wei (in addition to purchase gross). */
   maxGasWei?: bigint;
   /** Persist before broadcast. A failed write prevents transmission. Never log the raw transaction. */
@@ -374,16 +398,20 @@ export async function executeV14Settlement(
     payer: ctx.account,
     minSecondsRemaining: ctx.minSecondsRemaining,
   });
+  const stable = lc(q.token) !== ZERO;
   if (
     call.route !== validated.route ||
     call.arg_encoding !== "struct+signature" ||
-    call.function !== NATIVE_FUNCTION ||
+    call.function !== (stable ? STABLE_FUNCTION : NATIVE_FUNCTION) ||
     JSON.stringify(call.field_order) !== JSON.stringify(QUOTE_FIELDS.map((f) => f.name))
   ) {
     fail("V14_CALL_MISMATCH", "route, method or quote field order disagrees with the supported ABI");
   }
-  if (lc(q.token) !== ZERO || call.asset !== "POL" || lc(q.ipCreator) !== ZERO) {
-    fail("V14_UNSUPPORTED_ASSET", "This executor supports native POL without creator payments only");
+  if (lc(q.ipCreator) !== ZERO || (!stable && call.asset !== "POL")) {
+    fail("V14_UNSUPPORTED_ASSET", "This executor supports native POL or a pinned stablecoin, without creator payments");
+  }
+  if (lc(ctx.expectedToken ?? ZERO) !== lc(q.token)) {
+    fail("V14_PURCHASE_MISMATCH", "signed token does not match the authorized purchase");
   }
   if (
     lc(q.merchant) === ZERO ||
@@ -403,6 +431,23 @@ export async function executeV14Settlement(
     lc(call.contract) !== lc(deployment.splitter.address)
   ) {
     fail("V14_UNTRUSTED_DEPLOYMENT", "settlement target is not an enabled pinned native deployment");
+  }
+  // A token must be one the registry pins for this deployment — never one the
+  // quote names — and the approval must be exactly the signed gross, to the
+  // pinned splitter. An unlimited or misdirected approval outlives the quote.
+  if (stable) {
+    const pinned = deployment.splitter.assets.find((a) => lc(a.address) === lc(q.token));
+    if (!pinned || pinned.symbol !== call.asset) {
+      fail("V14_UNSUPPORTED_ASSET", "token is not a pinned stablecoin for this deployment");
+    }
+    if (
+      !call.approval ||
+      lc(call.approval.token) !== lc(q.token) ||
+      lc(call.approval.spender) !== lc(deployment.splitter.address) ||
+      String(call.approval.amount) !== String(q.grossAmount)
+    ) {
+      fail("V14_APPROVAL_MISMATCH", "approval must be exactly the signed gross, to the pinned splitter");
+    }
   }
   const { publicClient, walletClient } = ctx;
   const account = walletClient.account;
@@ -483,17 +528,35 @@ export async function executeV14Settlement(
   }
   if (!preflight.submittable) fail(preflight.code, preflight.reason);
   const args = [message, call.args.signature] as const;
-  await publicClient.simulateContract({
-    address: call.contract,
-    abi: EXECUTION_ABI,
-    functionName: "settleNative",
-    args,
-    account: ctx.account,
-    value: message.grossAmount,
-  });
-  const data = encodeFunctionData({ abi: EXECUTION_ABI, functionName: "settleNative", args });
+  const settleFunction = stable ? "settleStable" : "settleNative";
+  const settleValue = stable ? 0n : message.grossAmount;
+  // Gas already committed to an approval in this call, counted against the
+  // same operator budget as the settlement.
+  let approvalCostWei = 0n;
+  if (stable) {
+    approvalCostWei = await ensureExactApproval(ctx, account!, deployment.chainId, q.token, call.contract, message.grossAmount, fail);
+  }
+  if (stable) {
+    await publicClient.simulateContract({
+      address: call.contract,
+      abi: EXECUTION_ABI,
+      functionName: "settleStable",
+      args,
+      account: ctx.account,
+    });
+  } else {
+    await publicClient.simulateContract({
+      address: call.contract,
+      abi: EXECUTION_ABI,
+      functionName: "settleNative",
+      args,
+      account: ctx.account,
+      value: settleValue,
+    });
+  }
+  const data = encodeFunctionData({ abi: EXECUTION_ABI, functionName: settleFunction, args });
   const [estimatedGas, fees, nonce, balance] = await Promise.all([
-    publicClient.estimateGas({ account: ctx.account, to: call.contract, data, value: message.grossAmount }),
+    publicClient.estimateGas({ account: ctx.account, to: call.contract, data, value: settleValue }),
     publicClient.estimateFeesPerGas({ type: "eip1559", chain: publicClient.chain }),
     publicClient.getTransactionCount({ address: ctx.account, blockTag: "pending" }),
     publicClient.getBalance({ address: ctx.account, blockTag: "pending" }),
@@ -504,11 +567,11 @@ export async function executeV14Settlement(
     fees.maxFeePerGas <= 0n ||
     fees.maxPriorityFeePerGas < 0n ||
     fees.maxPriorityFeePerGas > fees.maxFeePerGas ||
-    gas * fees.maxFeePerGas > ctx.maxGasWei!
+    approvalCostWei + gas * fees.maxFeePerGas > ctx.maxGasWei!
   ) {
     fail("V14_GAS_BUDGET_EXCEEDED", "estimated maximum transaction fee exceeds the operator gas budget");
   }
-  if (balance < message.grossAmount + gas * fees.maxFeePerGas)
+  if (balance < settleValue + gas * fees.maxFeePerGas)
     fail("V14_INSUFFICIENT_BALANCE", "balance cannot cover authorized gross and maximum gas");
   // Check deadline again after slow RPCs, before signing or persisting anything.
   validateV14SettlementCall(call, {
@@ -520,7 +583,7 @@ export async function executeV14Settlement(
     type: "eip1559",
     chainId: deployment.chainId,
     to: call.contract,
-    value: message.grossAmount,
+    value: settleValue,
     data,
     gas,
     maxFeePerGas: fees.maxFeePerGas,
@@ -578,7 +641,7 @@ export async function executeV14Settlement(
         lc(p.paymentId) === lc(paymentId) &&
         lc(p.payer) === lc(q.payer) &&
         lc(p.merchant) === lc(q.merchant) &&
-        lc(p.token) === ZERO &&
+        lc(p.token) === lc(q.token) &&
         p.grossAmount === message.grossAmount &&
         p.validUntil === message.validUntil &&
         lc(p.routeId) === lc(q.routeId) &&
@@ -591,4 +654,97 @@ export async function executeV14Settlement(
     throw new SettlementConfirmationPendingError(hash, "settlement");
   }
   return { hash, route: validated.route };
+}
+
+/**
+ * Make the splitter's allowance for `token` at least `gross` — by approving
+ * EXACTLY `gross` when it is short — before settleStable pulls it.
+ *
+ * Checks first, spends second: the token must still be allowed by the
+ * pinned tokenList, be a 6-decimal token, and be held in full; the wallet
+ * must hold native gas for the approval AND a bounded settlement, all within
+ * the operator's gas budget. Only then is an approval signed locally and sent.
+ *
+ * Not journaled, deliberately: an approval moves no funds, and repeating it
+ * sets the same allowance again. If its outcome is unknown the caller may
+ * retry the whole purchase; the next attempt reads the allowance and skips
+ * the approval if it landed. Returns the maximum gas cost it committed.
+ */
+async function ensureExactApproval(
+  ctx: V14ExecutionContext,
+  account: NonNullable<WalletClient["account"]>,
+  chainId: number,
+  token: Address,
+  spender: Address,
+  gross: bigint,
+  fail: (code: string, message: string) => never
+): Promise<bigint> {
+  const { publicClient } = ctx;
+  const deployment = Object.values(V14_DEPLOYMENTS).find((d) => d.chainId === chainId)!;
+  const [allowed, decimals, held, current] = await Promise.all([
+    publicClient.readContract({
+      address: deployment.splitter.tokenList,
+      abi: TOKENLIST_ABI,
+      functionName: "isAllowed",
+      args: [token],
+    }),
+    publicClient.readContract({ address: token, abi: ERC20_ABI, functionName: "decimals" }),
+    publicClient.readContract({ address: token, abi: ERC20_ABI, functionName: "balanceOf", args: [ctx.account] }),
+    publicClient.readContract({ address: token, abi: ERC20_ABI, functionName: "allowance", args: [ctx.account, spender] }),
+  ]);
+  if (!allowed) fail("V14_TOKEN_NOT_ALLOWED", "the splitter's tokenList no longer allows this token");
+  if (Number(decimals) !== 6) fail("V14_TOKEN_DECIMALS", "token decimals differ from the 6 the quote is priced in");
+  if (held < gross) fail("V14_INSUFFICIENT_BALANCE", "token balance cannot cover the authorized gross");
+  if (current >= gross) return 0n;
+
+  const approveData = encodeFunctionData({ abi: ERC20_ABI, functionName: "approve", args: [spender, gross] });
+  await publicClient.simulateContract({
+    address: token,
+    abi: ERC20_ABI,
+    functionName: "approve",
+    args: [spender, gross],
+    account: ctx.account,
+  });
+  const [estimated, fees, nonce, native] = await Promise.all([
+    publicClient.estimateGas({ account: ctx.account, to: token, data: approveData }),
+    publicClient.estimateFeesPerGas({ type: "eip1559", chain: publicClient.chain }),
+    publicClient.getTransactionCount({ address: ctx.account, blockTag: "pending" }),
+    publicClient.getBalance({ address: ctx.account, blockTag: "pending" }),
+  ]);
+  const gas = (estimated * 120n + 99n) / 100n;
+  const approvalCost = gas * fees.maxFeePerGas;
+  const worstCase = approvalCost + STABLE_SETTLE_GAS_BOUND * fees.maxFeePerGas;
+  if (gas <= 0n || fees.maxFeePerGas <= 0n || worstCase > ctx.maxGasWei!) {
+    fail("V14_GAS_BUDGET_EXCEEDED", "approval plus settlement gas exceeds the operator gas budget");
+  }
+  if (native < worstCase) fail("V14_INSUFFICIENT_BALANCE", "native balance cannot cover approval and settlement gas");
+
+  const serializedTransaction = await account.signTransaction!({
+    type: "eip1559",
+    chainId,
+    to: token,
+    value: 0n,
+    data: approveData,
+    gas,
+    maxFeePerGas: fees.maxFeePerGas,
+    maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
+    nonce,
+  });
+  let receipt;
+  try {
+    const hash = await publicClient.sendRawTransaction({ serializedTransaction });
+    receipt = await publicClient.waitForTransactionReceipt({ hash, confirmations: 1 });
+  } catch {
+    // Nothing has been paid. Retrying reads the allowance and continues.
+    fail("V14_APPROVAL_PENDING", "token approval outcome unknown; no payment was made — retry the purchase");
+  }
+  if (receipt!.status !== "success") fail("V14_APPROVAL_FAILED", "token approval reverted; no payment was made");
+  const after = await publicClient.readContract({
+    address: token,
+    abi: ERC20_ABI,
+    functionName: "allowance",
+    args: [ctx.account, spender],
+  });
+  if (after < gross) fail("V14_APPROVAL_FAILED", "allowance is still below the authorized gross after approval");
+  return approvalCost;
 }
