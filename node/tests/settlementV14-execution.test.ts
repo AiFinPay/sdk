@@ -279,7 +279,9 @@ describe("authorized native v1.4 execution", () => {
       (f: any) => {
         f.call.args.quote.token = merchant;
       },
-      "V14_UNSUPPORTED_ASSET",
+      // A token quote must carry value 0; this native call still carries the
+      // gross as value, so the validator refuses it first.
+      "V14_VALUE_MISMATCH",
     ],
     [
       "target",

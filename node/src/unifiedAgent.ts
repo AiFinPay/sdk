@@ -1599,6 +1599,7 @@ export class AiFinPayAgent {
       validUntil: bigint;
       orderId: string;
       settlementCall?: import("./aifp1.js").Aifp1Quote["settlement_call"];
+      token?: `0x${string}`;
       onPrepared?: (tx: { hash: `0x${string}`; serializedTransaction: `0x${string}` }) => Promise<void>;
     },
     opts: Aifp1FetchOptions
@@ -1613,6 +1614,7 @@ export class AiFinPayAgent {
         orderId: p.orderId,
         expectedMerchant: p.merchantWallet,
         expectedGrossAmount: p.grossWei,
+        ...(p.token ? { expectedToken: p.token } : {}),
         maxGasWei: opts.v14.maxGasWei,
         onPrepared: p.onPrepared,
       });
