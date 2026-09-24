@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aifinpay-gate"
+version = "0.1.0"
+description = "Accept AIFP-1 payments from AI agents in a Python API — ASGI (FastAPI, Starlette) and WSGI (Flask, Django) middleware. Port of @aifinpay/gate."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "CoinSecurities (SECCO)", email = "contact@aifinpay.io" }]
+keywords = ["ai-agents", "agent-payments", "http-402", "paywall", "fastapi", "flask", "asgi", "wsgi", "middleware", "aifinpay"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Framework :: FastAPI",
+  "Framework :: Flask",
+  "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+]
+dependencies = ["PyNaCl>=1.5"]
+
+[project.optional-dependencies]
+redis = ["redis>=4.2"]
+
+[project.urls]
+Homepage = "https://aifinpay.io"
+Repository = "https://github.com/AiFinPay/sdk"
+Issues = "https://github.com/AiFinPay/sdk/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["aifinpay_gate*"]
