@@ -1,6 +1,6 @@
 # aifinpay-agent (Python)
 
-Version `2.2.0`: agent identity (EVM and Solana addresses from one seed), native
+Version `2.2.1`: agent identity (EVM and Solana addresses from one seed), native
 request authentication, linking an agent to its owner's dashboard, and paying
 AiFinPay merchants (`fetch_paid`, AIFP-1 on Polygon v1.4 in POL or USDC).
 

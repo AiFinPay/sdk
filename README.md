@@ -12,12 +12,13 @@ Canonical domain: **https://aifinpay.io**
 
 | Package | Current source version | Install |
 |---|---:|---|
-| `aifinpay-agent` (Python) | `2.2.0` | `pip install aifinpay-agent` |
-| `@aifinpay/agent` (Node / TypeScript) | `2.0.1` | `npm install @aifinpay/agent` |
-| `@aifinpay/mcp` | `2.1.0` | `npx @aifinpay/mcp` |
-| `@aifinpay/mcp-http` | `2.0.2` | Streamable HTTP wrapper |
-| `@aifinpay/skill` | `2.0.9` | `npm install @aifinpay/skill` |
-| `@aifinpay/gate` | `0.3.2` | `npm install @aifinpay/gate` |
+| `aifinpay-agent` (Python) | `2.2.1` | `pip install aifinpay-agent` |
+| `aifinpay-gate` (Python merchant gate) | `0.1.0` | `pip install aifinpay-gate` |
+| `@aifinpay/agent` (Node / TypeScript) | `2.2.0` | `npm install @aifinpay/agent` |
+| `@aifinpay/mcp` | `2.3.0` | `npx @aifinpay/mcp` |
+| `@aifinpay/mcp-http` | `2.0.4` | Streamable HTTP wrapper |
+| `@aifinpay/skill` | `2.3.0` | `npm install @aifinpay/skill` |
+| `@aifinpay/gate` | `0.3.4` | `npm install @aifinpay/gate` |
 | `@aifinpay/wallet` | `1.1.0` | `npm install @aifinpay/wallet` |
 | `@aifinpay/deployments` | `1.1.2` | deployment registry package |
 
@@ -100,7 +101,7 @@ See [node/README.md](./node/README.md) and [node/PAYMENT_RECEIPTS.md](./node/PAY
 
 ### Python
 
-The Python package pays AIFP-1 merchants with `AiFinPayAgent.fetch_paid` (2.2.0+, Polygon v1.4, POL or USDC), at parity with Node `fetchPaid`. Its legacy paid `call()` settlement path stays disabled.
+The Python package pays AIFP-1 merchants with `AiFinPayAgent.fetch_paid` (2.2.0+; use 2.2.1 or later for USDC at current Polygon gas prices; Polygon v1.4, POL or USDC), at parity with Node `fetchPaid`. Its legacy paid `call()` settlement path stays disabled.
 
 See [python/README.md](./python/README.md).
 
@@ -121,7 +122,7 @@ For a site or API that wants to monetize AI-agent traffic:
 npm install @aifinpay/gate
 ```
 
-The merchant package can return HTTP 402 challenges, expose discovery metadata and meter paid access. See [gate/README.md](./gate/README.md) and the `aifinpay-merchant` skill in [skill/skills/aifinpay-merchant/SKILL.md](./skill/skills/aifinpay-merchant/SKILL.md).
+The merchant package can return HTTP 402 challenges, expose discovery metadata and meter paid access. See [gate/README.md](./gate/README.md). Python servers (FastAPI, Starlette, Flask, Django) use `pip install aifinpay-gate`, the same gate as ASGI/WSGI middleware — see [python-gate/README.md](./python-gate/README.md) and the `aifinpay-merchant` skill in [skill/skills/aifinpay-merchant/SKILL.md](./skill/skills/aifinpay-merchant/SKILL.md).
 
 ## Deployment status
 
