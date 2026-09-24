@@ -1,3 +1,19 @@
+## Python 2.2.0 — unreleased
+
+- `AiFinPayAgent.fetch_paid(url, allowed_origins=…, max_amount_usd=…,
+  daily_amount_usd=…, asset="POL"|"USDC")` pays AIFP-1 merchants on the Polygon
+  v1.4 splitter, at parity with Node `fetchPaid`: the same signed-call checks and
+  refusal codes against the pinned deployment (`settlement_v14.py`, generated
+  `_v14_deployments.py`), exact-amount USDC approval, independent POL/USD
+  (Chainlink → Coinbase → CoinGecko), per-payment and persisted rolling-24h
+  limits, a durable prepared-transaction journal, and `recover_paid(path)` to
+  obtain the receipt of a mined payment without paying again. The idempotency
+  key and receipt-authorization message are byte-identical to Node's; receipts
+  are verified as Ed25519 JWTs from the issuer's JWKS and bound to the purchase.
+- Batches are bought with `scope="prefix"` by default and reused while their
+  scope covers the path.
+- Legacy paid `call()` stays disabled.
+
 ## MCP 2.3.0 / Node 2.2.0 — unreleased
 
 - MCP `payable_fetch` can pay in USDC: the owner sets `AIFINPAY_PAY_ASSET=USDC`

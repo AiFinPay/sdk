@@ -1,13 +1,8 @@
 # aifinpay-agent (Python)
 
-Version `2.1.1`: agent identity (EVM and Solana addresses from one seed), native
-request authentication, and linking an agent to its owner's dashboard.
-
-> **Python cannot pay AiFinPay merchants yet.** Live AIFP-1 payments settle on
-> the Polygon v1.4 splitter, and that executor exists only in the Node SDK
-> (`@aifinpay/agent`, `fetchPaid`) and the MCP server (`@aifinpay/mcp`,
-> `payable_fetch`). To pay from a Python agent, run the MCP server or call the
-> Node SDK. Legacy paid `call()` is disabled.
+Version `2.2.0`: agent identity (EVM and Solana addresses from one seed), native
+request authentication, linking an agent to its owner's dashboard, and paying
+AiFinPay merchants (`fetch_paid`, AIFP-1 on Polygon v1.4 in POL or USDC).
 
 Canonical domain **aifinpay.io** (`aifinpay.company` only redirects there). A
 wallet address alone does not mean a payment route is enabled. The keypair is
@@ -33,8 +28,33 @@ pip install -r requirements.txt -e .
 from aifinpay.unified_agent import AiFinPayAgent
 
 agent = AiFinPayAgent.from_seed(SEED_HEX)  # 32-byte seed you keep private
-print("EVM address:", agent.evm_address)   # fund with POL on Polygon to pay (via MCP/Node)
+print("EVM address:", agent.evm_address)   # fund on Polygon: POL, or USDC + a little POL for gas
 ```
+
+## Pay for a paywalled resource
+
+```python
+r = agent.fetch_paid(
+    "https://api.example.com/articles/2026/x",
+    allowed_origins=["https://api.example.com"],  # the only origins it will pay
+    max_amount_usd=0.20,                           # per batch
+    daily_amount_usd=2.00,                         # rolling 24 h, persisted
+    asset="USDC",                                  # or "POL" (default)
+)
+print(r.status_code, r.json())
+```
+
+On an AIFP-1 `402` it buys one batch (from $0.10) scoped to the path's section
+(`/articles/`), settles it on the Polygon v1.4 splitter, exchanges it for a
+receipt and retries. Later requests the receipt covers cost no transaction.
+Nothing is signed unless the origin is allowed, the signed quote matches the
+challenge and the SDK's pinned deployment, and the batch fits both limits. POL
+is priced against an independent POL/USD source (Chainlink on Polygon, then
+Coinbase, then CoinGecko), never the quote; USDC approves exactly the batch.
+
+Every settlement is journaled to `journal_dir` (default `~/.aifinpay/journal`,
+mode 600) before it is sent. If the outcome is unknown, `Aifp1PayError` carries
+`recovery["journal_path"]`; call `agent.recover_paid(path)` — do not pay again.
 
 ## Link the agent to its owner's dashboard
 
@@ -77,7 +97,7 @@ agent = Agent.from_secret_b58("3RvZm7Gw...")
 4. Retries the original request with the auth attached.
 
 The server verifies the signature and serves the resource if the agent is
-entitled to it. Paying for access is a separate step (see the note at the top).
+entitled to it. Paying for access is `fetch_paid` (above).
 
 ## Privacy
 

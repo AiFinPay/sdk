@@ -12,7 +12,7 @@ Canonical domain: **https://aifinpay.io**
 
 | Package | Current source version | Install |
 |---|---:|---|
-| `aifinpay-agent` (Python) | `2.1.0` | `pip install aifinpay-agent` |
+| `aifinpay-agent` (Python) | `2.2.0` | `pip install aifinpay-agent` |
 | `@aifinpay/agent` (Node / TypeScript) | `2.0.1` | `npm install @aifinpay/agent` |
 | `@aifinpay/mcp` | `2.1.0` | `npx @aifinpay/mcp` |
 | `@aifinpay/mcp-http` | `2.0.2` | Streamable HTTP wrapper |
@@ -100,7 +100,7 @@ See [node/README.md](./node/README.md) and [node/PAYMENT_RECEIPTS.md](./node/PAY
 
 ### Python
 
-The Python package supports identity and related SDK functions, but its legacy paid `call()` settlement path is disabled and it does not currently expose the Node `fetchPaid` executor.
+The Python package pays AIFP-1 merchants with `AiFinPayAgent.fetch_paid` (2.2.0+, Polygon v1.4, POL or USDC), at parity with Node `fetchPaid`. Its legacy paid `call()` settlement path stays disabled.
 
 See [python/README.md](./python/README.md).
 

@@ -6,9 +6,8 @@ derives a Solana base58 pubkey, a Polygon EVM 0x address, and a Casper
 account hash. Casper is identity only — the address is derived and can be
 funded, but this SDK does not sign Casper deploys.
 Legacy paid `agent.call(provider=…)` is fail-closed after a 402 challenge:
-free/read-only bridge responses still pass through. This Python surface has no
-paid replacement; use the Node SDK's reviewed `fetchPaid` v1.3 route with a
-fresh trusted quote/FX result.
+free/read-only bridge responses still pass through. Paid AIFP-1 access is
+`agent.fetch_paid(url, …)`, which settles on Polygon v1.4 in POL or USDC.
 
 Dependencies (declared in pyproject.toml):
   • PyNaCl, base58   (already there)
@@ -21,6 +20,7 @@ from __future__ import annotations
 import re
 import contextlib
 import hashlib
+import json
 import os
 from dataclasses import dataclass
 from typing import Any
@@ -846,6 +846,109 @@ class AiFinPayAgent:
 
     # ── Public: chain-opaque call ─────────────────────────────────────────
 
+    # ── AIFP-1 paid access ─────────────────────────────────────────────────
+
+    def fetch_paid(
+        self,
+        url: str,
+        *,
+        allowed_origins: list[str],
+        max_amount_usd: float,
+        daily_amount_usd: float,
+        max_gas_pol: float = 0.05,
+        journal_dir: [str] = None,
+        asset: str = "POL",
+        scope: str = "prefix",
+        units: [int] = None,
+        api_base: str = "https://api.aifinpay.io",
+    ) -> requests.Response:
+        """
+        GET an AIFP-1 paywalled URL, paying for one batch if it answers 402.
+
+        Settles on Polygon v1.4 in native POL (default) or ``asset="USDC"``
+        (exact approval, then settle; the wallet still needs POL for gas).
+        Nothing is signed unless the URL is on ``allowed_origins``, the quote
+        matches the challenge and the pinned deployment, and the batch fits
+        ``max_amount_usd`` and the rolling-24h ``daily_amount_usd``. POL is
+        priced against an independent POL/USD source (Chainlink over
+        ``polygon_rpc``, then Coinbase, then CoinGecko), never the quote.
+
+        Receipts are kept on this agent and reused while their scope covers
+        the path. Every prepared settlement is written to ``journal_dir``
+        (default ``~/.aifinpay/journal``) before it is sent; if the outcome is
+        unknown, :class:`aifinpay.aifp1.Aifp1PayError` is raised with the
+        journal path in ``recovery`` — call :meth:`recover_paid` with it
+        rather than paying again.
+
+        A non-402 response, or a 402 from another protocol, is returned as is.
+        """
+        from . import aifp1
+        from .settlement_v14 import Web3ChainClient
+
+        journal = self._aifp1_journal_dir(journal_dir)
+        ledger = aifp1.SpendLedger(max_amount_usd, daily_amount_usd, os.path.join(journal, "spend.json"))
+        if not hasattr(self, "_aifp1_receipts"):
+            self._aifp1_receipts = {}
+        session = getattr(self, "_aifp1_session", None) or requests.Session()
+        self._aifp1_session = session
+
+        def on_prepared(entry: dict) -> None:
+            path = os.path.join(journal, f"{entry['tx_ref']}.json")
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                json.dump({**entry, "journal_path": path}, f)
+                f.flush()
+                os.fsync(f.fileno())
+
+        try:
+            return aifp1.aifp1_fetch(
+                url,
+                session=session,
+                account=self.evm_account,
+                client=Web3ChainClient(self._web3()),
+                polygon_rpc=self.polygon_rpc,
+                allowed_origins=list(allowed_origins),
+                ledger=ledger,
+                max_gas_wei=int(max_gas_pol * 10**18),
+                on_prepared=on_prepared,
+                receipts=self._aifp1_receipts,
+                asset=asset,
+                scope=scope,
+                api_base=api_base,
+                issuer=api_base,
+                units=units,
+                agent_id=self.evm_address,
+            )
+        except aifp1.Aifp1PayError as e:
+            path = os.path.join(journal, f"{e.tx_ref}.json")
+            if os.path.exists(path):
+                e.recovery["journal_path"] = path
+            raise
+
+    def recover_paid(self, journal_path: str) -> dict:
+        """
+        Exchange an already-settled payment for its receipt, without paying
+        again. ``journal_path`` is a file written by :meth:`fetch_paid`.
+        """
+        from . import aifp1
+
+        with open(journal_path) as f:
+            recovery = json.load(f)
+        paid = aifp1.submit_payment(requests.Session(), self.evm_account, recovery, agent_id=self.evm_address)
+        if not hasattr(self, "_aifp1_receipts"):
+            self._aifp1_receipts = {}
+        self._aifp1_receipts.setdefault(paid["merchant_id"], []).append({
+            "jwt": paid["receipt"], "expires_at": aifp1._iso_to_unix(paid["expires_at"]), "scope": paid["scope"],
+            "resource": paid["resource"], "receipt_id": paid["receipt_id"], "unit_quota": paid["unit_quota"],
+        })
+        return paid
+
+    @staticmethod
+    def _aifp1_journal_dir(journal_dir: [str]) -> str:
+        path = journal_dir or os.path.join(os.path.expanduser("~"), ".aifinpay", "journal")
+        os.makedirs(path, mode=0o700, exist_ok=True)
+        return path
+
     def call(
         self,
         provider: str,
@@ -859,8 +962,7 @@ class AiFinPayAgent:
         """
         Call a registered provider. Free responses pass through; a paid 402
         fails closed because this legacy settlement surface has no reviewed
-        target. The Python surface has no paid replacement; use the Node SDK's
-        reviewed fetchPaid v1.3 route for paid requests.
+        target. For paid AIFP-1 resources use :meth:`fetch_paid`.
 
         :param provider: Registry name ("exa", "io-net", "venice", …)
         :param body: JSON-serializable body forwarded to the bridge

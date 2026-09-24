@@ -16,8 +16,8 @@ Safety properties kept from Node:
   outcome raises :class:`Aifp1PayError` carrying what is needed to recover it —
   never a second payment.
 
-STATUS: work in progress (phase B3/B4) — not yet wired into AiFinPayAgent and
-not yet covered by tests; do not release.
+Most callers want :meth:`aifinpay.AiFinPayAgent.fetch_paid`, which supplies
+the chain client, the durable journal and the persisted spend ledger.
 """
 
 from __future__ import annotations
