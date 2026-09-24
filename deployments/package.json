@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/deployments",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "Deployment aifinpay",
   "type": "module",
   "main": "dist/index.js",

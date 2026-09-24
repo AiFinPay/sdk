@@ -1,14 +1,14 @@
 {
   "$schema": "./reference/payment-deployments.schema.json",
   "version": "1.4",
-  "description": "B2BSplitter v1.4 \u2014 Full contract suite deployment",
+  "description": "B2BSplitter v1.4 — Full contract suite deployment",
   "schemaVersion": 1,
-  "generatedAt": "2026-09-15T12:08:01.929Z",
+  "generatedAt": "2026-09-24T19:47:18.778Z",
   "ecosystem": "evm",
   "protocolVersion": "v1.4",
   "source": {
     "repo": "AiFinPay/evm-contract",
-    "commit": "a54a4c107de7bb42f54e411e621d3897938bfc31",
+    "commit": "403bd742c33ace86c0131915db987a7063b73e06",
     "path": "deployments/*-v14-*-latest.json"
   },
   "governance": {
@@ -177,6 +177,11 @@
           "symbol": "USDC.e",
           "name": "Bridged USDC",
           "address": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+        },
+        {
+          "symbol": "USDT",
+          "name": "USDT0",
+          "address": "0xc2132D05D31c914a87C6611C10748AEb04B58e8F"
         }
       ],
       "safe": {
@@ -414,6 +419,6 @@
   ],
   "sourceArtifact": {
     "path": "./splitter/evm/v1.4/deployments.json",
-    "retrievedAt": "2026-09-15"
+    "retrievedAt": "2026-09-24"
   }
 }

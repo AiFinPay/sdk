@@ -3,7 +3,7 @@
   "version": "1.4",
   "description": "Solana Splitter v1.4 — Program deployment",
   "schemaVersion": 1,
-  "generatedAt": "2026-09-15T12:08:01.929Z",
+  "generatedAt": "2026-09-24T19:47:18.778Z",
   "ecosystem": "solana",
   "protocolVersion": "v1.4",
   "source": {
@@ -43,6 +43,6 @@
   ],
   "sourceArtifact": {
     "path": "./splitter/solana/deployments.json",
-    "retrievedAt": "2026-09-15"
+    "retrievedAt": "2026-09-24"
   }
 }

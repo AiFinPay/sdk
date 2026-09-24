@@ -355,7 +355,9 @@ export async function writeSplitRegistries(registry: DeploymentRegistry, outDir:
     protocolVersion: "v1.4" as const,
     source: {
       repo: "AiFinPay/evm-contract",
-      commit: "a54a4c107de7bb42f54e411e621d3897938bfc31",
+      // The evm-contract `dev` head this registry was generated from. Update it
+      // with every regeneration, or the file names a commit its data is not from.
+      commit: "403bd742c33ace86c0131915db987a7063b73e06",
       path: "deployments/*-v14-*-latest.json",
     },
     governance: {
@@ -369,6 +371,11 @@ export async function writeSplitRegistries(registry: DeploymentRegistry, outDir:
           "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
           "0x588A80e94a762C670711ff77CC60a2e65E64F53A",
         ],
+        // This Safe has no code on Polygon. The Polygon splitter and TokenList
+        // are administered by a different Safe (3-of-4); read `contracts.admin`
+        // per deployment, never this address, for Polygon. It was hand-added to
+        // the generated JSON once and lost on the next regeneration.
+        note: "Polygon uses a separate Safe at 0x01b80329ff81ce1d22a9e2e8807df5f92414c3c3",
       },
       testnet: {
         safe: "0xc9ab36c2af2888414c7ea9160d9e33b773c2b388",
