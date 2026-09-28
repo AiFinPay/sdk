@@ -8,7 +8,7 @@ submit them — never to construct one. Most of this module is refusals.
 
 Two settlement paths:
 
-* ``settleNative`` — the gross is sent as value in POL.
+* ``settleNative`` — the gross is sent as value in POL (Polygon) or ETH (Base).
 * ``settleStable`` — the token is pulled with ``transferFrom``, so an approval
   for exactly the gross is sent first when the allowance is short. The
   approval moves no funds and is safe to repeat, so it is not journaled; the
@@ -55,6 +55,7 @@ STABLE_FUNCTION = f"settleStable({_QUOTE_TUPLE},bytes)"
 # needs the allowance the approval is about to create). Measured at 161–179k
 # on a Polygon fork; the real estimate replaces it before the settlement is signed.
 STABLE_SETTLE_GAS_BOUND = 300_000
+BASE_GAS_PRICE_ORACLE = "0x420000000000000000000000000000000000000F"
 _PAYMENT_TOPIC = "0x" + keccak(
     text="Payment(bytes32,address,address,address,uint256,uint256,uint256,uint256,uint256,bytes32,bytes32)"
 ).hex()
@@ -285,8 +286,9 @@ class V14ExecutionContext:
     expected_gross_amount: int
     max_gas_wei: int
     on_prepared: Callable[[Dict[str, str]], None]
-    expected_token: Optional[str] = None  # None / address(0) = native POL
+    expected_token: Optional[str] = None  # None / address(0) = the selected chain's native asset
     min_seconds_remaining: Optional[int] = None
+    expected_chain: str | None = None  # Base requires explicit caller authorization
 
 
 def _quote_args(q: Dict[str, Any]) -> tuple:
@@ -367,8 +369,32 @@ def _gas_with_margin(estimate: int) -> int:
     return (estimate * 120 + 99) // 100
 
 
+def _transaction_fee(c: ChainClient, deployment: dict[str, Any], data: bytes, gas: int, max_fee: int) -> int:
+    """L2 maximum fee plus a buffered current Base L1/operator fee estimate.
+
+    calldata + 512 bounds our type-2 transaction encoding (no access list).
+    The OP oracle accounts for compression and the current operator-fee rules;
+    this is a preflight estimate, not a consensus cap on future L1 fees.
+    """
+    if gas <= 0 or max_fee <= 0:
+        _fail("V14_GAS_BUDGET_EXCEEDED", "gas and maximum fee must be positive")
+    cost = gas * max_fee
+    if deployment["chainId"] != 8453:
+        return cost
+    try:
+        l1 = _read(c, BASE_GAS_PRICE_ORACLE, "getL1FeeUpperBound(uint256)",
+                   ["uint256"], [len(data) + 512], ["uint256"])
+        operator = _read(c, BASE_GAS_PRICE_ORACLE, "getOperatorFee(uint256)",
+                         ["uint256"], [gas], ["uint256"])
+        if type(l1) is not int or type(operator) is not int or l1 < 0 or operator < 0:
+            raise ValueError("invalid fee estimate")
+    except Exception:
+        _fail("V14_FEE_ESTIMATE_UNAVAILABLE", "Base L1 data and operator fees must be estimated before signing")
+    return cost + ((l1 + operator) * 120 + 99) // 100
+
+
 def _ensure_exact_approval(ctx: V14ExecutionContext, deployment: Dict[str, Any], token: str,
-                           spender: str, gross: int) -> int:
+                           spender: str, gross: int, settlement_data: bytes) -> int:
     """Approve exactly ``gross`` when the allowance is short; return the gas cost committed."""
     c = ctx.client
     me = ctx.account.address
@@ -391,9 +417,9 @@ def _ensure_exact_approval(ctx: V14ExecutionContext, deployment: Dict[str, Any],
     nonce = c.pending_nonce(me)
     native = c.pending_balance(me)
     gas = _gas_with_margin(estimate)
-    approval_cost = gas * max_fee
-    worst_case = approval_cost + STABLE_SETTLE_GAS_BOUND * max_fee
-    if gas <= 0 or max_fee <= 0 or worst_case > ctx.max_gas_wei:
+    approval_cost = _transaction_fee(c, deployment, data, gas, max_fee)
+    worst_case = approval_cost + _transaction_fee(c, deployment, settlement_data, STABLE_SETTLE_GAS_BOUND, max_fee)
+    if priority < 0 or priority > max_fee or worst_case > ctx.max_gas_wei:
         _fail("V14_GAS_BUDGET_EXCEEDED", "approval plus settlement gas exceeds the operator gas budget")
     if native < worst_case:
         _fail("V14_INSUFFICIENT_BALANCE", "native balance cannot cover approval and settlement gas")
@@ -452,6 +478,11 @@ def execute_v14_settlement(call: Dict[str, Any], ctx: V14ExecutionContext) -> Di
     validated = validate_v14_settlement_call(
         call, order_id=ctx.order_id, payer=account_address, min_seconds_remaining=ctx.min_seconds_remaining
     )
+    if (
+        (ctx.expected_chain is not None and call.get("chain") != ctx.expected_chain)
+        or (call.get("chain") == "base" and ctx.expected_chain != "base")
+    ):
+        _fail("V14_CHAIN_MISMATCH", "settlement chain differs from the explicitly authorized purchase")
     stable = _lc(q["token"]) != ZERO
     if (
         call.get("route") != validated["route"]
@@ -460,8 +491,10 @@ def execute_v14_settlement(call: Dict[str, Any], ctx: V14ExecutionContext) -> Di
         or list(call.get("field_order") or []) != [n for n, _ in QUOTE_FIELDS]
     ):
         _fail("V14_CALL_MISMATCH", "route, method or quote field order disagrees with the supported ABI")
-    if _lc(q["ipCreator"]) != ZERO or (not stable and call.get("asset") != "POL"):
-        _fail("V14_UNSUPPORTED_ASSET", "This executor supports native POL or a pinned stablecoin, without creator payments")
+    native_asset = "ETH" if call.get("chain") == "base" else "POL"
+    if _lc(q["ipCreator"]) != ZERO or (not stable and call.get("asset") != native_asset):
+        _fail("V14_UNSUPPORTED_ASSET", "This executor supports the chain's native asset or a pinned stablecoin, "
+                                      "without creator payments")
     if _lc(ctx.expected_token or ZERO) != _lc(q["token"]):
         _fail("V14_PURCHASE_MISMATCH", "signed token does not match the authorized purchase")
     if (
@@ -474,7 +507,7 @@ def execute_v14_settlement(call: Dict[str, Any], ctx: V14ExecutionContext) -> Di
         _fail("V14_MALFORMED", "nonce metadata disagrees with signed quote")
     deployment = V14_DEPLOYMENTS.get(call.get("chain"))
     if (
-        call.get("chain") not in ("polygon", "amoy")
+        call.get("chain") not in ("polygon", "amoy", "base")
         or not deployment
         or deployment["status"] != "enabled"
         or not deployment["settlementEnabled"]
@@ -543,17 +576,18 @@ def execute_v14_settlement(call: Dict[str, Any], ctx: V14ExecutionContext) -> Di
     gross = int(q["grossAmount"])
     function = STABLE_FUNCTION if stable else NATIVE_FUNCTION
     value = 0 if stable else gross
-    approval_cost = _ensure_exact_approval(ctx, deployment, q["token"], contract, gross) if stable else 0
     data = _settle_data(function, q, call["args"]["signature"])
+    approval_cost = _ensure_exact_approval(ctx, deployment, q["token"], contract, gross, data) if stable else 0
     c.call(contract, data, sender=me, value=value)  # simulate
     estimate = c.estimate_gas(me, contract, data, value)
     max_fee, priority = c.fees()
     nonce = c.pending_nonce(me)
     balance = c.pending_balance(me)
     gas = _gas_with_margin(estimate)
-    if gas <= 0 or max_fee <= 0 or priority < 0 or priority > max_fee or approval_cost + gas * max_fee > ctx.max_gas_wei:
+    settlement_cost = _transaction_fee(c, deployment, data, gas, max_fee)
+    if priority < 0 or priority > max_fee or approval_cost + settlement_cost > ctx.max_gas_wei:
         _fail("V14_GAS_BUDGET_EXCEEDED", "estimated maximum transaction fee exceeds the operator gas budget")
-    if balance < value + gas * max_fee:
+    if balance < value + settlement_cost:
         _fail("V14_INSUFFICIENT_BALANCE", "balance cannot cover authorized gross and maximum gas")
     # Check the deadline again after slow RPCs, before signing or persisting anything.
     validate_v14_settlement_call(call, order_id=ctx.order_id, payer=me, min_seconds_remaining=ctx.min_seconds_remaining)

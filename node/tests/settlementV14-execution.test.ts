@@ -78,7 +78,7 @@ async function fixture(network = "polygon", route = "merchant-aifp1") {
     contract: dep.splitter.address,
     splitter_version: "1.4",
     route,
-    asset: "POL",
+    asset: network === "base" ? "ETH" : "POL",
     function: "settleNative((address,address,address,uint256,address,uint256,bytes32,uint256,bytes32),bytes)",
     arg_encoding: "struct+signature",
     field_order: fields.map((f) => f.name),
@@ -143,6 +143,8 @@ async function fixture(network = "polygon", route = "merchant-aifp1") {
     consumedNonce: false,
     payerNonce: 0n,
     paused: false,
+    getL1FeeUpperBound: 1000n,
+    getOperatorFee: 100n,
   };
   const onPrepared = vi.fn(async (_tx: { hash: Hex; serializedTransaction: Hex }) => {});
   const client = {
@@ -177,14 +179,15 @@ async function fixture(network = "polygon", route = "merchant-aifp1") {
     orderId: "order-1",
     expectedMerchant: merchant,
     expectedGrossAmount: 1000000n,
-    maxGasWei: 1200000n,
+    ...(network === "base" ? { expectedChain: "base" as const } : {}),
+    maxGasWei: network === "base" ? 2000000n : 1200000n,
     onPrepared,
   };
   return { call, ctx, client, wallet, state, onPrepared, log, domain, message };
 }
 
 describe("authorized native v1.4 execution", () => {
-  it.each(["polygon", "amoy"])(
+  it.each(["polygon", "amoy", "base"])(
     "journals locally signed bounded transaction and verifies mined Payment on %s",
     async (network) => {
       const f = await fixture(network);
@@ -295,7 +298,7 @@ describe("authorized native v1.4 execution", () => {
       (f: any) => {
         f.call.chain = "base";
       },
-      "V14_UNTRUSTED_DEPLOYMENT",
+      "V14_CHAIN_MISMATCH",
     ],
     [
       "negative amount",
@@ -516,5 +519,53 @@ describe("authorized native v1.4 execution", () => {
     }));
     await expect(executeV14Settlement(f.call, f.ctx)).rejects.toMatchObject({ code: "V14_TRANSACTION_REVERTED" });
     expect(f.client.sendRawTransaction).toHaveBeenCalledOnce();
+  });
+});
+
+describe("Base native fee and domain preflight", () => {
+  it.each([
+    "unselected-chain",
+    "RPC-chain",
+    "wallet-chain",
+    "L1-budget",
+    "operator-budget",
+    "fee-unavailable",
+    "operator-unavailable",
+    "balance",
+  ])("refuses %s before signing a Base transaction", async (kind) => {
+    const f = await fixture("base");
+    let code = "V14_CHAIN_MISMATCH";
+    if (kind === "unselected-chain") delete f.ctx.expectedChain;
+    if (kind === "RPC-chain") f.client.getChainId.mockResolvedValue(137);
+    if (kind === "wallet-chain") f.wallet.getChainId.mockResolvedValue(137);
+    if (kind === "L1-budget" || kind === "operator-budget") {
+      f.ctx.maxGasWei = 1200100n;
+      if (kind === "operator-budget") f.state.getL1FeeUpperBound = 0n;
+      code = "V14_GAS_BUDGET_EXCEEDED";
+    }
+    if (kind === "fee-unavailable" || kind === "operator-unavailable") {
+      delete f.state[kind === "fee-unavailable" ? "getL1FeeUpperBound" : "getOperatorFee"];
+      code = "V14_FEE_ESTIMATE_UNAVAILABLE";
+    }
+    if (kind === "balance") {
+      f.client.getBalance.mockResolvedValue(2200100n);
+      code = "V14_INSUFFICIENT_BALANCE";
+    }
+    await expect(executeV14Settlement(f.call, f.ctx)).rejects.toMatchObject({ code });
+    expect(f.wallet.account.signTransaction).not.toHaveBeenCalled();
+    expect(f.client.sendRawTransaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects a Base quote signed for the Polygon EIP-712 domain", async () => {
+    const f = await fixture("base");
+    f.call.args.signature = await signer.signTypedData({
+      domain: { ...f.domain, chainId: 137 },
+      types: { Quote: fields },
+      primaryType: "Quote",
+      message: f.message,
+    });
+    await expect(executeV14Settlement(f.call, f.ctx)).rejects.toMatchObject({ code: "V14_UNTRUSTED_SIGNER" });
+    expect(f.wallet.account.signTransaction).not.toHaveBeenCalled();
+    expect(f.client.sendRawTransaction).not.toHaveBeenCalled();
   });
 });

@@ -331,9 +331,11 @@ export interface V14ExecutionContext {
   /** Independently authorized purchase, not defaults copied from settlement_call. */
   expectedMerchant?: Address;
   expectedGrossAmount?: bigint;
-  /** The token the purchase was authorized in; address(0) or omitted = native POL. */
+  /** Trusted chain selected by the caller. Base must be explicit; legacy Polygon/Amoy callers remain valid. */
+  expectedChain?: "polygon" | "amoy" | "base";
+  /** The token the purchase was authorized in; address(0) or omitted = selected native currency. */
   expectedToken?: Address;
-  /** Maximum gas * maxFeePerGas, in native wei (in addition to purchase gross). */
+  /** Native fee budget. Base includes buffered L1/operator estimates, which can vary before inclusion. */
   maxGasWei?: bigint;
   /** Persist before broadcast. A failed write prevents transmission. Never log the raw transaction. */
   onPrepared?: (tx: { hash: Hex; serializedTransaction: Hex }) => Promise<void>;
@@ -407,8 +409,15 @@ export async function executeV14Settlement(
   ) {
     fail("V14_CALL_MISMATCH", "route, method or quote field order disagrees with the supported ABI");
   }
-  if (lc(q.ipCreator) !== ZERO || (!stable && call.asset !== "POL")) {
-    fail("V14_UNSUPPORTED_ASSET", "This executor supports native POL or a pinned stablecoin, without creator payments");
+  const expectedChain = ctx.expectedChain ?? (call.chain === "amoy" ? "amoy" : "polygon");
+  if (!["polygon", "amoy", "base"].includes(expectedChain) || call.chain !== expectedChain) {
+    fail("V14_CHAIN_MISMATCH", "signed chain does not match the independently authorized purchase");
+  }
+  if (lc(q.ipCreator) !== ZERO || (!stable && call.asset !== (expectedChain === "base" ? "ETH" : "POL"))) {
+    fail(
+      "V14_UNSUPPORTED_ASSET",
+      "This executor supports the selected native currency or a pinned stablecoin, without creator payments"
+    );
   }
   if (lc(ctx.expectedToken ?? ZERO) !== lc(q.token)) {
     fail("V14_PURCHASE_MISMATCH", "signed token does not match the authorized purchase");
@@ -424,7 +433,7 @@ export async function executeV14Settlement(
     fail("V14_MALFORMED", "nonce metadata disagrees with signed quote");
   const deployment = V14_DEPLOYMENTS[call.chain];
   if (
-    !["polygon", "amoy"].includes(call.chain) ||
+    !["polygon", "amoy", "base"].includes(call.chain) ||
     !deployment ||
     deployment.status !== "enabled" ||
     !deployment.settlementEnabled ||
@@ -530,11 +539,21 @@ export async function executeV14Settlement(
   const args = [message, call.args.signature] as const;
   const settleFunction = stable ? "settleStable" : "settleNative";
   const settleValue = stable ? 0n : message.grossAmount;
+  const data = encodeFunctionData({ abi: EXECUTION_ABI, functionName: settleFunction, args });
   // Gas already committed to an approval in this call, counted against the
   // same operator budget as the settlement.
   let approvalCostWei = 0n;
   if (stable) {
-    approvalCostWei = await ensureExactApproval(ctx, account!, deployment.chainId, q.token, call.contract, message.grossAmount, fail);
+    approvalCostWei = await ensureExactApproval(
+      ctx,
+      account!,
+      deployment.chainId,
+      q.token,
+      call.contract,
+      message.grossAmount,
+      data,
+      fail
+    );
   }
   if (stable) {
     await publicClient.simulateContract({
@@ -554,7 +573,6 @@ export async function executeV14Settlement(
       value: settleValue,
     });
   }
-  const data = encodeFunctionData({ abi: EXECUTION_ABI, functionName: settleFunction, args });
   const [estimatedGas, fees, nonce, balance] = await Promise.all([
     publicClient.estimateGas({ account: ctx.account, to: call.contract, data, value: settleValue }),
     publicClient.estimateFeesPerGas({ type: "eip1559", chain: publicClient.chain }),
@@ -562,17 +580,19 @@ export async function executeV14Settlement(
     publicClient.getBalance({ address: ctx.account, blockTag: "pending" }),
   ]);
   const gas = (estimatedGas * 120n + 99n) / 100n;
+  const extraFee = await baseExtraFee(publicClient, deployment.chainId, data, gas);
+  const transactionCost = gas * fees.maxFeePerGas + extraFee;
   if (
     gas <= 0n ||
     fees.maxFeePerGas <= 0n ||
     fees.maxPriorityFeePerGas < 0n ||
     fees.maxPriorityFeePerGas > fees.maxFeePerGas ||
-    approvalCostWei + gas * fees.maxFeePerGas > ctx.maxGasWei!
+    approvalCostWei + transactionCost > ctx.maxGasWei!
   ) {
-    fail("V14_GAS_BUDGET_EXCEEDED", "estimated maximum transaction fee exceeds the operator gas budget");
+    fail("V14_GAS_BUDGET_EXCEEDED", "estimated transaction fees exceed the operator gas budget");
   }
-  if (balance < settleValue + gas * fees.maxFeePerGas)
-    fail("V14_INSUFFICIENT_BALANCE", "balance cannot cover authorized gross and maximum gas");
+  if (balance < settleValue + transactionCost)
+    fail("V14_INSUFFICIENT_BALANCE", "balance cannot cover authorized gross and estimated transaction fees");
   // Check deadline again after slow RPCs, before signing or persisting anything.
   validateV14SettlementCall(call, {
     orderId: ctx.orderId,
@@ -677,6 +697,7 @@ async function ensureExactApproval(
   token: Address,
   spender: Address,
   gross: bigint,
+  settlementData: Hex,
   fail: (code: string, message: string) => never
 ): Promise<bigint> {
   const { publicClient } = ctx;
@@ -690,7 +711,12 @@ async function ensureExactApproval(
     }),
     publicClient.readContract({ address: token, abi: ERC20_ABI, functionName: "decimals" }),
     publicClient.readContract({ address: token, abi: ERC20_ABI, functionName: "balanceOf", args: [ctx.account] }),
-    publicClient.readContract({ address: token, abi: ERC20_ABI, functionName: "allowance", args: [ctx.account, spender] }),
+    publicClient.readContract({
+      address: token,
+      abi: ERC20_ABI,
+      functionName: "allowance",
+      args: [ctx.account, spender],
+    }),
   ]);
   if (!allowed) fail("V14_TOKEN_NOT_ALLOWED", "the splitter's tokenList no longer allows this token");
   if (Number(decimals) !== 6) fail("V14_TOKEN_DECIMALS", "token decimals differ from the 6 the quote is priced in");
@@ -712,8 +738,12 @@ async function ensureExactApproval(
     publicClient.getBalance({ address: ctx.account, blockTag: "pending" }),
   ]);
   const gas = (estimated * 120n + 99n) / 100n;
-  const approvalCost = gas * fees.maxFeePerGas;
-  const worstCase = approvalCost + STABLE_SETTLE_GAS_BOUND * fees.maxFeePerGas;
+  const [approvalExtra, settlementExtra] = await Promise.all([
+    baseExtraFee(publicClient, chainId, approveData, gas),
+    baseExtraFee(publicClient, chainId, settlementData, STABLE_SETTLE_GAS_BOUND),
+  ]);
+  const approvalCost = gas * fees.maxFeePerGas + approvalExtra;
+  const worstCase = approvalCost + STABLE_SETTLE_GAS_BOUND * fees.maxFeePerGas + settlementExtra;
   if (gas <= 0n || fees.maxFeePerGas <= 0n || worstCase > ctx.maxGasWei!) {
     fail("V14_GAS_BUDGET_EXCEEDED", "approval plus settlement gas exceeds the operator gas budget");
   }
@@ -747,4 +777,40 @@ async function ensureExactApproval(
   });
   if (after < gross) fail("V14_APPROVAL_FAILED", "allowance is still below the authorized gross after approval");
   return approvalCost;
+}
+
+/** Base charges L1 data and operator fees outside the EIP-1559 execution fee.
+ * The oracle owns the active fork's formula. Its unavailable/invalid response
+ * blocks payment; zero is accepted only as an actual oracle result.
+ * No access list is signed here. Calldata bytes + 512 conservatively covers
+ * the entire unsigned EIP-1559 envelope (including maximal uint256 fields).
+ * This is a buffered preflight estimate, not an inclusion-time fee guarantee.
+ */
+async function baseExtraFee(client: PublicClient, chainId: number, data: Hex, gas: bigint): Promise<bigint> {
+  if (chainId !== 8453) return 0n;
+  try {
+    const oracle = "0x420000000000000000000000000000000000000F" as const;
+    const abi = parseAbi([
+      "function getL1FeeUpperBound(uint256 unsignedTxSize) view returns (uint256)",
+      "function getOperatorFee(uint256 gasUsed) view returns (uint256)",
+    ]);
+    const [l1Fee, operatorFee] = await Promise.all([
+      client.readContract({
+        address: oracle,
+        abi,
+        functionName: "getL1FeeUpperBound",
+        args: [BigInt((data.length - 2) / 2 + 512)],
+      }),
+      client.readContract({ address: oracle, abi, functionName: "getOperatorFee", args: [gas] }),
+    ]);
+    if (typeof l1Fee !== "bigint" || l1Fee < 0n || typeof operatorFee !== "bigint" || operatorFee < 0n) {
+      throw new Error("invalid fee response");
+    }
+    return ((l1Fee + operatorFee) * 120n + 99n) / 100n;
+  } catch {
+    throw new V14SettlementError(
+      "V14_FEE_ESTIMATE_UNAVAILABLE",
+      "Base L1/operator fee estimate unavailable; refusing to sign"
+    );
+  }
 }

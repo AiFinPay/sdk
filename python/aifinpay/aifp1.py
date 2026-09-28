@@ -9,7 +9,7 @@ Safety properties kept from Node:
 
 * only owner-listed HTTPS origins are paid;
 * the signed call must match the quote (merchant, amount, expiry, asset);
-* native POL is priced against an independent POL/USD source, never the quote;
+* the caller chooses Polygon or Base; native POL/ETH uses an independent price;
 * a stablecoin quote must bind its gross exactly to the quoted dollars;
 * per-payment and rolling-24h USD limits are enforced before anything is signed;
 * the prepared transaction is journaled before it is sent, and an unknown
@@ -146,85 +146,110 @@ def _micro_usd(amount: Any) -> int:
     return int(micro)
 
 
-# ── Independent POL/USD ─────────────────────────────────────────────────────
+# ── Independent native-asset/USD prices ─────────────────────────────────────
 
 
-def _sane(usd: float) -> bool:
-    return 0 < usd < 1000
+def _native_asset(chain: str) -> str:
+    if chain not in ("polygon", "base"):
+        raise Aifp1QuoteError("AIFP-1 supports only an explicitly selected Polygon or Base chain")
+    return "ETH" if chain == "base" else "POL"
+
+
+def _merchant_address(quote: dict[str, Any], chain: str) -> str:
+    pay_to = quote.get("pay_to") or {}
+    if chain in pay_to and "evm" in pay_to and str(pay_to[chain]).lower() != str(pay_to["evm"]).lower():
+        raise Aifp1QuoteError("chain and EVM merchant destinations disagree")
+    return str(pay_to.get(chain, pay_to.get("evm", "")))
+
+
+def _sane(usd: float, asset: str = "POL") -> bool:
+    return 0 < usd < (1_000_000 if asset == "ETH" else 1000)
 
 
 def independent_pol_usd(session: requests.Session, polygon_rpc: str) -> Tuple[float, str]:
     """Chainlink on Polygon over the agent's own RPC, then Coinbase, then CoinGecko."""
+    return independent_native_usd(session, polygon_rpc, "polygon")
+
+
+def independent_native_usd(session: requests.Session, rpc: str, chain: str) -> tuple[float, str]:
+    """Independent POL or ETH spot price; never substitute the other chain's asset."""
+    asset = _native_asset(chain)
     errors = []
+    if chain == "polygon":
+        try:
+            r = session.post(rpc, json={
+                "jsonrpc": "2.0", "id": 1, "method": "eth_call",
+                "params": [{"to": CHAINLINK_POL_USD_POLYGON, "data": "0xfeaf968c"}, "latest"],
+            }, timeout=10, allow_redirects=False)
+            hexdata = str(r.json().get("result", ""))[2:]
+            if r.ok and len(hexdata) >= 64 * 5:
+                answer = int(hexdata[64:128], 16)
+                updated_at = int(hexdata[192:256], 16)
+                usd = answer / 1e8
+                if answer < 2**255 and _sane(usd) and -30 <= time.time() - updated_at <= MAX_FEED_AGE_S:
+                    return usd, "chainlink-polygon"
+            errors.append("chainlink: unusable answer")
+        except Exception as e:  # noqa: BLE001 — every failure means "try the next source"
+            errors.append(f"chainlink: {type(e).__name__}")
     try:
-        r = session.post(polygon_rpc, json={
-            "jsonrpc": "2.0", "id": 1, "method": "eth_call",
-            "params": [{"to": CHAINLINK_POL_USD_POLYGON, "data": "0xfeaf968c"}, "latest"],
-        }, timeout=10, allow_redirects=False)
-        hexdata = str(r.json().get("result", ""))[2:]
-        if r.ok and len(hexdata) >= 64 * 5:
-            answer = int(hexdata[64:128], 16)
-            updated_at = int(hexdata[192:256], 16)
-            usd = answer / 1e8
-            if answer < 2**255 and _sane(usd) and time.time() - updated_at <= MAX_FEED_AGE_S:
-                return usd, "chainlink-polygon"
-        errors.append("chainlink: unusable answer")
-    except Exception as e:  # noqa: BLE001 — every failure means "try the next source"
-        errors.append(f"chainlink: {type(e).__name__}")
-    try:
-        r = session.get("https://api.coinbase.com/v2/prices/POL-USD/spot", timeout=10, allow_redirects=False)
+        r = session.get(f"https://api.coinbase.com/v2/prices/{asset}-USD/spot", timeout=10, allow_redirects=False)
         d = r.json().get("data") or {}
         usd = float(d.get("amount"))
-        if r.ok and d.get("base") == "POL" and d.get("currency") == "USD" and _sane(usd):
+        if r.ok and d.get("base") == asset and d.get("currency") == "USD" and _sane(usd, asset):
             return usd, "coinbase"
         errors.append("coinbase: invalid response")
     except Exception as e:  # noqa: BLE001
         errors.append(f"coinbase: {type(e).__name__}")
     try:
+        coin_id = "ethereum" if asset == "ETH" else "polygon-ecosystem-token"
         r = session.get(
-            "https://api.coingecko.com/api/v3/simple/price?ids=polygon-ecosystem-token"
+            f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}"
             "&vs_currencies=usd&include_last_updated_at=true",
             timeout=10, allow_redirects=False,
         )
-        entry = r.json().get("polygon-ecosystem-token") or {}
+        entry = r.json().get(coin_id) or {}
         usd = float(entry.get("usd"))
-        if r.ok and _sane(usd) and time.time() - int(entry.get("last_updated_at", 0)) <= MAX_FEED_AGE_S:
+        age = time.time() - int(entry.get("last_updated_at", 0))
+        if r.ok and _sane(usd, asset) and -30 <= age <= MAX_FEED_AGE_S:
             return usd, "coingecko"
         errors.append("coingecko: invalid response")
     except Exception as e:  # noqa: BLE001
         errors.append(f"coingecko: {type(e).__name__}")
-    raise Aifp1QuoteError("no independent POL/USD price is available (" + "; ".join(errors) + ")")
+    raise Aifp1QuoteError(f"no independent {asset}/USD price is available (" + "; ".join(errors) + ")")
 
 
 # ── Quote checks ────────────────────────────────────────────────────────────
 
 
-def _pinned_stable(asset: str) -> str:
-    for a in V14_DEPLOYMENTS["polygon"]["splitter"]["assets"]:
+def _pinned_stable(asset: str, chain: str = "polygon") -> str:
+    _native_asset(chain)
+    for a in V14_DEPLOYMENTS[chain]["splitter"]["assets"]:
         if a["symbol"] == asset:
             return a["address"]
-    raise Aifp1QuoteError(f'asset "{asset}" is not a stablecoin pinned for Polygon v1.4')
+    raise Aifp1QuoteError(f'asset "{asset}" is not a stablecoin pinned for {chain} v1.4')
 
 
-def validate_stable_quote(quote: Dict[str, Any], asset: str, payer: str, expiry_s: int) -> int:
+def validate_stable_quote(
+    quote: Dict[str, Any], asset: str, payer: str, expiry_s: int, chain: str = "polygon",
+) -> int:
     """The signed gross = settlement units = the quoted USD in micro-dollars. Returns it."""
     call = quote.get("settlement_call") or {}
     if call.get("splitter_version") != "1.4":
         raise Aifp1QuoteError("a stablecoin purchase requires a signed v1.4 quote")
     validate_v14_settlement_call(call, order_id=quote["quote_id"], payer=payer)
     q = call["args"]["quote"]
-    token = _pinned_stable(asset)
+    token = _pinned_stable(asset, chain)
     micro = _micro_usd(quote.get("amount"))
     approval = call.get("approval") or {}
     units = (quote.get("settlement") or {}).get("total_units")
     if (
-        call.get("chain") != "polygon"
+        call.get("chain") != chain
         or call.get("asset") != asset
         or call.get("route") != "merchant-aifp1"
         or q["token"].lower() != token.lower()
-        or "polygon" not in (quote.get("accepted_chains") or [])
-        or not (quote.get("pay_to") or {}).get("polygon")
-        or q["merchant"].lower() != quote["pay_to"]["polygon"].lower()
+        or quote.get("accepted_chains") != [chain]
+        or not _merchant_address(quote, chain)
+        or q["merchant"].lower() != _merchant_address(quote, chain).lower()
         or "native_settlement" in quote
         or quote.get("accepted_assets") != [asset]
         or units is None
@@ -241,8 +266,11 @@ def validate_stable_quote(quote: Dict[str, Any], asset: str, payer: str, expiry_
     return micro
 
 
-def validate_native_quote(quote: Dict[str, Any], payer: str, expiry_s: int, pol_usd: float) -> float:
-    """Cross-check the POL debit against an independent price; return the USD to budget."""
+def validate_native_quote(
+    quote: Dict[str, Any], payer: str, expiry_s: int, native_usd: float, chain: str = "polygon",
+) -> float:
+    """Cross-check the selected native asset against its independent price."""
+    native_asset = _native_asset(chain)
     call = quote.get("settlement_call") or {}
     if call.get("splitter_version") != "1.4":
         raise Aifp1QuoteError("a native purchase requires a signed v1.4 quote; no legacy fallback")
@@ -250,16 +278,17 @@ def validate_native_quote(quote: Dict[str, Any], payer: str, expiry_s: int, pol_
     native = quote.get("native_settlement") or {}
     q = call["args"]["quote"]
     total = str(native.get("total_wei", ""))
-    if not total.isdigit() or native.get("asset") != "POL" or native.get("decimals") != 18:
-        raise Aifp1QuoteError("quote has no valid native POL debit")
+    if not total.isdigit() or native.get("asset") != native_asset or native.get("decimals") != 18:
+        raise Aifp1QuoteError(f"quote has no valid native {native_asset} debit")
     gross = int(total)
     treasury = int(native.get("treasury_wei", -1))
     if (
-        call.get("chain") != "polygon"
-        or call.get("asset") != "POL"
+        call.get("chain") != chain
+        or quote.get("accepted_chains") != [chain]
+        or call.get("asset") != native_asset
         or call.get("route") != "merchant-aifp1"
-        or "POL" not in (quote.get("accepted_assets") or [])
-        or q["merchant"].lower() != str((quote.get("pay_to") or {}).get("polygon", "")).lower()
+        or quote.get("accepted_assets") != [native_asset]
+        or q["merchant"].lower() != _merchant_address(quote, chain).lower()
         or q["grossAmount"] != total
         or int(q["validUntil"]) != expiry_s
         or native.get("settlement_semantics") != "gross-inclusive"
@@ -268,9 +297,9 @@ def validate_native_quote(quote: Dict[str, Any], payer: str, expiry_s: int, pol_
         or int(native.get("merchant_wei", -1)) != gross - treasury
     ):
         raise Aifp1QuoteError("signed v1.4 call disagrees with the requested merchant, debit or expiry")
-    amount_usd = float(Decimal(str(quote.get("amount"))))
-    debit_usd = gross / 1e18 * pol_usd
-    if debit_usd <= 0 or abs(debit_usd - amount_usd) > max(0.02 * amount_usd, 1e-6):
+    amount_usd = _micro_usd(quote.get("amount")) / 1e6
+    debit_usd = gross / 1e18 * native_usd
+    if not _sane(native_usd, native_asset) or debit_usd <= 0 or abs(debit_usd - amount_usd) > max(0.02 * amount_usd, 1e-6):
         raise Aifp1QuoteError("native debit disagrees with the independent USD price")
     return max(amount_usd, debit_usd)
 
@@ -284,7 +313,7 @@ def _b64url(part: str) -> bytes:
 
 def verify_paid_receipt(
     paid: Dict[str, Any], quote: Dict[str, Any], asset: str, tx_ref: str, payer: str, issuer: str,
-    session: requests.Session,
+    session: requests.Session, chain: str = "polygon",
 ) -> None:
     """Ed25519 JWT from the configured issuer's JWKS, bound to this exact purchase."""
     def reject():
@@ -334,7 +363,7 @@ def verify_paid_receipt(
         or claims.get("tx_ref") != tx_ref
         or claims.get("scope") != quote.get("scope")
         or claims.get("resource") != quote.get("resource")
-        or claims.get("chain") != "polygon"
+        or claims.get("chain") != chain
         or claims.get("asset") != asset
         or claims.get("currency") != "USD"
         or (claims.get("network_mode") or "live") != "live"
@@ -364,7 +393,26 @@ def submit_payment(
     """POST /v1/pay (idempotent), retrying 425/503 until confirmed; verify the receipt."""
     quote, tx_ref, asset = recovery["quote"], recovery["tx_ref"], recovery["asset"]
     api_base, issuer = recovery["api_base"].rstrip("/"), recovery["issuer"]
-    chain = "polygon"
+    # Older Polygon journals did not store a chain. Never derive authorization
+    # from a mutable server quote when resuming a purchase.
+    chain = recovery.get("chain", "polygon")
+    native_asset = _native_asset(chain)
+    call = quote.get("settlement_call") or {}
+    signed = (call.get("args") or {}).get("quote") or {}
+    if (
+        call.get("chain") != chain or quote.get("accepted_chains") != [chain]
+        or call.get("asset") != asset or quote.get("accepted_assets") != [asset]
+        or str(signed.get("payer", "")).lower() != account.address.lower()
+        or str(signed.get("merchant", "")).lower() != _merchant_address(quote, chain).lower()
+    ):
+        raise Aifp1QuoteError("recovery chain or asset disagrees with the original purchase")
+    if asset != native_asset:
+        token = _pinned_stable(asset, chain)
+        if str(signed.get("token", "")).lower() != token.lower():
+            raise Aifp1QuoteError("recovery token disagrees with the original purchase")
+    elif ((quote.get("native_settlement") or {}).get("asset") != native_asset
+          or signed.get("token") != "0x0000000000000000000000000000000000000000"):
+        raise Aifp1QuoteError("recovery native asset disagrees with the original purchase")
     idem = idempotency_key_for(quote["quote_id"], chain, asset, tx_ref)
     payer = account.address.lower()
     deadline = time.time() + confirm_s
@@ -402,7 +450,7 @@ def submit_payment(
             if not paid.get("receipt"):
                 raise failure("/v1/pay returned no receipt after settlement")
             try:
-                verify_paid_receipt(paid, quote, asset, tx_ref, payer, issuer, session)
+                verify_paid_receipt(paid, quote, asset, tx_ref, payer, issuer, session, chain)
             except Aifp1Error:
                 raise failure("receipt signature or purchase binding could not be verified; recover the payment")
             return paid
@@ -467,7 +515,8 @@ def aifp1_fetch(
     max_gas_wei: int,
     on_prepared: Callable[[Dict[str, Any]], None],
     receipts: Dict[str, List[Dict[str, Any]]],
-    asset: str = "POL",
+    asset: str | None = None,
+    chain: str = "polygon",
     scope: str = "prefix",
     api_base: str = DEFAULT_API_BASE,
     issuer: str = DEFAULT_API_BASE,
@@ -481,6 +530,11 @@ def aifp1_fetch(
     "prefix" by default for the same reason as in Node: an "exact" batch per URL
     costs the $0.10 floor and a transaction for every distinct page.
     """
+    native_asset = _native_asset(chain)
+    asset = native_asset if asset is None else asset
+    stable = asset != native_asset
+    if stable:
+        _pinned_stable(asset, chain)
     if scope not in ("exact", "prefix", "merchant"):
         raise Aifp1QuoteError(f"unknown scope {scope!r}")
     if not url.startswith("https://") or _origin(url) not in allowed_origins:
@@ -511,14 +565,11 @@ def aifp1_fetch(
     else:
         want_resource = resource
 
-    stable = asset != "POL"
-    if stable:
-        _pinned_stable(asset)
     r = session.post(f"{api_base.rstrip('/')}/v1/quote", json={
         "merchant_id": merchant_id, "payer": account.address, "scope": scope,
         **({} if scope == "merchant" else {"resource": want_resource}),
         "units": units or default_units_for(challenge), **({"agent_id": agent_id} if agent_id else {}),
-        **({"asset": asset} if stable else {}),
+        "asset": asset,
     }, timeout=15, allow_redirects=False)
     if not r.ok:
         raise Aifp1QuoteError(f"POST /v1/quote → {r.status_code}: {r.text[:300]}")
@@ -541,26 +592,27 @@ def aifp1_fetch(
     if expiry_s <= time.time():
         raise Aifp1QuoteError("quote is expired")
     if stable:
-        amount_usd = validate_stable_quote(quote, asset, account.address, expiry_s) / 1e6
+        amount_usd = validate_stable_quote(quote, asset, account.address, expiry_s, chain) / 1e6
         paid_asset = asset
     else:
-        pol_usd, _source = independent_pol_usd(session, polygon_rpc)
-        amount_usd = validate_native_quote(quote, account.address, expiry_s, pol_usd)
-        paid_asset = "POL"
+        native_usd, _source = independent_native_usd(session, polygon_rpc, chain)
+        amount_usd = validate_native_quote(quote, account.address, expiry_s, native_usd, chain)
+        paid_asset = native_asset
     ledger.check(amount_usd)
 
     call = quote["settlement_call"]
     q = call["args"]["quote"]
-    recovery = {"api_base": api_base, "issuer": issuer, "quote": quote, "tx_ref": None, "asset": paid_asset}
+    recovery = {"api_base": api_base, "issuer": issuer, "quote": quote, "tx_ref": None, "asset": paid_asset,
+                "chain": chain}
 
     def journal(tx: Dict[str, str]) -> None:
         recovery["tx_ref"] = tx["hash"]
         on_prepared({**recovery, "serialized_transaction": tx["serialized_transaction"]})
 
     ctx = V14ExecutionContext(
-        client=client, account=account, order_id=quote["quote_id"], expected_merchant=quote["pay_to"]["polygon"],
+        client=client, account=account, order_id=quote["quote_id"], expected_merchant=_merchant_address(quote, chain),
         expected_gross_amount=int(q["grossAmount"]), max_gas_wei=max_gas_wei, on_prepared=journal,
-        expected_token=q["token"] if stable else None,
+        expected_token=q["token"] if stable else None, expected_chain=chain,
     )
     try:
         result = execute_v14_settlement(call, ctx)

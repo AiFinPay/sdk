@@ -62,7 +62,9 @@ const paymentAbi = parseAbi([
 ]);
 const erc20 = parseAbi(["function approve(address,uint256) returns (bool)"]);
 
-async function fixture() {
+async function fixture(network: "polygon" | "base" = "polygon") {
+  const dep = V14_DEPLOYMENTS[network];
+  const USDC = dep.splitter.assets.find((a) => a.symbol === "USDC")!.address;
   const q = {
     payer: payer.address,
     merchant,
@@ -83,7 +85,7 @@ async function fixture() {
   };
   const signature = await signer.signTypedData({ domain, types: { Quote: fields }, primaryType: "Quote", message });
   const call: V14SettlementCall = {
-    chain: "polygon",
+    chain: network,
     contract: dep.splitter.address,
     splitter_version: "1.4",
     route: "merchant-aifp1",
@@ -135,6 +137,8 @@ async function fixture() {
     decimals: 6,
     balanceOf: 5_000_000n,
     allowance: 0n,
+    getL1FeeUpperBound: 1000n,
+    getOperatorFee: 100n,
   };
   const onPrepared = vi.fn(async (_tx: { hash: Hex; serializedTransaction: Hex }) => {});
   let settleLog = paymentLog();
@@ -183,12 +187,14 @@ async function fixture() {
     expectedMerchant: merchant,
     expectedGrossAmount: GROSS,
     expectedToken: USDC,
+    expectedChain: network,
     maxGasWei: 10_000_000n,
     onPrepared,
   };
   return {
     call,
     ctx,
+    token: USDC,
     client,
     wallet,
     state,
@@ -278,5 +284,50 @@ describe("v1.4 settleStable execution", () => {
     const f = await fixture();
     f.setSettleLog(zero);
     await expect(executeV14Settlement(f.call, f.ctx)).rejects.toMatchObject({ stage: "settlement" });
+  });
+});
+
+describe("Base USDC execution", () => {
+  it("approves Base USDC and settles on chain 8453 with L1/operator preflight for both transactions", async () => {
+    const f = await fixture("base");
+    await executeV14Settlement(f.call, f.ctx);
+    expect(f.sent).toHaveLength(2);
+    const [approval, settlement] = f.sent.map((s) => parseTransaction(s));
+    expect(approval).toMatchObject({ chainId: 8453, to: f.token.toLowerCase() });
+    expect(settlement).toMatchObject({ chainId: 8453, to: f.call.contract.toLowerCase() });
+    expect(f.client.readContract.mock.calls.filter(([p]) => p.functionName === "getL1FeeUpperBound")).toHaveLength(3);
+    expect(f.client.readContract.mock.calls.filter(([p]) => p.functionName === "getOperatorFee")).toHaveLength(3);
+    expect(f.onPrepared).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    "missing-L1",
+    "missing-operator",
+    "approval-budget",
+    "operator-budget",
+    "approval-balance",
+    "Polygon-token",
+  ])("rejects %s before even signing an approval", async (kind) => {
+    const f = await fixture("base");
+    let code = "V14_FEE_ESTIMATE_UNAVAILABLE";
+    if (kind === "missing-L1") delete f.state.getL1FeeUpperBound;
+    if (kind === "missing-operator") delete f.state.getOperatorFee;
+    if (kind === "approval-budget" || kind === "operator-budget") {
+      f.ctx.maxGasWei = 4200100n;
+      if (kind === "operator-budget") f.state.getL1FeeUpperBound = 0n;
+      code = "V14_GAS_BUDGET_EXCEEDED";
+    }
+    if (kind === "approval-balance") {
+      f.client.getBalance.mockResolvedValue(4200100n);
+      code = "V14_INSUFFICIENT_BALANCE";
+    }
+    if (kind === "Polygon-token") {
+      f.ctx.expectedToken = f.call.args.quote.token = f.call.approval!.token = USDC;
+      code = "V14_UNSUPPORTED_ASSET";
+    }
+    await expect(executeV14Settlement(f.call, f.ctx)).rejects.toMatchObject({ code });
+    expect(f.wallet.account.signTransaction).not.toHaveBeenCalled();
+    expect(f.client.sendRawTransaction).not.toHaveBeenCalled();
+    expect(f.onPrepared).not.toHaveBeenCalled();
   });
 });

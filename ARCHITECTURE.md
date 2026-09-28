@@ -15,8 +15,16 @@ build orchestrator. Package instructions and lockfiles are authoritative.
   package; source changes require a packed SDK integration test. Operator config,
   wallet loading, SSRF-safe fetch, and tool dispatch are separate boundaries.
 - `gate/` implements merchant paywall discovery and receipt access control.
+- `python/aifinpay/aifp1.py` owns Python payment negotiation, receipt verification
+  and recovery; `settlement_v14.py` owns validation and EVM execution. Both SDKs
+  bind an explicit Base selection across quotes, RPC, tokens, receipts and
+  journals. Polygon remains the default. Native ETH never uses a POL rate or
+  the Python default gas cap denominated in POL. Base's gas budget includes an
+  oracle-based L1/operator preflight estimate with a buffer; it cannot cap a
+  future inclusion-time L1 fee on-chain.
 - `wallet/`, `python/`, and `mcp-http/` are independent packages, outside the
-  scoped native EVM payment change below.
+  original scoped native EVM payment proposal below. Python is included in
+  the subsequent Base implementation; MCP's current chain setting is unchanged.
 
 Current integration proposal and acceptance criteria:
 [v1.4 public payment](docs/architecture/v14-public-payment.md).

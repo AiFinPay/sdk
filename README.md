@@ -95,13 +95,13 @@ The SDK surfaces have different execution status. Do not treat them as interchan
 
 ### Node / TypeScript
 
-`@aifinpay/agent` includes the reviewed AIFP-1 `fetchPaid` path. Paid execution is gated by runtime checks, including the reviewed Polygon v1.3 deployment/profile and a fresh trusted native/USD price. A quote, invoice or matching runtime hash alone is not proof that a route is production-enabled.
+`@aifinpay/agent` includes the AIFP-1 `fetchPaid` path. The 2.3.0 source candidate adds explicitly selected Base v1.4 (ETH or pinned USDC) alongside default Polygon v1.4. Paid execution validates the selected chain, pinned deployment/profile, token and RPC before signing; native payments also require a fresh independent price. Legacy Polygon v1.3 still requires its separately reviewed settlement pin. Source support does not activate a production route or publish a package.
 
 See [node/README.md](./node/README.md) and [node/PAYMENT_RECEIPTS.md](./node/PAYMENT_RECEIPTS.md).
 
 ### Python
 
-The Python package pays AIFP-1 merchants with `AiFinPayAgent.fetch_paid` (2.2.0+; use 2.2.1 or later for USDC at current Polygon gas prices; Polygon v1.4, POL or USDC), at parity with Node `fetchPaid`. Its legacy paid `call()` settlement path stays disabled.
+The Python package pays AIFP-1 merchants with `AiFinPayAgent.fetch_paid` (Polygon v1.4, POL or USDC). The 2.3.0 source candidate also supports explicit `chain="base"` with ETH or pinned USDC and a required gas budget in wei. Its legacy paid `call()` settlement path stays disabled. MCP's current payment configuration remains Polygon; these source changes do not add a Base MCP setting.
 
 See [python/README.md](./python/README.md).
 

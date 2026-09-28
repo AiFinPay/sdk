@@ -1,7 +1,7 @@
-# Native v1.4 candidate (2.1.0)
+# v1.4 payment authorization (2.3.0)
 
 The existing v1.3 documentation below remains applicable to explicitly pinned
-v1.3 callers. The new native v1.4 path uses the original backend-signed quote:
+v1.3 callers. The v1.4 path uses the original backend-signed quote:
 
 ```ts
 const response = await agent.fetchPaid(
@@ -23,7 +23,7 @@ const response = await agent.fetchPaid(
 
 `nativeUsdPrice` may return `{ usd, observedAtMs }` asynchronously and is called
 only when buying, not when reusing a receipt. `onPrepared` receives the original
-quote, API/issuer, transaction hash and serialized signed transaction. It MUST
+quote, selected chain, API/issuer, transaction hash and serialized signed transaction. It MUST
 atomically persist and fsync private state before resolving. A failed callback
 prevents broadcast. Keep a per-wallet operation lock and refuse another purchase
 while a prepared payment is unresolved. Never log the raw transaction or receipt.
@@ -37,13 +37,54 @@ owner reconciliation; receipt recovery is not a replacement broadcast.
 
 The public MCP candidate implements this private journal/cache/lock integration.
 Applications using the SDK directly own persistence and process coordination.
-The low-level executor supports native Polygon and Amoy; `fetchPaid` receipts
-currently support Polygon live mode only. No legacy or stable-token fallback.
+`fetchPaid` supports Polygon and explicitly selected Base in live mode, with
+native POL/ETH or a stablecoin pinned for that chain. It never falls back to a
+legacy route or changes assets after a refusal. The low-level executor retains
+Polygon/Amoy support and requires `expectedChain: "base"` to execute on Base.
 
 A successful executor result requires a mined success receipt with the matching
 Payment event. Unknown broadcast/confirmation yields the original hash. Profile
 fees/treasury remain administratively mutable under the existing v1.4 contract
 model. Separate funded acceptance and release approval are still required.
+
+## Base ETH or USDC
+
+Configure `evmRpcUrls.base` on `AiFinPayAgent` for an independent Base RPC. The
+SDK verifies its `eth_chainId` is 8453 before signing. `polygonRpc` remains the
+Polygon transport and is never reused for Base.
+
+```ts
+await agent.fetchPaid(url, {}, {
+  gatewayOrigins: ["https://merchant.example"],
+  resourcePathMode: "direct",
+  maxAmountUsd: ownerLimitUsd,
+  nativeUsdPrice: readFreshIndependentEthPrice,
+  v14: {
+    chain: "base", // trusted caller choice, never copied from a quote
+    asset: "ETH", // or "USDC"; omit nativeUsdPrice for a USDC purchase
+    maxGasWei: ownerFeeBudgetWei,
+    onPrepared: persistPrivatePaymentJournal,
+  },
+});
+```
+
+`asset` defaults to ETH on Base and POL on Polygon. `nativeUsdPrice` must report
+the chosen native asset's USD price and observation time; there is no automatic
+POL fallback on Base. A valid merchant receipt already cached for the same
+resource can still be reused after changing this payment preference.
+
+For Base, fee preflight counts L2 `gas × maxFeePerGas`, plus a conservative
+`GasPriceOracle.getL1FeeUpperBound` and `getOperatorFee` estimate with 20% headroom.
+Both approval and settlement are included before approval signing. The estimates
+are rechecked before settlement. Missing or malformed oracle answers block payment.
+The gas cap and balance checks use this total, but L1/operator fees may change
+before inclusion and are not capped by the signed EIP-1559 transaction.
+
+New recovery records include `chain`. A record without this field is treated as
+Polygon for compatibility and cannot recover a Base payment. The stored chain,
+asset and original quote must agree before the SDK signs a receipt claim.
+Recovery works after quote expiry when the existing transaction already settled;
+it never signs a replacement payment. Receipt JWT format is unchanged.
 
 ---
 
