@@ -24,7 +24,8 @@ import {
   toFunctionSelector,
   formatEther,
 } from "viem";
-import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
+import { privateKeyToAccount, type LocalAccount } from "viem/accounts";
+import type { AgentWallet } from "./agentWallet.js";
 import { polygon, base, arbitrum, optimism, bsc, mainnet, unichain, avalanche, type Chain } from "viem/chains";
 import { botchain, xrplevm, robinhood } from "./chains.js";
 import { V14_DEPLOYMENTS } from "./generated/v14Deployments.generated.js";
@@ -183,6 +184,7 @@ export interface AiFinPayAgentOptions extends AgentOptions {
   registryUrl?: string; // default: ${baseUrl}/api/providers,
   // falling back to /providers
   evmPrivateKey?: `0x${string}`; // optional override; otherwise derived/generated
+  // evmWallet (inherited from AgentOptions) wins over both when provided
   budgetCaps?: BudgetCaps;
   telemetry?: boolean; // default true
   polygonRpc?: string; // default: https://polygon.drpc.org
@@ -622,7 +624,7 @@ export interface NetworkAgent {
 
 export class AiFinPayAgent {
   readonly inner: Agent; // existing Solana-flavoured agent
-  readonly evmAccount: PrivateKeyAccount;
+  readonly evmAccount: AgentWallet;
   readonly registryUrl: string;
   /** Fallback registry URLs, tried in order when `registryUrl` was defaulted. */
   private registryCandidates: string[];
@@ -641,7 +643,7 @@ export class AiFinPayAgent {
   private _evmClients: Map<AnyEvmChainName, { publicClient: PublicClient; walletClient: WalletClient }> = new Map();
   private evmRpcUrls: Partial<Record<AnyEvmChainName, string>> = {};
 
-  private constructor(inner: Agent, evmAccount: PrivateKeyAccount, opts: AiFinPayAgentOptions = {}) {
+  private constructor(inner: Agent, evmAccount: AgentWallet, opts: AiFinPayAgentOptions = {}) {
     this.inner = inner;
     this.evmAccount = evmAccount;
     this.registryUrl = opts.registryUrl ?? `${inner.baseUrl}${DEFAULT_REGISTRY_PATH}`;
@@ -665,6 +667,22 @@ export class AiFinPayAgent {
     if (this.polygonRpc) this.evmRpcUrls.polygon = this.polygonRpc;
   }
 
+  /**
+   * The injected evmAccount when it is a full viem LocalAccount — required by
+   * on-chain client flows (bridge execution, splitter settlement), which sign
+   * transactions, not just messages. A message-only AgentWallet fails here
+   * with a clear error instead of a runtime type crash mid-payment.
+   */
+  private viemEvmAccount(): LocalAccount {
+    const account = this.evmAccount as AgentWallet & Partial<LocalAccount>;
+    if (typeof account.signTransaction !== "function") {
+      throw new AiFinPayError(
+        "This payment flow needs an on-chain-capable EVM wallet (a viem LocalAccount); the injected evmWallet only signs messages and typed data.",
+      );
+    }
+    return account as LocalAccount;
+  }
+
   // Lazy viem clients — only spun up when a Polygon flow runs.
   // Kept as-is for the legacy call() Polygon path; cross-chain flows use
   // evmClients() below which is generalised across all supported EVM chains.
@@ -679,7 +697,7 @@ export class AiFinPayAgent {
       this._polygonWallet = createWalletClient({
         chain: polygon,
         transport: http(this.polygonRpc),
-        account: this.evmAccount,
+        account: this.viemEvmAccount(),
       });
     }
     return { publicClient: this._polygonPublic, walletClient: this._polygonWallet };
@@ -707,7 +725,7 @@ export class AiFinPayAgent {
     const transport = rpcUrl ? http(rpcUrl) : http();
 
     const publicClient = createPublicClient({ chain, transport });
-    const walletClient = createWalletClient({ chain, transport, account: this.evmAccount });
+    const walletClient = createWalletClient({ chain, transport, account: this.viemEvmAccount() });
     const pair = { publicClient, walletClient };
     this._evmClients.set(name, pair);
     return pair;
@@ -768,6 +786,10 @@ export class AiFinPayAgent {
     // `fromSolanaSecret()` reads the same 32-byte seed and lands on the same
     // EVM address. An explicit `evmPrivateKey` still overrides, for callers
     // importing a pre-existing EVM wallet.
+    if (opts.evmWallet) {
+      const inner = Agent.new(opts);
+      return new AiFinPayAgent(inner, opts.evmWallet, opts);
+    }
     if (opts.evmPrivateKey) {
       const inner = Agent.new(opts);
       return new AiFinPayAgent(inner, privateKeyToAccount(opts.evmPrivateKey), opts);
@@ -806,7 +828,7 @@ export class AiFinPayAgent {
 
     // Derive EVM key from seed (independent, not BIP-44 — see TODO above)
     const evmHex = opts.evmPrivateKey ?? (("0x" + bytesToHex(crypto32(seed))) as `0x${string}`);
-    const evmAccount = privateKeyToAccount(evmHex);
+    const evmAccount = opts.evmWallet ?? privateKeyToAccount(evmHex);
     return new AiFinPayAgent(inner, evmAccount, opts);
   }
 
@@ -826,7 +848,7 @@ export class AiFinPayAgent {
     const inner = Agent.fromSecretB58(secretB58, opts);
     const evmKey =
       opts.evmPrivateKey ?? (("0x" + bytesToHex(crypto32(inner.secretKey.subarray(0, 32)))) as `0x${string}`);
-    const evmAccount = privateKeyToAccount(evmKey);
+    const evmAccount = opts.evmWallet ?? privateKeyToAccount(evmKey);
     return new AiFinPayAgent(inner, evmAccount, opts);
   }
 

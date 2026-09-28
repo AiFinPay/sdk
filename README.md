@@ -95,7 +95,7 @@ The SDK surfaces have different execution status. Do not treat them as interchan
 
 ### Node / TypeScript
 
-`@aifinpay/agent` includes the AIFP-1 `fetchPaid` path. The 2.3.0 source candidate adds explicitly selected Base v1.4 (ETH or pinned USDC) alongside default Polygon v1.4. Paid execution validates the selected chain, pinned deployment/profile, token and RPC before signing; native payments also require a fresh independent price. Legacy Polygon v1.3 still requires its separately reviewed settlement pin. Source support does not activate a production route or publish a package.
+`@aifinpay/agent` includes the AIFP-1 `fetchPaid` path. The 2.3.1 source candidate adds explicitly selected Base v1.4 (ETH or pinned USDC) alongside default Polygon v1.4, plus external EVM signer injection via `evmWallet`. Paid execution validates the selected chain, pinned deployment/profile, token and RPC before signing; native payments also require a fresh independent price. Legacy Polygon v1.3 still requires its separately reviewed settlement pin. Source support does not activate a production route or publish a package.
 
 See [node/README.md](./node/README.md) and [node/PAYMENT_RECEIPTS.md](./node/PAYMENT_RECEIPTS.md).
 

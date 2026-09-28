@@ -4,7 +4,8 @@ import { sha256 } from "./crypto.js";
 import { AiFinPayError, FundingTimeoutError, X402Error } from "./errors.js";
 import { detectFacilitator } from "./facilitators/detect.js";
 import type { PayOptions } from "./facilitators/base.js";
-import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
+import { privateKeyToAccount } from "viem/accounts";
+import type { AgentWallet } from "./agentWallet.js";
 
 // Canonical domain is aifinpay.io. The legacy aifinpay.company host still
 // answers, with a 301 to aifinpay.io — do not use it: a client that follows a
@@ -28,6 +29,12 @@ export interface AgentOptions {
   /** Import an existing EVM wallet for standard x402; keep this key alongside
    * the Solana secret when backing up an agent with an override. */
   evmPrivateKey?: `0x${string}`;
+  /**
+   * Inject an external EVM wallet (any viem LocalAccount — see AgentWallet).
+   * Takes priority over `evmPrivateKey` and seed derivation: the SDK calls the
+   * wallet's sign methods instead of holding the key itself.
+   */
+  evmWallet?: AgentWallet;
 }
 
 export interface PayInit extends Omit<RequestInit, "method"> {
@@ -47,7 +54,9 @@ export class Agent {
   private constructor(secretKey: Uint8Array, publicKey: Uint8Array, opts: AgentOptions = {}) {
     this.secretKey = secretKey;
     this.publicKey = publicKey;
-    if (opts.evmPrivateKey !== undefined) {
+    if (opts.evmWallet) {
+      this._evm = opts.evmWallet;
+    } else if (opts.evmPrivateKey !== undefined) {
       this._evm = privateKeyToAccount(opts.evmPrivateKey);
     }
     this.baseUrl = (opts.baseUrl || DEFAULT_BASE_URL).replace(/\/$/, "");
@@ -104,16 +113,17 @@ export class Agent {
     return bs58.encode(this.secretKey);
   }
 
-  private _evm?: PrivateKeyAccount;
+  private _evm?: AgentWallet;
   /**
-   * The agent's EVM account (viem), derived from the same 32-byte seed as the
+   * The agent's EVM account, derived from the same 32-byte seed as the
    * Solana key via domain-separated SHA-256 ("aifinpay:evm:v1\0" || seed) —
    * byte-for-byte identical to AiFinPayAgent's EVM address. Used by the
-   * standard x402 (EIP-3009) facilitator. An explicitly imported EVM key is
-   * cached during construction and takes priority over derivation.
+   * standard x402 (EIP-3009) facilitator. Priority: an injected `evmWallet`
+   * first, then an explicitly imported `evmPrivateKey` (cached during
+   * construction), then seed derivation.
    * Default derivation is Node-only (sync SHA-256).
    */
-  async evmAccount(): Promise<PrivateKeyAccount> {
+  async evmAccount(): Promise<AgentWallet> {
     if (this._evm) return this._evm;
     const { createHash } = await import("node:crypto");
     const h = createHash("sha256");

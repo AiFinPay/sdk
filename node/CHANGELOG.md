@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.3.1
+
+- Inject an external EVM signer with the `evmWallet` option (`Agent` and
+  `AiFinPayAgent`): the `AgentWallet` interface pins `address`, `signMessage`
+  and `signTypedData` with no balance or send surface, so any viem
+  `LocalAccount` satisfies it structurally and the SDK never has to hold the
+  key. `evmPrivateKeyWallet` is the self-custodial EVM adapter, identical to
+  the key `evmPrivateKey` already built internally. Stacks on the unreleased
+  2.3.0 Base support below.
+
 ## 2.3.0
 
 - Add explicitly selected Base ETH/USDC AIFP-1 payments with `v14.chain: "base"`.

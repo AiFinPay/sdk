@@ -1,3 +1,12 @@
+## Node 2.3.1 — unreleased
+
+- External EVM signer injection via the `evmWallet` option (`Agent` and
+  `AiFinPayAgent`): the exported `AgentWallet` interface pins `address`,
+  `signMessage` and `signTypedData` with no balance or send surface — any
+  viem `LocalAccount` satisfies it structurally. Stacks on the unreleased
+  2.3.0 Base support below. See
+  `docs/reviews/agent-wallet-ecosystem-review.md`.
+
 ## Node 2.3.0 / Python 2.3.0 — unreleased
 
 - AIFP-1 clients can explicitly select Base for ETH or registry-pinned USDC:

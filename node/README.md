@@ -1,6 +1,6 @@
 # @aifinpay/agent (Node / TypeScript)
 
-Version **2.3.0** adds Base ETH and USDC to the AIFP-1 `fetchPaid` flow.
+Version **2.3.1** adds Base ETH and USDC to the AIFP-1 `fetchPaid` flow.
 Polygon remains the default. Select Base independently with `v14.chain: "base"`;
 a merchant quote cannot change that choice. Runtime, signer, token, RPC chain and
 current profile checks remain mandatory, along with a durable pre-broadcast
@@ -69,7 +69,7 @@ npm pack
 Install the resulting tarball in your application:
 
 ```bash
-npm install /absolute/path/to/sdk/node/aifinpay-agent-2.3.0.tgz
+npm install /absolute/path/to/sdk/node/aifinpay-agent-2.3.1.tgz
 ```
 
 ## Quick start
@@ -123,6 +123,27 @@ const agent = await Agent.fromKeypairFile("./agent-wallet.json");
 // from base58 secret string (works in browser too)
 const agent2 = Agent.fromSecretB58("3RvZm7Gw...");
 ```
+
+## Inject an external EVM signer
+
+`Agent.new()` and `AiFinPayAgent.fromSeed()` derive the EVM identity from the
+agent seed. To keep the key outside the SDK — an in-house signer, a
+hardware-backed key, or a future vendor adapter — inject any wallet matching
+the `AgentWallet` interface via `evmWallet` (any viem `LocalAccount`
+qualifies structurally):
+
+```ts
+import { Agent, evmPrivateKeyWallet } from "@aifinpay/agent";
+
+// self-custodial default: the same key `evmPrivateKey` builds internally
+const agent = Agent.new({ evmWallet: evmPrivateKeyWallet("0x…") });
+```
+
+The interface is `address` plus `signMessage`/`signTypedData` only; balances
+and settlement stay with the facilitator/backend layer. An injected wallet
+takes priority over `evmPrivateKey` and seed derivation. A message-only signer
+covers x402 flows; on-chain flows (bridge execution, splitter settlement)
+still need a full `LocalAccount` that signs transactions.
 
 ## How x402 auth works under the hood
 
