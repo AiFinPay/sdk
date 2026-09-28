@@ -82,6 +82,8 @@ export interface Aifp1PaymentRecovery {
   quote: Aifp1Quote;
   txRef: `0x${string}`;
   asset: string;
+  /** Trusted payment chain saved before broadcast; omitted legacy journals mean Polygon. */
+  chain?: Aifp1V14Chain;
   paymentIssuer?: string;
 }
 
@@ -91,18 +93,34 @@ export interface Aifp1PaymentSigner {
   fetchImpl?: typeof fetch;
 }
 
-/** Recover an already settled Polygon payment. Never sends an on-chain transaction. */
+/** Recover an already settled payment. Never sends an on-chain transaction. */
 export function recoverAifp1Payment(
   recovery: Aifp1PaymentRecovery,
   signer: Aifp1PaymentSigner,
   options: Pick<Aifp1FetchOptions, "settlementConfirmMs" | "apiTimeoutMs" | "paymentIssuer"> = {}
 ): Promise<Aifp1PayResult> {
+  const chain = authorizedV14Chain(recovery.chain);
+  const call = recovery.quote.settlement_call;
+  if (chain !== "polygon" && call?.splitter_version !== "1.4") {
+    throw new Aifp1QuoteError("Base recovery requires the original v1.4 settlement call");
+  }
+  if (
+    call?.splitter_version === "1.4" &&
+    (call.chain !== chain ||
+      call.asset !== recovery.asset ||
+      recovery.quote.accepted_chains.length !== 1 ||
+      recovery.quote.accepted_chains[0] !== chain ||
+      !recovery.quote.accepted_assets.includes(recovery.asset))
+  ) {
+    throw new Aifp1QuoteError("recovery chain or asset disagrees with the saved purchase");
+  }
   return submitPayment(
     { ...signer, agentId: signer.payerAddress, fetchImpl: signer.fetchImpl ?? fetch },
     recovery.apiBaseUrl,
     recovery.quote,
     recovery.txRef,
     recovery.asset,
+    chain,
     { paymentIssuer: recovery.paymentIssuer, ...options }
   );
 }
@@ -170,9 +188,9 @@ export interface Aifp1Quote {
           order_id: string;
         };
       };
-  /** Native Polygon v1.3 gross settlement, when enabled by backend readiness. */
+  /** Native gross settlement in the selected chain currency, when backend readiness permits. */
   native_settlement?: {
-    asset: string; // "POL"
+    asset: string; // "POL" on Polygon, "ETH" on Base
     decimals: number;
     rate_usd: string;
     rate_fixed_at?: string;
@@ -594,16 +612,20 @@ export class Aifp1ReceiptCache {
 
 // ── Options ───────────────────────────────────────────────────────────────
 
+export type Aifp1V14Chain = "polygon" | "base";
+
 export interface Aifp1FetchOptions {
   /** Explicit native v1.4 authorization. Deployment/signer pins come from the
    * SDK registry, never from a merchant response. The journal must be durable
    * before broadcast; a prepared transaction must be recovered, never replaced. */
   v14?: {
+    /** Independently selected payment chain. Defaults to Polygon; never inferred from a quote. */
+    chain?: Aifp1V14Chain;
     /**
-     * Pay in a stablecoin the pinned Polygon deployment lists (e.g. "USDC")
-     * instead of native POL. Priced in dollars already, so no nativeUsdPrice
-     * is needed; gas is still paid in POL and counted against maxGasWei, which
-     * then covers the token approval as well as the settlement.
+     * Native currency (POL/ETH), or a stablecoin pinned for the selected chain.
+     * Defaults to native. Stablecoins need no nativeUsdPrice; maxGasWei covers
+     * approval and settlement. On Base it includes buffered L1/operator fee
+     * estimates, which can change before inclusion and are not a consensus cap.
      */
     asset?: string;
     maxGasWei: bigint;
@@ -614,7 +636,8 @@ export interface Aifp1FetchOptions {
    * The receipt flow currently verifies Polygon native settlements only. */
   settlementPin?: import("./settlement.js").TrustedSettlementRoutePin;
   /** Independent native/USD observation from the caller's trusted price source,
-   * never copied from the payment quote. Required with settlementPin; <=60s old. */
+   * never copied from the payment quote. POL/USD on Polygon, ETH/USD on Base.
+   * Required for native v1.3/v1.4 payments; <=60s old. */
   nativeUsdPrice?: { usd: number; observedAtMs: number } | (() => Promise<{ usd: number; observedAtMs: number }>);
   /**
    * How wide a batch to buy. Default "prefix" — see the comment on
@@ -839,6 +862,8 @@ export async function aifp1Fetch(
   if (opts.maxAmountUsd !== undefined && (!Number.isFinite(opts.maxAmountUsd) || opts.maxAmountUsd < 0)) {
     throw new Aifp1QuoteError("maxAmountUsd must be nonnegative and finite");
   }
+  const chain = authorizedV14Chain(opts.v14?.chain);
+  const nativeAsset = chain === "base" ? "ETH" : "POL";
   const direct = opts.resourcePathMode === "direct";
   const parsed = parseGatewayUrl(url, opts.gatewayOrigins ?? DEFAULT_GATEWAY_ORIGINS, opts.resourcePathMode);
   let site = parsed.site;
@@ -978,7 +1003,7 @@ export async function aifp1Fetch(
       throw new Aifp1QuoteError("a settlement wallet signer is required to receive a payment receipt");
     }
     // 2. Quote.
-    const stableAsset = pinnedStableAsset(opts.v14?.asset);
+    const stableAsset = pinnedStableAsset(opts.v14?.asset, chain);
     const apiBase = (opts.apiBaseUrl ?? DEFAULT_API_BASE).replace(/\/$/, "");
     const { scope, resource } = resolveScope(opts, challenge);
     const quote = await requestQuote(
@@ -991,7 +1016,7 @@ export async function aifp1Fetch(
         scope,
         units: opts.units ?? defaultUnitsFor(challenge),
         agent_id: deps.agentId,
-        ...(stableAsset ? { asset: stableAsset } : {}),
+        ...(opts.v14 ? { asset: stableAsset ?? nativeAsset } : {}),
       },
       opts.apiTimeoutMs
     );
@@ -1002,6 +1027,19 @@ export async function aifp1Fetch(
       throw new Aifp1QuoteError("unsupported receipt authorization scheme");
     }
     trustedPaymentIssuer(quote, opts.paymentIssuer);
+    const merchantWallet = quote.pay_to[chain] ?? quote.pay_to.evm;
+    if (
+      opts.v14 &&
+      (quote.accepted_chains.length !== 1 ||
+        quote.accepted_chains[0] !== chain ||
+        quote.settlement_call?.chain !== chain ||
+        !merchantWallet ||
+        (quote.pay_to[chain] !== undefined &&
+          quote.pay_to.evm !== undefined &&
+          quote.pay_to[chain].toLowerCase() !== quote.pay_to.evm.toLowerCase()))
+    ) {
+      throw new Aifp1QuoteError("quote does not match the independently selected payment chain");
+    }
 
     // The merchant we are about to pay must be the merchant that refused us.
     // Cheap, and the failure it catches is the one worth catching.
@@ -1035,7 +1073,7 @@ export async function aifp1Fetch(
       throw new Aifp1QuoteError(`quote ${quote.quote_id} has an unusable amount "${quote.amount}"`);
     }
     if (stableAsset) {
-      validateStableV14Quote(quote, stableAsset, deps.payerAddress as `0x${string}`, quoteExpiryMs);
+      validateStableV14Quote(quote, stableAsset, deps.payerAddress as `0x${string}`, quoteExpiryMs, chain);
     } else if (opts.settlementPin || opts.v14) {
       const price = typeof opts.nativeUsdPrice === "function" ? await opts.nativeUsdPrice() : opts.nativeUsdPrice;
       const age = price ? Date.now() - price.observedAtMs : NaN;
@@ -1069,8 +1107,14 @@ export async function aifp1Fetch(
       const call = quote.settlement_call;
       const args = call?.args as
         Exclude<Aifp1Quote["settlement_call"], V14SettlementCall | undefined>["args"] | undefined;
-      if (native.asset !== "POL" || native.decimals !== 18 || !quote.accepted_assets.includes("POL")) {
-        throw new Aifp1QuoteError("native receipt settlement requires accepted POL with 18 decimals");
+      if (
+        native.asset !== nativeAsset ||
+        native.decimals !== 18 ||
+        (opts.v14
+          ? quote.accepted_assets.length !== 1 || quote.accepted_assets[0] !== nativeAsset
+          : !quote.accepted_assets.includes(nativeAsset))
+      ) {
+        throw new Aifp1QuoteError(`native receipt settlement requires accepted ${nativeAsset} with 18 decimals`);
       }
       if (opts.v14) {
         if (!call || call.splitter_version !== "1.4") {
@@ -1079,10 +1123,10 @@ export async function aifp1Fetch(
         const signed = call as V14SettlementCall;
         validateV14SettlementCall(signed, { orderId: quote.quote_id, payer: deps.payerAddress as `0x${string}` });
         if (
-          signed.chain !== "polygon" ||
-          signed.asset !== "POL" ||
+          signed.chain !== chain ||
+          signed.asset !== nativeAsset ||
           signed.route !== "merchant-aifp1" ||
-          signed.args.quote.merchant.toLowerCase() !== quote.pay_to.polygon?.toLowerCase() ||
+          signed.args.quote.merchant.toLowerCase() !== merchantWallet?.toLowerCase() ||
           signed.args.quote.grossAmount !== native.total_wei ||
           BigInt(signed.args.quote.validUntil) !== BigInt(Math.floor(quoteExpiryMs / 1000))
         ) {
@@ -1138,7 +1182,7 @@ export async function aifp1Fetch(
         const gross = BigInt(signed.grossAmount);
         const treasury = gross / 100n;
         settleParams = {
-          merchantWallet: quote.pay_to.polygon as `0x${string}`,
+          merchantWallet: merchantWallet as `0x${string}`,
           grossWei: gross,
           merchantWei: gross - treasury,
           treasuryWei: treasury,
@@ -1151,16 +1195,12 @@ export async function aifp1Fetch(
         const native = quote.native_settlement;
         if (!native) {
           throw new Aifp1SettlementUnsupportedError(
-            `quote ${quote.quote_id} carries no native_settlement — the backend had no live POL rate, ` +
-              `and the deployed B2BSplitter has no ERC-20 entrypoint, so this SDK cannot settle ` +
-              `${quote.accepted_assets.join("/")}. Retry when a POL rate is available or settle the quote yourself.`
+            `quote ${quote.quote_id} carries no native_settlement for ${nativeAsset}; ` +
+              `retry when a live ${nativeAsset} rate is available or request a pinned stablecoin explicitly.`
           );
         }
-        if (!quote.accepted_chains.includes("polygon") || !quote.pay_to.polygon) {
-          throw new Aifp1SettlementUnsupportedError(
-            `quote ${quote.quote_id} does not accept polygon (accepts ${quote.accepted_chains.join(", ")}) — ` +
-              `AIFP-1 settlement verification is Polygon-only server-side (aifp/verify-settlement.js)`
-          );
+        if (!quote.accepted_chains.includes(chain) || !merchantWallet) {
+          throw new Aifp1SettlementUnsupportedError(`quote ${quote.quote_id} does not accept ${chain}`);
         }
 
         // The caps above were checked in USD; the wallet is about to be debited in
@@ -1212,7 +1252,7 @@ export async function aifp1Fetch(
           throw new Aifp1QuoteError(`quote ${quote.quote_id} valid_until does not match expires_at`);
         }
         settleParams = {
-          merchantWallet: quote.pay_to.polygon as `0x${string}`,
+          merchantWallet: merchantWallet as `0x${string}`,
           grossWei: nativeGross,
           merchantWei: nativeMerchant,
           treasuryWei: nativeTreasury,
@@ -1238,6 +1278,7 @@ export async function aifp1Fetch(
                     quote,
                     txRef: tx.hash,
                     asset: paidAsset,
+                    chain,
                     paymentIssuer: opts.paymentIssuer,
                     serializedTransaction: tx.serializedTransaction,
                   });
@@ -1255,6 +1296,7 @@ export async function aifp1Fetch(
             quote,
             txRef: error.txHash,
             asset: paidAsset,
+            chain,
             paymentIssuer: opts.paymentIssuer,
           };
           try {
@@ -1293,12 +1335,13 @@ export async function aifp1Fetch(
             quote,
             txRef,
             asset: paidAsset,
+            chain,
             paymentIssuer: opts.paymentIssuer,
           }
         );
       }
 
-      const paid = await submitPayment(deps, apiBase, quote, txRef, paidAsset, opts);
+      const paid = await submitPayment(deps, apiBase, quote, txRef, paidAsset, chain, opts);
 
       // 6. Keep the batch. This is the whole point of the design: the next call
       // this receipt covers costs a header, not a transaction.
@@ -1345,6 +1388,7 @@ export async function aifp1Fetch(
             quote,
             txRef,
             asset: paidAsset,
+            chain,
             paymentIssuer: opts.paymentIssuer,
           }
         );
@@ -1384,18 +1428,21 @@ export async function aifp1Fetch(
 
 // ── /v1/quote ─────────────────────────────────────────────────────────────
 
-/**
- * The stablecoin a v1.4 purchase may be made in: null for native POL, the
- * pinned symbol otherwise. Only symbols the SDK's own Polygon deployment pin
- * lists are accepted — never one a merchant or quote suggests.
- */
-function pinnedStableAsset(asset: string | undefined): string | null {
-  if (asset === undefined || asset === "POL") return null;
-  const pinned = V14_DEPLOYMENTS.polygon?.splitter.assets.find((a) => a.symbol === asset);
+/** Trusted input only: neither a quote nor a receipt may choose a payment chain. */
+function authorizedV14Chain(chain: Aifp1V14Chain | undefined): Aifp1V14Chain {
+  if (chain === undefined) return "polygon";
+  if (chain !== "polygon" && chain !== "base") throw new Aifp1QuoteError(`unsupported v1.4 chain "${chain}"`);
+  return chain;
+}
+
+/** Native by default; stablecoin symbols must be pinned for the selected chain. */
+function pinnedStableAsset(asset: string | undefined, chain: Aifp1V14Chain): string | null {
+  if (asset === undefined || asset === (chain === "base" ? "ETH" : "POL")) return null;
+  const pinned = V14_DEPLOYMENTS[chain]?.splitter.assets.find((a) => a.symbol === asset);
   if (!pinned) {
     throw new Aifp1QuoteError(
-      `v14.asset "${asset}" is not a stablecoin pinned for Polygon v1.4 ` +
-        `(${(V14_DEPLOYMENTS.polygon?.splitter.assets ?? []).map((a) => a.symbol).join(", ") || "none"})`
+      `v14.asset "${asset}" is not a stablecoin pinned for ${chain} v1.4 ` +
+        `(${(V14_DEPLOYMENTS[chain]?.splitter.assets ?? []).map((a) => a.symbol).join(", ") || "none"})`
     );
   }
   return pinned.symbol;
@@ -1412,7 +1459,8 @@ function validateStableV14Quote(
   quote: Aifp1Quote,
   asset: string,
   payer: `0x${string}`,
-  quoteExpiryMs: number
+  quoteExpiryMs: number,
+  chain: Aifp1V14Chain
 ): void {
   const call = quote.settlement_call;
   if (!call || call.splitter_version !== "1.4") {
@@ -1420,7 +1468,8 @@ function validateStableV14Quote(
   }
   const signed = call as V14SettlementCall;
   validateV14SettlementCall(signed, { orderId: quote.quote_id, payer });
-  const token = V14_DEPLOYMENTS.polygon?.splitter.assets.find((a) => a.symbol === asset)?.address;
+  const token = V14_DEPLOYMENTS[chain]?.splitter.assets.find((a) => a.symbol === asset)?.address;
+  const merchant = quote.pay_to[chain] ?? quote.pay_to.evm;
   const q = signed.args.quote;
   let micro: bigint;
   try {
@@ -1430,14 +1479,15 @@ function validateStableV14Quote(
   }
   const units = (quote as { settlement?: { total_units?: string } }).settlement?.total_units;
   if (
-    signed.chain !== "polygon" ||
+    signed.chain !== chain ||
     signed.asset !== asset ||
     signed.route !== "merchant-aifp1" ||
     !token ||
     q.token.toLowerCase() !== token.toLowerCase() ||
-    !quote.accepted_chains.includes("polygon") ||
-    !quote.pay_to.polygon ||
-    q.merchant.toLowerCase() !== quote.pay_to.polygon.toLowerCase() ||
+    quote.accepted_chains.length !== 1 ||
+    quote.accepted_chains[0] !== chain ||
+    !merchant ||
+    q.merchant.toLowerCase() !== merchant.toLowerCase() ||
     quote.native_settlement !== undefined ||
     quote.accepted_assets.length !== 1 ||
     quote.accepted_assets[0] !== asset ||
@@ -1515,9 +1565,9 @@ async function submitPayment(
   quote: Aifp1Quote,
   txRef: `0x${string}`,
   asset: string,
+  chain: Aifp1V14Chain,
   opts: Aifp1FetchOptions
 ): Promise<Aifp1PayResult> {
-  const chain = "polygon";
   const idempotencyKey = idempotencyKeyFor({ quoteId: quote.quote_id, chain, asset, txRef });
   const deadline = Date.now() + (opts.settlementConfirmMs ?? DEFAULT_SETTLEMENT_CONFIRM_MS);
 
@@ -1526,6 +1576,7 @@ async function submitPayment(
     quote,
     txRef,
     asset,
+    chain,
     paymentIssuer: opts.paymentIssuer,
   };
   const failure = (message: string) => new Aifp1PayError(message, txRef, quote.quote_id, recovery);
@@ -1600,6 +1651,7 @@ async function submitPayment(
             paid,
             quote,
             asset,
+            chain,
             txRef,
             deps.payerAddress,
             opts.paymentIssuer ?? DEFAULT_API_BASE,
@@ -1630,6 +1682,7 @@ async function verifyPaidReceipt(
   paid: Aifp1PayResult,
   quote: Aifp1Quote,
   asset: string,
+  chain: Aifp1V14Chain,
   txRef: string,
   payer: string,
   issuer: string,
@@ -1690,7 +1743,7 @@ async function verifyPaidReceipt(
     claims.tx_ref !== txRef ||
     claims.scope !== quote.scope ||
     claims.resource !== quote.resource ||
-    claims.chain !== "polygon" ||
+    claims.chain !== chain ||
     claims.asset !== asset ||
     claims.currency !== "USD" ||
     (claims.network_mode ?? "live") !== "live" ||

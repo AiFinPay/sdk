@@ -1,3 +1,18 @@
+## Node 2.3.0 / Python 2.3.0 — unreleased
+
+- AIFP-1 clients can explicitly select Base for ETH or registry-pinned USDC:
+  Node `v14.chain = "base"`, Python `chain="base"`. Polygon remains the default.
+  Chain selection binds quote validation, RPC chain ID, EIP-712 deployment,
+  token, native price, receipts and recovery journals before payment signing.
+- ETH uses an independent ETH/USD observation, never a POL rate. Base gas
+  preflight includes L2 execution plus the oracle's L1 data/operator estimate
+  with a 20% buffer. Python Base requires an explicit `max_gas_wei`; its legacy
+  0.5 POL default is not an ETH allowance. These are preflight estimates, not
+  a guarantee of inclusion-time L1 fees.
+- Existing Polygon journals remain recoverable. A Base purchase requires a
+  Base-aware backend and operator-enabled deployment; installing the SDK does
+  not activate a network. MCP's current payment configuration remains Polygon.
+
 ## Deployments 1.1.3 — unreleased
 
 - Polygon v1.4 pins USDT0 (`0xc2132D05D31c914a87C6611C10748AEb04B58e8F`) as

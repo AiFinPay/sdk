@@ -38,6 +38,7 @@ def sel(signature):
 
 
 def signed_call(dep, token=ZERO, gross=100000, order="order-1"):
+    chain = dep["network"]
     q = {
         "payer": PAYER.address, "merchant": MERCHANT, "token": token, "grossAmount": str(gross),
         "ipCreator": ZERO, "validUntil": str(int(time.time()) + 300),
@@ -57,8 +58,8 @@ def signed_call(dep, token=ZERO, gross=100000, order="order-1"):
     sig = SIGNER.sign_message(encode_typed_data(full_message=typed)).signature.hex()
     stable = token != ZERO
     call = {
-        "chain": "polygon", "contract": dep["splitter"]["address"], "splitter_version": "1.4",
-        "route": "merchant-aifp1", "asset": "USDC" if stable else "POL",
+        "chain": chain, "contract": dep["splitter"]["address"], "splitter_version": "1.4",
+        "route": "merchant-aifp1", "asset": "USDC" if stable else ("ETH" if chain == "base" else "POL"),
         "function": s.STABLE_FUNCTION if stable else s.NATIVE_FUNCTION,
         "arg_encoding": "struct+signature", "field_order": [n for n, _ in s.QUOTE_FIELDS],
         "value_wei": "0" if stable else str(gross),
@@ -75,7 +76,8 @@ def decode_tx(raw):
 
     assert raw[0] == 2
     fields = rlp.decode(bytes(raw[1:]))
-    return {"to": fields[5], "value": int.from_bytes(fields[6], "big"), "data": fields[7]}
+    return {"chainId": int.from_bytes(fields[0], "big"), "to": fields[5],
+            "value": int.from_bytes(fields[6], "big"), "data": fields[7]}
 
 
 class FakeChain:
@@ -90,6 +92,7 @@ class FakeChain:
             "consumedNonce(address,uint256)": False, "payerNonce(address)": 0, "paused()": False,
             "isAllowed(address)": True, "decimals()": 6, "balanceOf(address)": 5_000_000,
             "allowance(address,address)": 0,
+            "getL1FeeUpperBound(uint256)": 1000, "getOperatorFee(uint256)": 100,
         }
         self.returns = {
             "profiles()": ["address"], "tokenList()": ["address"], "treasury()": ["address"],
@@ -97,9 +100,11 @@ class FakeChain:
             "consumedNonce(address,uint256)": ["bool"], "payerNonce(address)": ["uint256"], "paused()": ["bool"],
             "isAllowed(address)": ["bool"], "decimals()": ["uint8"], "balanceOf(address)": ["uint256"],
             "allowance(address,address)": ["uint256"],
+            "getL1FeeUpperBound(uint256)": ["uint256"], "getOperatorFee(uint256)": ["uint256"],
         }
         self.by_selector = {sel(k): k for k in self.returns}
         self.sent = []
+        self.oracle_calls = []
         self.approve_status = 1
         self.settle_status = 1
         self.native_balance = 10_000_000
@@ -114,6 +119,8 @@ class FakeChain:
 
     def call(self, to, data, sender=None, value=0):
         name = self.by_selector.get(bytes(data[:4]))
+        if to.lower() == s.BASE_GAS_PRICE_ORACLE.lower():
+            self.oracle_calls.append((name, abi_decode(["uint256"], bytes(data[4:]))[0]))
         if name is None:
             return b""  # simulation of approve / settle
         return abi_encode(self.returns[name], [self.state[name]])
@@ -132,7 +139,7 @@ class FakeChain:
 
     def is_approve(self, raw):
         tx = decode_tx(raw)
-        return "0x" + bytes(tx["to"]).hex() == USDC.lower(), tx
+        return bytes(tx["data"][:4]) == sel("approve(address,uint256)"), tx
 
     def send_raw_transaction(self, raw):
         self.sent.append(raw)

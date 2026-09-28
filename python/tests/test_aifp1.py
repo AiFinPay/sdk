@@ -20,7 +20,7 @@ from eth_abi import encode as abi_encode
 from eth_account import Account
 from eth_account.messages import encode_defunct
 from eth_utils import keccak
-from test_settlement_v14 import MERCHANT, PAYER, USDC, FakeChain, signed_call
+from test_settlement_v14 import MERCHANT, PAYER, FakeChain, signed_call
 
 import aifinpay.aifp1 as a
 import aifinpay.settlement_v14 as s
@@ -76,6 +76,10 @@ class Server:
 
     def __init__(self, dep):
         self.dep = dep
+        self.chain = dep["network"]
+        self.native_asset = "ETH" if self.chain == "base" else "POL"
+        self.native_usd = 2500 if self.chain == "base" else POL_USD
+        self.usdc = next(asset["address"] for asset in dep["splitter"]["assets"] if asset["symbol"] == "USDC")
         self.quotes = 0
         self.pays = []
         self.pay_statuses = []  # answered, in order, before a /v1/pay succeeds
@@ -98,7 +102,7 @@ class Server:
         if url.startswith("https://api.coinbase.com/"):
             if self.prices_down:
                 return Resp(500, {})
-            return Resp(200, {"data": {"base": "POL", "currency": "USD", "amount": str(POL_USD)}})
+            return Resp(200, {"data": {"base": self.native_asset, "currency": "USD", "amount": str(self.native_usd)}})
         if url.startswith("https://api.coingecko.com/"):
             return Resp(500, {})
         if url.startswith(SHOP):
@@ -130,27 +134,28 @@ class Server:
 
     def quote(self, body):
         self.quotes += 1
-        stable = body.get("asset") not in (None, "POL")
+        stable = body.get("asset") not in (None, self.native_asset)
         assert body["payer"] == PAYER.address and body["units"] == 200
         order = f"qt_{self.quotes:016d}"
-        gross = STABLE_GROSS if stable else NATIVE_GROSS
-        self.call = signed_call(self.dep, token=USDC if stable else s.ZERO, gross=gross, order=order)
+        gross = STABLE_GROSS if stable else int(float(AMOUNT) / self.native_usd * 10**18)
+        self.call = signed_call(self.dep, token=self.usdc if stable else s.ZERO, gross=gross, order=order)
         valid_until = int(self.call["args"]["quote"]["validUntil"])
         quote = {
             "quote_id": order, "nonce": "n-" + order, "payer": body["payer"], "merchant_id": body["merchant_id"],
             "resource": "*" if body["scope"] == "merchant" else body["resource"], "scope": body["scope"],
             "unit_quota": 200, "amount": AMOUNT,
             "currency": "USD", "network_mode": "live", "expires_at": iso(valid_until),
-            "accepted_chains": ["polygon"], "pay_to": {"polygon": MERCHANT}, "settlement_call": self.call,
+            "accepted_chains": [self.chain],
+            "pay_to": {"evm": MERCHANT, "polygon": MERCHANT}, "settlement_call": self.call,
             "payment_authorization": {"scheme": "wallet-signature-v1", "domain": API},
         }
         if stable:
             quote["accepted_assets"] = ["USDC"]
             quote["settlement"] = {"total_units": str(gross)}
         else:
-            quote["accepted_assets"] = ["POL"]
+            quote["accepted_assets"] = [self.native_asset]
             quote["native_settlement"] = {
-                "asset": "POL", "decimals": 18, "total_wei": str(gross), "settlement_semantics": "gross-inclusive",
+                "asset": self.native_asset, "decimals": 18, "total_wei": str(gross), "settlement_semantics": "gross-inclusive",
                 "creator_wei": "0", "treasury_wei": str(gross // 100), "merchant_wei": str(gross - gross // 100),
             }
         if self.quote_mutator:
@@ -173,14 +178,14 @@ class Server:
         )
         signer = Account.recover_message(encode_defunct(text=message), signature=auth["signature"])
         assert signer == PAYER.address and auth["payer"] == PAYER.address.lower()
-        self.pays.append({"idem": idem, "tx_ref": body["tx_ref"]})
+        self.pays.append({"idem": idem, "tx_ref": body["tx_ref"], "chain": body["chain"], "asset": body["asset"]})
         if self.pay_statuses:
             return Resp(self.pay_statuses.pop(0), {"error": "AIFP-425"})
         now = int(time.time())
         receipt_id = "rcpt_" + body["tx_ref"][2:10]
         claims = {
             "iss": API, "aud": quote["merchant_id"], "sub": auth["payer"], "tx_ref": body["tx_ref"],
-            "scope": quote["scope"], "resource": quote["resource"], "chain": "polygon", "asset": body["asset"],
+            "scope": quote["scope"], "resource": quote["resource"], "chain": self.chain, "asset": body["asset"],
             "currency": "USD", "network_mode": "live", "amount": AMOUNT, "unit_quota": quote["unit_quota"],
             "iat": now, "exp": now + 3600, "receipt_id": receipt_id,
         }
@@ -192,7 +197,7 @@ class Server:
         return Resp(200, {
             "receipt": f"{head}.{payload}.{sig}", "receipt_id": receipt_id, "merchant_id": quote["merchant_id"],
             "tx_ref": body["tx_ref"], "scope": quote["scope"], "resource": quote["resource"],
-            "unit_quota": quote["unit_quota"], "chain": "polygon", "asset": body["asset"], "currency": "USD",
+            "unit_quota": quote["unit_quota"], "chain": self.chain, "asset": body["asset"], "currency": "USD",
             "amount": AMOUNT, "expires_at": iso(now + 3600), **self.paid_override,
         })
 
@@ -457,6 +462,18 @@ def test_recovery_resubmits_the_same_payment_without_paying_again(pinned):
         h.fetch()
     paid = a.submit_payment(h.server, PAYER, e.value.recovery)
     assert paid["tx_ref"] == e.value.tx_ref and len(h.chain.sent) == 1
+    assert len({p["idem"] for p in h.server.pays}) == 1
+
+
+def test_old_polygon_journal_without_a_chain_still_recovers(pinned):
+    h = Harness(pinned)
+    h.server.pay_statuses = [500]
+    with pytest.raises(a.Aifp1PayError) as failure:
+        h.fetch()
+    recovery = failure.value.recovery
+    recovery.pop("chain")
+    paid = a.submit_payment(h.server, PAYER, recovery)
+    assert paid["chain"] == "polygon" and len(h.chain.sent) == 1
     assert len({p["idem"] for p in h.server.pays}) == 1
 
 

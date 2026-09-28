@@ -1,15 +1,21 @@
 # @aifinpay/agent (Node / TypeScript)
 
-Version **2.1.4**. Native Polygon v1.4 execution with pinned runtime, signer and
-current profile checks is released (since 2.1.0). `fetchPaid` buys Polygon v1.4
-receipts through explicit `v14` authorization, a durable pre-broadcast journal,
-a fresh independent POL/USD rate you supply (`nativeUsdPrice`) and a separate
-gas cap. Stable-token v1.4 execution and legacy `call()` remain unavailable.
+Version **2.3.0** adds Base ETH and USDC to the AIFP-1 `fetchPaid` flow.
+Polygon remains the default. Select Base independently with `v14.chain: "base"`;
+a merchant quote cannot change that choice. Runtime, signer, token, RPC chain and
+current profile checks remain mandatory, along with a durable pre-broadcast
+journal and an explicit gas budget. Legacy `call()` remains unavailable.
 
-For `nativeUsdPrice`, any source independent of the quote works: Chainlink
-POL/USD on Polygon (`0xAB594600376Ec9fD91F8e885dADF0CE036862dE0`, 8 decimals),
-Coinbase `POL-USD`, or CoinGecko id `polygon-ecosystem-token` (not the retired
-`matic-network`, which stopped updating in February 2026).
+Native payments require a fresh independent `nativeUsdPrice`: POL/USD on Polygon,
+ETH/USD on Base. The SDK does not infer or fetch this price from a payment quote.
+Stablecoin payments use the selected deployment's pinned token and exact USD minor
+units. No native price is needed for stablecoin settlement.
+
+On Base, `maxGasWei` covers the estimated L2 execution fee plus buffered L1 data and
+operator fees, including approval when needed. This preflight estimate can change
+before inclusion; the transaction cannot enforce a hard cap on L1/operator fees.
+An unavailable fee oracle blocks signing. See the [Base configuration and recovery
+guide](./PAYMENT_RECEIPTS.md).
 
 ### Link the agent to its owner's dashboard
 
@@ -63,7 +69,7 @@ npm pack
 Install the resulting tarball in your application:
 
 ```bash
-npm install /absolute/path/to/sdk/node/aifinpay-agent-2.1.0.tgz
+npm install /absolute/path/to/sdk/node/aifinpay-agent-2.3.0.tgz
 ```
 
 ## Quick start

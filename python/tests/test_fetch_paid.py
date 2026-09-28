@@ -96,3 +96,27 @@ def test_the_default_gas_cap_covers_a_usdc_purchase_at_a_250_gwei_base_fee(agent
     worst_fee = 2 * 250 * 10**9 + 30 * 10**9  # 2 x base fee + tip, in wei per gas
     approval_bound = 70_000
     assert seen["max_gas_wei"] >= (approval_bound + STABLE_SETTLE_GAS_BOUND) * worst_fee
+
+
+def test_base_selects_its_rpc_and_explicit_native_wei_budget(tmp_path, monkeypatch):
+    agent = AiFinPayAgent.new(polygon_rpc="https://polygon-rpc.example", base_rpc="https://base-rpc.example")
+    seen = {}
+    monkeypatch.setattr(a, "aifp1_fetch", lambda url, **kw: seen.update(kw) or "ok")
+    agent.fetch_paid("https://shop.example/x", allowed_origins=["https://shop.example"],
+                     max_amount_usd=1, daily_amount_usd=1, journal_dir=str(tmp_path),
+                     chain="base", max_gas_wei=10**15)
+    assert seen["chain"] == "base" and seen["max_gas_wei"] == 10**15
+    assert seen["polygon_rpc"] == "https://base-rpc.example"
+    assert agent._web3("base").provider.endpoint_uri == "https://base-rpc.example"
+    assert agent._web3().provider.endpoint_uri == "https://polygon-rpc.example"
+    assert agent._web3("base") is not agent._web3()
+
+
+@pytest.mark.parametrize("gas", [None, 0, -1, True, 0.01, float("nan")])
+def test_base_cannot_reuse_the_legacy_pol_gas_default(agent, tmp_path, monkeypatch, gas):
+    monkeypatch.setattr(a, "aifp1_fetch", lambda *_a, **_kw: pytest.fail("must refuse before any request"))
+    with pytest.raises(a.Aifp1QuoteError):
+        agent.fetch_paid("https://shop.example/x", allowed_origins=["https://shop.example"],
+                         max_amount_usd=1, daily_amount_usd=1, journal_dir=str(tmp_path),
+                         chain="base", max_gas_wei=gas)
+    assert list(tmp_path.iterdir()) == []

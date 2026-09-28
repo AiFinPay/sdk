@@ -1,8 +1,9 @@
 # aifinpay-agent (Python)
 
-Version `2.2.1`: agent identity (EVM and Solana addresses from one seed), native
+Version `2.3.0`: agent identity (EVM and Solana addresses from one seed), native
 request authentication, linking an agent to its owner's dashboard, and paying
-AiFinPay merchants (`fetch_paid`, AIFP-1 on Polygon v1.4 in POL or USDC).
+AiFinPay merchants (`fetch_paid`, AIFP-1 on Polygon v1.4 in POL or USDC,
+or explicitly selected Base v1.4 in ETH or USDC).
 
 Canonical domain **aifinpay.io** (`aifinpay.company` only redirects there). A
 wallet address alone does not mean a payment route is enabled. The keypair is
@@ -52,9 +53,42 @@ challenge and the SDK's pinned deployment, and the batch fits both limits. POL
 is priced against an independent POL/USD source (Chainlink on Polygon, then
 Coinbase, then CoinGecko), never the quote; USDC approves exactly the batch.
 
+For a merchant configured to settle on Base, select the chain explicitly:
+
+```python
+agent = AiFinPayAgent.from_seed(SEED_HEX, base_rpc="https://mainnet.base.org")
+r = agent.fetch_paid(
+    "https://api.example.com/articles/2026/x",
+    allowed_origins=["https://api.example.com"],
+    max_amount_usd=0.20,
+    daily_amount_usd=2.00,
+    chain="base",
+    asset="USDC",                  # omit for native ETH on Base
+    max_gas_wei=10**15,             # explicit 0.001 ETH fee budget
+)
+```
+
+Base requires `max_gas_wei`; the legacy Polygon `max_gas_pol=0.5` default never
+becomes an ETH allowance. This budget covers approval plus settlement, with
+the L2 maximum gas fee and current Base oracle L1 data/operator estimates plus
+20% headroom. An unavailable estimate or insufficient budget/balance refuses
+before sending. It is a preflight estimate, not an on-chain cap on future L1
+fees. Fees are separate from the USD payment limits. Configure the Base RPC
+via `base_rpc` or `AIFINPAY_BASE_RPC`; the SDK checks chain ID 8453 before signing.
+
+ETH uses independent ETH/USD prices from Coinbase, falling back to a fresh
+CoinGecko quote. The SDK rejects a quote with another chain, native asset,
+token address or receipt chain. It uses Base's pinned USDC address; a token
+named USDC on another chain does not authorize a Base payment. Omitting `chain`
+keeps Polygon behavior, even if a merchant advertises Base. Other EVM chains
+are not enabled by this change.
+
 Every settlement is journaled to `journal_dir` (default `~/.aifinpay/journal`,
 mode 600) before it is sent. If the outcome is unknown, `Aifp1PayError` carries
 `recovery["journal_path"]`; call `agent.recover_paid(path)` — do not pay again.
+New journals preserve the explicitly selected chain; older journals without
+it remain Polygon-only. Recovery can fetch a receipt after the original quote
+expires when the existing transaction settled in time.
 
 ## Link the agent to its owner's dashboard
 
@@ -103,7 +137,7 @@ entitled to it. Paying for access is `fetch_paid` (above).
 
 - **The server never sees your private key.** Period.
 - Nonces are consumed on use; replay-resistant.
-- All payments are public and on-chain (Polygon mainnet).
+- All payments are public and on-chain (Polygon or explicitly selected Base).
 
 ## License
 

@@ -1606,7 +1606,8 @@ export class AiFinPayAgent {
   ): Promise<`0x${string}`> {
     if (opts.v14) {
       if (p.settlementCall?.splitter_version !== "1.4") throw new AiFinPayError("expected signed v1.4 settlement call");
-      const { publicClient, walletClient } = this.polygonClients();
+      const chain = opts.v14.chain ?? "polygon";
+      const { publicClient, walletClient } = this.splitterClients(chain);
       const result = await executeV14Settlement(p.settlementCall as V14SettlementCall, {
         publicClient,
         walletClient,
@@ -1614,6 +1615,7 @@ export class AiFinPayAgent {
         orderId: p.orderId,
         expectedMerchant: p.merchantWallet,
         expectedGrossAmount: p.grossWei,
+        expectedChain: chain,
         ...(p.token ? { expectedToken: p.token } : {}),
         maxGasWei: opts.v14.maxGasWei,
         onPrepared: p.onPrepared,
@@ -1680,7 +1682,7 @@ export class AiFinPayAgent {
           this.reportTelemetry({
             kind: "aifp1",
             merchant: merchantId,
-            chain: "polygon",
+            chain: opts.v14?.chain ?? "polygon",
             cost: amountUsd,
             tx: txRef,
           });

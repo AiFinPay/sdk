@@ -7,7 +7,7 @@ account hash. Casper is identity only — the address is derived and can be
 funded, but this SDK does not sign Casper deploys.
 Legacy paid `agent.call(provider=…)` is fail-closed after a 402 challenge:
 free/read-only bridge responses still pass through. Paid AIFP-1 access is
-`agent.fetch_paid(url, …)`, which settles on Polygon v1.4 in POL or USDC.
+`agent.fetch_paid(url, …)`, which settles on Polygon or explicitly selected Base v1.4.
 
 Dependencies (declared in pyproject.toml):
   • PyNaCl, base58   (already there)
@@ -112,6 +112,7 @@ DEFAULT_REGISTRY_PATHS = ("/api/providers", "/providers")
 DEFAULT_REGISTRY_HOST = "https://aifinpay.io"
 DEFAULT_REGISTRY_URL = DEFAULT_REGISTRY_HOST + DEFAULT_REGISTRY_PATHS[0]
 DEFAULT_POLYGON_RPC = "https://polygon.drpc.org"
+DEFAULT_BASE_RPC = "https://mainnet.base.org"
 DEFAULT_SOLANA_RPC = "https://api.mainnet-beta.solana.com"
 
 # B2BSplitter native-payment ABIs. v1.2 (deployed 2026-07-31 on Polygon,
@@ -528,6 +529,7 @@ class AiFinPayAgent:
         *,
         registry_url: [str] = None,
         polygon_rpc: [str] = None,
+        base_rpc: [str] = None,
         solana_rpc: [str] = None,
         base_url: [str] = None,
     ):
@@ -543,6 +545,7 @@ class AiFinPayAgent:
         self._registry_candidates = [_pinned] if _pinned else [_api_base + path for path in DEFAULT_REGISTRY_PATHS]
         self.registry_url = self._registry_candidates[0]
         self.polygon_rpc = polygon_rpc or os.environ.get("AIFINPAY_POLYGON_RPC", DEFAULT_POLYGON_RPC)
+        self.base_rpc = base_rpc or os.environ.get("AIFINPAY_BASE_RPC", DEFAULT_BASE_RPC)
         self.solana_rpc = solana_rpc or os.environ.get("AIFINPAY_SOLANA_RPC", DEFAULT_SOLANA_RPC)
         self._w3: [Web3] = None
         self._registry_cache: [list[ProviderEntry]] = None
@@ -805,7 +808,11 @@ class AiFinPayAgent:
 
     # ── Lazy clients ──────────────────────────────────────────────────────
 
-    def _web3(self) -> Web3:
+    def _web3(self, chain: str = "polygon") -> Web3:
+        if chain == "base":
+            if getattr(self, "_base_w3", None) is None:
+                self._base_w3 = Web3(Web3.HTTPProvider(self.base_rpc, request_kwargs={"timeout": 30}))
+            return self._base_w3
         if self._w3 is None:
             w3 = Web3(Web3.HTTPProvider(self.polygon_rpc, request_kwargs={"timeout": 30}))
             if _poa_middleware is not None:
@@ -856,8 +863,10 @@ class AiFinPayAgent:
         max_amount_usd: float,
         daily_amount_usd: float,
         max_gas_pol: float = 0.5,
+        max_gas_wei: [int] = None,
         journal_dir: [str] = None,
-        asset: str = "POL",
+        asset: [str] = None,
+        chain: str = "polygon",
         scope: str = "prefix",
         units: [int] = None,
         api_base: str = "https://api.aifinpay.io",
@@ -865,19 +874,21 @@ class AiFinPayAgent:
         """
         GET an AIFP-1 paywalled URL, paying for one batch if it answers 402.
 
-        Settles on Polygon v1.4 in native POL (default) or ``asset="USDC"``
-        (exact approval, then settle; the wallet still needs POL for gas).
+        Settles on Polygon v1.4 (default) or explicitly selected ``chain="base"``.
+        Native payment defaults to POL/ETH respectively; ``asset="USDC"``
+        approves exactly the gross, then settles using native funds for fees.
         Nothing is signed unless the URL is on ``allowed_origins``, the quote
         matches the challenge and the pinned deployment, and the batch fits
-        ``max_amount_usd`` and the rolling-24h ``daily_amount_usd``. POL is
-        priced against an independent POL/USD source (Chainlink over
-        ``polygon_rpc``, then Coinbase, then CoinGecko), never the quote.
+        ``max_amount_usd`` and the rolling-24h ``daily_amount_usd``. Native
+        prices come from independent POL/USD or ETH/USD sources, never the quote.
 
-        ``max_gas_pol`` caps the WORST-CASE fee (gas bound x (2 x base fee +
-        tip)) of the approval and the settlement together, and the wallet must
-        hold that much POL; what is actually spent is far less (~0.04 POL at a
-        250 gwei base fee). A cap below the worst case refuses before signing
-        with ``V14_GAS_BUDGET_EXCEEDED``.
+        ``max_gas_wei`` is the approval-plus-settlement fee budget in the selected
+        native asset's wei and is REQUIRED for Base. Polygon keeps its legacy
+        ``max_gas_pol=0.5`` default if ``max_gas_wei`` is omitted. Base checks
+        L2 maximum gas plus oracle L1 data/operator estimates with 20% headroom;
+        those estimates are not a consensus cap on future L1 fees. Missing
+        estimates or an exceeded budget refuse before signing. ``base_rpc``
+        (constructor, or ``AIFINPAY_BASE_RPC``) is checked for chain ID 8453.
 
         Receipts are kept on this agent and reused while their scope covers
         the path. Every prepared settlement is written to ``journal_dir``
@@ -891,6 +902,16 @@ class AiFinPayAgent:
         from . import aifp1
         from .settlement_v14 import Web3ChainClient
 
+        aifp1._native_asset(chain)  # authorize the chain before creating a journal or client
+        if max_gas_wei is None:
+            if chain == "base":
+                raise aifp1.Aifp1QuoteError("Base requires an explicit max_gas_wei budget in ETH wei")
+            try:
+                max_gas_wei = int(max_gas_pol * 10**18)
+            except (TypeError, ValueError, OverflowError):
+                raise aifp1.Aifp1QuoteError("max_gas_pol must be a finite positive POL amount") from None
+        if type(max_gas_wei) is not int or max_gas_wei <= 0:
+            raise aifp1.Aifp1QuoteError("max_gas_wei must be a positive integer in native wei")
         journal = self._aifp1_journal_dir(journal_dir)
         ledger = aifp1.SpendLedger(max_amount_usd, daily_amount_usd, os.path.join(journal, "spend.json"))
         if not hasattr(self, "_aifp1_receipts"):
@@ -911,14 +932,15 @@ class AiFinPayAgent:
                 url,
                 session=session,
                 account=self.evm_account,
-                client=Web3ChainClient(self._web3()),
-                polygon_rpc=self.polygon_rpc,
+                client=Web3ChainClient(self._web3("base") if chain == "base" else self._web3()),
+                polygon_rpc=self.base_rpc if chain == "base" else self.polygon_rpc,
                 allowed_origins=list(allowed_origins),
                 ledger=ledger,
-                max_gas_wei=int(max_gas_pol * 10**18),
+                max_gas_wei=max_gas_wei,
                 on_prepared=on_prepared,
                 receipts=self._aifp1_receipts,
                 asset=asset,
+                chain=chain,
                 scope=scope,
                 api_base=api_base,
                 issuer=api_base,

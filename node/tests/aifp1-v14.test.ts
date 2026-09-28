@@ -3,12 +3,14 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import { keccak256, stringToHex } from "viem";
 import {
   aifp1Fetch,
+  recoverAifp1Payment,
   Aifp1ReceiptCache,
   type Aifp1Quote,
   type Aifp1Deps,
   type Aifp1FetchOptions,
 } from "../src/aifp1.js";
 import { routeIdOf, type V14SettlementCall } from "../src/settlementV14.js";
+import { V14_DEPLOYMENTS } from "../src/generated/v14Deployments.generated.js";
 import { SettlementConfirmationPendingError } from "../src/settlement.js";
 
 const payer = "0x1111111111111111111111111111111111111111";
@@ -21,14 +23,17 @@ const { privateKey, publicKey } = generateKeyPairSync("ed25519");
 const json = (value: unknown, status = 200) =>
   new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
 
-function fixture() {
+function fixture(chain: "polygon" | "base" = "polygon") {
+  const nativeAsset = chain === "base" ? "ETH" : "POL";
+  const gross = chain === "base" ? 50_000_000_000_000n : 1_000_000_000_000_000_000n;
+  const rate = chain === "base" ? 2000 : 0.1;
   const expiry = Math.floor(Date.now() / 1000) + 600;
   const call: V14SettlementCall = {
-    chain: "polygon",
+    chain,
     contract: "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
     splitter_version: "1.4",
     route: "merchant-aifp1",
-    asset: "POL",
+    asset: nativeAsset,
     function: "settleNative((address,address,address,uint256,address,uint256,bytes32,uint256,bytes32),bytes)",
     arg_encoding: "struct+signature",
     field_order: [
@@ -42,13 +47,13 @@ function fixture() {
       "nonce",
       "routeId",
     ],
-    value_wei: "1000000000000000000",
+    value_wei: String(gross),
     args: {
       quote: {
         payer,
         merchant,
         token: zero,
-        grossAmount: "1000000000000000000",
+        grossAmount: String(gross),
         ipCreator: zero,
         validUntil: String(expiry),
         orderIdHash: keccak256(stringToHex("qt_v14")),
@@ -71,19 +76,19 @@ function fixture() {
     unit_quota: 200,
     amount: "0.1",
     currency: "USD",
-    accepted_assets: ["POL"],
-    accepted_chains: ["polygon"],
-    pay_to: { polygon: merchant },
+    accepted_assets: [nativeAsset],
+    accepted_chains: [chain],
+    pay_to: chain === "base" ? { evm: merchant } : { polygon: merchant },
     settlement_call: call,
     native_settlement: {
-      asset: "POL",
+      asset: nativeAsset,
       decimals: 18,
-      rate_usd: "0.1",
+      rate_usd: String(rate),
       total_wei: call.value_wei,
       gross_wei: call.value_wei,
       payer_total_wei: call.value_wei,
-      merchant_wei: "990000000000000000",
-      treasury_wei: "10000000000000000",
+      merchant_wei: String(gross - gross / 100n),
+      treasury_wei: String(gross / 100n),
       creator_wei: "0",
       valid_until: expiry,
       settlement_semantics: "gross-inclusive",
@@ -110,8 +115,8 @@ function fixture() {
     scope: quote.scope,
     amount: "0.1",
     currency: "USD",
-    asset: "POL",
-    chain: "polygon",
+    asset: nativeAsset,
+    chain,
     tx_ref: tx,
     receipt_id: "rcpt_v14",
     unit_quota: 200,
@@ -143,8 +148,8 @@ function fixture() {
         currency: "USD",
         quota: 200,
         unit_quota: 200,
-        asset: "POL",
-        chain: "polygon",
+        asset: nativeAsset,
+        chain,
         settled_at: new Date().toISOString(),
         expires_at: quote.expires_at,
         ...responseOverrides,
@@ -178,7 +183,7 @@ function fixture() {
     commit: vi.fn(async () => {}),
     release: vi.fn(async () => {}),
   };
-  const price = vi.fn(async () => ({ usd: 0.1, observedAtMs: Date.now() }));
+  const price = vi.fn(async () => ({ usd: rate, observedAtMs: Date.now() }));
   const prepared = vi.fn(async () => {});
   const opts: Aifp1FetchOptions = {
     gatewayOrigins: ["https://merchant.example"],
@@ -187,7 +192,7 @@ function fixture() {
     units: 200,
     maxAmountUsd: 0.11,
     nativeUsdPrice: price,
-    v14: { maxGasWei: 50000000000000000n, onPrepared: prepared },
+    v14: { chain, maxGasWei: 50000000000000000n, onPrepared: prepared },
   };
   return {
     quote,
@@ -304,8 +309,9 @@ describe("public native v1.4 purchase", () => {
 // The same fixture, turned into the USDC quote the backend now signs: one
 // asset, no native amounts, settleStable with value 0 and an exact approval.
 const USDC = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
-function stableFixture() {
-  const f = fixture();
+function stableFixture(chain: "polygon" | "base" = "polygon") {
+  const f = fixture(chain);
+  const USDC = V14_DEPLOYMENTS[chain].splitter.assets.find((a) => a.symbol === "USDC")!.address;
   const q = f.call.args.quote as { token: string; grossAmount: string };
   q.token = USDC;
   q.grossAmount = "100000";
@@ -375,4 +381,90 @@ describe("public v1.4 stablecoin purchase", () => {
     f.responseOverrides.asset = "POL";
     await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toThrow(/recover the existing payment/);
   });
+});
+
+describe("Base v1.4 chain authorization", () => {
+  it.each(["ETH", "USDC"])("pays Base %s and reuses merchant access after changing selected chain", async (asset) => {
+    const f = asset === "ETH" ? fixture("base") : stableFixture("base");
+    expect((await aifp1Fetch(f.deps, url, {}, f.opts))?.status).toBe(200);
+    expect(f.prepared).toHaveBeenCalledWith(expect.objectContaining({ chain: "base", asset }));
+    const calls = vi.mocked(f.deps.fetchImpl).mock.calls;
+    const quoteBody = JSON.parse(String(calls.find(([u]) => String(u).endsWith("/v1/quote"))![1]!.body));
+    const payBody = JSON.parse(String(calls.find(([u]) => String(u).endsWith("/v1/pay"))![1]!.body));
+    expect(quoteBody.asset).toBe(asset);
+    expect(payBody).toMatchObject({ chain: "base", asset, tx_ref: tx });
+    expect(f.deps.signPaymentAuthorization).toHaveBeenCalledWith(expect.stringContaining('"base"'));
+    expect((await aifp1Fetch(f.deps, url, {}, { ...f.opts, v14: { ...f.opts.v14!, chain: "polygon" } }))?.status).toBe(
+      200
+    );
+    expect(f.deps.settle).toHaveBeenCalledOnce();
+    expect(f.deps.commit).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    "unselected",
+    "wrong-chain",
+    "extra-chain",
+    "POL-rate",
+    "POL-label",
+    "conflicting-payout",
+    "Polygon-only-payout",
+  ])("refuses Base native %s before signing or reserving funds", async (kind) => {
+    const f = fixture("base");
+    if (kind === "unselected") delete f.opts.v14!.chain;
+    if (kind === "wrong-chain") f.call.chain = "polygon";
+    if (kind === "extra-chain") f.quote.accepted_chains.push("polygon");
+    if (kind === "POL-rate") f.opts.nativeUsdPrice = { usd: 0.1, observedAtMs: Date.now() };
+    if (kind === "POL-label") f.call.asset = f.quote.native_settlement!.asset = "POL";
+    if (kind === "conflicting-payout") f.quote.pay_to.base = payer;
+    if (kind === "Polygon-only-payout") f.quote.pay_to = { polygon: merchant };
+    await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toThrow();
+    expect(f.deps.reserveDaily).not.toHaveBeenCalled();
+    expect(f.deps.settle).not.toHaveBeenCalled();
+    expect(f.deps.signPaymentAuthorization).not.toHaveBeenCalled();
+  });
+
+  it("refuses a Polygon token in an explicitly authorized Base purchase before approval", async () => {
+    const f = stableFixture("base");
+    f.call.args.quote.token = USDC;
+    f.call.approval!.token = USDC;
+    await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toThrow(/stablecoin call disagrees/);
+    expect(f.deps.settle).not.toHaveBeenCalled();
+    expect(f.deps.reserveDaily).not.toHaveBeenCalled();
+  });
+
+  it.each(["chain", "asset"])("rejects a correctly signed receipt with a foreign %s", async (field) => {
+    const f = fixture("base");
+    f.claims[field] = f.responseOverrides[field] = field === "chain" ? "polygon" : "POL";
+    await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toMatchObject({
+      recovery: expect.objectContaining({ chain: "base", asset: "ETH" }),
+    });
+    expect(f.deps.cache.size).toBe(0);
+    expect(f.deps.settle).toHaveBeenCalledOnce();
+    expect(f.deps.release).not.toHaveBeenCalled();
+  });
+
+  it("recovers the selected Base chain after quote expiry without settling again", async () => {
+    const f = stableFixture("base");
+    await aifp1Fetch(f.deps, url, {}, f.opts);
+    const saved = vi.mocked(f.prepared).mock.calls[0][0] as any;
+    saved.quote.expires_at = new Date(1).toISOString();
+    const result = await recoverAifp1Payment(saved, f.deps);
+    expect(result).toMatchObject({ chain: "base", asset: "USDC", tx_ref: tx });
+    expect(f.deps.settle).toHaveBeenCalledOnce();
+  });
+
+  it.each(["missing", "foreign"])(
+    "refuses %s chain in a Base recovery journal before authorizing receipt issuance",
+    async (kind) => {
+      const f = stableFixture("base");
+      await aifp1Fetch(f.deps, url, {}, f.opts);
+      const saved = vi.mocked(f.prepared).mock.calls[0][0] as any;
+      if (kind === "missing") delete saved.chain;
+      else saved.chain = "polygon";
+      vi.mocked(f.deps.signPaymentAuthorization).mockClear();
+      expect(() => recoverAifp1Payment(saved, f.deps)).toThrow(/recovery chain or asset/);
+      expect(f.deps.signPaymentAuthorization).not.toHaveBeenCalled();
+    }
+  );
 });

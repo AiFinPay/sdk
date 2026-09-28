@@ -163,6 +163,7 @@ export type {
   Aifp1PayResult,
   Aifp1CachedReceipt,
   Aifp1FetchOptions,
+  Aifp1V14Chain,
   Aifp1Deps,
   QuoteSummary,
 } from "./aifp1.js";
