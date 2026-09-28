@@ -1,3 +1,11 @@
+## Node 2.3.2 — unreleased
+
+- Zero-dependency external wallet adapters: `eip1193Wallet` (MetaMask and any
+  generic EVM browser wallet) and `viemWalletClientWallet` (Privy, Crossmint,
+  ZeroDev, Coinbase Smart Wallet, custom transports) — both injectable via
+  `evmWallet`. Stacks on the unreleased 2.3.1 below. See
+  `docs/reviews/agent-wallet-ecosystem-review.md`.
+
 ## Node 2.3.1 — unreleased
 
 - External EVM signer injection via the `evmWallet` option (`Agent` and

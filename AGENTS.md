@@ -2,7 +2,7 @@
 
 Primary instructions: `node_modules/@daochild/agents-config/AGENTS.md` — read in full and follow unless overridden below.
 
-Payment rail for AI agents (AIFP-1 gross-inclusive settlement, AIFP-2/x402 negotiation). Node `@aifinpay/agent` source 2.3.1 and Python `aifinpay-agent` source 2.3.0 support Polygon v1.4 and explicitly selected Base v1.4 (native POL/ETH or pinned stablecoins). This is source capability, not a publication or production activation claim. MCP's payment configuration remains Polygon. See the root README for published versions. Build and test from source. Never use `npm install @aifinpay/agent@latest` or `pip install aifinpay-agent` to stand in for this source. Canonical domain is `aifinpay.io` (`aifinpay.company` is retired).
+Payment rail for AI agents (AIFP-1 gross-inclusive settlement, AIFP-2/x402 negotiation). Node `@aifinpay/agent` source 2.3.2 and Python `aifinpay-agent` source 2.3.0 support Polygon v1.4 and explicitly selected Base v1.4 (native POL/ETH or pinned stablecoins). This is source capability, not a publication or production activation claim. MCP's payment configuration remains Polygon. See the root README for published versions. Build and test from source. Never use `npm install @aifinpay/agent@latest` or `pip install aifinpay-agent` to stand in for this source. Canonical domain is `aifinpay.io` (`aifinpay.company` is retired).
 
 ## Layout
 

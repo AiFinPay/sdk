@@ -20,6 +20,7 @@ export interface AgentWallet {
 }
 
 import { privateKeyToAccount } from "viem/accounts";
+import { stringToHex, type WalletClient } from "viem";
 
 /**
  * AgentWallet backed by a raw EVM private key — the self-custodial default,
@@ -27,4 +28,63 @@ import { privateKeyToAccount } from "viem/accounts";
  */
 export function evmPrivateKeyWallet(privateKey: `0x${string}`): AgentWallet {
   return privateKeyToAccount(privateKey) as unknown as AgentWallet;
+}
+
+/**
+ * Minimal EIP-1193 provider shape (`window.ethereum`, Coinbase Wallet, Rabby,
+ * WalletConnect's Ethereum provider, …). Only `request` is used — no vendor
+ * SDK, no new dependency.
+ */
+export interface Eip1193Provider {
+  request(args: { method: string; params?: unknown }): Promise<unknown>;
+}
+
+/**
+ * AgentWallet backed by a browser/injected EIP-1193 wallet (MetaMask and any
+ * generic EVM wallet exposing the provider API). The address is read via
+ * `eth_requestAccounts`, so construction is async. Message signing uses
+ * `personal_sign`, typed-data signing uses `eth_signTypedData_v4`.
+ *
+ * The provider is fully trusted with signing: the SDK never sees key
+ * material, but a malicious provider can sign anything it is asked for —
+ * same as any dapp connection. Connect only wallets the owner controls.
+ */
+export async function eip1193Wallet(provider: Eip1193Provider): Promise<AgentWallet> {
+  const accounts = (await provider.request({ method: "eth_requestAccounts" })) as string[];
+  const address = accounts?.[0] as `0x${string}` | undefined;
+  if (!address) {
+    throw new Error("eip1193Wallet: the provider returned no accounts");
+  }
+  return {
+    address,
+    signMessage: async ({ message }) =>
+      (await provider.request({
+        method: "personal_sign",
+        params: [stringToHex(message), address],
+      })) as `0x${string}`,
+    signTypedData: async (typedData) =>
+      (await provider.request({
+        method: "eth_signTypedData_v4",
+        params: [address, JSON.stringify(typedData)],
+      })) as `0x${string}`,
+  };
+}
+
+/**
+ * AgentWallet backed by a viem `WalletClient` — the integration point for
+ * embedded/smart wallets that hand out viem clients (Privy, Crossmint,
+ * ZeroDev, Coinbase Smart Wallet, custom transports). The client must carry
+ * an account; transports are never touched by the adapter itself, so no
+ * network access happens here beyond what the caller's client already does.
+ */
+export function viemWalletClientWallet(client: WalletClient): AgentWallet {
+  const account = client.account;
+  if (!account) {
+    throw new Error("viemWalletClientWallet: the WalletClient has no account");
+  }
+  return {
+    address: account.address,
+    signMessage: (args) => client.signMessage({ ...args, account }),
+    signTypedData: (args) => client.signTypedData({ ...args, account }),
+  };
 }

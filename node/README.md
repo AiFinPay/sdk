@@ -1,6 +1,6 @@
 # @aifinpay/agent (Node / TypeScript)
 
-Version **2.3.1** adds Base ETH and USDC to the AIFP-1 `fetchPaid` flow.
+Version **2.3.2** adds Base ETH and USDC to the AIFP-1 `fetchPaid` flow.
 Polygon remains the default. Select Base independently with `v14.chain: "base"`;
 a merchant quote cannot change that choice. Runtime, signer, token, RPC chain and
 current profile checks remain mandatory, along with a durable pre-broadcast
@@ -69,7 +69,7 @@ npm pack
 Install the resulting tarball in your application:
 
 ```bash
-npm install /absolute/path/to/sdk/node/aifinpay-agent-2.3.1.tgz
+npm install /absolute/path/to/sdk/node/aifinpay-agent-2.3.2.tgz
 ```
 
 ## Quick start
@@ -138,6 +138,24 @@ import { Agent, evmPrivateKeyWallet } from "@aifinpay/agent";
 // self-custodial default: the same key `evmPrivateKey` builds internally
 const agent = Agent.new({ evmWallet: evmPrivateKeyWallet("0x…") });
 ```
+
+Two zero-dependency adapters cover the rest of the wallet market through the
+same interface:
+
+```ts
+import { eip1193Wallet, viemWalletClientWallet } from "@aifinpay/agent";
+
+// MetaMask and any generic EVM browser wallet (async: reads the address
+// via eth_requestAccounts)
+const injected = Agent.new({ evmWallet: await eip1193Wallet(window.ethereum) });
+
+// Privy, Crossmint, ZeroDev, Coinbase Smart Wallet, custom transports —
+// anything that hands out a viem WalletClient with an account
+const embedded = Agent.new({ evmWallet: viemWalletClientWallet(walletClient) });
+```
+
+Server-side vendor SDKs (Coinbase CDP server wallets, Circle) are out of
+scope: they need vendor API credentials, which the SDK must not hold.
 
 The interface is `address` plus `signMessage`/`signTypedData` only; balances
 and settlement stay with the facilitator/backend layer. An injected wallet
