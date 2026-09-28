@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import nacl from "tweetnacl";
 import bs58 from "bs58";
 import { sha256 } from "./crypto.js";
-import { AiFinPayError, FundingTimeoutError, X402Error } from "./errors.js";
+import { AiFinPayError, FacilitatorNotImplementedError, FundingTimeoutError, X402Error } from "./errors.js";
 import { detectFacilitator } from "./facilitators/detect.js";
 import type { PayOptions } from "./facilitators/base.js";
 import { privateKeyToAccount } from "viem/accounts";
@@ -90,8 +92,7 @@ export class Agent {
 
   /** Load from a Solana CLI ``solana-keygen`` JSON file path (Node only). */
   static async fromKeypairFile(path: string, opts: AgentOptions = {}): Promise<Agent> {
-    const fs = await import("node:fs/promises");
-    const raw = await fs.readFile(path, "utf8");
+    const raw = await readFile(path, "utf8");
     const arr = JSON.parse(raw);
     if (!Array.isArray(arr) || arr.length !== 64) {
       throw new AiFinPayError(`${path}: expected 64-byte JSON array`);
@@ -125,7 +126,6 @@ export class Agent {
    */
   async evmAccount(): Promise<AgentWallet> {
     if (this._evm) return this._evm;
-    const { createHash } = await import("node:crypto");
     const h = createHash("sha256");
     h.update("aifinpay:evm:v1\0");
     h.update(this.secretKey.subarray(0, 32));
@@ -284,7 +284,6 @@ export class Agent {
     orderId: string;
     feeRecipient?: string;
   }): Promise<Record<string, unknown>> {
-    const { FacilitatorNotImplementedError } = await import("./errors.js");
     if (!args.orderId || args.orderId.length > 64) {
       throw new AiFinPayError("orderId required, max 64 chars");
     }

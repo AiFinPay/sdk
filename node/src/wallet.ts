@@ -6,6 +6,7 @@
 
 import nacl from "tweetnacl";
 import bs58 from "bs58";
+import { randomFillSync } from "node:crypto";
 import { blake2b } from "@noble/hashes/blake2b";
 import { keccak_256, sha3_256 } from "@noble/hashes/sha3";
 import { sha256 } from "@noble/hashes/sha2";
@@ -118,7 +119,6 @@ export async function newWallet(): Promise<DerivedWallet> {
   if (typeof globalThis.crypto?.getRandomValues === "function") {
     globalThis.crypto.getRandomValues(seed);
   } else {
-    const { randomFillSync } = await import("node:crypto");
     randomFillSync(seed);
   }
   return deriveWallet(hex(seed));
