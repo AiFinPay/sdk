@@ -1,5 +1,14 @@
 # @aifinpay/wallet — changelog
 
+## 1.1.1
+
+- Security: encrypted keystores no longer store `seedHex` in plaintext. The
+  seed is stored AES-GCM-encrypted (`seedEnc`); the Solana-secret ciphertext
+  (`ct`) format is unchanged, so `@aifinpay/mcp` reads new keystores without
+  an update. Pre-1.1.1 encrypted keystores and `--plain` keystores keep
+  working unchanged — rotate old ones with a fresh `npx @aifinpay/wallet new`
+  to drop the plaintext copy.
+
 ## 1.1.0
 
 - Stable release: remove `keytar`/libsecret OS-keyring dependency, add encrypted

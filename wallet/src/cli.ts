@@ -35,12 +35,23 @@ function getPaths() {
   return { HOME, KEYSTORE, ENV_FILE, INSTRUCTIONS_FILE, RULES_FILE, AIIGNORE_FILE };
 }
 
+type EncryptedSeed = {
+  salt: string;
+  iv: string;
+  tag: string;
+  ct: string;
+};
+
 type EncryptedKeystore = {
   enc: "scrypt-aes-256-gcm";
   salt: string;
   iv: string;
   tag: string;
   ct: string;
+  /** AES-GCM of the 32-byte seedHex — the recovery secret for standard
+   * derivation. Present on keystores written by 1.1.1+; older encrypted
+   * keystores carry the seed in plaintext `seedHex` instead. */
+  seedEnc?: EncryptedSeed;
 };
 
 type PlainKeystore = {
@@ -67,7 +78,7 @@ function readStore(): KeystoreFile | null {
   }
 }
 
-function encryptSecret(secretB58: string, passphrase: string): EncryptedKeystore {
+function encryptSecret(plaintext: string, passphrase: string): EncryptedKeystore {
   const salt = randomBytes(16);
   const iv = randomBytes(12);
   const key = scryptSync(passphrase, salt, 32, {
@@ -77,7 +88,7 @@ function encryptSecret(secretB58: string, passphrase: string): EncryptedKeystore
     maxmem: 64 * 1024 * 1024,
   });
   const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const ct = Buffer.concat([cipher.update(secretB58, "utf8"), cipher.final()]);
+  const ct = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   return {
     enc: "scrypt-aes-256-gcm",
     salt: salt.toString("base64"),
@@ -87,7 +98,7 @@ function encryptSecret(secretB58: string, passphrase: string): EncryptedKeystore
   };
 }
 
-function decrypt(store: EncryptedKeystore, passphrase: string): string {
+function decrypt(store: Pick<EncryptedKeystore, "salt" | "iv" | "tag" | "ct">, passphrase: string): string {
   const key = scryptSync(passphrase, Buffer.from(store.salt, "base64"), 32, {
     N: 1 << 15,
     r: 8,
@@ -214,7 +225,13 @@ secrets/
       process.stdout.write(`Generated strong passphrase and saved to ${ENV_FILE}\n\n`);
     }
     const encrypted = encryptSecret(w.keys.solanaSecretKeyB58, passphrase);
-    content = JSON.stringify({ ...encrypted, created: nowIso(), derivationMode: w.derivationMode, seedHex: w.keys.seedHex }, null, 2) + "\n";
+    // The seed is the recovery secret for standard derivation — it must never
+    // sit in plaintext next to the ciphertext, so it gets its own AES-GCM
+    // envelope. `ct` keeps holding the Solana secret so @aifinpay/mcp reads
+    // new keystores without an update.
+    const seedBlock = encryptSecret(w.keys.seedHex, passphrase);
+    const seedEnc: EncryptedSeed = { salt: seedBlock.salt, iv: seedBlock.iv, tag: seedBlock.tag, ct: seedBlock.ct };
+    content = JSON.stringify({ ...encrypted, seedEnc, created: nowIso(), derivationMode: w.derivationMode }, null, 2) + "\n";
   } else {
     content = JSON.stringify({ secretB58: w.keys.solanaSecretKeyB58, seedHex: w.keys.seedHex, created: nowIso(), derivationMode: w.derivationMode }, null, 2) + "\n";
   }
@@ -248,8 +265,13 @@ function loadWalletFromStore(store: KeystoreFile): DerivedWallet {
       );
     }
     const passphrase = validatePassphrase(envPass);
-    const secretB58 = decrypt(store, passphrase);
     const mode: DerivationMode = "derivationMode" in store && (store.derivationMode === "legacy-solana" || store.derivationMode === "standard") ? store.derivationMode : "standard";
+    // New format (1.1.1+): the seed itself is encrypted — no plaintext key material.
+    if ("seedEnc" in store && store.seedEnc) {
+      return walletFromSeed(decrypt(store.seedEnc, passphrase), { mode });
+    }
+    // Legacy fallback: pre-1.1.1 keystores carry the seed in plaintext.
+    const secretB58 = decrypt(store, passphrase);
     // For encrypted keystores in standard mode, use seedHex
     const seedHex = "seedHex" in store && typeof store.seedHex === "string" && store.seedHex ? store.seedHex : undefined;
     if (mode === "standard") {
@@ -379,7 +401,14 @@ export const run = async (cmdArg?: string, argv?: string[], options?: { mode?: D
       process.exit(1);
     }
     let seedHex: string | undefined;
-    if ("seedHex" in s && s.seedHex) {
+    if ("seedEnc" in s && s.seedEnc) {
+      const envPass = process.env.AIFINPAY_WALLET_PASSPHRASE;
+      if (!envPass) {
+        throw new Error("AIFINPAY_WALLET_PASSPHRASE is required to decrypt the keystore.");
+      }
+      seedHex = decrypt(s.seedEnc, validatePassphrase(envPass));
+      if (!/^(0x)?[0-9a-fA-F]{64}$/.test(seedHex)) throw new Error("invalid keystore.");
+    } else if ("seedHex" in s && s.seedHex) {
       seedHex = s.seedHex;
     } else if ("enc" in s) {
       const envPass = process.env.AIFINPAY_WALLET_PASSPHRASE;

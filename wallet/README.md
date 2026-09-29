@@ -88,7 +88,7 @@ npx @aifinpay/wallet keyring-delete-all remove BOTH secret and passphrase (safe 
 
 **Security:** The `keyring-delete` command is blocked to prevent orphaning encrypted wallets. Use `keyring-delete-all` to remove both secret and passphrase together, or delete the keystore file directly.
 
-**Encrypted Keystore (Default):** New wallets are encrypted by default using scrypt-aes-256-gcm. You'll be prompted for a passphrase during creation. The encrypted format is compatible with `@aifinpay/agent` and `@aifinpay/mcp` (requires `AIFINPAY_WALLET_PASSPHRASE` environment variable).
+**Encrypted Keystore (Default):** New wallets are encrypted by default using scrypt-aes-256-gcm. You'll be prompted for a passphrase during creation. The encrypted format is compatible with `@aifinpay/agent` and `@aifinpay/mcp` (requires `AIFINPAY_WALLET_PASSPHRASE` environment variable). The seed itself is stored encrypted (`seedEnc`) — no plaintext key material is written to the keystore.
 
 **Agent Passphrase Storage:** After creating an encrypted wallet, run `keyring-save-passphrase` to store the passphrase in OS keyring. This allows agents to auto-decrypt the wallet without hardcoding passwords. The passphrase is stored separately from the encrypted file under a different keyring account name.
 

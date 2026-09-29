@@ -337,3 +337,99 @@ describe("passphrase validation", () => {
     expect(passphrase.length).toBe(64);
   });
 });
+
+describe("encrypted keystore keeps key material encrypted", () => {
+  const tmpDir = resolve(HERE, "tmp-enc-keystore");
+  const originalEnv = process.env.AIFINPAY_HOME;
+  const originalPassphrase = process.env.AIFINPAY_WALLET_PASSPHRASE;
+  const PASSPHRASE = "StrongPass123!@$.^";
+
+  function encryptBlock(plaintext: string, passphrase: string) {
+    const salt = randomBytes(16);
+    const iv = randomBytes(12);
+    const key = scryptSync(passphrase, salt, 32, {
+      N: 1 << 15,
+      r: 8,
+      p: 1,
+      maxmem: 64 * 1024 * 1024,
+    });
+    const cipher = createCipheriv("aes-256-gcm", key, iv);
+    const ct = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+    return {
+      salt: salt.toString("base64"),
+      iv: iv.toString("base64"),
+      tag: cipher.getAuthTag().toString("base64"),
+      ct: ct.toString("base64"),
+    };
+  }
+
+  function captureStdout() {
+    const logs: string[] = [];
+    const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((...args: any[]) => {
+      logs.push(args[0]);
+      return originalStdoutWrite.apply(process.stdout, args);
+    }) as any;
+    return { logs, restore: () => void (process.stdout.write = originalStdoutWrite) };
+  }
+
+  beforeEach(() => {
+    process.env.AIFINPAY_HOME = tmpDir;
+    process.env.AIFINPAY_WALLET_PASSPHRASE = PASSPHRASE;
+    rmSync(tmpDir, { recursive: true, force: true });
+    mkdirSync(tmpDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    if (originalEnv === undefined) delete process.env.AIFINPAY_HOME;
+    else process.env.AIFINPAY_HOME = originalEnv;
+    if (originalPassphrase === undefined) delete process.env.AIFINPAY_WALLET_PASSPHRASE;
+    else process.env.AIFINPAY_WALLET_PASSPHRASE = originalPassphrase;
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("new writes no plaintext seedHex/secretB58 and round-trips show/export", async () => {
+    const cli = await import("../src/cli.js");
+    await cli.run!("new", ["node", "wallet"]);
+    const keystorePath = join(tmpDir, "agent.json");
+    const store = JSON.parse(readFileSync(keystorePath, "utf8"));
+    expect(store).toHaveProperty("enc", "scrypt-aes-256-gcm");
+    expect(store).toHaveProperty("seedEnc");
+    expect(store.seedEnc).toHaveProperty("ct");
+    expect(store).not.toHaveProperty("seedHex");
+    expect(store).not.toHaveProperty("secretB58");
+
+    const { logs, restore } = captureStdout();
+    await cli.run!("show", ["node", "wallet"]);
+    await cli.run!("export", ["node", "wallet"]);
+    restore();
+
+    const exported = logs.filter((l) => /^[0-9a-f]{64}\n$/.test(l)).join("").trim();
+    expect(exported).toMatch(/^[0-9a-f]{64}$/);
+    const w = deriveWallet(exported);
+    const showOutput = logs.join("");
+    expect(showOutput).toContain(w.evmAddress);
+    expect(showOutput).toContain(w.solanaAddress);
+  });
+
+  it("still reads pre-1.1.1 encrypted keystores with plaintext seedHex", async () => {
+    const w = deriveWallet("ab".repeat(32));
+    const enc = encryptBlock(w.keys.solanaSecretKeyB58, PASSPHRASE);
+    writeFileSync(
+      join(tmpDir, "agent.json"),
+      JSON.stringify(
+        { enc: "scrypt-aes-256-gcm", ...enc, created: new Date().toISOString(), derivationMode: "standard", seedHex: w.keys.seedHex },
+        null,
+        2
+      ),
+      { mode: 0o600 }
+    );
+    const cli = await import("../src/cli.js");
+    const { logs, restore } = captureStdout();
+    await cli.run!("show", ["node", "wallet"]);
+    await cli.run!("export", ["node", "wallet"]);
+    restore();
+    expect(logs.join("")).toContain(w.evmAddress);
+    expect(logs.filter((l) => /^[0-9a-f]{64}\n$/.test(l)).join("").trim()).toBe(w.keys.seedHex);
+  });
+});
