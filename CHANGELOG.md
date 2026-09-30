@@ -1,4 +1,11 @@
-## MCP 2.4.0 — unreleased
+## MCP 2.4.1 — unreleased
+
+- Bundles `@aifinpay/skill` 2.5.1 as `aifinpay://skill`: MCP 2.4 as current,
+  "buy access for this site" with `scope: "merchant"`, the 0.3 POL gas example
+  and USDC's worst-case gas. 2.4.0 was never published; it still bundled skill
+  2.4.0 (MCP 2.3, gas 0.05), which the bundled-skill test rejected on main.
+
+## MCP 2.4.0 — unreleased (not published; see 2.4.1)
 
 - `payable_fetch` takes `scope`: `"exact"` (default, unchanged) buys one
   resource, `"merchant"` buys one batch that covers every path on the site.

@@ -4,9 +4,9 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Version **2.4.0**. Owner-enabled native Polygon v1.4 purchases with
+Version **2.4.1**. Owner-enabled native Polygon v1.4 purchases with
 `payable_fetch` are released (since 2.2.0); site-wide batches with
-`scope: "merchant"` since 2.4.0. Without payment configuration the server keeps
+`scope: "merchant"` since 2.4.1. Without payment configuration the server keeps
 its inspection-only tool inventory.
 
 ## Enable native paid GET requests
@@ -162,7 +162,7 @@ A client configuration can use the keystore without embedding its secret:
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["-y", "@aifinpay/mcp@2.4.0"],
+      "args": ["-y", "@aifinpay/mcp@2.4.1"],
       "env": {
         "AIFINPAY_AGENTS_FILE": "/absolute/project/aifinpay/agents.json",
         "AIFINPAY_AGENT_ID": "research-agent"
