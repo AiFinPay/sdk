@@ -17,14 +17,20 @@
 // Everything runs the real bin as a subprocess. A unit test of the helpers
 // would not have caught that `--help` used to start a stdio server and hang.
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, existsSync, statSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { createServer } from "../src/server.js";
+import { loadConfigFromEnv } from "../src/config.js";
 
 const BIN = fileURLToPath(new URL("../bin/aifinpay-mcp.js", import.meta.url));
+const README = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+const VERSION: string = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 
 let home: string;
 beforeEach(() => {
@@ -72,6 +78,11 @@ function run(args: string[], extraEnv: Record<string, string> = {}, nodeArgs: st
 }
 
 const EVM = /0x[a-fA-F0-9]{40}/;
+
+/** The JSON blocks init prints, in order: the client config, then the payment env. */
+function printed(out: string): any[] {
+  return [...out.matchAll(/^\{\n[\s\S]*?\n\}$/gm)].map((match) => JSON.parse(match[0]));
+}
 
 describe("aifinpay-mcp init", () => {
   it("refuses to create an unencrypted wallet unless asked by name", () => {
@@ -131,18 +142,15 @@ describe("aifinpay-mcp init", () => {
   it("keeps the secret out of the printed MCP config", () => {
     const out = run(["init", "--plaintext"]);
     const secret = JSON.parse(readFileSync(join(home, "agent.json"), "utf8")).secretB58;
-    const block = out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1);
-    expect(block).toContain("mcpServers");
-    expect(block.includes(secret)).toBe(false);
+    const blocks = printed(out);
+    expect(blocks[0]).toHaveProperty("mcpServers");
+    expect(JSON.stringify(blocks).includes(secret)).toBe(false);
   });
 
   it("pins the printed MCP config to the version that initialized the wallet", () => {
-    const out = run(["init", "--plaintext"]);
-    const block = out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1);
-    const config = JSON.parse(block);
-    const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+    const [config] = printed(run(["init", "--plaintext"]));
     expect(config.mcpServers.aifinpay.command).toBe("npx");
-    expect(config.mcpServers.aifinpay.args).toEqual(["-y", `@aifinpay/mcp@${version}`]);
+    expect(config.mcpServers.aifinpay.args).toEqual(["-y", `@aifinpay/mcp@${VERSION}`]);
   });
 
   it.each([false, true])(
@@ -360,5 +368,99 @@ describe("aifinpay-mcp flags", () => {
     // Silently starting a server on a typo is how someone ends up funding an
     // ephemeral address.
     expect(() => run(["frobnicate"])).toThrow();
+  });
+});
+
+// ── Following init output to a server that can pay ──────────────────────
+//
+// 2.3.1 printed env {"AIFINPAY_MAX_USD": "0.10"} and nothing else, so a client
+// configured from it never listed payable_fetch. The payment settings were a
+// prose line whose gas cap, 0.05 POL, is below the worst case the SDK checks
+// before signing at ~280 gwei (~0.10 POL paying in POL, ~0.21 POL in USDC), and
+// the config of an encrypted wallet — the default — had no passphrase, so the
+// server did not start at all.
+
+const PAYMENT_KEYS = [
+  "AIFINPAY_PAYMENTS_ENABLED",
+  "AIFINPAY_GATEWAY_ORIGINS",
+  "AIFINPAY_GATEWAY_PATH_MODE",
+  "AIFINPAY_MAX_USD",
+  "AIFINPAY_DAILY_USD",
+  "AIFINPAY_MAX_GAS_POL",
+  "AIFINPAY_PAY_ASSET",
+  "AIFINPAY_MODE",
+];
+
+/** Tool names a server configured with exactly this env lists. */
+async function toolsWith(env: Record<string, string>): Promise<string[]> {
+  vi.unstubAllEnvs();
+  for (const name of [...PAYMENT_KEYS, "AIFINPAY_WALLET_PASSPHRASE"]) vi.stubEnv(name, undefined);
+  for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
+  const active = await createServer({
+    ...loadConfigFromEnv(),
+    seedHash: undefined,
+    agentsFile: undefined,
+    agentSecretB58: undefined,
+    walletHome: home,
+    logFn: () => {},
+  });
+  const client = new Client({ name: "init-output-test", version: "1" });
+  const [left, right] = InMemoryTransport.createLinkedPair();
+  await active.server.connect(right);
+  await client.connect(left);
+  try {
+    return (await client.listTools()).tools.map((tool) => tool.name);
+  } finally {
+    await client.close();
+    await active.server.close();
+  }
+}
+
+describe("aifinpay-mcp init payment settings", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("registers payable_fetch once its payment block is added to the printed env", async () => {
+    const [config, payment] = printed(run(["init", "--plaintext"]));
+    const env = config.mcpServers.aifinpay.env;
+    expect(await toolsWith(env)).not.toContain("payable_fetch");
+    expect(await toolsWith({ ...env, ...payment })).toContain("payable_fetch");
+  });
+
+  it("leaves room above the smallest batch and for the worst-case gas at ~280 gwei", () => {
+    const [, payment] = printed(run(["init", "--plaintext"]));
+    expect(Number(payment.AIFINPAY_MAX_USD)).toBeGreaterThan(0.1);
+    expect(Number(payment.AIFINPAY_MAX_GAS_POL)).toBeGreaterThanOrEqual(0.21);
+  });
+
+  it("gives an encrypted wallet's config the passphrase variable, never the passphrase", () => {
+    const pass = { AIFINPAY_WALLET_PASSPHRASE: "fixture-passphrase" };
+    for (const out of [run(["init"], pass), run(["init"], pass)]) {
+      const [config] = printed(out);
+      expect(Object.keys(config.mcpServers.aifinpay.env)).toEqual(["AIFINPAY_WALLET_PASSPHRASE"]);
+      expect(out.includes(pass.AIFINPAY_WALLET_PASSPHRASE)).toBe(false);
+    }
+  });
+
+  it("gives a plaintext wallet's config no passphrase", () => {
+    const [config] = printed(run(["init", "--plaintext"]));
+    expect(config.mcpServers.aifinpay.env).toEqual({});
+  });
+});
+
+describe("README, as npm shows it", () => {
+  it("shows the payment block init prints", () => {
+    const section = README.slice(README.indexOf("## Enable native paid GET requests"));
+    const block = section.match(/```json\n([\s\S]*?)\n```/);
+    expect(block, "README lost its payment example").not.toBeNull();
+    const [, payment] = printed(run(["init", "--plaintext"]));
+    expect(JSON.parse(block![1])).toEqual(payment);
+  });
+
+  it("names this release", () => {
+    // 2.3.1 was published saying "Version **2.2.4**".
+    expect(README).toContain(`Version **${VERSION}**`);
+    for (const [pinned] of README.matchAll(/@aifinpay\/mcp@\d+\.\d+\.\d+/g)) {
+      expect(pinned).toBe(`@aifinpay/mcp@${VERSION}`);
+    }
   });
 });

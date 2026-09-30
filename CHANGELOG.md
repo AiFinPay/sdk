@@ -1,3 +1,25 @@
+## MCP 2.3.2 — unreleased
+
+- `init` prints the payment settings as a JSON block to add to the server's
+  `env` (`AIFINPAY_PAYMENTS_ENABLED`, `AIFINPAY_GATEWAY_ORIGINS`,
+  `AIFINPAY_GATEWAY_PATH_MODE`, `AIFINPAY_MAX_USD`, `AIFINPAY_DAILY_USD`,
+  `AIFINPAY_MAX_GAS_POL`), with what each one does. 2.3.1 printed only
+  `AIFINPAY_MAX_USD: "0.10"`, so a client configured from `init` never listed
+  `payable_fetch`, and $0.10 left no room above the smallest batch.
+- The config `init` prints for an encrypted wallet includes
+  `AIFINPAY_WALLET_PASSPHRASE` (a placeholder, never the passphrase). Without
+  it the server cannot open the keystore and does not start.
+- Example gas cap 0.3 POL, up from 0.05. The cap bounds the worst case the SDK
+  checks before signing — estimated gas plus 20% at the RPC's maximum fee per
+  gas — which at ~280 gwei is ~0.10 POL for a POL payment and ~0.21 POL for
+  USDC, so 0.05 refused every payment with `V14_GAS_BUDGET_EXCEEDED`. The README
+  explains the cap against the gas price.
+- README names this version (2.3.1 was published saying 2.2.4). Tests keep the
+  README version and pins, the README payment block and the one `init` prints
+  in step, and start a server from `init` output to check it lists
+  `payable_fetch`.
+- No payment logic changed.
+
 ## Node 2.3.0 / Python 2.3.0 — unreleased
 
 - AIFP-1 clients can explicitly select Base for ETH or registry-pinned USDC:
