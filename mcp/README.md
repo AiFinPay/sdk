@@ -4,14 +4,15 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Version **2.2.4**. Owner-enabled native Polygon v1.4 purchases with
+Version **2.3.2**. Owner-enabled native Polygon v1.4 purchases with
 `payable_fetch` are released (since 2.2.0). Without payment configuration the
 server keeps its inspection-only tool inventory.
 
 ## Enable native paid GET requests
 
 Use a persistent wallet created with public `npx @aifinpay/mcp init` or an
-existing configured identity. Keep its passphrase private. The owner must set:
+existing configured identity. Keep its passphrase private. The owner adds these
+to the server's `env` (`init` prints the same block):
 
 ```json
 {
@@ -20,20 +21,30 @@ existing configured identity. Keep its passphrase private. The owner must set:
   "AIFINPAY_GATEWAY_PATH_MODE": "direct",
   "AIFINPAY_MAX_USD": "0.15",
   "AIFINPAY_DAILY_USD": "1.00",
-  "AIFINPAY_MAX_GAS_POL": "0.05"
+  "AIFINPAY_MAX_GAS_POL": "0.3"
 }
 ```
 
 Limits are examples, not authorization. USD limits cover purchases; gas has its
-own per-transaction POL cap. Origins are exact HTTPS origins authorized by the
+own POL cap. Origins are exact HTTPS origins authorized by the
 owner. `direct` uses the full path for self-hosted sites; `gateway` uses the
 merchant slug on the hosted gateway. Restart/reconnect the MCP process after
 changing its environment.
 
+`AIFINPAY_MAX_GAS_POL` caps the worst case, not the fee you expect to pay.
+Before signing, the client prices the estimated gas plus 20% at the maximum fee
+per gas the Polygon RPC quotes, and refuses with `V14_GAS_BUDGET_EXCEEDED` if
+that exceeds the cap. The worst case follows the gas price: at about 280 gwei
+(September 2026) it is about 0.10 POL for a POL payment and about 0.21 POL for
+USDC, which needs a token approval and the settlement. `0.3` covers both at that
+price; check the current Polygon gas price and raise the cap when it is higher.
+The fee actually charged is usually a fraction of the cap, but the wallet must
+hold the batch price plus the worst case before it signs.
+
 To pay in USDC instead of native POL, the owner also sets
-`"AIFINPAY_PAY_ASSET": "USDC"`. The wallet then needs USDC for the batch and a
-little POL for gas (an exact-amount token approval plus the settlement, both
-within `AIFINPAY_MAX_GAS_POL` together). Unset or `"POL"` keeps native POL.
+`"AIFINPAY_PAY_ASSET": "USDC"`. The wallet then needs USDC for the batch and
+POL for gas: an exact-amount token approval plus the settlement, both within
+`AIFINPAY_MAX_GAS_POL` together. Unset or `"POL"` keeps native POL.
 
 Call `payable_fetch({"url":"https://merchant.example/api/data"})`. The tool
 uses the original signed v1.4 quote, independent fresh POL/USD pricing, SDK
@@ -142,7 +153,7 @@ A client configuration can use the keystore without embedding its secret:
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["-y", "@aifinpay/mcp@2.2.0"],
+      "args": ["-y", "@aifinpay/mcp@2.3.2"],
       "env": {
         "AIFINPAY_AGENTS_FILE": "/absolute/project/aifinpay/agents.json",
         "AIFINPAY_AGENT_ID": "research-agent"
@@ -158,8 +169,12 @@ After the pinned dependencies are published, source checkouts can run
 `node /absolute/path/to/mcp/bin/aifinpay-mcp.js` instead.
 
 If using the legacy keystore, run `npx @aifinpay/mcp init` once and omit the
-project-file variables. Optional `AIFINPAY_WALLET_PASSPHRASE` encrypts that
-legacy file at creation. An already connected server can load it with
+project-file variables. `AIFINPAY_WALLET_PASSPHRASE` encrypts that legacy file
+at creation, and the server's `env` needs the same value to open it; `init`
+prints a block with a placeholder for it. Clients that expand variables in their
+config, such as Claude Code's `.mcp.json`, can use
+`"${AIFINPAY_WALLET_PASSPHRASE}"` instead of writing the passphrase into the
+file. An already connected server can load it with
 `agent_reload`; it does not need a new conversation. A changed package or
 launch environment requires a server reconnect, subject to host support.
 
