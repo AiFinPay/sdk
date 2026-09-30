@@ -4,11 +4,16 @@ import { validatePaymentConfig } from "../config.js";
 import { PaymentStateError, type PaymentState } from "../payment-state.js";
 import { independentPolUsd } from "../native-price.js";
 
+// "prefix" is left out on purpose: it needs a resource to anchor to, and the
+// owner's two real requests are "this endpoint" and "this site".
+const SCOPES = ["exact", "merchant"] as const;
+type PayableScope = (typeof SCOPES)[number];
+
 export function payableFetchTool() {
   return {
     name: "payable_fetch",
     description:
-      "Fetch a GET resource from an owner-approved AiFinPay merchant. Buys a prepaid batch through verified Polygon v1.4 — in native POL, or in the stablecoin the owner set in AIFINPAY_PAY_ASSET (e.g. USDC; gas is still POL) — within owner limits, then reuses its receipt. Pending payments are recovered without sending another transaction. Other payment protocols are unsupported.",
+      'Fetch a GET resource from an owner-approved AiFinPay merchant. Buys a prepaid batch through verified Polygon v1.4 — in native POL, or in the stablecoin the owner set in AIFINPAY_PAY_ASSET (e.g. USDC; gas is still POL) — within owner limits, then reuses its receipt. With scope "merchant" one batch covers every path on the site. Pending payments are recovered without sending another transaction. Other payment protocols are unsupported.',
     inputSchema: {
       type: "object",
       properties: {
@@ -17,6 +22,12 @@ export function payableFetchTool() {
           type: "number",
           exclusiveMinimum: 0,
           description: "Optional tighter per-payment USD limit; cannot increase the owner's cap.",
+        },
+        scope: {
+          type: "string",
+          enum: [...SCOPES],
+          description:
+            'What a new batch covers. "exact" (default): this one resource. "merchant": every path on this site — use it when the owner asked for access to the site; each request still costs its own listed price. Does not change the price or the owner limits.',
         },
       },
       required: ["url"],
@@ -39,18 +50,21 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
     const store = ctx.paymentState;
     if (!store || store.address !== ctx.agent.evmAddress.toLowerCase())
       return errorResult("A persistent matching wallet is required for payments.");
-    if (Object.keys(args).some((k) => !["url", "max_amount_usd"].includes(k)))
-      return errorResult("Only url and max_amount_usd are supported; no facilitator fallback.");
+    if (Object.keys(args).some((k) => !["url", "max_amount_usd", "scope"].includes(k)))
+      return errorResult("Only url, max_amount_usd and scope are supported; no facilitator fallback.");
     if (typeof args.url !== "string") return errorResult("url must be an HTTPS resource URL.");
+    if (args.scope !== undefined && !SCOPES.includes(args.scope as PayableScope))
+      return errorResult('scope must be "exact" or "merchant".');
+    const scope: PayableScope = (args.scope as PayableScope | undefined) ?? "exact";
     const url = new URL(args.url);
-    if (
-      url.protocol !== "https:" ||
-      url.username ||
-      url.password ||
-      url.hash ||
-      !ctx.config.gatewayOrigins!.includes(url.origin)
-    )
+    if (url.protocol !== "https:" || url.username || url.password || url.hash)
       return errorResult("The URL must use an owner-approved exact HTTPS origin without credentials or fragment.");
+    // The agent cannot approve a site itself: a page asking to be paid is not
+    // the owner asking to pay it. Name the origin so the owner can decide.
+    if (!ctx.config.gatewayOrigins!.includes(url.origin))
+      return errorResult(
+        `${url.origin} is not an owner-approved site. Nothing was paid. The owner can add it to AIFINPAY_GATEWAY_ORIGINS and reconnect this server; the agent cannot approve a site itself.`
+      );
     if (
       args.max_amount_usd !== undefined &&
       (typeof args.max_amount_usd !== "number" || !Number.isFinite(args.max_amount_usd) || args.max_amount_usd <= 0)
@@ -115,7 +129,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
             paymentIssuer: ctx.config.baseUrl ?? "https://api.aifinpay.io",
             gatewayOrigins: ctx.config.gatewayOrigins,
             resourcePathMode: ctx.config.gatewayPathMode,
-            scope: "exact",
+            scope,
             maxAmountUsd: Math.min(maximum, Math.max(0, ctx.config.dailyAmountUsd! - spent)),
             nativeUsdPrice: async () => {
               // Independent public price, never the quote API's rate: Chainlink

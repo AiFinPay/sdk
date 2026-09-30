@@ -1,3 +1,14 @@
+## MCP 2.4.0 — unreleased
+
+- `payable_fetch` takes `scope`: `"exact"` (default, unchanged) buys one
+  resource, `"merchant"` buys one batch that covers every path on the site.
+  It is what "buy access for this site" means; each request still drains the
+  batch at its own listed price, and the owner limits and approved origins are
+  unchanged. Any other value is refused before a quote is requested.
+- An origin missing from `AIFINPAY_GATEWAY_ORIGINS` is now refused by name,
+  saying nothing was paid and that only the owner can approve it.
+- Includes 2.3.2 below, which was not published on its own.
+
 ## MCP 2.3.2 — unreleased
 
 - `init` prints the payment settings as a JSON block to add to the server's

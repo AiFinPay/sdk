@@ -4,9 +4,10 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Version **2.3.2**. Owner-enabled native Polygon v1.4 purchases with
-`payable_fetch` are released (since 2.2.0). Without payment configuration the
-server keeps its inspection-only tool inventory.
+Version **2.4.0**. Owner-enabled native Polygon v1.4 purchases with
+`payable_fetch` are released (since 2.2.0); site-wide batches with
+`scope: "merchant"` since 2.4.0. Without payment configuration the server keeps
+its inspection-only tool inventory.
 
 ## Enable native paid GET requests
 
@@ -54,6 +55,14 @@ merchant script, alternate contract or facilitator fallback is used. GET,
 Polygon live mode only, in POL or the configured stablecoin; Amoy payment
 receipts are not supported. The smallest batch is $0.10 plus gas, so keep `AIFINPAY_MAX_USD`
 a little above the batch you expect to buy.
+
+To buy access to a whole site rather than one endpoint, call
+`payable_fetch({"url":"https://merchant.example/api/data","scope":"merchant"})`.
+One batch then covers every path on that merchant, and each request still costs
+its own listed price, so a premium page drains more of it than a standard API
+call. The price, the owner limits and the approved origins do not change. An
+origin missing from `AIFINPAY_GATEWAY_ORIGINS` is refused by name; only the
+owner can add it.
 
 ### Network access
 
@@ -153,7 +162,7 @@ A client configuration can use the keystore without embedding its secret:
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["-y", "@aifinpay/mcp@2.3.2"],
+      "args": ["-y", "@aifinpay/mcp@2.4.0"],
       "env": {
         "AIFINPAY_AGENTS_FILE": "/absolute/project/aifinpay/agents.json",
         "AIFINPAY_AGENT_ID": "research-agent"
