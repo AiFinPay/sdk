@@ -3,9 +3,10 @@
 - `init` prints the payment settings as a JSON block to add to the server's
   `env` (`AIFINPAY_PAYMENTS_ENABLED`, `AIFINPAY_GATEWAY_ORIGINS`,
   `AIFINPAY_GATEWAY_PATH_MODE`, `AIFINPAY_MAX_USD`, `AIFINPAY_DAILY_USD`,
-  `AIFINPAY_MAX_GAS_POL`), with what each one does. 2.3.1 printed only
-  `AIFINPAY_MAX_USD: "0.10"`, so a client configured from `init` never listed
-  `payable_fetch`, and $0.10 left no room above the smallest batch.
+  `AIFINPAY_MAX_GAS_POL`), with what each one does. In 2.3.1 the printed
+  config held only `AIFINPAY_MAX_USD: "0.10"`, which leaves no room above the
+  smallest batch; the payment variables were a prose hint to merge by hand,
+  with a 0.05 POL gas cap and no `AIFINPAY_GATEWAY_PATH_MODE`.
 - The config `init` prints for an encrypted wallet includes
   `AIFINPAY_WALLET_PASSPHRASE` (a placeholder, never the passphrase). Without
   it the server cannot open the keystore and does not start.
