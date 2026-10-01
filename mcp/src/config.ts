@@ -1,3 +1,5 @@
+import { payChain } from "./pay-chains.js";
+
 /** Runtime configuration loaded from env. */
 export interface McpConfig {
   /** Legacy base58 secret, after SEED_HASH and the project agents file. */
@@ -20,9 +22,17 @@ export interface McpConfig {
   /** Owner opt-in; never accepted from tool arguments. */
   paymentsEnabled?: boolean;
   dailyAmountUsd?: number;
+  /** Chain payable_fetch settles on: "polygon" (default) or "base". Set by
+   *  the owner only; never inferred from a quote or a tool argument. */
+  payChain?: string;
+  /** RPC for the pay chain; defaults to the chain's public RPC. */
+  rpcUrl?: string;
+  /** Gas cap per payment, in the pay chain's native currency (POL, ETH). */
+  maxGas?: string;
+  /** Same cap under its original name; accepted on Polygon only. */
   maxGasPol?: string;
-  /** What payable_fetch pays with: "POL" (default) or a stablecoin the SDK
-   *  pins for Polygon v1.4, e.g. "USDC". Gas is paid in POL either way. */
+  /** What payable_fetch pays with: the chain's native currency (default) or a
+   *  stablecoin the SDK pins for that chain, e.g. "USDC". Gas is native either way. */
   payAsset?: string;
 
   /** Hard cap on a single payment to prevent runaway agents. */
@@ -71,6 +81,9 @@ export function loadConfigFromEnv(): McpConfig {
   return {
     paymentsEnabled: process.env.AIFINPAY_PAYMENTS_ENABLED === "1",
     dailyAmountUsd: process.env.AIFINPAY_DAILY_USD ? Number(process.env.AIFINPAY_DAILY_USD) : undefined,
+    payChain: process.env.AIFINPAY_PAY_CHAIN || undefined,
+    rpcUrl: process.env.AIFINPAY_RPC_URL || undefined,
+    maxGas: process.env.AIFINPAY_MAX_GAS || undefined,
     maxGasPol: process.env.AIFINPAY_MAX_GAS_POL || undefined,
     payAsset: process.env.AIFINPAY_PAY_ASSET || undefined,
     devMode: process.env.AIFINPAY_MODE === "dev",
@@ -148,7 +161,18 @@ function splitOrigins(raw: string | undefined): string[] | undefined {
 /** Signing is available only after the owner configures all spending boundaries. */
 export function validatePaymentConfig(config: McpConfig): bigint {
   if (!config.paymentsEnabled) throw new Error("Payments disabled; owner must set AIFINPAY_PAYMENTS_ENABLED=1");
-  if (config.devMode) throw new Error("MCP receipt payments currently support Polygon live mode only");
+  if (config.devMode) throw new Error("MCP receipt payments support live mode only");
+  const chain = payChain(config.payChain);
+  if (config.rpcUrl !== undefined) {
+    let rpc: URL | undefined;
+    try {
+      rpc = new URL(config.rpcUrl);
+    } catch {
+      rpc = undefined;
+    }
+    if (!rpc || rpc.protocol !== "https:" || rpc.username || rpc.password)
+      throw new Error("AIFINPAY_RPC_URL must be an https URL without credentials");
+  }
   for (const [name, value] of [
     ["AIFINPAY_MAX_USD", config.maxAmountUsd],
     ["AIFINPAY_DAILY_USD", config.dailyAmountUsd],
@@ -171,12 +195,23 @@ export function validatePaymentConfig(config: McpConfig): bigint {
   )
     throw new Error("Payments require explicit exact HTTPS AIFINPAY_GATEWAY_ORIGINS");
   if (config.payAsset !== undefined && !/^[A-Z][A-Z0-9.]{1,11}$/.test(config.payAsset))
-    throw new Error('AIFINPAY_PAY_ASSET must be "POL" or a stablecoin symbol such as "USDC"');
-  const gas = config.maxGasPol;
+    throw new Error(`AIFINPAY_PAY_ASSET must be "${chain.native}" or a stablecoin symbol such as "USDC"`);
+  // The POL-named cap means POL. Read on another chain it would silently cap
+  // ETH gas at a number chosen for POL — 0.3 POL is ~$0.04, 0.3 ETH is ~$800.
+  if (config.maxGasPol !== undefined && chain.name !== "polygon")
+    throw new Error(
+      `AIFINPAY_MAX_GAS_POL caps POL gas and does not apply on ${chain.name}; set AIFINPAY_MAX_GAS in ${chain.native}`
+    );
+  if (config.maxGas !== undefined && config.maxGasPol !== undefined && config.maxGas !== config.maxGasPol)
+    throw new Error("AIFINPAY_MAX_GAS and AIFINPAY_MAX_GAS_POL disagree; set one");
+  const name = config.maxGas !== undefined ? "AIFINPAY_MAX_GAS" : "AIFINPAY_MAX_GAS_POL";
+  const gas = config.maxGas ?? config.maxGasPol;
   if (typeof gas !== "string" || !/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,18})?$/.test(gas))
-    throw new Error("AIFINPAY_MAX_GAS_POL must be a positive decimal with at most 18 places");
+    throw new Error(
+      `${name} must be a positive decimal with at most 18 places: the gas cap per payment in ${chain.native}`
+    );
   const [whole, fraction = ""] = gas.split(".");
   const wei = BigInt(whole) * 10n ** 18n + BigInt(fraction.padEnd(18, "0"));
-  if (wei <= 0n || wei >= 2n ** 256n) throw new Error("AIFINPAY_MAX_GAS_POL is outside the supported range");
+  if (wei <= 0n || wei >= 2n ** 256n) throw new Error(`${name} is outside the supported range`);
   return wei;
 }

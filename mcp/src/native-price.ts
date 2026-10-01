@@ -1,5 +1,7 @@
+import { PAY_CHAINS, type PayChain } from "./pay-chains.js";
+
 /**
- * Independent POL/USD rate for payable_fetch.
+ * Independent native/USD rate for payable_fetch: POL on Polygon, ETH on Base.
  *
  * payable_fetch values a v1.4 quote in USD with a rate it fetches itself —
  * never the quote API's own — so the owner's per-payment and daily USD limits
@@ -9,17 +11,15 @@
  * it began, with nothing to try instead.
  *
  * Sources, in order; the first fresh, sane answer wins:
- *   1. Chainlink POL/USD on Polygon, read over the agent's own Polygon RPC —
- *      the host the payment already needs, so no extra allowlist entry.
+ *   1. Chainlink <native>/USD on the payment chain, read over the agent's own
+ *      RPC for that chain — the host the payment already needs, so no extra
+ *      allowlist entry.
  *   2. api.coinbase.com spot price.
- *   3. api.coingecko.com, id polygon-ecosystem-token. NOT matic-network: that
- *      id stopped updating in February 2026 and answers a stale, higher price.
+ *   3. api.coingecko.com.
+ * Feed addresses and ids live in pay-chains.ts.
  */
 
-// Chainlink's MATIC/USD aggregator proxy on Polygon PoS. POL replaced MATIC
-// 1:1 and the feed kept its name ("MATIC / USD"); 8 decimals. Read 2026-09-23:
-// 0.1064, updated 3 s earlier, within 0.1% of Coinbase.
-export const CHAINLINK_POL_USD_POLYGON = "0xAB594600376Ec9fD91F8e885dADF0CE036862dE0";
+export const CHAINLINK_POL_USD_POLYGON = PAY_CHAINS.polygon.chainlinkNativeUsd;
 const LATEST_ROUND_DATA = "0xfeaf968c"; // latestRoundData()
 const CHAINLINK_DECIMALS = 8;
 // The feed updates on a 0.5% deviation or its heartbeat; a quiet market can
@@ -29,12 +29,12 @@ const MAX_FEED_AGE_S = 3600;
 export interface NativePrice {
   usd: number;
   observedAtMs: number;
-  source: "chainlink-polygon" | "coinbase" | "coingecko";
+  source: `chainlink-${string}` | "coinbase" | "coingecko";
 }
 
 type FetchImpl = (input: string, init?: RequestInit) => Promise<Response>;
 
-const sane = (usd: number) => Number.isFinite(usd) && usd > 0 && usd < 1000;
+const sane = (usd: number, chain: PayChain) => Number.isFinite(usd) && usd > 0 && usd < chain.maxSaneUsd;
 
 async function boundedJson(response: Response, limit = 16 * 1024): Promise<unknown> {
   const text = await response.text();
@@ -42,7 +42,7 @@ async function boundedJson(response: Response, limit = 16 * 1024): Promise<unkno
   return JSON.parse(text);
 }
 
-async function fromChainlink(fetchImpl: FetchImpl, rpc: string): Promise<NativePrice> {
+async function fromChainlink(fetchImpl: FetchImpl, rpc: string, chain: PayChain): Promise<NativePrice> {
   const response = await fetchImpl(rpc, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -50,7 +50,7 @@ async function fromChainlink(fetchImpl: FetchImpl, rpc: string): Promise<NativeP
       jsonrpc: "2.0",
       id: 1,
       method: "eth_call",
-      params: [{ to: CHAINLINK_POL_USD_POLYGON, data: LATEST_ROUND_DATA }, "latest"],
+      params: [{ to: chain.chainlinkNativeUsd, data: LATEST_ROUND_DATA }, "latest"],
     }),
     signal: AbortSignal.timeout(10_000),
     redirect: "manual",
@@ -67,51 +67,56 @@ async function fromChainlink(fetchImpl: FetchImpl, rpc: string): Promise<NativeP
   const ageS = Math.floor(Date.now() / 1000) - updatedAt;
   if (ageS > MAX_FEED_AGE_S) throw new Error(`feed is ${ageS}s old`);
   const usd = Number(answer) / 10 ** CHAINLINK_DECIMALS;
-  if (!sane(usd)) throw new Error("implausible answer");
-  return { usd, observedAtMs: Date.now(), source: "chainlink-polygon" };
+  if (!sane(usd, chain)) throw new Error("implausible answer");
+  return { usd, observedAtMs: Date.now(), source: `chainlink-${chain.name}` };
 }
 
-async function fromCoinbase(fetchImpl: FetchImpl): Promise<NativePrice> {
-  const response = await fetchImpl("https://api.coinbase.com/v2/prices/POL-USD/spot", {
+async function fromCoinbase(fetchImpl: FetchImpl, chain: PayChain): Promise<NativePrice> {
+  const response = await fetchImpl(`https://api.coinbase.com/v2/prices/${chain.coinbasePair}/spot`, {
     signal: AbortSignal.timeout(10_000),
     redirect: "manual",
   });
   if (!response.ok) throw new Error(`http ${response.status}`);
   const data = (await boundedJson(response)) as { data?: { base?: string; currency?: string; amount?: string } };
   const usd = Number(data.data?.amount);
-  if (data.data?.base !== "POL" || data.data?.currency !== "USD" || !sane(usd)) {
+  if (data.data?.base !== chain.native || data.data?.currency !== "USD" || !sane(usd, chain)) {
     throw new Error("invalid response");
   }
   return { usd, observedAtMs: Date.now(), source: "coinbase" };
 }
 
-async function fromCoinGecko(fetchImpl: FetchImpl): Promise<NativePrice> {
+async function fromCoinGecko(fetchImpl: FetchImpl, chain: PayChain): Promise<NativePrice> {
   const response = await fetchImpl(
-    "https://api.coingecko.com/api/v3/simple/price?ids=polygon-ecosystem-token&vs_currencies=usd&include_last_updated_at=true",
+    `https://api.coingecko.com/api/v3/simple/price?ids=${chain.coingeckoId}&vs_currencies=usd&include_last_updated_at=true`,
     { signal: AbortSignal.timeout(10_000), redirect: "manual" }
   );
   if (!response.ok) throw new Error(`http ${response.status}`);
-  const data = (await boundedJson(response)) as {
-    "polygon-ecosystem-token"?: { usd?: number; last_updated_at?: number };
-  };
-  const entry = data["polygon-ecosystem-token"];
+  const data = (await boundedJson(response)) as Record<string, { usd?: number; last_updated_at?: number } | undefined>;
+  const entry = data[chain.coingeckoId];
   const usd = Number(entry?.usd);
   const ageS = Math.floor(Date.now() / 1000) - Number(entry?.last_updated_at ?? 0);
-  if (!sane(usd)) throw new Error("invalid response");
+  if (!sane(usd, chain)) throw new Error("invalid response");
   if (!(ageS <= MAX_FEED_AGE_S)) throw new Error(`price is ${ageS}s old`);
   return { usd, observedAtMs: Date.now(), source: "coingecko" };
 }
 
 /**
- * The first independent POL/USD rate any source gives. Throws one error naming
- * every source tried, so an agent in a restricted sandbox knows what to allow.
+ * The first independent native/USD rate any source gives for the payment
+ * chain. Throws one error naming every source tried, so an agent in a
+ * restricted sandbox knows what to allow.
  */
-export async function independentPolUsd(opts: { fetchImpl: FetchImpl; polygonRpc?: string }): Promise<NativePrice> {
+export async function independentNativeUsd(opts: {
+  fetchImpl: FetchImpl;
+  chain: PayChain;
+  rpc?: string;
+}): Promise<NativePrice> {
+  const { chain } = opts;
   const attempts: Array<[string, () => Promise<NativePrice>]> = [];
-  const rpc = opts.polygonRpc;
-  if (rpc) attempts.push([`Chainlink on Polygon via ${hostOf(rpc)}`, () => fromChainlink(opts.fetchImpl, rpc)]);
-  attempts.push(["api.coinbase.com", () => fromCoinbase(opts.fetchImpl)]);
-  attempts.push(["api.coingecko.com", () => fromCoinGecko(opts.fetchImpl)]);
+  const rpc = opts.rpc;
+  if (rpc)
+    attempts.push([`Chainlink on ${chain.label} via ${hostOf(rpc)}`, () => fromChainlink(opts.fetchImpl, rpc, chain)]);
+  attempts.push(["api.coinbase.com", () => fromCoinbase(opts.fetchImpl, chain)]);
+  attempts.push(["api.coingecko.com", () => fromCoinGecko(opts.fetchImpl, chain)]);
 
   const failures: string[] = [];
   for (const [label, attempt] of attempts) {
@@ -122,10 +127,15 @@ export async function independentPolUsd(opts: { fetchImpl: FetchImpl; polygonRpc
     }
   }
   throw new Error(
-    "Independent POL/USD price unavailable — nothing was paid. Tried " +
+    `Independent ${chain.native}/USD price unavailable — nothing was paid. Tried ` +
       failures.join("; ") +
       ". Allow outbound access to one of these hosts."
   );
+}
+
+/** The Polygon rate, as before chains were configurable. */
+export function independentPolUsd(opts: { fetchImpl: FetchImpl; polygonRpc?: string }): Promise<NativePrice> {
+  return independentNativeUsd({ fetchImpl: opts.fetchImpl, chain: PAY_CHAINS.polygon, rpc: opts.polygonRpc });
 }
 
 function hostOf(url: string): string {

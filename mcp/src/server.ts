@@ -51,7 +51,15 @@ export async function createServer(config: McpConfig = {}) {
   async function configuredAgent() {
     const identity = loadWalletIdentity(config);
     if (!identity) return null;
-    const options = { fetchImpl: safeFetch, baseUrl: config.baseUrl, timeoutMs: config.timeoutMs };
+    // The owner's RPC for the pay chain, if set, is the one the SDK settles
+    // through; otherwise the SDK keeps its public default for that chain.
+    const rpc = config.rpcUrl ? { [config.payChain ?? "polygon"]: config.rpcUrl } : undefined;
+    const options = {
+      fetchImpl: safeFetch,
+      baseUrl: config.baseUrl,
+      timeoutMs: config.timeoutMs,
+      ...(rpc ? { evmRpcUrls: rpc, ...(rpc.polygon ? { polygonRpc: rpc.polygon } : {}) } : {}),
+    };
     const loaded = identity.seedHash
       ? await AiFinPayAgent.fromSeed(identity.seedHash, options)
       : await AiFinPayAgent.fromSolanaSecret(identity.secretB58!, options);
