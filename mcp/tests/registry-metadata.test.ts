@@ -115,6 +115,9 @@ describe("smithery.yaml and server.json describe this server", () => {
       "AIFINPAY_DAILY_USD",
       "AIFINPAY_GATEWAY_ORIGINS",
       "AIFINPAY_MAX_GAS_POL",
+      // 2.5: the chain and its native gas cap, which Base needs.
+      "AIFINPAY_PAY_CHAIN",
+      "AIFINPAY_MAX_GAS",
     ]) {
       expect(smitheryEnv, `smithery.yaml configSchema`).toContain(name);
       expect(

@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.daochild/aifinpay",
   "title": "AiFinPay",
-  "description": "Payment infrastructure for AI agents: persistent wallet, passport, owner-enabled Polygon payments.",
+  "description": "Payment infrastructure for AI agents: wallet, passport, owner-enabled Polygon and Base payments.",
   "version": "2.2.2",
   "websiteUrl": "https://aifinpay.io",
   "repository": {
@@ -55,7 +55,7 @@
         },
         {
           "name": "AIFINPAY_PAYMENTS_ENABLED",
-          "description": "Set to 1 to register payable_fetch (AIFP-1 v1.4 payments on Polygon). Needs a persistent wallet and every owner limit below; the server refuses to start with payments enabled and a limit missing.",
+          "description": "Set to 1 to register payable_fetch (AIFP-1 v1.4 payments on Polygon or Base). Needs a persistent wallet and every owner limit below; the server refuses to start with payments enabled and a limit missing.",
           "format": "string",
           "choices": ["0", "1"],
           "isRequired": false
@@ -79,8 +79,26 @@
           "isRequired": false
         },
         {
+          "name": "AIFINPAY_PAY_CHAIN",
+          "description": "Payment chain: polygon (default) or base.",
+          "format": "string",
+          "isRequired": false
+        },
+        {
+          "name": "AIFINPAY_MAX_GAS",
+          "description": "Gas cap per payment in the chain's native currency (POL or ETH). Required with payments unless AIFINPAY_MAX_GAS_POL is set on Polygon.",
+          "format": "string",
+          "isRequired": false
+        },
+        {
+          "name": "AIFINPAY_RPC_URL",
+          "description": "Optional HTTPS RPC for the payment chain.",
+          "format": "string",
+          "isRequired": false
+        },
+        {
           "name": "AIFINPAY_MAX_GAS_POL",
-          "description": "Gas cap per payment in POL, e.g. 0.3. Required when payments are enabled.",
+          "description": "Gas cap per payment in POL, e.g. 0.3. Polygon only; on Base use AIFINPAY_MAX_GAS.",
           "format": "string",
           "isRequired": false
         },
