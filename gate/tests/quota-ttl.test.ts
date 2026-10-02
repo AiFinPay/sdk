@@ -39,7 +39,7 @@ describe("the counter's lifetime is the receipt's lifetime", () => {
     expect(calls[0].by).toBe(1);
   });
 
-  it("sets a TTL that matches the receipt's remaining life and never exceeds it", async () => {
+  it("sets a TTL that matches the receipt's verifiable life and never exceeds it", async () => {
     const { store, calls } = spyStore();
     const iss = await issuer();
     const gate = createGate({
@@ -55,9 +55,10 @@ describe("the counter's lifetime is the receipt's lifetime", () => {
     const ttl = calls[0].ttlMs;
     // A counter that outlives its receipt refuses paid calls forever. One that
     // dies EARLY is worse: the whole batch becomes spendable a second time,
-    // and nothing in the request path can see it happen.
-    expect(ttl).toBeLessThanOrEqual(120_000);
-    expect(ttl).toBeGreaterThan(110_000);
+    // and nothing in the request path can see it happen. The receipt is
+    // accepted until exp + the 30 s default clock tolerance, so that is its life.
+    expect(ttl).toBeLessThanOrEqual(150_000);
+    expect(ttl).toBeGreaterThan(140_000);
   });
 
   it("floors the TTL at 1s rather than asking for a non-positive expiry", async () => {
@@ -67,13 +68,13 @@ describe("the counter's lifetime is the receipt's lifetime", () => {
       merchantId: MERCHANT,
       resource: "/api/search",
       issuer: ISSUER,
-      // Tolerance keeps a just-expired receipt verifiable, which is exactly the
-      // window where exp*1000 - now goes negative.
+      // Tolerance keeps a just-expired receipt verifiable; 59 s past exp, less
+      // than a second of that window is left.
       clockToleranceSec: 60,
       jwks: iss.jwks,
       store,
     });
-    const token = await iss.sign({ unit_quota: 10, expiresInSec: -5 });
+    const token = await iss.sign({ unit_quota: 10, expiresInSec: -59 });
 
     await gate(req("/api/search", { "AIFP-Receipt": token }));
     expect(calls[0].ttlMs).toBe(1000);

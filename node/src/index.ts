@@ -45,6 +45,9 @@ export {
   SETTLEMENT_CHAIN_IDS,
   SETTLEMENT_EXPECTED_BPS,
 } from "./settlement.js";
+// Thrown by SettlementClient for transport failures (timeout, refused redirect,
+// oversized response) — export it so callers can tell those from protocol errors.
+export { SettlementHttpError } from "./settlementHttp.js";
 export * from "./settlementV14.js";
 export type {
   SettlementRouteClass,
@@ -203,7 +206,13 @@ export type { SafeErrorShape } from "./errors.js";
 /** @deprecated Legacy x402 facilitators — use AIFP-1/AIFP-2 settlement instead */
 export { AiFinPayFacilitator, CoinbaseX402Facilitator, REGISTERED, detectFacilitator } from "./facilitators/index.js";
 /** @deprecated Legacy x402 facilitators — use AIFP-1/AIFP-2 settlement instead */
-export type { AuthPayload, Facilitator, FacilitatorClass, PayOptions } from "./facilitators/index.js";
+export type {
+  AuthPayload,
+  AuthRequestContext,
+  Facilitator,
+  FacilitatorClass,
+  PayOptions,
+} from "./facilitators/index.js";
 
 export { type SpendLedger, MemorySpendLedger, FileSpendLedger } from "./spendLedger.js";
 

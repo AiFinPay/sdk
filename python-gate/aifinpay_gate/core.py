@@ -71,7 +71,10 @@ class Route:
         if self.weight is not None and (not isinstance(self.weight, int) or self.weight < 1):
             raise ValueError("weight must be a positive integer")
         if self.methods is not None:
-            object.__setattr__(self, "methods", frozenset(m.upper() for m in self.methods))
+            # A bare string is one method. Iterating it would gate "P", "O",
+            # "S", "T", match nothing, and leave a paid route free.
+            methods = [self.methods] if isinstance(self.methods, str) else self.methods
+            object.__setattr__(self, "methods", frozenset(m.upper() for m in methods))
 
 
 @dataclass
@@ -138,6 +141,9 @@ class Gate:
             raise ValueError("replay must be auto, always or off")
         if on_store_error not in ("closed", "open"):
             raise ValueError("on_store_error must be closed or open")
+        # As Route does: an unknown tier would price the mount as standard.
+        if tier not in TIERS:
+            raise ValueError(f"tier must be one of {TIERS}: {tier!r}")
         self.merchant_id = merchant_id
         self.resource = resource
         self.tier = tier
@@ -302,28 +308,44 @@ class Gate:
         # never run out.
         if not (limit == limit and math.isfinite(limit)) or limit <= 0:
             return self._forbid(resource, weight, "receipt carries no usable unit_quota")
-        # The counter dies with the receipt — never later, never earlier.
-        ttl_ms = max(1000, int(payload["exp"] * 1000 - self._now() * 1000))
+        # The counter dies with the receipt — never later, never earlier. The
+        # receipt lives until the verifier stops accepting it, exp plus the clock
+        # tolerance; a counter ending at exp let a spent batch start again from
+        # zero inside that window.
+        ttl_ms = max(1000, int((payload["exp"] + self.verify.tolerance) * 1000 - self._now() * 1000))
 
+        nonce_key: Optional[str] = None
         if self.replay == "always" or (self.replay == "auto" and limit <= 1):
             nonce = payload.get("nonce")
             if not isinstance(nonce, str) or nonce == "":
                 return self._forbid(resource, weight, "single-use receipt carries no nonce")
+            nonce_key = f"{self.key_prefix}nonce:{nonce}"
             try:
-                seen = self.store.incr_by(f"{self.key_prefix}nonce:{nonce}", 1, ttl_ms)
+                seen = self.store.incr_by(nonce_key, 1, ttl_ms)
             except Exception as e:  # noqa: BLE001
                 return self._store_failure(e, resource, weight, payload, limit)
             if seen > 1:
                 return self._forbid(resource, weight, "receipt already spent (single-use)")
 
+        used_key = f"{self.key_prefix}used:{receipt_id}"
         try:
-            used = self.store.incr_by(f"{self.key_prefix}used:{receipt_id}", weight, ttl_ms)
+            used = self.store.incr_by(used_key, weight, ttl_ms)
         except Exception as e:  # noqa: BLE001
+            # The nonce is recorded but nothing was metered. Closed, the agent is
+            # told to retry — which a burned nonce would refuse as already spent.
+            # Open, the call is served, so the nonce stays spent.
+            if self.on_store_error != "open":
+                self._undo(nonce_key, 1)
             return self._store_failure(e, resource, weight, payload, limit)
 
         # Post-increment compare: whichever request crosses the limit is the one
-        # refused, exactly once.
+        # refused, exactly once. The refused call then takes back its own
+        # increment (and nonce), so the units that remain stay spendable by a
+        # call that fits. Only refused increments are undone, so the units
+        # served can never exceed the limit.
         if used > limit:
+            self._undo(used_key, weight)
+            self._undo(nonce_key, 1)
             return self._challenge(resource, weight, tier, DETAIL_QUOTA_EXHAUSTED)
 
         self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": sub, "receipt_id": receipt_id})
@@ -349,11 +371,18 @@ class Gate:
 
     def refund(self, aifp: Dict[str, Any]) -> None:
         """Give back the units a call consumed after the handler failed. Best effort."""
+        if not aifp or aifp.get("mode") != "paid" or aifp.get("weight", 0) <= 0:
+            return
+        self._undo(f"{self.key_prefix}used:{aifp['receipt_id']}", aifp["weight"])
+
+    def _undo(self, key: Optional[str], by: int) -> None:
+        """Take back an increment that bought nothing. Best effort: a store
+        without decr_by, or one failing right now, keeps the increment."""
         decr = getattr(self.store, "decr_by", None)
-        if decr is None or not aifp or aifp.get("mode") != "paid" or aifp.get("weight", 0) <= 0:
+        if key is None or decr is None:
             return
         try:
-            decr(f"{self.key_prefix}used:{aifp['receipt_id']}", aifp["weight"])
+            decr(key, by)
         except Exception:  # noqa: BLE001
             pass
 

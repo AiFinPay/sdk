@@ -54,8 +54,8 @@ try:
     from web3 import Web3
 except ImportError as e:  # pragma: no cover
     raise ImportError(
-        "AiFinPayAgent requires web3 + eth_account. "
-        "Install with: pip install 'aifinpay-agent[unified]' "
+        "AiFinPayAgent requires web3 + eth_account, which are dependencies of "
+        "aifinpay-agent. Reinstall it (pip install --force-reinstall aifinpay-agent) "
         "or: pip install web3 eth-account"
     ) from e
 
@@ -77,7 +77,8 @@ try:
     from solders.keypair import Keypair as SolKeypair
 except ImportError as e:  # pragma: no cover
     raise ImportError(
-        "AiFinPayAgent requires solders. " "Install with: pip install 'aifinpay-agent[unified]' or: pip install solders"
+        "AiFinPayAgent requires solders, a dependency of aifinpay-agent. "
+        "Reinstall it (pip install --force-reinstall aifinpay-agent) or: pip install solders"
     ) from e
 
 
