@@ -1,4 +1,4 @@
-# AiFinPay — financial rails for AI agents
+# AiFinPay — payment infrastructure for AI agents
 
 AiFinPay provides payment and monetization infrastructure for autonomous AI agents.
 
@@ -12,15 +12,15 @@ Canonical domain: **https://aifinpay.io**
 
 | Package | Current source version | Install |
 |---|---:|---|
-| `aifinpay-agent` (Python) | `2.2.1` | `pip install aifinpay-agent` |
+| `aifinpay-agent` (Python) | `2.3.0` | `pip install aifinpay-agent` |
 | `aifinpay-gate` (Python merchant gate) | `0.1.0` | `pip install aifinpay-gate` |
-| `@aifinpay/agent` (Node / TypeScript) | `2.2.0` | `npm install @aifinpay/agent` |
-| `@aifinpay/mcp` | `2.3.0` | `npx @aifinpay/mcp` |
+| `@aifinpay/agent` (Node / TypeScript) | `2.3.0` | `npm install @aifinpay/agent` |
+| `@aifinpay/mcp` | `2.4.1` | `npx @aifinpay/mcp` |
 | `@aifinpay/mcp-http` | `2.0.4` | Streamable HTTP wrapper |
-| `@aifinpay/skill` | `2.3.0` | `npm install @aifinpay/skill` |
+| `@aifinpay/skill` | `2.5.1` (source: [AiFinPay/skill](https://github.com/AiFinPay/skill); bundled by `@aifinpay/mcp`) | `npm install @aifinpay/skill` |
 | `@aifinpay/gate` | `0.3.4` | `npm install @aifinpay/gate` |
 | `@aifinpay/wallet` | `1.1.0` | `npm install @aifinpay/wallet` |
-| `@aifinpay/deployments` | `1.1.2` | deployment registry package |
+| `@aifinpay/deployments` | `1.1.3` | deployment registry package |
 
 Package lines are versioned independently. The package manifests in this repository and the corresponding npm/PyPI registries are the source of truth.
 
@@ -43,14 +43,16 @@ npm install @aifinpay/gate
 npm install @aifinpay/skill
 ```
 
-## MCP: current production surface
+## MCP: current tool surface
 
-The current `@aifinpay/mcp` source exposes the following production tools:
+The current `@aifinpay/mcp` source registers these tools:
 
 | Tool | Purpose |
 |---|---|
 | `agent_address` | Read the current EVM, Solana and Casper public addresses. |
 | `agent_reload` | Reload configured local wallet files without starting a new conversation. |
+| `agent_claim_self` | Link the agent to its owner's dashboard with a one-time URL from dash.aifinpay.io. Signs only an AiFinPay claim challenge for the agent's own address; moves no funds. |
+| `payable_fetch` | **Only when the owner enables payments.** Fetch a GET resource from an owner-approved AIFP-1 merchant, buying a prepaid batch on Polygon v1.4 (POL or a pinned stablecoin) within the owner's limits. |
 | `agent_quota` | Read the agent's quota. |
 | `agent_history` | Read indexed AiFinPay payment history or retained receipt history. |
 | `agent_passport_resolve` | Resolve a public Agent Passport identity and verified wallet bindings. |
@@ -62,9 +64,9 @@ The current `@aifinpay/mcp` source exposes the following production tools:
 
 With `AIFINPAY_MODE=dev`, an additional `dev_payment_quote` tool is available for dev-only quote inspection.
 
-**The public MCP surface does not sign or broadcast payments.** Creating an invoice or quote is not a completed payment.
+**Without owner payment configuration the MCP server is read-only:** it signs no payment, and creating an invoice or quote is not a completed payment. `payable_fetch` is registered — and signs and broadcasts locally — only when the owner sets `AIFINPAY_PAYMENTS_ENABLED=1` together with `AIFINPAY_MAX_USD`, `AIFINPAY_DAILY_USD`, `AIFINPAY_GATEWAY_ORIGINS` and `AIFINPAY_MAX_GAS_POL`; with payments enabled and any of them missing, the server does not start. See [mcp/README.md](./mcp/README.md).
 
-Legacy tools such as `payable_fetch`, `agent_call`, `agent_quote`, `pay_with_split`, `quote_split` and `agent_claim_self` are not registered by the current production MCP server.
+Legacy tools such as `agent_call`, `agent_quote`, `pay_with_split` and `quote_split` are not registered by the current MCP server.
 
 ### MCP client configuration
 
@@ -79,10 +81,12 @@ Legacy tools such as `payable_fetch`, `agent_call`, `agent_quote`, `pay_with_spl
 }
 ```
 
-For a persistent local identity, initialize the keystore once:
+For a persistent local identity, initialize the keystore once. `init` creates an encrypted keystore and refuses to create one without a passphrase unless you ask for a plaintext test wallet:
 
 ```bash
-npx @aifinpay/mcp init
+AIFINPAY_WALLET_PASSPHRASE='<a long passphrase>' npx @aifinpay/mcp init
+# disposable test wallet only:
+npx @aifinpay/mcp init --plaintext
 ```
 
 Then use `agent_reload` and `agent_address` to verify the selected public wallet. Do not paste seeds or private keys into chat, issues, logs or shared configuration.
@@ -122,7 +126,7 @@ For a site or API that wants to monetize AI-agent traffic:
 npm install @aifinpay/gate
 ```
 
-The merchant package can return HTTP 402 challenges, expose discovery metadata and meter paid access. See [gate/README.md](./gate/README.md). Python servers (FastAPI, Starlette, Flask, Django) use `pip install aifinpay-gate`, the same gate as ASGI/WSGI middleware — see [python-gate/README.md](./python-gate/README.md) and the `aifinpay-merchant` skill in [skill/skills/aifinpay-merchant/SKILL.md](./skill/skills/aifinpay-merchant/SKILL.md).
+The merchant package can return HTTP 402 challenges, expose discovery metadata and meter paid access. See [gate/README.md](./gate/README.md). Python servers (FastAPI, Starlette, Flask, Django) use `pip install aifinpay-gate`, the same gate as ASGI/WSGI middleware — see [python-gate/README.md](./python-gate/README.md) and the `aifinpay-merchant` skill in the [AiFinPay/skill](https://github.com/AiFinPay/skill/blob/main/agent/skills/aifinpay-merchant/SKILL.md) repository.
 
 ## Deployment status
 
@@ -158,8 +162,9 @@ sdk/
 ├── python/        aifinpay-agent
 ├── mcp/           @aifinpay/mcp
 ├── mcp-http/      Streamable HTTP wrapper
-├── skill/         @aifinpay/skill
-├── gate/          merchant HTTP 402 paywall
+├── skill/         pointer only — @aifinpay/skill moved to github.com/AiFinPay/skill
+├── gate/          merchant HTTP 402 paywall (Node)
+├── python-gate/   aifinpay-gate, merchant HTTP 402 paywall (Python)
 ├── wallet/        lightweight agent wallet / keystore
 ├── deployments/   deployment registry
 └── examples/      integrations and reference examples

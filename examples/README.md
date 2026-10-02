@@ -1,53 +1,83 @@
 # AiFinPay examples
 
-Reference integrations you can copy and adapt. All examples work with the
-stable **2.0.0** release.
+Reference integrations you can copy and adapt. Each example pins its own
+dependencies in its own folder. CI only parses the bridges' `server.js` and
+`store.js` files; it does not install or run any example, and the Python
+examples are not checked at all. Read the known issues below before you rely
+on one.
 
 ## Agent framework integrations
 
 | Example | What it shows | Stack |
 |---|---|---|
-| [`openai-agent`](./openai-agent) | OpenAI Agents SDK `Tool` that pays x402 endpoints | Node 22+, `@openai/agents` |
-| [`langchain`](./langchain) | LangChain `BaseTool` wrapping `agent.call()` | Node 22+, LangChain |
-| [`crewai`](./crewai) | CrewAI crew that buys inference + search calls | Node 22+, CrewAI |
-| [`flowise`](./flowise) | Flowise custom node JSON + import instructions | Node 22+, Flowise |
-| [`autogpt`](./autogpt) | Headless self-funding agent loop | Node 22+, AutoGPT |
+| [`openai-agent`](./openai-agent) | OpenAI tool-calling loop with a `payable_fetch` tool around `aifinpay.Agent.pay(url)` | Python 3.10+, `openai` |
+| [`langchain`](./langchain) | LangChain `BaseTool` wrapping `aifinpay.Agent.pay(url)` | Python 3.10+, LangChain |
+| [`crewai`](./crewai) | CrewAI crew that buys inference + search calls | Python 3.9+, CrewAI |
+| [`flowise`](./flowise) | Flowise custom tool JSON + import instructions | Flowise (Node), `@aifinpay/agent` |
+| [`autogpt`](./autogpt) | Headless self-funding agent loop | Python 3.9+, `openai` |
 | [`claude-mcp`](./claude-mcp) | Claude Desktop MCP config + walkthrough | MCP client |
 
-## Live bridge templates
+## Bridge templates (legacy splitter)
+
+These bridges sell per-call access by having the agent pay the legacy
+Polygon B2BSplitter (`0xbD1fa545…`, or the older `0xE34Fc0E6…` in
+`_generic-x402-bridge`), which splits 98.99% / 1.00% / 0.01% (merchant /
+treasury / creator). That is not the AIFP-1 v1.4 model (merchant 99% /
+AiFinPay 1% of the gross), and the released agent clients do not pay it. To
+put a new API behind AIFP-1, use [`@aifinpay/gate`](../gate) (Node) or
+[`aifinpay-gate`](../python-gate) (Python) instead.
 
 | Example | What it shows | Stack |
 |---|---|---|
-| [`echo-x402-server`](./echo-x402-server) | Smallest possible **AiFinPay-gated API** in prepaid access mode. ~70 lines of Express. | Node 22+, Express |
-| [`exa-x402-bridge`](./exa-x402-bridge) | **Per-call paid bridge** for [Exa AI](https://exa.ai/) `/search`. Default template for any pay-per-call API. | Node 22+, Express, viem |
+| [`echo-x402-server`](./echo-x402-server) | Seat-gated echo API using the retired v1 native-auth message (`AiFinPay-x402:{nonce}:{pubkey}`) and `GET /api/seat/:pubkey`. ~170 lines of Express. | Node 22+, Express |
+| [`exa-x402-bridge`](./exa-x402-bridge) | Per-call paid bridge for [Exa AI](https://exa.ai/) `/search`. | Node 22+, Express, viem |
 | [`venice-x402-bridge`](./venice-x402-bridge) | Same template applied to [Venice AI](https://venice.ai) `/chat/completions`. | Node 22+, Express, viem |
-| [`io-net-x402-bridge`](./io-net-x402-bridge) | Production bridge for io.net inference API | Node 22+, Express, viem |
-| [`gcore-x402-bridge`](./gcore-x402-bridge) | Production bridge for GCore inference API | Node 22+, Express, viem |
+| [`io-net-x402-bridge`](./io-net-x402-bridge) | Bridge for the io.net inference API | Node 22+, Express, viem |
+| [`gcore-x402-bridge`](./gcore-x402-bridge) | Bridge for the GCore inference API | Node 22+, Express, viem |
 | [`_generic-x402-bridge`](./_generic-x402-bridge) | Minimal template to fork for a new service | Node 22+, Express, viem |
 
 ## Utilities
 
 | Example | What it shows | Stack |
 |---|---|---|
-| [`agent-snippets`](./agent-snippets) | **Payer-side copy-paste snippets**: wallet create/load → `setBudget` → paid call | Node 22+ / Python 3.9+ |
-| [`new-wallet`](./new-wallet) | Wallet creation and backup workflow | Node 22+ |
+| [`agent-snippets`](./agent-snippets) | **Payer-side copy-paste snippets**: wallet create/load → `setBudget` (Node) → paid call | Node 22+ / Python 3.9+ |
+| [`new-wallet`](./new-wallet) | One-shot EVM wallet generator (viem) and backup workflow | Node 22+ |
 
 PRs welcome — open one against `main`.
 
-## Quick start (echo-x402-server — prepaid access gate)
+## Known issues
+
+These are bugs in the example code, not in the SDKs. They are listed here
+until the examples are fixed.
+
+- `openai-agent`, `langchain`, `crewai` and `autogpt` call
+  `Agent.pay(url, body=...)`. `Agent.pay` forwards extra keyword arguments to
+  `requests.Session.request`, which has no `body` argument, so the first paid
+  call raises `TypeError`. They also send these bodies with the default `GET`.
+- `autogpt/loop.py` reloads its wallet with `Agent.from_secret(...)`; the
+  method is `Agent.from_secret_b58(...)`, so every run after the first fails
+  with `AttributeError`.
+- `flowise/payable_fetch_tool.json` calls `Agent.fromSecret(...)`; the method
+  is `Agent.fromSecretB58(...)`, so the tool fails as soon as
+  `AIFINPAY_AGENT_SECRET` is set.
+- `echo-x402-server` and `gcore-x402-bridge` have no `package-lock.json`, so
+  `npm ci` refuses to install them; use `npm install` in those two folders.
+
+## Quick start (echo-x402-server — seat-gated echo)
 
 ```bash
-cd echo-x402-server && npm ci --no-audit --no-fund && node server.js
+cd echo-x402-server && npm install --no-audit --no-fund && node server.js
 # → x402-gated API on port 3000
 
 node test-client.js  # in another shell
 ```
 
-## Quick start (exa-x402-bridge — per-call Polygon settlement)
+## Quick start (exa-x402-bridge — per-call Polygon settlement, legacy splitter)
 
 ```bash
 cd exa-x402-bridge && npm ci --no-audit --no-fund
-EXA_API_KEY=...  BRIDGE_MERCHANT_WALLET=0x...  node server.js
+# The bridge refuses to start without shared Redis; ALLOW_MEMORY_STORE=1 is for a local dev run only.
+EXA_API_KEY=...  BRIDGE_MERCHANT_WALLET=0x...  ALLOW_MEMORY_STORE=1  node server.js
 # → paid proxy on port 3001
 
 # Demo client — submits a real Polygon tx
@@ -55,4 +85,3 @@ AGENT_PRIVATE_KEY=0x...  node test-client.js "autonomous AI commerce"
 ```
 
 See each example's README for detailed setup and environment variables.
-All examples require Node 22+ unless noted.

@@ -1,11 +1,11 @@
 # aifinpay-agent (Python)
 
-Version `2.3.0`: agent identity (EVM and Solana addresses from one seed), native
+Version `2.3.1`: agent identity (EVM and Solana addresses from one seed), native
 request authentication, linking an agent to its owner's dashboard, and paying
 AiFinPay merchants (`fetch_paid`, AIFP-1 on Polygon v1.4 in POL or USDC,
 or explicitly selected Base v1.4 in ETH or USDC).
 
-Canonical domain **aifinpay.io** (`aifinpay.company` only redirects there). A
+Canonical domain **aifinpay.io**. A
 wallet address alone does not mean a payment route is enabled. The keypair is
 generated locally and never leaves your process.
 
@@ -106,8 +106,11 @@ and receipts.
 ## Loading an existing keypair
 
 ```python
-# from solana-keygen JSON file
-agent = Agent.from_keypair_file("~/agent-wallet.json")
+import os
+from aifinpay import Agent
+
+# from solana-keygen JSON file (open() does not expand "~")
+agent = Agent.from_keypair_file(os.path.expanduser("~/agent-wallet.json"))
 
 # from base58 secret string
 agent = Agent.from_secret_b58("3RvZm7Gw...")
@@ -123,11 +126,17 @@ agent = Agent.from_secret_b58("3RvZm7Gw...")
      `agreement_hash` + `treasury_vault` fingerprint
    - **Coinbase x402** — `PAYMENT-REQUIRED` HTTP header
 3. Builds the right auth payload:
-   - AiFinPay → reads `x-nonce` from the 402 body (no extra round-trip),
-     computes `SHA-256("AiFinPay-x402:{nonce}:{pubkey}")`, signs with
-     Ed25519, sets `x-agent-pubkey`, `x-nonce`, `x-signature` headers
-   - Coinbase x402 → builds a `PaymentPayload`, base64-encodes, sets
-     `PAYMENT-SIGNATURE` (detection and parsing only; Python does not settle)
+   - AiFinPay (auth version 2) → reads the one-time `x-nonce`, its expiry and
+     the request-body SHA-256 from the 402 body; refuses unless the request and
+     the response are on the origin configured as the agent's `base_url` and
+     the body digest matches; signs, with Ed25519, the SHA-256 of the JSON
+     array `["AiFinPay-x402", "v2", nonce, pubkey, origin, METHOD, path+query,
+     bodySha256, expiresAt]`; sets `x-agent-pubkey`, `x-nonce`, `x-signature`
+     and `x-aifinpay-auth-version: 2`. The retired v1 format is refused and
+     `auth_headers()` raises.
+   - Coinbase x402 → detected and parsed (a price above
+     `options.max_amount_usd` raises `PaymentTooExpensiveError`), then
+     `FacilitatorNotImplementedError`: Python does not pay this flavor
 4. Retries the original request with the auth attached.
 
 The server verifies the signature and serves the resource if the agent is
