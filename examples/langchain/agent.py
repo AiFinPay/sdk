@@ -1,64 +1,81 @@
 """
 LangChain × AiFinPay
 --------------------
-Expose `aifinpay.Agent.pay(url)` as a LangChain BaseTool.
+Expose `AiFinPayAgent.fetch_paid` as a LangChain BaseTool: a GET that buys one
+AIFP-1 batch on Polygon v1.4 when the URL answers 402. The model chooses only
+the URL; the owner's wallet and spending limits come from the environment.
+
+    python agent.py https://merchant.example/api/data
 """
 
+import os
+import sys
+
+from langchain.agents import create_agent
 from langchain.tools import BaseTool
-from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from aifinpay import Agent as PayAgent
 from pydantic import BaseModel, Field
 
+from aifinpay import AiFinPayAgent
+from aifinpay.aifp1 import Aifp1Error
 
-pay_agent = PayAgent.new()
-print(f"[bootstrap] address={pay_agent.address}")
-print(f"[bootstrap] secret={pay_agent.secret_b58}  # persist this to keep funds")
+
+def required(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise SystemExit(f"Set {name}. Payment limits are the owner's choice; there are no defaults.")
+    return value
+
+
+# The owner's wallet (64 hex characters; never print or log it) and limits.
+agent = AiFinPayAgent.from_seed(required("SEED_HASH"))
+ALLOWED_ORIGINS = [o.strip() for o in required("AIFINPAY_GATEWAY_ORIGINS").split(",") if o.strip()]
+MAX_USD = float(required("AIFINPAY_MAX_USD"))  # per batch
+DAILY_USD = float(required("AIFINPAY_DAILY_USD"))  # rolling 24 h, persisted
+ASSET = os.environ.get("AIFINPAY_PAY_ASSET") or None  # "USDC", or native POL when unset
 
 
 class PayableFetchInput(BaseModel):
-    url: str = Field(description="URL to fetch")
-    body: dict | None = Field(default=None, description="Optional JSON body")
+    url: str = Field(description="An https URL on an origin the owner approved")
 
 
 class PayableFetchTool(BaseTool):
     name: str = "payable_fetch"
     description: str = (
-        "Fetch any URL. If the server returns 402 (Payment Required), the tool "
-        "settles the payment on-chain via the AiFinPay agent wallet and retries. "
-        "Returns the response body as a string."
+        "GET a URL. If it is an AiFinPay (AIFP-1) paywalled resource on an origin the owner approved, "
+        "buy one prepaid batch within the owner's limits and return the response body."
     )
     args_schema: type = PayableFetchInput
 
-    def _run(self, url: str, body: dict | None = None) -> str:
-        return pay_agent.pay(url, body=body).text
+    def _run(self, url: str) -> str:
+        try:
+            r = agent.fetch_paid(
+                url,
+                allowed_origins=ALLOWED_ORIGINS,
+                max_amount_usd=MAX_USD,
+                daily_amount_usd=DAILY_USD,
+                asset=ASSET,
+            )
+        except Aifp1Error as e:
+            # A refused quote paid nothing. A failed settlement may have been
+            # broadcast: its recovery journal is for the owner (recover_paid),
+            # never for the model to retry.
+            return f"payment not completed: {e}. Do not retry this URL."
+        return f"HTTP {r.status_code}\n{r.text[:4000]}"
 
-    async def _arun(self, url: str, body: dict | None = None) -> str:
-        return self._run(url, body)
 
-
-tools = [PayableFetchTool()]
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-
-prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are an autonomous agent that can buy x402-gated services with payable_fetch."),
-    ("human", "{input}"),
-    MessagesPlaceholder("agent_scratchpad"),
-])
-
-agent = create_openai_tools_agent(llm, tools, prompt)
-executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+# LangChain 1.x agent API (create_agent); AgentExecutor moved to langchain-classic.
+reader = create_agent(
+    ChatOpenAI(model="gpt-4o-mini", temperature=0),
+    tools=[PayableFetchTool()],
+    system_prompt="You can read AiFinPay-paywalled resources with payable_fetch; the owner's limits apply.",
+)
 
 
 if __name__ == "__main__":
-    out = executor.invoke({
-        "input": (
-            "Buy a one-sentence completion: payable_fetch "
-            "https://bridge.aifinpay.io/io-net/chat/completions with body "
-            "{\"model\":\"meta-llama/Llama-3.3-70B-Instruct\","
-            "\"messages\":[{\"role\":\"user\",\"content\":\"In one sentence: what is x402?\"}]}. "
-            "Then summarize the result."
-        ),
-    })
-    print("\n=== OUTPUT ===\n", out["output"])
+    if len(sys.argv) != 2:
+        raise SystemExit("usage: python agent.py <AIFP-1 paywalled https URL on an allowed origin>")
+    print(f"[wallet] paying from {agent.evm_address} on Polygon")
+    task = f"Read {sys.argv[1]} with payable_fetch, then summarize it in three sentences."
+    out = reader.invoke({"messages": [{"role": "user", "content": task}]})
+    print("\n=== OUTPUT ===\n", out["messages"][-1].content)

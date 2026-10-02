@@ -874,7 +874,7 @@ export class AiFinPayAgent {
     for (const url of this.registryCandidates) {
       let r: Response;
       try {
-        r = await fetch(url);
+        r = await this.inner.fetchImpl(url);
       } catch (err) {
         attempts.push(`${url} → ${(err as Error).message}`);
         continue;
@@ -961,7 +961,7 @@ export class AiFinPayAgent {
     const message = `AiFinPay-network-publish:polygon:${addr}:${nonce}`;
     const signature = await this.evmAccount.signMessage({ message });
 
-    const r = await fetch(`${base}/api/network/agents/${addr}/publish`, {
+    const r = await this.inner.fetchImpl(`${base}/api/network/agents/${addr}/publish`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -992,7 +992,7 @@ export class AiFinPayAgent {
     const nonce = await this.networkNonce();
     const message = `AiFinPay-network-unpublish:polygon:${addr}:${nonce}`;
     const signature = await this.evmAccount.signMessage({ message });
-    const r = await fetch(`${base}/api/network/agents/${addr}/unpublish`, {
+    const r = await this.inner.fetchImpl(`${base}/api/network/agents/${addr}/unpublish`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ nonce, signature }),
@@ -1019,14 +1019,14 @@ export class AiFinPayAgent {
       if (query.q) params.set("q", query.q);
       if (query.limit) params.set("limit", String(query.limit));
     }
-    const r = await fetch(`${base}/api/network/agents?${params.toString()}`);
+    const r = await this.inner.fetchImpl(`${base}/api/network/agents?${params.toString()}`);
     if (!r.ok) throw new AiFinPayError(`network search ${base} → ${r.status}`);
     const j = (await r.json()) as { agents?: NetworkAgent[] };
     return j.agents ?? [];
   }
 
   private async networkNonce(): Promise<string> {
-    const r = await fetch(`${this.inner.baseUrl}/api/network/nonce`);
+    const r = await this.inner.fetchImpl(`${this.inner.baseUrl}/api/network/nonce`);
     if (!r.ok) throw new AiFinPayError(`network nonce → ${r.status}`);
     const { nonce } = (await r.json()) as { nonce: string };
     if (!nonce) throw new AiFinPayError("network nonce: empty response");

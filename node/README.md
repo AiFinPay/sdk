@@ -69,7 +69,7 @@ npm pack
 Install the resulting tarball in your application:
 
 ```bash
-npm install /absolute/path/to/sdk/node/aifinpay-agent-2.3.0.tgz
+npm install /absolute/path/to/sdk/node/aifinpay-agent-<version>.tgz
 ```
 
 ## Quick start
@@ -104,7 +104,8 @@ inputs and wallet files out of chats, logs and version control.
 The same configured inputs restore the same addresses after a process restart.
 An explicit `evmPrivateKey` option overrides the derived EVM identity; retain
 that separate key as well to recover the imported wallet. Loading a wallet
-does not enable the RC's gated settlement routes.
+does not by itself pay for anything; paid execution goes through `fetchPaid`
+and its checks.
 
 `AiFinPayAgent.new()` and `Agent.new()` intentionally create a fresh ephemeral
 wallet each time. They do not load existing environment variables or keystores
@@ -126,24 +127,34 @@ const agent2 = Agent.fromSecretB58("3RvZm7Gw...");
 
 ## How x402 auth works under the hood
 
-For every gated request the SDK:
+`Agent.pay(url)` (and `get`/`post`/`request`) handles an AiFinPay-native 402
+with request-bound auth (version 2). For a gated request the SDK:
 
-1. `GET /nonce` → receives a one-time UUID with 60s TTL.
-2. computes `SHA-256("AiFinPay-x402:{nonce}:{pubkey}")`.
-3. signs with Ed25519, base58-encodes the signature.
+1. sends the request without credentials; the 402 body carries a one-time
+   `x-nonce`, its expiry `x-nonce-expires-at`, `x-aifinpay-auth-version: 2`
+   and the SHA-256 of the request body it was issued for;
+2. refuses to sign unless the request went to the origin configured as the
+   agent's `baseUrl`, the response came from that origin, and the body digest
+   matches the body it sent;
+3. signs, with Ed25519, the SHA-256 of
+   `JSON.stringify(["AiFinPay-x402", "v2", nonce, pubkey, origin, METHOD, path+query, bodySha256, expiresAt])`
+   and base58-encodes the signature;
 4. retries the original request with headers:
    - `x-agent-pubkey: <base58 pubkey>`
-   - `x-nonce: <uuid>`
+   - `x-nonce: <nonce>`
    - `x-signature: <base58 sig>`
+   - `x-aifinpay-auth-version: 2`
 
-The server verifies the signature, checks the agent has a live Seat PDA
-on-chain, and serves the resource.
+The server verifies the signature, consumes the nonce, checks the agent has a
+live Seat PDA on-chain, and serves the resource. The retired v1 format
+(`GET /nonce`, `SHA-256("AiFinPay-x402:{nonce}:{pubkey}")`) is refused, and
+`Agent.authHeaders()` throws.
 
 ## Privacy
 
 - **The server never sees your private key.** Period.
 - Nonces are consumed on use; replay-resistant.
-- All transactions are public and on-chain — Solana + Polygon mainnet.
+- Payments settle on public chains — Polygon, or Base when selected — and are visible on-chain.
 
 ## License
 

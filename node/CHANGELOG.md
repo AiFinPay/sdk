@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.3.2
+
+- README only: native auth is documented as the v2 request-bound signature;
+  chain and release wording match the source. No code change.
+
+## 2.3.1
+
+- `fetchRegistry`, `register`, `unregister`, `search` and the network nonce use
+  the configured `fetchImpl` instead of global `fetch`.
+- Export the `AuthRequestContext` type and `SettlementHttpError`.
+- See `docs/sdk-parity.md` for the Node/Python comparison.
+
 ## 2.3.0
 
 - Add explicitly selected Base ETH/USDC AIFP-1 payments with `v14.chain: "base"`.
