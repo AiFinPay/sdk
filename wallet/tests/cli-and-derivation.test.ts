@@ -6,13 +6,13 @@
 // and an exit that merely returned would let `new` carry on past "Refusing" and
 // overwrite the keystore it just refused to touch.
 //
-// Tests written as `it.fails` describe correct behaviour the package does not
-// have today. Each is a real bug, listed in the change that adds it and not
-// fixed there; when one is fixed its test starts passing, which `it.fails`
-// reports as a failure so the marker is removed.
+// The bugs the coverage pass found (AiFinPay/sdk#96) are fixed and pinned
+// here, each labelled W1–W8. W1 is still `it.fails`: fixing it changes how a
+// new wallet derives its keys, which is a decision for a human, not a test.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, mkdirSync } from "node:fs";
+import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import bs58 from "bs58";
@@ -215,16 +215,33 @@ describe("wallet new refuses to overwrite", () => {
     expect(readFileSync(keystorePath()).equals(before)).toBe(true);
   });
 
-  // W3. readStore() returns null for a file it cannot parse or does not
-  // recognise, and create() then writes a new keystore over it. A keystore from
-  // a newer release, a hand-edited one, or one truncated by a full disk "may
-  // hold funds" exactly as much as a valid one.
-  it.fails("an agent.json it cannot read (W3)", async () => {
+  // W3. A keystore from a newer release, a hand-edited one, or one truncated by
+  // a full disk "may hold funds" exactly as much as a valid one.
+  it("an agent.json it cannot read (W3)", async () => {
     mkdirSync(home(), { recursive: true, mode: 0o700 });
     const unknown = JSON.stringify({ version: 3, crypto: { cipher: "aes-128-ctr" } });
     writeFileSync(keystorePath(), unknown, { mode: 0o600 });
     await expect(run("new", ["node", "wallet", "--plain"])).rejects.toEqual(new Exit(1));
     expect(readFileSync(keystorePath(), "utf8")).toBe(unknown);
+  });
+
+  it("an encrypted agent.json in a scheme this version does not know (W3)", async () => {
+    mkdirSync(home(), { recursive: true, mode: 0o700 });
+    const future = JSON.stringify({ enc: "argon2id-xchacha20", ct: "AAAA" });
+    writeFileSync(keystorePath(), future, { mode: 0o600 });
+    process.env.AIFINPAY_WALLET_PASSPHRASE = STRONG;
+    await expect(run("show", [])).rejects.toThrow("is not a keystore this version can read");
+    await expect(run("new", ["node", "wallet"])).rejects.toEqual(new Exit(1));
+    expect(readFileSync(keystorePath(), "utf8")).toBe(future);
+  });
+
+  it("show and export say an unreadable agent.json is not a keystore, not that there is no wallet (W3)", async () => {
+    mkdirSync(home(), { recursive: true, mode: 0o700 });
+    writeFileSync(keystorePath(), "{ truncated", { mode: 0o600 });
+    await expect(run("show", [])).rejects.toThrow("is not a keystore this version can read");
+    await expect(run("export", [])).rejects.toThrow("is not a keystore this version can read");
+    expect(err.join("")).not.toContain("wallet new");
+    expect(readFileSync(keystorePath(), "utf8")).toBe("{ truncated");
   });
 });
 
@@ -277,10 +294,10 @@ describe("encrypted keystores", () => {
     expect(keystore().enc).toBe("scrypt-aes-256-gcm");
   });
 
-  // W2. The keystore is encrypted, and next to the ciphertext sits seedHex in
-  // plaintext (cli.ts create()). The seed derives every key, so anyone who can
-  // read agent.json has the wallet; the passphrase protects nothing.
-  it.fails("do not store the seed in plaintext (W2)", async () => {
+  // W2. The seed derives every key: stored in the clear next to the ciphertext,
+  // anyone who can read agent.json has the wallet and the passphrase protects
+  // nothing.
+  it("do not store the seed in plaintext (W2)", async () => {
     process.env.AIFINPAY_WALLET_PASSPHRASE = STRONG;
     await run("new", ["node", "wallet"]);
     out = [];
@@ -290,9 +307,9 @@ describe("encrypted keystores", () => {
     expect(readFileSync(keystorePath(), "utf8")).not.toContain(seed);
   });
 
-  // W2, as a user sees it: `export` prints the seed of an encrypted keystore
-  // without asking for the passphrase.
-  it.fails("do not export the seed without the passphrase (W2)", async () => {
+  // W2, as a user sees it: `export` must not print an encrypted keystore's seed
+  // without the passphrase.
+  it("do not export the seed without the passphrase (W2)", async () => {
     process.env.AIFINPAY_WALLET_PASSPHRASE = STRONG;
     await run("new", ["node", "wallet"]);
     delete process.env.AIFINPAY_WALLET_PASSPHRASE;
@@ -301,34 +318,106 @@ describe("encrypted keystores", () => {
     expect(out.join("")).not.toMatch(/[0-9a-f]{64}/);
   });
 
-  // W4. generateStrongPassphrase() draws 32 characters from the allowed set
-  // without guaranteeing one of each class; validatePassphrase() requires all
-  // four. About 3–4% of generated passphrases lack a digit or a special
-  // character — the CLI then refuses the passphrase it wrote to ~/.aifinpay/.env,
-  // and the owner cannot open their own wallet with it.
-  it.fails("accept every passphrase the CLI itself generates (W4)", async () => {
+  // W4. validatePassphrase() requires all four character classes; a generator
+  // that does not guarantee them wrote passphrases (~3–4%) the CLI then refused,
+  // and the owner could not open their own wallet. "$" is excluded because the
+  // passphrase is saved to a .env file a shell may `source`.
+  it("generate only passphrases the CLI itself accepts, without a shell-expanded $ (W4)", () => {
     const allClasses = (p: string) => /[a-z]/.test(p) && /[A-Z]/.test(p) && /[0-9]/.test(p) && /[!@$.^*_+=-]/.test(p);
-    let candidate: string | undefined;
-    for (let i = 0; i < 5000 && !candidate; i++) {
-      const p = generateStrongPassphrase();
-      if (!allClasses(p)) candidate = p;
-    }
-    if (!candidate) return; // every sampled passphrase had all four classes
-    process.env.AIFINPAY_WALLET_PASSPHRASE = candidate;
-    await run("new", ["node", "wallet"]);
-    expect(keystore().enc).toBe("scrypt-aes-256-gcm");
+    const sample = Array.from({ length: 5000 }, () => generateStrongPassphrase());
+    expect(sample.filter((p) => !allClasses(p))).toEqual([]);
+    expect(sample.filter((p) => p.includes("$"))).toEqual([]);
+    expect(sample.every((p) => p.length === 32)).toBe(true);
   });
 
-  // W8. savePassphraseToEnv() filters the old passphrase line out of .env and
-  // then APPENDS the whole filtered content to the same file: every existing
-  // line is duplicated and the old AIFINPAY_WALLET_PASSPHRASE line stays.
-  it.fails("keep other .env lines exactly once when saving a generated passphrase (W8)", async () => {
+  // W8. The filtered .env content was appended to the file it came from, so
+  // every existing line was duplicated and the old passphrase line stayed.
+  it("keep other .env lines exactly once when saving a generated passphrase (W8)", async () => {
     mkdirSync(home(), { recursive: true, mode: 0o700 });
     writeFileSync(join(home(), ".env"), "OPENAI_BASE_URL=https://example.test\n", { mode: 0o600 });
     await run("new", ["node", "wallet"]);
     const lines = readFileSync(join(home(), ".env"), "utf8").trim().split("\n");
     expect(lines.filter((l) => l.startsWith("OPENAI_BASE_URL=")).length).toBe(1);
     expect(lines.filter((l) => l.startsWith("AIFINPAY_WALLET_PASSPHRASE=")).length).toBe(1);
+  });
+});
+
+/** The key @aifinpay/mcp derives from AIFINPAY_WALLET_PASSPHRASE (mcp/src/identity.ts). */
+const mcpKey = (passphrase: string, salt: string) =>
+  scryptSync(passphrase, Buffer.from(salt, "base64"), 32, { N: 1 << 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+
+/** What @aifinpay/mcp decrypts from an encrypted agent.json: `ct`, and nothing else. */
+function mcpDecrypts(store: { salt: string; iv: string; tag: string; ct: string }, passphrase: string): string {
+  const decipher = createDecipheriv("aes-256-gcm", mcpKey(passphrase, store.salt), Buffer.from(store.iv, "base64"));
+  decipher.setAuthTag(Buffer.from(store.tag, "base64"));
+  return Buffer.concat([decipher.update(Buffer.from(store.ct, "base64")), decipher.final()]).toString("utf8");
+}
+
+/** An encrypted keystore exactly as @aifinpay/wallet 1.1.0 wrote it: the
+ *  Solana secret sealed, the seed next to it in the clear. */
+function wallet110Keystore(seedHex: string, passphrase: string) {
+  const w = deriveWallet(seedHex);
+  const salt = randomBytes(16);
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", mcpKey(passphrase, salt.toString("base64")), iv);
+  const ct = Buffer.concat([cipher.update(w.keys.solanaSecretKeyB58, "utf8"), cipher.final()]);
+  return {
+    enc: "scrypt-aes-256-gcm",
+    salt: salt.toString("base64"),
+    iv: iv.toString("base64"),
+    tag: cipher.getAuthTag().toString("base64"),
+    ct: ct.toString("base64"),
+    created: "2026-09-20T00:00:00.000Z",
+    derivationMode: "standard",
+    seedHex,
+  };
+}
+
+describe("the encrypted keystore format", () => {
+  it.each([
+    ["standard", []],
+    ["legacy-solana", ["--legacy-solana"]],
+  ])("keeps ct the Solana secret MCP decrypts (%s)", async (_mode, flags) => {
+    process.env.AIFINPAY_WALLET_PASSPHRASE = STRONG;
+    await run("new", ["node", "wallet", ...flags]);
+    out = [];
+    await run("export", []);
+    const seed = out.join("").trim();
+    const store = keystore();
+    const w = deriveWallet(seed, { mode: store.derivationMode });
+    expect(mcpDecrypts(store, STRONG)).toBe(w.keys.solanaSecretKeyB58);
+    // A legacy-solana seed IS the Solana key, so only standard needs it sealed.
+    expect("seedCt" in store).toBe(store.derivationMode === "standard");
+    expect(store.seedHex).toBeUndefined();
+  });
+
+  it("still opens a 1.1.0 keystore, and warns that its seed is in the clear", async () => {
+    mkdirSync(home(), { recursive: true, mode: 0o700 });
+    const seed = "ab".repeat(32);
+    writeFileSync(keystorePath(), JSON.stringify(wallet110Keystore(seed, STRONG)), { mode: 0o600 });
+    process.env.AIFINPAY_WALLET_PASSPHRASE = STRONG;
+    await run("show", []);
+    expect(printed("EVM")).toBe(SDK[seed].evm);
+    expect(err.join("")).toMatch(/stores the seed unencrypted/);
+    out = [];
+    await run("export", []);
+    expect(out.join("")).toBe(`${seed}\n`);
+
+    delete process.env.AIFINPAY_WALLET_PASSPHRASE;
+    out = [];
+    await expect(run("export", [])).rejects.toThrow("AIFINPAY_WALLET_PASSPHRASE is required");
+    expect(out.join("")).toBe("");
+  });
+
+  it("refuses a 1.1.0 keystore whose plaintext seed was swapped", async () => {
+    // The plaintext seed sits outside the GCM tag. Trusting it would show — and
+    // invite funding of — an address the sealed key does not control.
+    mkdirSync(home(), { recursive: true, mode: 0o700 });
+    const store = { ...wallet110Keystore("ab".repeat(32), STRONG), seedHex: "11".repeat(32) };
+    writeFileSync(keystorePath(), JSON.stringify(store), { mode: 0o600 });
+    process.env.AIFINPAY_WALLET_PASSPHRASE = STRONG;
+    await expect(run("show", [])).rejects.toThrow("keystore seed does not match its key");
+    await expect(run("export", [])).rejects.toThrow("keystore seed does not match its key");
   });
 });
 
@@ -343,15 +432,36 @@ describe("interoperability with @aifinpay/mcp", () => {
     expect(evmMcpWouldUse(keystore().secretB58)).toBe(printed("EVM"));
   });
 
+  // W1, until it is fixed: the CLI must not tell the owner MCP will use a
+  // wallet it would run at different addresses.
+  it("tells the owner a default-mode wallet is not the one MCP would run", async () => {
+    await run("new", ["node", "wallet", "--plain"]);
+    expect(out.join("")).toContain("Do not fund this wallet for use with @aifinpay/mcp");
+    expect(out.join("")).not.toContain("uses it with no config");
+    out = [];
+    rmSync(keystorePath());
+    await run("new", ["node", "wallet", "--plain", "--legacy-solana"]);
+    expect(out.join("")).toContain("uses it with no config");
+  });
+
   // W7. `npx @aifinpay/mcp init` writes { secretB58, created } — no seedHex and
-  // no derivationMode (mcp/bin/aifinpay-mcp.js). The wallet CLI defaults such a
-  // file to "standard" mode, which needs seedHex, and refuses to show it.
-  it.fails("show reads a keystore written by `npx @aifinpay/mcp init` (W7)", async () => {
+  // no derivationMode (mcp/bin/aifinpay-mcp.js). Its Solana key is the seed.
+  it("show reads a keystore written by `npx @aifinpay/mcp init` (W7)", async () => {
     mkdirSync(home(), { recursive: true, mode: 0o700 });
     const secretB58 = deriveWallet("11".repeat(32), { mode: "legacy-solana" }).keys.solanaSecretKeyB58;
     writeFileSync(keystorePath(), JSON.stringify({ secretB58, created: "2026-09-01T00:00:00.000Z" }), { mode: 0o600 });
     await run("show", []);
     expect(printed("EVM")).toBe(SDK["11".repeat(32)].evm);
+  });
+});
+
+describe("export from an MCP keystore", () => {
+  it("prints the seed, which is the stored Solana key's first 32 bytes", async () => {
+    mkdirSync(home(), { recursive: true, mode: 0o700 });
+    const secretB58 = deriveWallet("11".repeat(32), { mode: "legacy-solana" }).keys.solanaSecretKeyB58;
+    writeFileSync(keystorePath(), JSON.stringify({ secretB58, created: "2026-09-01T00:00:00.000Z" }), { mode: 0o600 });
+    await run("export", []);
+    expect(out.join("")).toBe(`${"11".repeat(32)}\n`);
   });
 });
 
@@ -377,11 +487,10 @@ describe("CLI errors", () => {
 });
 
 describe("the library", () => {
-  // W5. cli.ts handles --help at module load (print, process.exit(0)), and
-  // index.ts re-exports run from cli.ts. So any program that imports
-  // @aifinpay/wallet and was itself started with `--help`, `-h` or `help` as its
-  // first argument prints the wallet's help and exits.
-  it.fails("importing @aifinpay/wallet never exits the host process (W5)", async () => {
+  // W5. index.ts re-exports run from cli.ts, so help handled at module load made
+  // any program started with `--help`, `-h` or `help` that imported
+  // @aifinpay/wallet print the wallet's help and exit.
+  it("importing @aifinpay/wallet never exits the host process (W5)", async () => {
     const argv = process.argv;
     process.argv = [argv[0], "/usr/local/bin/some-agent", "--help"];
     vi.resetModules();
