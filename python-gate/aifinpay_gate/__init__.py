@@ -25,7 +25,7 @@ from .stores import REDIS_INCRBY_SCRIPT, MemoryStore, RedisStore, StoreCapacityE
 from .verify import Verifier
 from .wsgi import AifpGateWSGI
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "AI_AGENT_UA_MARKERS", "AifpGateMiddleware", "AifpGateWSGI", "DETAIL_QUOTA_EXHAUSTED", "DETAIL_RECEIPT_EXPIRED",
