@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.daochild/aifinpay",
   "title": "AiFinPay",
-  "description": "Pay for any HTTP API in stablecoins on Polygon and Solana with one MCP call.",
+  "description": "Payment infrastructure for AI agents: persistent wallet, passport, owner-enabled Polygon payments.",
   "version": "2.2.2",
   "websiteUrl": "https://aifinpay.io",
   "repository": {
@@ -33,21 +33,60 @@
       ],
       "environmentVariables": [
         {
-          "name": "AIFINPAY_AGENT_SECRET",
-          "description": "Base58 Ed25519 secret (persistent agent identity; Solana + EVM addresses both derive from it)",
+          "name": "SEED_HASH",
+          "description": "32-byte hex seed (64 hex characters), the highest-priority wallet source. Solana, EVM and Casper addresses derive from it.",
           "format": "string",
           "isSecret": true,
           "isRequired": false
         },
         {
+          "name": "AIFINPAY_AGENT_SECRET",
+          "description": "Legacy base58 Ed25519 secret for a persistent agent identity; Solana, EVM and Casper addresses derive from it. Without any wallet source the server uses an unfunded ephemeral identity.",
+          "format": "string",
+          "isSecret": true,
+          "isRequired": false
+        },
+        {
+          "name": "AIFINPAY_WALLET_PASSPHRASE",
+          "description": "Passphrase for an encrypted ~/.aifinpay/agent.json keystore created by `npx @aifinpay/mcp init`.",
+          "format": "string",
+          "isSecret": true,
+          "isRequired": false
+        },
+        {
+          "name": "AIFINPAY_PAYMENTS_ENABLED",
+          "description": "Set to 1 to register payable_fetch (AIFP-1 v1.4 payments on Polygon). Needs a persistent wallet and every owner limit below; the server refuses to start with payments enabled and a limit missing.",
+          "format": "string",
+          "choices": ["0", "1"],
+          "isRequired": false
+        },
+        {
           "name": "AIFINPAY_MAX_USD",
-          "description": "Hard cap per paid call (agent_call + payable_fetch), default 0.10",
+          "description": "Per-payment cap in USD for payable_fetch. Required when payments are enabled; a tool argument can lower it, never raise it.",
+          "format": "string",
+          "isRequired": false
+        },
+        {
+          "name": "AIFINPAY_DAILY_USD",
+          "description": "Rolling 24-hour spending cap in USD. Required when payments are enabled.",
+          "format": "string",
+          "isRequired": false
+        },
+        {
+          "name": "AIFINPAY_GATEWAY_ORIGINS",
+          "description": "Comma-separated exact HTTPS origins the agent may pay. Required when payments are enabled.",
+          "format": "string",
+          "isRequired": false
+        },
+        {
+          "name": "AIFINPAY_MAX_GAS_POL",
+          "description": "Gas cap per payment in POL, e.g. 0.3. Required when payments are enabled.",
           "format": "string",
           "isRequired": false
         },
         {
           "name": "AIFINPAY_BASE_URL",
-          "description": "Override the AiFinPay backend endpoint, default https://aifinpay.io",
+          "description": "Override the AiFinPay backend. Unset, read-only tools use https://aifinpay.io and payable_fetch quotes and receipts use https://api.aifinpay.io.",
           "format": "string",
           "isRequired": false
         }
