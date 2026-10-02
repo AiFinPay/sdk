@@ -136,10 +136,10 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Build (tsc)
         run: npm run build
-      # The byte-identity test imports @aifinpay/agent (a devDependency). It is
-      # the check that keeps this package's derivation from drifting away from
-      # the full SDK — an agent funded from a drifted address would be
-      # unspendable.
+      # @aifinpay/agent is not installed here, so the live byte-identity test in
+      # tests/wallet.test.ts reports as skipped. Derivation is held to the full
+      # SDK by vectors pinned in tests/cli-and-derivation.test.ts — an agent
+      # funded from a drifted address would be unspendable.
       - name: Test (vitest)
         run: npm test
       - name: Verify publishable tarball
