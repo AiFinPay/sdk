@@ -3,18 +3,22 @@
 Reference integrations you can copy and adapt. Each example pins its own
 dependencies in its own folder. CI only parses the bridges' `server.js` and
 `store.js` files; it does not install or run any example, and the Python
-examples are not checked at all. Read the known issues below before you rely
-on one.
+examples are not checked. Read the known issues below before you rely on one.
+
+The Python framework examples pay through `AiFinPayAgent.fetch_paid`. They
+need the owner's wallet as `SEED_HASH` and the owner's limits as
+`AIFINPAY_GATEWAY_ORIGINS`, `AIFINPAY_MAX_USD` and `AIFINPAY_DAILY_USD` (the
+names `@aifinpay/mcp` uses), and refuse to start without them.
 
 ## Agent framework integrations
 
 | Example | What it shows | Stack |
 |---|---|---|
-| [`openai-agent`](./openai-agent) | OpenAI tool-calling loop with a `payable_fetch` tool around `aifinpay.Agent.pay(url)` | Python 3.10+, `openai` |
-| [`langchain`](./langchain) | LangChain `BaseTool` wrapping `aifinpay.Agent.pay(url)` | Python 3.10+, LangChain |
-| [`crewai`](./crewai) | CrewAI crew that buys inference + search calls | Python 3.9+, CrewAI |
+| [`openai-agent`](./openai-agent) | OpenAI tool-calling loop with a `payable_fetch(url)` tool built on `AiFinPayAgent.fetch_paid` (AIFP-1, Polygon v1.4, owner limits from the environment) | Python 3.9+, `openai` |
+| [`langchain`](./langchain) | The same `payable_fetch` tool as a LangChain `BaseTool` | Python 3.9+, LangChain |
+| [`crewai`](./crewai) | Two-agent crew whose Researcher reads paid sources with `payable_fetch` | Python 3.10+, CrewAI |
 | [`flowise`](./flowise) | Flowise custom tool JSON + import instructions | Flowise (Node), `@aifinpay/agent` |
-| [`autogpt`](./autogpt) | Headless self-funding agent loop | Python 3.9+, `openai` |
+| [`autogpt`](./autogpt) | Headless loop that reads a paid resource on a schedule and stops at the owner's 24-hour limit | Python 3.9+, `openai` |
 | [`claude-mcp`](./claude-mcp) | Claude Desktop MCP config + walkthrough | MCP client |
 
 ## Bridge templates (legacy splitter)
@@ -47,21 +51,16 @@ PRs welcome — open one against `main`.
 
 ## Known issues
 
-These are bugs in the example code, not in the SDKs. They are listed here
-until the examples are fixed.
+These are problems in the example code, not in the SDKs.
 
-- `openai-agent`, `langchain`, `crewai` and `autogpt` call
-  `Agent.pay(url, body=...)`. `Agent.pay` forwards extra keyword arguments to
-  `requests.Session.request`, which has no `body` argument, so the first paid
-  call raises `TypeError`. They also send these bodies with the default `GET`.
-- `autogpt/loop.py` reloads its wallet with `Agent.from_secret(...)`; the
-  method is `Agent.from_secret_b58(...)`, so every run after the first fails
-  with `AttributeError`.
-- `flowise/payable_fetch_tool.json` calls `Agent.fromSecret(...)`; the method
-  is `Agent.fromSecretB58(...)`, so the tool fails as soon as
-  `AIFINPAY_AGENT_SECRET` is set.
 - `echo-x402-server` and `gcore-x402-bridge` have no `package-lock.json`, so
   `npm ci` refuses to install them; use `npm install` in those two folders.
+- `_generic-x402-bridge` is written against the retired v1.1 splitter
+  (`0xE34Fc0E6…`): its 402 asks for `payMatic(address,address,string)` and its
+  verifier decodes a `Payment` event without `paymentId`. Pointing it at the
+  v1.2 splitter the other bridges use takes porting those too (see
+  `exa-x402-bridge`); changing the address alone makes every payment fail
+  verification.
 
 ## Quick start (echo-x402-server — seat-gated echo)
 

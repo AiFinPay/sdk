@@ -2,6 +2,6 @@
   "name": "payable_fetch",
   "description": "Fetch any URL. If the server returns HTTP 402, settle the payment on-chain via the AiFinPay agent wallet (Polygon mainnet) and retry. Returns the response body.",
   "schema": "z.object({ url: z.string().describe('URL to fetch'), body: z.any().optional().describe('Optional JSON body for POST') })",
-  "func": "const { Agent } = require('@aifinpay/agent'); const secret = $vars.AIFINPAY_AGENT_SECRET; const agent = secret ? Agent.fromSecret(secret) : Agent.new(); const res = await agent.pay($input.url, { body: $input.body }); return await res.text();",
+  "func": "const { Agent } = require('@aifinpay/agent'); const secret = $vars.AIFINPAY_AGENT_SECRET; const agent = secret ? Agent.fromSecretB58(secret) : Agent.new(); const res = await agent.pay($input.url, { body: $input.body }); return await res.text();",
   "_notes": "Set AIFINPAY_AGENT_SECRET in Flowise Settings → Variables (base58 secret from Agent.new().secretB58). Fund the corresponding address on Polygon mainnet before first use."
 }
