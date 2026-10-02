@@ -39,6 +39,23 @@
   `payable_fetch`.
 - No payment logic changed.
 
+## Node 2.3.1 / Python 2.3.1 — unreleased
+
+- `docs/sdk-parity.md`: method-by-method parity between `@aifinpay/agent` and
+  `aifinpay-agent` — public surface, options and defaults, errors for the same
+  input, amount rounding, signing and key derivation, spend limits and
+  deployment data — with the gaps that touch amounts or signing listed, not
+  changed.
+- Node: `fetchRegistry`, `register`, `unregister`, `search` and the network
+  nonce use the configured `fetchImpl`; they called global `fetch` and ignored
+  it. `AuthRequestContext` (used by the public `Facilitator.buildAuth`) and
+  `SettlementHttpError` (thrown by `SettlementClient`) are exported.
+- Python: `ProviderEntry`, `Aifp1Error`, `Aifp1QuoteError`, `Aifp1PayError` and
+  `V14SettlementError` are importable from `aifinpay`. The missing-dependency
+  error no longer recommends an `aifinpay-agent[unified]` extra that does not
+  exist.
+- No amount, signing or key-derivation behaviour changed.
+
 ## Node 2.3.0 / Python 2.3.0 — unreleased
 
 - AIFP-1 clients can explicitly select Base for ETH or registry-pinned USDC:
