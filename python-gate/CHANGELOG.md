@@ -1,3 +1,24 @@
+## 0.1.1 — unreleased
+
+Fixes for bugs found by the coverage pass (AiFinPay/sdk#96); P1, P5, P6 and
+P7 also ship in `@aifinpay/gate` 0.3.5.
+
+- P1: the quota counter and single-use nonce now live until
+  `exp + clock_tolerance_s`, as long as the verifier accepts the receipt. They
+  used to expire at `exp`, so a spent batch refilled for 30 seconds.
+- P2: a receipt whose header nests thousands of JSON arrays is refused with
+  403. It used to raise `RecursionError` out of `Gate.decide`, which an
+  adapter with `on_store_error="open"` treated as an outage and served free.
+- P9: a truncated or malformed JWKS response (`http.client.HTTPException`)
+  fails closed with 503 instead of escaping `decide()`.
+- P3: `Route(methods="POST")` gates `POST`. A bare string used to be iterated
+  into `{"P", "O", "S", "T"}`, so the route matched nothing and was free.
+- P5: `Gate(tier=...)` refuses an unknown tier, as `Route` does.
+- P6: a call refused for not fitting takes its increment back, so the units
+  that remain stay spendable.
+- P7: a store failure after the nonce check no longer burns a single-use
+  receipt when the gate fails closed.
+
 ## 0.1.0 — unreleased
 
 - First release: `Gate` (framework-agnostic decision), `AifpGateMiddleware`

@@ -12,6 +12,7 @@ no TTL to give the counter).
 """
 
 import base64
+import http.client
 import json
 import threading
 import time
@@ -42,7 +43,9 @@ def _fetch_jwks(uri: str, timeout_s: float) -> List[Dict[str, Any]]:
     try:
         with urllib.request.urlopen(req, timeout=timeout_s) as r:  # noqa: S310 — the JWKS URI is operator config
             doc = json.loads(r.read(1_000_000))
-    except (urllib.error.URLError, OSError, ValueError) as e:
+    # HTTPException covers a response cut short (IncompleteRead) or malformed;
+    # it is none of the others, and escaping here would skip the 503.
+    except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:
         raise JwksUnavailable(f"{type(e).__name__}: {e}") from e
     keys = doc.get("keys") if isinstance(doc, dict) else None
     if not isinstance(keys, list):
@@ -129,7 +132,11 @@ class Verifier:
             header = json.loads(_b64url(h_part))
             payload = json.loads(_b64url(p_part))
             signature = _b64url(s_part)
-        except (ValueError, UnicodeDecodeError) as e:
+        # RecursionError: a header of thousands of nested arrays exhausts the
+        # JSON decoder while still under the size check. It is a malformed
+        # token like any other, and must not escape as an exception that an
+        # on_store_error="open" adapter would read as an outage.
+        except (ValueError, UnicodeDecodeError, RecursionError) as e:
             return ("invalid", f"malformed JWT: {type(e).__name__}")
         if not isinstance(header, dict) or not isinstance(payload, dict):
             return ("invalid", "malformed JWT")
