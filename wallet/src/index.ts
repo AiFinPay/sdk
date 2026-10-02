@@ -8,11 +8,12 @@
  * Grok run died on TAR_ENTRY_ERROR after 14 minutes and never got a wallet).
  *
  * Making a wallet needs none of that. This package installs 4 packages / ~4.5 MB
- * in seconds and produces the exact same Solana, EVM and Casper addresses the
- * full SDK would — verified byte-for-byte against @aifinpay/agent in CI. The
- * keystore it writes is the one @aifinpay/mcp reads, so the division of labour is
- * clean: this light package to CREATE a wallet anywhere, the full SDK only when
- * you actually PAY.
+ * in seconds. In legacy-solana mode it produces the same Solana, EVM and Casper
+ * addresses as @aifinpay/agent's fromSeed (pinned to SDK-computed vectors in
+ * tests/cli-and-derivation.test.ts). The keystore it writes is the one
+ * @aifinpay/mcp reads; MCP derives every address from the stored Solana key,
+ * which matches only for a legacy-solana wallet. This light package CREATES a
+ * wallet anywhere; the full SDK is needed only when you actually PAY.
  */
 export { deriveWallet, newWallet, walletFromSolanaSecret, walletFromSeed, DerivationDomain, LEGACY_SOLANA_DERIVATION } from "./derive.js";
 export type { DerivedWallet, DerivationMode } from "./derive.js";
