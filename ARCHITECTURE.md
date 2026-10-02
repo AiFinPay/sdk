@@ -15,6 +15,8 @@ build orchestrator. Package instructions and lockfiles are authoritative.
   package; source changes require a packed SDK integration test. Operator config,
   wallet loading, SSRF-safe fetch, and tool dispatch are separate boundaries.
 - `gate/` implements merchant paywall discovery and receipt access control.
+  `python-gate/` is its Python port (ASGI/WSGI middleware); its tests replay
+  scenarios recorded from the Node gate.
 - `python/aifinpay/aifp1.py` owns Python payment negotiation, receipt verification
   and recovery; `settlement_v14.py` owns validation and EVM execution. Both SDKs
   bind an explicit Base selection across quotes, RPC, tokens, receipts and

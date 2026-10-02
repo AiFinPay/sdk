@@ -39,6 +39,18 @@
   `payable_fetch`.
 - No payment logic changed.
 
+## Node 2.3.2 / Python 2.3.2 — unreleased
+
+Documentation only; no code change in either SDK.
+
+- `node/README.md`: native auth is described as the current v2 request-bound
+  signature, not the retired v1 nonce message; chain and release wording match
+  the source.
+- `python/README.md`: the keypair example imports `Agent` and expands `~`;
+  native auth is described as v2; the Coinbase x402 facilitator is documented
+  as raising `FacilitatorNotImplementedError`; the retired domain is no longer
+  mentioned.
+
 ## Node 2.3.1 / Python 2.3.1 — unreleased
 
 - `docs/sdk-parity.md`: method-by-method parity between `@aifinpay/agent` and

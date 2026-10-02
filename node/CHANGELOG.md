@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.3.2
+
+- README only: native auth is documented as the v2 request-bound signature;
+  chain and release wording match the source. No code change.
+
 ## 2.3.1
 
 - `fetchRegistry`, `register`, `unregister`, `search` and the network nonce use

@@ -12,7 +12,7 @@ agent identity via env.
 
 ```bash
 cd mcp-http
-npm install
+npm ci --no-audit --no-fund
 PORT=3010 node server.js
 ```
 

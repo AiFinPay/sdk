@@ -14,25 +14,28 @@ AiFinPay — інфраструктура платежів і монетизац
 
 | Пакет | Версія |
 |---|---:|
-| `aifinpay-agent` | `2.1.0` |
-| `@aifinpay/agent` | `2.0.1` |
-| `@aifinpay/mcp` | `2.1.0` |
-| `@aifinpay/mcp-http` | `2.0.2` |
-| `@aifinpay/skill` | `2.0.9` |
-| `@aifinpay/gate` | `0.3.2` |
+| `aifinpay-agent` | `2.3.0` |
+| `aifinpay-gate` | `0.1.0` |
+| `@aifinpay/agent` | `2.3.0` |
+| `@aifinpay/mcp` | `2.4.1` |
+| `@aifinpay/mcp-http` | `2.0.4` |
+| `@aifinpay/skill` | `2.5.1` (source: github.com/AiFinPay/skill; MCP bundle-ить `^2.5.1`) |
+| `@aifinpay/gate` | `0.3.4` |
 | `@aifinpay/wallet` | `1.1.0` |
-| `@aifinpay/deployments` | `1.1.2` |
+| `@aifinpay/deployments` | `1.1.3` |
 
 Пакети versioned independently. Для точного latest треба дивитися package manifests + npm/PyPI.
 
 ## 3. Поточна MCP surface
 
-Production `@aifinpay/mcp` у `main` реєструє:
+`@aifinpay/mcp` у `main` реєструє:
 
 | Tool | Призначення |
 |---|---|
 | `agent_address` | Публічні EVM / Solana / Casper адреси |
 | `agent_reload` | Reload локальної persistent wallet identity |
+| `agent_claim_self` | Прив'язка агента до dashboard власника; підписує лише AiFinPay claim challenge для власної адреси |
+| `payable_fetch` | Лише коли власник вмикає платежі: купівля AIFP-1 batch на Polygon v1.4 у межах лімітів власника |
 | `agent_quota` | Квота агента |
 | `agent_history` | Indexed settlement / receipt history |
 | `agent_passport_resolve` | Resolve Agent Passport і verified wallet bindings |
@@ -44,25 +47,25 @@ Production `@aifinpay/mcp` у `main` реєструє:
 
 `dev_payment_quote` додається тільки при `AIFINPAY_MODE=dev`.
 
-Legacy tools `payable_fetch`, `agent_call`, `agent_quote`, `pay_with_split`, `quote_split`, `agent_claim_self` не входять у current production MCP surface.
+Legacy tools `agent_call`, `agent_quote`, `pay_with_split`, `quote_split` не реєструються.
 
-Current MCP **не підписує і не broadcast'ить платежі**. Invoice/quote ≠ completed payment.
+Без payment-конфігурації власника MCP **не підписує і не broadcast'ить платежі**. `payable_fetch` реєструється (і підписує локально) лише з `AIFINPAY_PAYMENTS_ENABLED=1` разом з `AIFINPAY_MAX_USD`, `AIFINPAY_DAILY_USD`, `AIFINPAY_GATEWAY_ORIGINS` і `AIFINPAY_MAX_GAS_POL`. Invoice/quote ≠ completed payment.
 
 ## 4. SDK execution status
 
 ### Node / TypeScript
 
-`@aifinpay/agent` містить reviewed AIFP-1 `fetchPaid` path.
+`@aifinpay/agent` містить AIFP-1 `fetchPaid` path на v1.4: Polygon за замовчуванням, Base — через `v14.chain: "base"`, native asset або pinned stablecoin.
 
-Execution gated runtime checks, включно з reviewed Polygon v1.3 deployment/profile і fresh trusted native/USD price.
+Перед підписом перевіряються pinned deployment, runtime, signer, profile, token і RPC chain; native-платежі потребують fresh independent `nativeUsdPrice`. Legacy Polygon v1.3 route і далі потребує окремого reviewed settlement pin.
 
 Не можна робити production claim тільки на основі contract address, runtime hash, quote або invoice.
 
 ### Python
 
-Python package підтримує identity та інші SDK функції.
+Python package платить AIFP-1 merchants через `AiFinPayAgent.fetch_paid` (Polygon v1.4 за замовчуванням, POL або pinned stablecoin; Base — через `chain="base"` з явним `max_gas_wei`).
 
-Legacy paid `call()` settlement disabled. Python зараз не exposes Node `fetchPaid` executor.
+Legacy paid `call()` settlement disabled.
 
 ## 5. Economics
 
@@ -121,5 +124,5 @@ Canonical source:
 - Python SDK: `python/README.md`
 - MCP source: `mcp/src/server.ts`
 - Deployment registry: `deployments/registry/`
-- Agent skill: `skill/skills/aifinpay/SKILL.md`
-- Merchant skill: `skill/skills/aifinpay-merchant/SKILL.md`
+- Agent skill: https://github.com/AiFinPay/skill (`agent/skills/aifinpay/SKILL.md`)
+- Merchant skill: https://github.com/AiFinPay/skill (`agent/skills/aifinpay-merchant/SKILL.md`)
