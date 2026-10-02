@@ -19,7 +19,7 @@ import type { GateStore } from "./stores/types.js";
 import { createVerifier } from "./verify.js";
 import { buildChallenge } from "./challenge.js";
 import { scopeCovers } from "./scope.js";
-import { weightForTier } from "./pricing.js";
+import { TIER_WEIGHTS, weightForTier } from "./pricing.js";
 import type { ResourceRegistry } from "./registry.js";
 
 export interface GateOptions {
@@ -118,6 +118,11 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
   if (!merchantId) throw new Error("createGate: merchantId is required");
 
   const tier: Tier = options.tier ?? "standard";
+  // A typo such as "Premium" would otherwise price the mount as standard: a
+  // tenth of the premium price, with nothing in the response to show it.
+  if (!Object.hasOwn(TIER_WEIGHTS, tier)) {
+    throw new Error(`createGate: tier must be one of ${Object.keys(TIER_WEIGHTS).join(", ")}: ${JSON.stringify(tier)}`);
+  }
   const mountWeight =
     Number.isInteger(options.weight) && (options.weight as number) > 0
       ? (options.weight as number)
@@ -127,10 +132,11 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
   const onStoreError = options.onStoreError ?? "closed";
   const store = options.store ?? new MemoryStore({ warnIfDefaulted: true });
 
+  const clockToleranceSec = options.clockToleranceSec ?? 30;
   const verify = createVerifier({
     issuer: options.issuer ?? DEFAULT_ISSUER,
     audience: merchantId,
-    clockToleranceSec: options.clockToleranceSec ?? 30,
+    clockToleranceSec,
     jwksUri: options.jwksUri ?? DEFAULT_JWKS,
     jwks: options.jwks,
   });
@@ -401,13 +407,15 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     );
     // The counter must die with the receipt: never longer (a stale counter
     // refuses paid calls), never shorter (an expired counter makes the whole
-    // batch spendable again).
-    const ttlMs = Math.max(1000, payload.exp * 1000 - Date.now());
+    // batch spendable again). The receipt lives until the verifier stops
+    // accepting it — exp plus the clock tolerance — so that is the TTL.
+    const ttlMs = Math.max(1000, (payload.exp + clockToleranceSec) * 1000 - Date.now());
 
     // A single-use receipt has no counter headroom to protect it, so replay is
     // checked explicitly. A multi-use batch does not need it: replaying it just
     // spends it, which is what it is for.
     const wantsReplayCheck = replayMode === "always" || (replayMode === "auto" && limit <= 1);
+    let nonceKey: string | undefined;
     if (wantsReplayCheck) {
       // No nonce means no way to tell a first spend from a replay. Keying on
       // `undefined` would not fail open, it would fail WEIRD: every nonce-less
@@ -417,26 +425,39 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       if (typeof payload.nonce !== "string" || payload.nonce === "") {
         return forbid(resource, weight, "single-use receipt carries no nonce");
       }
+      nonceKey = `${keyPrefix}nonce:${payload.nonce}`;
       let seen: number;
       try {
-        seen = await store.incrBy(`${keyPrefix}nonce:${payload.nonce}`, 1, ttlMs);
+        seen = await store.incrBy(nonceKey, 1, ttlMs);
       } catch (e) {
         return storeFailure(e);
       }
       if (seen > 1) return forbid(resource, weight, "receipt already spent (single-use)");
     }
 
+    const usedKey = `${keyPrefix}used:${payload.receipt_id}`;
     let used: number;
     try {
-      used = await store.incrBy(`${keyPrefix}used:${payload.receipt_id}`, weight, ttlMs);
+      used = await store.incrBy(usedKey, weight, ttlMs);
     } catch (e) {
+      // The nonce is recorded but nothing was metered. Closed, the agent is
+      // told to retry — which a burned nonce would refuse as already spent.
+      // Open, the call is served, so the nonce stays spent.
+      if (onStoreError !== "open") await undo(store, nonceKey, 1);
       return storeFailure(e);
     }
 
     // Post-increment compare: whichever concurrent request receives the value
     // that crosses the limit is the one refused, exactly once. Reading first
-    // and deciding second is how a batch gets overspent.
-    if (used > limit) return challenge(resource, weight, effectiveTier, DETAIL_QUOTA_EXHAUSTED);
+    // and deciding second is how a batch gets overspent. The refused call then
+    // takes back its own increment (and nonce), so the units that remain stay
+    // spendable by a call that fits; only refused increments are undone, so
+    // the units served can never exceed the limit.
+    if (used > limit) {
+      await undo(store, usedKey, weight);
+      await undo(store, nonceKey, 1);
+      return challenge(resource, weight, effectiveTier, DETAIL_QUOTA_EXHAUSTED);
+    }
 
     emit({ kind: "serve", resource, weight, agent: payload.sub, receipt_id: payload.receipt_id });
     const aifp: AifpContext = {
@@ -505,10 +526,17 @@ async function safeAllow(
  *  refundOnError and for manual use; see the README on why this is off by
  *  default (a refund after the response has gone out is a unit served free). */
 export async function refundUnits(store: GateStore, ctx: AifpContext, keyPrefix = "aifp:"): Promise<void> {
-  if (!store.decrBy || ctx.mode !== "paid" || ctx.weight <= 0) return;
+  if (ctx.mode !== "paid" || ctx.weight <= 0) return;
+  await undo(store, `${keyPrefix}used:${ctx.receipt_id}`, ctx.weight);
+}
+
+/** Take back an increment that bought nothing. Best effort by contract: a store
+ *  without decrBy, or one failing right now, keeps the increment. */
+async function undo(store: GateStore, key: string | undefined, by: number): Promise<void> {
+  if (!store.decrBy || key === undefined) return;
   try {
-    await store.decrBy(`${keyPrefix}used:${ctx.receipt_id}`, ctx.weight);
+    await store.decrBy(key, by);
   } catch {
-    /* best effort by contract — a failed refund must not fail the response */
+    /* a failed undo must not fail the response */
   }
 }
