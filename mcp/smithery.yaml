@@ -1,7 +1,7 @@
 name: aifinpay
 displayName: AiFinPay
-description: Payment infrastructure for AI agents. A persistent non-custodial agent wallet, Agent Passport resolution, route discovery and non-signing settlement invoices; with owner-set limits, payable_fetch buys prepaid access to AIFP-1 merchants on Polygon in POL or a pinned stablecoin.
-version: 2.4.1
+description: Payment infrastructure for AI agents. A persistent non-custodial agent wallet, Agent Passport resolution, route discovery and non-signing settlement invoices; with owner-set limits, payable_fetch buys prepaid access to AIFP-1 merchants on Polygon or Base, in POL/ETH or a pinned stablecoin.
+version: 2.5.0
 license: MIT
 homepage: https://aifinpay.io
 repository: https://github.com/AiFinPay/sdk
@@ -67,7 +67,7 @@ configSchema:
     AIFINPAY_PAYMENTS_ENABLED:
       type: string
       title: Enable payments
-      description: Set to "1" to register payable_fetch. Requires a persistent wallet and AIFINPAY_MAX_USD, AIFINPAY_DAILY_USD, AIFINPAY_GATEWAY_ORIGINS and AIFINPAY_MAX_GAS_POL; the server refuses to start if any is missing. Unset or "0" keeps the server read-only.
+      description: Set to "1" to register payable_fetch. Requires a persistent wallet and AIFINPAY_MAX_USD, AIFINPAY_DAILY_USD, AIFINPAY_GATEWAY_ORIGINS and a gas cap (AIFINPAY_MAX_GAS, or AIFINPAY_MAX_GAS_POL on Polygon); the server refuses to start if any is missing. Unset or "0" keeps the server read-only.
     AIFINPAY_MAX_USD:
       type: string
       title: Max USD per payment
@@ -85,14 +85,26 @@ configSchema:
       title: Gateway path mode
       description: "Use gateway for merchant-slug identity or direct for full request-path identity."
       default: gateway
+    AIFINPAY_PAY_CHAIN:
+      type: string
+      title: Payment chain
+      description: '"polygon" (default) or "base". Set by the owner; a quote for any other chain is refused.'
+    AIFINPAY_MAX_GAS:
+      type: string
+      title: Gas cap (native)
+      description: Gas cap per payment in the payment chain's native currency, for example "0.3" POL on Polygon or "0.0002" ETH on Base. Required when payments are enabled (or AIFINPAY_MAX_GAS_POL on Polygon).
     AIFINPAY_MAX_GAS_POL:
       type: string
-      title: Gas cap (POL)
-      description: Gas cap per payment in POL, for example "0.3". Required when payments are enabled.
+      title: Gas cap (POL, Polygon only)
+      description: The gas cap under its original name, in POL. Accepted on Polygon; refused on Base rather than read as ETH.
     AIFINPAY_PAY_ASSET:
       type: string
       title: Payment asset
-      description: '"POL" (default) or a stablecoin the SDK pins for Polygon v1.4, such as "USDC". Gas is paid in POL either way.'
+      description: The chain's native currency (default; POL or ETH) or a stablecoin the SDK pins for that chain, such as "USDC". Gas is paid in the native currency either way.
+    AIFINPAY_RPC_URL:
+      type: string
+      title: RPC for the payment chain
+      description: Optional HTTPS RPC for the payment chain; defaults to its public RPC.
     AIFINPAY_BASE_URL:
       type: string
       title: API base URL

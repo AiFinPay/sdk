@@ -4,9 +4,9 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Version **2.4.1**. Owner-enabled native Polygon v1.4 purchases with
-`payable_fetch` are released (since 2.2.0); site-wide batches with
-`scope: "merchant"` since 2.4.1. Without payment configuration the server keeps
+Version **2.5.0**. Owner-enabled v1.4 purchases with `payable_fetch` are
+released: on Polygon since 2.2.0, on Base (ETH or USDC) since 2.5.0; site-wide
+batches with `scope: "merchant"` since 2.4.1. Without payment configuration the server keeps
 its inspection-only tool inventory.
 
 ## Enable native paid GET requests
@@ -47,13 +47,40 @@ To pay in USDC instead of native POL, the owner also sets
 POL for gas: an exact-amount token approval plus the settlement, both within
 `AIFINPAY_MAX_GAS_POL` together. Unset or `"POL"` keeps native POL.
 
+### Paying on another chain
+
+`AIFINPAY_PAY_CHAIN` picks the chain `payable_fetch` settles on: `polygon`
+(default) or `base`. Only the owner sets it, and a merchant is paid on a chain
+only if its quote is for that chain; a quote for any other chain is refused,
+never followed. On Base the batch is paid in ETH (or `AIFINPAY_PAY_ASSET:
+"USDC"`) and gas is ETH, so the cap is `AIFINPAY_MAX_GAS`, in ETH:
+
+```json
+{
+  "AIFINPAY_PAY_CHAIN": "base",
+  "AIFINPAY_MAX_GAS": "0.0002"
+}
+```
+
+`AIFINPAY_MAX_GAS` is the gas cap in the pay chain's native currency;
+`AIFINPAY_MAX_GAS_POL` remains accepted on Polygon and is refused on Base rather
+than read as ETH (0.3 POL is about $0.04; 0.3 ETH is several hundred dollars).
+On Base the worst case includes the L1 data fee, typically well under 0.0001 ETH
+for one settlement. The wallet's EVM address is the same on every chain, so
+fund it with ETH on Base, not on Ethereum mainnet. `AIFINPAY_RPC_URL` optionally
+replaces the chain's public RPC (`https://mainnet.base.org`,
+`https://polygon.drpc.org`).
+
+A payment still pending on one chain is recovered only with that chain
+configured; switching chains never re-sends or forgets it.
+
 Call `payable_fetch({"url":"https://merchant.example/api/data"})`. The tool
-uses the original signed v1.4 quote, independent fresh POL/USD pricing, SDK
+uses the original signed v1.4 quote, independent fresh native/USD pricing, SDK
 runtime/signer verification and owner limits. It persists the prepared transaction
 before sending, verifies the receipt, and reuses the purchased batch. No special
-merchant script, alternate contract or facilitator fallback is used. GET,
-Polygon live mode only, in POL or the configured stablecoin; Amoy payment
-receipts are not supported. The smallest batch is $0.10 plus gas, so keep `AIFINPAY_MAX_USD`
+merchant script, alternate contract or facilitator fallback is used. GET, live
+mode only, on the configured chain, in its native currency or the configured
+stablecoin; Amoy payment receipts are not supported. The smallest batch is $0.10 plus gas, so keep `AIFINPAY_MAX_USD`
 a little above the batch you expect to buy.
 
 To buy access to a whole site rather than one endpoint, call
@@ -67,9 +94,9 @@ owner can add it.
 ### Network access
 
 A sandbox that allowlists outbound hosts must allow `api.aifinpay.io` (quotes and
-receipts) and a Polygon RPC. The independent POL/USD rate comes from Chainlink
-on Polygon over that same RPC, then `api.coinbase.com`, then `api.coingecko.com`;
-one of them is enough. If none answers, `payable_fetch` stops before paying and
+receipts) and an RPC for the pay chain. The independent POL/USD or ETH/USD rate
+comes from Chainlink on that chain over the same RPC, then `api.coinbase.com`,
+then `api.coingecko.com`; one of them is enough. If none answers, `payable_fetch` stops before paying and
 the error names each host it tried.
 
 ## Link the agent to its owner's dashboard
@@ -100,10 +127,18 @@ state file in chat. Unconfirmed payments consume the budget conservatively.
 | `agent_passport_resolve` | Resolve the global Agent Passport identity.              |
 | `settlement_routes`      | Read the available verified settlement routes.           |
 | `settlement_invoice`     | Prepare a non-signing settlement invoice.                |
+| `agent_history`          | Read indexed settlements or retained receipt batches.    |
+| `settlement_solana`      | Build a non-signing Solana settlement invoice.           |
+| `settlement_casper`      | Build a non-signing Casper settlement invoice.           |
+| `deployment_info`        | Read deployments: addresses, assets, settlement status.  |
 
-`payable_fetch` appears only with valid owner payment configuration and a persistent wallet.
-Legacy `agent_call`, `agent_quote`, `pay_with_split` and `quote_split` remain
-unregistered.
+`payable_fetch` is registered when the owner sets `AIFINPAY_PAYMENTS_ENABLED=1`
+with a persistent wallet. With payments enabled and any owner limit missing or
+invalid, the server refuses to start rather than hiding the tool. It accepts
+only `url`, `max_amount_usd` and `scope`; `max_amount_usd` can lower the owner's
+per-payment cap for one call, never raise it. `dev_payment_quote` is registered
+only with `AIFINPAY_MODE=dev`. Legacy `agent_call`, `agent_quote`,
+`pay_with_split` and `quote_split` remain unregistered.
 
 ## Persistent wallet selection
 
@@ -162,7 +197,7 @@ A client configuration can use the keystore without embedding its secret:
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["-y", "@aifinpay/mcp@2.4.1"],
+      "args": ["-y", "@aifinpay/mcp@2.5.0"],
       "env": {
         "AIFINPAY_AGENTS_FILE": "/absolute/project/aifinpay/agents.json",
         "AIFINPAY_AGENT_ID": "research-agent"
@@ -197,13 +232,17 @@ snapshot. Verify `agent_address` against the wallet you intend to use.
 
 ## Other environment variables
 
-| Variable                     | Default               | Purpose                                                                              |
-| ---------------------------- | --------------------- | ------------------------------------------------------------------------------------ |
-| `AIFINPAY_BASE_URL`          | `https://aifinpay.io` | Backend URL.                                                                         |
-| `AIFINPAY_TIMEOUT_MS`        | `30000`               | Request timeout.                                                                     |
-| `AIFINPAY_MAX_USD`           | —                     | Configures the underlying agent's per-call cap; it does not enable signing.          |
-| `AIFINPAY_GATEWAY_ORIGINS`   | SDK default           | Comma-separated exact HTTPS origins trusted for AIFP-1 settlement.                   |
-| `AIFINPAY_GATEWAY_PATH_MODE` | `gateway`             | Use `gateway` for merchant-slug identity or `direct` for full request-path identity. |
+| Variable                     | Default               | Purpose                                                                               |
+| ---------------------------- | --------------------- | ------------------------------------------------------------------------------------- |
+| `AIFINPAY_BASE_URL`          | `https://aifinpay.io` | Backend URL. Unset, `payable_fetch` quotes and verifies at `https://api.aifinpay.io`. |
+| `AIFINPAY_TIMEOUT_MS`        | `30000`               | Request timeout.                                                                      |
+| `AIFINPAY_MAX_USD`           | —                     | Per-payment USD cap for `payable_fetch`; required when payments are enabled.          |
+| `AIFINPAY_GATEWAY_ORIGINS`   | —                     | Comma-separated exact HTTPS origins the agent may pay; required with payments.        |
+| `AIFINPAY_GATEWAY_PATH_MODE` | `gateway`             | Use `gateway` for merchant-slug identity or `direct` for full request-path identity.  |
+| `AIFINPAY_PAY_CHAIN`         | `polygon`             | Chain `payable_fetch` settles on: `polygon` or `base`.                                |
+| `AIFINPAY_MAX_GAS`           | —                     | Gas cap per payment in the pay chain's native currency (POL, ETH).                    |
+| `AIFINPAY_RPC_URL`           | chain's public RPC    | HTTPS RPC for the pay chain.                                                          |
+| `AIFINPAY_CLAIM_ORIGINS`     | AiFinPay dashboards   | Exact origins `agent_claim_self` may link the agent to.                               |
 
 `agent_history({address, source:"transactions"})` reads indexed Polygon
 settlements; `source:"receipts"` reads retained batches, including test-mode
@@ -228,7 +267,7 @@ The programmatic equivalents of identity environment options are `seedHash`,
 - AIFINPAY_MODE=dev: expose dev_payment_quote; requires a separate dev base URL.
 
 - AIFINPAY_TIMEOUT_MS: SDK request timeout.
-- AIFINPAY_MAX_USD: legacy per-call budget; does not enable signing.
+- AIFINPAY_MAX_USD: per-payment USD cap for payable_fetch; required with payments.
 - AIFINPAY_TRUSTED_HOSTS: exact hosts allowed to bypass the DNS pre-check.
 - AIFINPAY_ALLOW_PRIVATE_FETCH=1: explicit local-development network access.
   Never enable this on the public hosted MCP.

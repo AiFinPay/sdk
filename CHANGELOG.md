@@ -1,3 +1,18 @@
+## MCP 2.5.0 — unreleased
+
+- `payable_fetch` pays on the chain the owner sets in `AIFINPAY_PAY_CHAIN`:
+  `polygon` (default, unchanged) or `base`. On Base it pays in ETH, or in USDC
+  with `AIFINPAY_PAY_ASSET`, and values an ETH batch at an independent ETH/USD
+  rate (Chainlink on Base, then Coinbase, then CoinGecko).
+- `AIFINPAY_MAX_GAS` is the gas cap in the pay chain's native currency.
+  `AIFINPAY_MAX_GAS_POL` still works on Polygon and is refused on Base rather
+  than read as ETH.
+- `AIFINPAY_RPC_URL` replaces the pay chain's public RPC for settlement and the
+  Chainlink price.
+- A payment pending on one chain is recovered only with that chain configured;
+  changing the chain never re-sends or drops it.
+- Requires `@aifinpay/agent` 2.3.0, the first release that settles on Base.
+
 ## MCP 2.4.1 — unreleased
 
 - Bundles `@aifinpay/skill` 2.5.1 as `aifinpay://skill`: MCP 2.4 as current,

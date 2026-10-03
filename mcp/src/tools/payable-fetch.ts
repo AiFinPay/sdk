@@ -2,7 +2,8 @@ import { Aifp1SettlementUnsupportedError, parseGatewayUrl, type Aifp1CachedRecei
 import type { ToolContext } from "../server.js";
 import { validatePaymentConfig } from "../config.js";
 import { PaymentStateError, type PaymentState } from "../payment-state.js";
-import { independentPolUsd } from "../native-price.js";
+import { independentNativeUsd } from "../native-price.js";
+import { payChain, type PayChain } from "../pay-chains.js";
 
 // "prefix" is left out on purpose: it needs a resource to anchor to, and the
 // owner's two real requests are "this endpoint" and "this site".
@@ -13,7 +14,7 @@ export function payableFetchTool() {
   return {
     name: "payable_fetch",
     description:
-      'Fetch a GET resource from an owner-approved AiFinPay merchant. Buys a prepaid batch through verified Polygon v1.4 — in native POL, or in the stablecoin the owner set in AIFINPAY_PAY_ASSET (e.g. USDC; gas is still POL) — within owner limits, then reuses its receipt. With scope "merchant" one batch covers every path on the site. Pending payments are recovered without sending another transaction. Other payment protocols are unsupported.',
+      'Fetch a GET resource from an owner-approved AiFinPay merchant. Buys a prepaid batch through verified v1.4 on the chain the owner set in AIFINPAY_PAY_CHAIN (Polygon by default, or Base) — in its native currency (POL, ETH), or in the stablecoin the owner set in AIFINPAY_PAY_ASSET (e.g. USDC; gas is still native) — within owner limits, then reuses its receipt. With scope "merchant" one batch covers every path on the site. Pending payments are recovered without sending another transaction. Other payment protocols are unsupported.',
     inputSchema: {
       type: "object",
       properties: {
@@ -40,10 +41,12 @@ export function payableFetchTool() {
 /** Never expose bearer receipts, raw signed transactions, or exception response bodies. */
 export async function runPayableFetch(ctx: ToolContext, args: Record<string, unknown>) {
   let state: PaymentState | undefined;
+  let chain: PayChain | undefined;
   try {
     let maxGasWei: bigint;
     try {
       maxGasWei = validatePaymentConfig(ctx.config);
+      chain = payChain(ctx.config.payChain);
     } catch (error) {
       return errorResult((error as Error).message);
     }
@@ -75,7 +78,9 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
       typeof args.max_amount_usd === "number" ? args.max_amount_usd : Infinity
     );
     const parsed = parseGatewayUrl(url.href, ctx.config.gatewayOrigins, ctx.config.gatewayPathMode);
-    const payAsset = ctx.config.payAsset ?? "POL";
+    const pay = chain;
+    const payAsset = ctx.config.payAsset ?? pay.native;
+    const rpc = ctx.config.rpcUrl ?? pay.defaultRpc;
     return await store.exclusive(async () => {
       state = store.read();
       for (const entry of ctx.agent.aifp1Receipts.list()) ctx.agent.aifp1Receipts.evict(entry);
@@ -90,13 +95,15 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
           pending.recovery.apiBaseUrl.replace(/\/+$/, "") !== configuredApi ||
           (pending.recovery.paymentIssuer ?? configuredApi).replace(/\/+$/, "") !== configuredApi ||
           pending.recovery.quote.payer?.toLowerCase() !== ctx.agent.evmAddress.toLowerCase() ||
-          call?.chain !== "polygon" ||
+          call?.chain !== pay.name ||
           call.splitter_version !== "1.4" ||
           // Native calls from earlier versions may lack the field; they were POL.
           ((call as { asset?: string }).asset ?? "POL") !== pending.recovery.asset ||
-          !["POL", payAsset].includes(pending.recovery.asset)
+          ![pay.native, payAsset].includes(pending.recovery.asset)
         ) {
-          throw new Error("Pending payment does not match configured wallet/API/Polygon v1.4 route and asset");
+          // A payment pending on another chain is recovered by switching back
+          // to that chain; it is never re-sent here and never forgotten.
+          throw new Error(`Pending payment does not match the configured wallet/API/${pay.name} v1.4 route and asset`);
         }
         const paid = await ctx.agent.recoverPaidPayment(pending.recovery, { paymentIssuer: configuredApi });
         const receipt: Aifp1CachedReceipt = {
@@ -133,25 +140,27 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
             maxAmountUsd: Math.min(maximum, Math.max(0, ctx.config.dailyAmountUsd! - spent)),
             nativeUsdPrice: async () => {
               // Independent public price, never the quote API's rate: Chainlink
-              // over the agent's own Polygon RPC first (no extra host), then
-              // Coinbase, then CoinGecko. See ../native-price.ts.
-              const found = await independentPolUsd({
+              // over the agent's own RPC for the pay chain first (no extra
+              // host), then Coinbase, then CoinGecko. See ../native-price.ts.
+              const found = await independentNativeUsd({
                 fetchImpl: (input, init) => ctx.agent.inner.fetchImpl(input, init),
-                polygonRpc: (ctx.agent as { polygonRpc?: string }).polygonRpc,
+                chain: pay,
+                rpc,
               });
               price = { usd: found.usd, observedAtMs: found.observedAtMs };
               return price;
             },
             v14: {
-              ...(payAsset !== "POL" ? { asset: payAsset } : {}),
+              chain: pay.name,
+              ...(payAsset !== pay.native ? { asset: payAsset } : {}),
               maxGasWei,
               onPrepared: async (prepared) => {
                 if (state!.pending) throw new Error("A payment is already pending");
                 // A stablecoin batch is dollars already: the SDK bound the signed
                 // gross to the quoted USD amount exactly. Only a native batch
-                // needs the independent POL price.
+                // needs the independent native price.
                 let usd: number;
-                if (payAsset !== "POL") {
+                if (payAsset !== pay.native) {
                   if (prepared.asset !== payAsset) throw new Error("Prepared payment is not in the configured asset");
                   usd = Number(prepared.quote.amount);
                 } else {
@@ -240,17 +249,20 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
     });
   } catch (error) {
     if (error instanceof PaymentStateError) return errorResult(error.message);
+    // Set before any payment step runs; the fallback only covers a throw from
+    // inside validation itself, which returns above.
+    const on = chain ?? payChain(undefined);
+    const label = on.label;
     if (!state?.pending && error instanceof Aifp1SettlementUnsupportedError) {
       return errorResult(
-        "The merchant must offer a signed native Polygon v1.4 quote. Its current settlement route is unsupported; no legacy or alternate-protocol payment was attempted."
+        `The merchant must offer a signed native ${label} v1.4 quote (the chain set in AIFINPAY_PAY_CHAIN). Its current settlement route is unsupported; no legacy, other-chain or alternate-protocol payment was attempted.`
       );
     }
     if (!state?.pending && error instanceof Error && error.name === "V14SettlementError") {
       const code = (error as Error & { code?: string }).code;
       const messages: Record<string, string> = {
-        V14_INSUFFICIENT_BALANCE: "The wallet needs enough POL for the quoted purchase plus the owner-capped gas fee.",
-        V14_GAS_BUDGET_EXCEEDED:
-          "Estimated gas exceeds AIFINPAY_MAX_GAS_POL. The owner can review the limit; the agent cannot raise it.",
+        V14_INSUFFICIENT_BALANCE: `The wallet needs enough ${on.native} on ${label} for the quoted purchase plus the owner-capped gas fee.`,
+        V14_GAS_BUDGET_EXCEEDED: `Estimated gas exceeds the owner's gas cap (AIFINPAY_MAX_GAS, in ${on.native}). The owner can review the limit; the agent cannot raise it.`,
         V14_PAUSED: "The approved payment deployment is paused. No payment was sent.",
         V14_EXPIRED: "The signed quote expired before submission. Request a fresh quote.",
         V14_EXPIRING: "The signed quote expires too soon to submit safely. Request a fresh quote.",
@@ -258,7 +270,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
       };
       return errorResult(
         messages[code ?? ""] ??
-          "Payment verification refused this deployment, signer or quote. The merchant must offer a verified native Polygon v1.4 route; no fallback was attempted."
+          `Payment verification refused this deployment, signer or quote. The merchant must offer a verified native ${label} v1.4 route; no fallback was attempted.`
       );
     }
     return errorResult(
