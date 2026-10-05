@@ -75,6 +75,30 @@ export function verifyPinnedProducer(directory, expected, commit) {
   }
 }
 
+// The cohort is installed from reviewed source packs. A registry-aligned
+// repository lock can nevertheless make the release-input metadata guard pass;
+// that result is not evidence that this disposable installation came from npm.
+export function registryLockMatchesSourcePacks(manifest, lock, packs) {
+  if (
+    lock.version !== manifest.version ||
+    lock.packages?.[""]?.version !== manifest.version
+  )
+    return false;
+  for (const [name, pack] of Object.entries(packs)) {
+    const entry = lock.packages?.[`node_modules/${name}`];
+    if (
+      manifest.dependencies?.[name] !== `^${pack.version}` ||
+      lock.packages?.[""]?.dependencies?.[name] !== `^${pack.version}` ||
+      entry?.version !== pack.version ||
+      entry?.resolved !==
+        `https://registry.npmjs.org/${name}/-/${name.split("/")[1]}-${pack.version}.tgz` ||
+      entry?.integrity !== pack.integrity
+    )
+      return false;
+  }
+  return true;
+}
+
 function run(command, args, cwd) {
   const result = spawnSync(command, args, {
     cwd,
@@ -269,15 +293,28 @@ export async function checkSourceCohort(skillSource) {
     ["scripts/verify-release-inputs.mjs"],
     { cwd: mcp, encoding: "utf8" },
   );
-  assert.notEqual(
-    publication.status,
-    0,
-    "source cohort must not satisfy registry publication gate",
+  const registryAligned = registryLockMatchesSourcePacks(
+    json(join(mcp, "package.json")),
+    json(join(mcp, "package-lock.json")),
+    { "@aifinpay/agent": agentPack, "@aifinpay/skill": skillPack },
   );
-  assert.match(
-    publication.stderr,
-    /must be published and installed with its real registry resolution/,
-  );
+  if (registryAligned) {
+    assert.equal(
+      publication.status,
+      0,
+      `registry-aligned release-input metadata guard failed: ${publication.stderr}`,
+    );
+  } else {
+    assert.notEqual(
+      publication.status,
+      0,
+      "source cohort without matching registry lock passed release-input metadata guard",
+    );
+    assert.match(
+      publication.stderr,
+      /must be published and installed with its real registry resolution/,
+    );
+  }
   for (const [name, bytes] of Object.entries(repoBytes))
     assert.deepEqual(
       readFileSync(join(root, "mcp", name)),
@@ -296,7 +333,9 @@ export async function checkSourceCohort(skillSource) {
     actual_runtime_lock_sha256: hash(
       readFileSync(join(runtime, "package-lock.json")),
     ),
-    publication_guard: "expected refusal",
+    publication_guard: registryAligned
+      ? "metadata accepted with registry-aligned lock; source cohort remains source-only"
+      : "expected refusal without registry-aligned lock",
     repository_metadata: Object.fromEntries(
       Object.entries(repoBytes).map(([p, b]) => [p, hash(b)]),
     ),

@@ -9,7 +9,54 @@ import {
   verifyInstalled,
   verifySkill,
   verifyPinnedProducer,
+  registryLockMatchesSourcePacks,
 } from "./check-mcp-source-cohort.mjs";
+test("source cohort distinguishes a real registry lock from stale or fabricated release metadata", () => {
+  const agent = { version: "2.5.0", integrity: "sha512-agent" };
+  const skill = { version: "2.8.0", integrity: "sha512-skill" };
+  const packs = { "@aifinpay/agent": agent, "@aifinpay/skill": skill };
+  const dependencies = {
+    "@aifinpay/agent": "^2.5.0",
+    "@aifinpay/skill": "^2.8.0",
+  };
+  const manifest = { version: "2.7.0", dependencies };
+  const lock = {
+    version: "2.7.0",
+    packages: {
+      "": { version: "2.7.0", dependencies },
+      "node_modules/@aifinpay/agent": {
+        version: agent.version,
+        resolved:
+          "https://registry.npmjs.org/@aifinpay/agent/-/agent-2.5.0.tgz",
+        integrity: agent.integrity,
+      },
+      "node_modules/@aifinpay/skill": {
+        version: skill.version,
+        resolved:
+          "https://registry.npmjs.org/@aifinpay/skill/-/skill-2.8.0.tgz",
+        integrity: skill.integrity,
+      },
+    },
+  };
+  assert.equal(registryLockMatchesSourcePacks(manifest, lock, packs), true);
+  const wrongIntegrity = structuredClone(lock);
+  wrongIntegrity.packages["node_modules/@aifinpay/skill"].integrity =
+    "sha512-fabricated";
+  assert.equal(
+    registryLockMatchesSourcePacks(manifest, wrongIntegrity, packs),
+    false,
+  );
+  const sourceResolution = structuredClone(lock);
+  sourceResolution.packages["node_modules/@aifinpay/agent"].resolved =
+    "file:../node/aifinpay-agent-2.5.0.tgz";
+  assert.equal(
+    registryLockMatchesSourcePacks(manifest, sourceResolution, packs),
+    false,
+  );
+  const staleRange = structuredClone(lock);
+  staleRange.packages[""].dependencies["@aifinpay/skill"] = "^2.6.0";
+  assert.equal(registryLockMatchesSourcePacks(manifest, staleRange, packs), false);
+});
 test("source-cohort parity rejects wrong version and mutated installed package bytes", () => {
   const path = mkdtempSync(join(tmpdir(), "aifp-cohort-guard-"));
   try {
