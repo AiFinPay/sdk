@@ -26,6 +26,7 @@ import {
 } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { polygon, base, arbitrum, optimism, bsc, mainnet, unichain, avalanche, type Chain } from "viem/chains";
+import { paymentChain, type PaymentChain } from "./paymentChains.js";
 import { botchain, xrplevm, robinhood } from "./chains.js";
 import { V14_DEPLOYMENTS } from "./generated/v14Deployments.generated.js";
 import { SPLITTER_ROUTES } from "./generated/splitterRoutes.generated.js";
@@ -49,15 +50,16 @@ import {
   type SettlementRoute,
   type SettlementRouteClass,
 } from "./settlement.js";
-import { executeV14Settlement, type V14SettlementCall } from "./settlementV14.js";
+import { executeV14Settlement, assertPreparedV14Recovery, type V14SettlementCall } from "./settlementV14.js";
 import { getQuota, type QuotaSummary } from "./agentHistory.js";
-import { type SpendLedger, MemorySpendLedger, FileSpendLedger } from "./spendLedger.js";
+import { type SpendLedger, type SpendLedgerBinding, MemorySpendLedger, FileSpendLedger } from "./spendLedger.js";
 import {
   aifp1Fetch,
   recoverAifp1Payment,
   type Aifp1PaymentRecovery,
   type Aifp1PayResult,
   Aifp1ReceiptCache,
+  Aifp1QuoteError,
   type Aifp1CachedReceipt,
   type Aifp1Deps,
   type Aifp1FetchOptions,
@@ -398,13 +400,29 @@ const CHAIN_OBJECTS: Record<SplitterChainName, Chain> = {
 // Legacy v1.2 splitter addresses, verified on-chain 2026-08-01. These are the
 // pre-v1.3 contracts; v1.3+ addresses live in the generated registry files.
 const LEGACY_SPLITTER: Record<SplitterChainName, { splitter: `0x${string}`; version: string; usdc?: `0x${string}` }> = {
-  polygon:   { splitter: "0xbD1fa5453f212F096c0213788a645eC597FB4DDe", version: "1.2", usdc: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" },
-  base:      { splitter: "0x8Ad9830D16b1f10333866a3f38C949CbB19f4BAD", version: "1.1", usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
-  optimism:  { splitter: "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74", version: "1.2", usdc: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85" },
-  unichain:  { splitter: "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB", version: "1.1", usdc: "0x078D782b760474a361dDA0AF3839290b0EF57AD6" },
+  polygon: {
+    splitter: "0xbD1fa5453f212F096c0213788a645eC597FB4DDe",
+    version: "1.2",
+    usdc: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+  },
+  base: {
+    splitter: "0x8Ad9830D16b1f10333866a3f38C949CbB19f4BAD",
+    version: "1.1",
+    usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  },
+  optimism: {
+    splitter: "0xF03B3387415D557b6ab709D06E8aF0b4ABD6Eb74",
+    version: "1.2",
+    usdc: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+  },
+  unichain: {
+    splitter: "0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB",
+    version: "1.1",
+    usdc: "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
+  },
   robinhood: { splitter: "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB", version: "1.2" },
-  xrplevm:   { splitter: "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC", version: "1.2" },
-  botchain:  { splitter: "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC", version: "1.2" },
+  xrplevm: { splitter: "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC", version: "1.2" },
+  botchain: { splitter: "0x147d8fF8c027E24303b5B99CbC8843e1D3dF94cC", version: "1.2" },
 };
 
 const NATIVE_USD_ENV: Record<SplitterChainName, string> = {
@@ -433,7 +451,10 @@ const NATIVE_USD_DEFAULT: Record<SplitterChainName, number> = {
 const TRANSPORT_OVERRIDE: Partial<Record<SplitterChainName, { defaultRpc?: string; explorer?: string }>> = {
   polygon: { defaultRpc: "https://polygon.drpc.org" },
   botchain: { defaultRpc: "https://rpc.botchain.ai", explorer: "https://scan.botchain.ai" },
-  robinhood: { defaultRpc: "https://rpc.mainnet.chain.robinhood.com", explorer: "https://robinhoodchain.blockscout.com" },
+  robinhood: {
+    defaultRpc: "https://rpc.mainnet.chain.robinhood.com",
+    explorer: "https://robinhoodchain.blockscout.com",
+  },
 };
 
 function buildSplitterDeployments(): Record<SplitterChainName, SplitterDeployment> {
@@ -449,7 +470,7 @@ function buildSplitterDeployments(): Record<SplitterChainName, SplitterDeploymen
       version: legacy.version,
       chainId: route?.chainId ?? chainObj.id,
       chain: chainObj,
-      defaultRpc: override?.defaultRpc ?? route?.defaultRpc ?? (chainObj.rpcUrls?.default?.http?.[0] ?? ""),
+      defaultRpc: override?.defaultRpc ?? route?.defaultRpc ?? chainObj.rpcUrls?.default?.http?.[0] ?? "",
       splitter: legacy.splitter,
       usdc: legacy.usdc,
       explorer: override?.explorer ?? route?.explorer ?? "",
@@ -479,11 +500,15 @@ const EVM_CHAIN_OBJECTS: Record<EvmChainName, Chain> = {
  * bridge chains (EvmChainName) + splitter deployment chains. Used for
  * evmRpcUrls overrides and the internal client cache.
  */
-export type AnyEvmChainName = EvmChainName | SplitterChainName;
+export type AnyEvmChainName = EvmChainName | SplitterChainName | PaymentChain;
 
 function evmChainObject(name: AnyEvmChainName): Chain | undefined {
   return (
-    (EVM_CHAIN_OBJECTS as Partial<Record<string, Chain>>)[name] ??
+    (name === "bnb"
+      ? bsc
+      : name === "avalanche"
+        ? avalanche
+        : (EVM_CHAIN_OBJECTS as Partial<Record<string, Chain>>)[name]) ??
     (SPLITTER_DEPLOYMENTS as Partial<Record<string, SplitterDeployment>>)[name]?.chain
   );
 }
@@ -657,11 +682,11 @@ export class AiFinPayAgent {
     // the failure the option exists to prevent.
     if (opts.spendLedger) this.ledgerOverride = opts.spendLedger;
     this.telemetry = opts.telemetry !== false;
-    this.polygonRpc = opts.polygonRpc ?? "https://polygon.drpc.org";
+    this.polygonRpc = opts.polygonRpc ?? opts.evmRpcUrls?.polygon ?? "https://polygon.drpc.org";
     this.solanaRpc = opts.solanaRpc ?? process.env.AIFINPAY_SOLANA_RPC ?? "https://api.mainnet-beta.solana.com";
     // Optional RPC overrides for non-Polygon EVM chains used in bridge flows.
     // Falls back to viem's chain.rpcUrls.default if not provided.
-    if (opts.evmRpcUrls) this.evmRpcUrls = opts.evmRpcUrls;
+    if (opts.evmRpcUrls) this.evmRpcUrls = { ...opts.evmRpcUrls };
     if (this.polygonRpc) this.evmRpcUrls.polygon = this.polygonRpc;
   }
 
@@ -703,7 +728,9 @@ export class AiFinPayAgent {
       throw new AiFinPayError(`evmClients: unsupported EVM chain "${name}"`);
     }
     const rpcUrl =
-      this.evmRpcUrls[name] ?? (SPLITTER_DEPLOYMENTS as Partial<Record<string, SplitterDeployment>>)[name]?.defaultRpc;
+      this.evmRpcUrls[name] ??
+      paymentChain(name)?.defaultRpc ??
+      (SPLITTER_DEPLOYMENTS as Partial<Record<string, SplitterDeployment>>)[name]?.defaultRpc;
     const transport = rpcUrl ? http(rpcUrl) : http();
 
     const publicClient = createPublicClient({ chain, transport });
@@ -1071,10 +1098,10 @@ export class AiFinPayAgent {
    * total and then reserved would have rebuilt the race this replaces, where
    * two concurrent calls both read the same total, both passed, and both paid.
    */
-  private async reserveDaily(costUsd: number): Promise<string | null | "skip"> {
+  private async reserveDaily(costUsd: number, binding?: SpendLedgerBinding): Promise<string | null | "skip"> {
     const cap = this.budgetCaps.daily_usd;
     if (cap === undefined) return null; // no daily cap to enforce
-    const id = await this.ledger.reserve(costUsd, cap, 24 * 3600 * 1000);
+    const id = await this.ledger.reserve(costUsd, cap, 24 * 3600 * 1000, binding);
     if (id) return id;
     const err = new BudgetCapExceededError("daily", `this call would take daily spend past the $${cap} cap`);
     if ((this.budgetCaps.on_limit_exceeded ?? "throw") === "skip") return "skip";
@@ -1607,7 +1634,7 @@ export class AiFinPayAgent {
     if (opts.v14) {
       if (p.settlementCall?.splitter_version !== "1.4") throw new AiFinPayError("expected signed v1.4 settlement call");
       const chain = opts.v14.chain ?? "polygon";
-      const { publicClient, walletClient } = this.splitterClients(chain);
+      const { publicClient, walletClient } = chain === "polygon" ? this.polygonClients() : this.evmClients(chain);
       const result = await executeV14Settlement(p.settlementCall as V14SettlementCall, {
         publicClient,
         walletClient,
@@ -1662,6 +1689,15 @@ export class AiFinPayAgent {
    * `budgetCaps.on_limit_exceeded` is "skip".
    */
   async fetchPaid(url: string, init: RequestInit = {}, opts: Aifp1FetchOptions = {}): Promise<Response | null> {
+    if (
+      opts.v14 &&
+      this.budgetCaps.daily_usd !== undefined &&
+      (!this.ledger.prepare || !this.ledger.assertRecovery || !this.ledger.complete)
+    ) {
+      throw new Aifp1QuoteError(
+        "Custom capped v1.4 ledger requires prepare/assertRecovery/complete hooks before payment"
+      );
+    }
     const deps: Aifp1Deps = {
       fetchImpl: this.inner.fetchImpl,
       cache: this._aifp1Cache,
@@ -1673,9 +1709,24 @@ export class AiFinPayAgent {
       signPaymentAuthorization: (message) => this.evmAccount.signMessage({ message }),
       settle: (p) => this.settleAifp1NativeV13(p, opts),
       checkPerCall: (usd) => this.checkPerCall(usd),
-      reserveDaily: (usd) => this.reserveDaily(usd),
+      reserveDaily: (usd, binding) => this.reserveDaily(usd, binding),
       commit: (id, usd) => this.ledger.commit(id, usd),
       release: (id) => this.ledger.release(id),
+      prepareReservation: async (id, tx, binding) => {
+        if (!this.ledger.prepare || !this.ledger.assertRecovery || !this.ledger.complete) {
+          throw new Aifp1QuoteError("Custom capped v1.4 ledger requires prepare/assertRecovery/complete hooks");
+        }
+        await this.ledger.prepare(id, tx, binding);
+      },
+      assertReservation: async (id, tx, binding) => {
+        if (!this.ledger.assertRecovery)
+          throw new Aifp1QuoteError("Custom ledger cannot verify the original budget reservation");
+        await this.ledger.assertRecovery(id, tx, binding);
+      },
+      completeReservation: async (id, tx, binding) => {
+        if (!this.ledger.complete) throw new Aifp1QuoteError("Custom ledger cannot reconcile the prepared payment");
+        await this.ledger.complete(id, tx, binding);
+      },
       onPaid: ({ merchantId, amountUsd, txRef }) => {
         this.spend24h.add(amountUsd);
         if (this.telemetry) {
@@ -1697,12 +1748,31 @@ export class AiFinPayAgent {
     recovery: Aifp1PaymentRecovery,
     opts: Pick<Aifp1FetchOptions, "settlementConfirmMs" | "apiTimeoutMs" | "paymentIssuer"> = {}
   ): Promise<Aifp1PayResult> {
+    if (recovery.budgetReservationId !== undefined) {
+      const chain = recovery.chain ?? "polygon";
+      await assertPreparedV14Recovery(
+        recovery.quote.settlement_call as V14SettlementCall,
+        { hash: recovery.txRef, serializedTransaction: recovery.serializedTransaction! },
+        chain,
+        this.evmAddress,
+        recovery.quote.quote_id
+      );
+    }
     return recoverAifp1Payment(
       recovery,
       {
         payerAddress: this.evmAddress,
         signPaymentAuthorization: (message) => this.evmAccount.signMessage({ message }),
         fetchImpl: this.inner.fetchImpl,
+        assertReservation: async (id, tx, binding) => {
+          if (!this.ledger.assertRecovery)
+            throw new Aifp1QuoteError("Custom ledger cannot verify the original budget reservation");
+          await this.ledger.assertRecovery(id, tx, binding);
+        },
+        completeReservation: async (id, tx, binding) => {
+          if (!this.ledger.complete) throw new Aifp1QuoteError("Custom ledger cannot reconcile the prepared payment");
+          await this.ledger.complete(id, tx, binding);
+        },
       },
       opts
     );

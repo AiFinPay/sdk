@@ -35,12 +35,12 @@ jobs:
     needs: [mcp-server, mcp-against-source]
     runs-on: ubuntu-latest
     steps:
-      - name: Require published and source SDK matrices
+      - name: Require both source-cohort SDK matrices
         env:
-          PUBLISHED_RESULT: ${{ needs.mcp-server.result }}
+          COHORT_RESULT: ${{ needs.mcp-server.result }}
           SOURCE_RESULT: ${{ needs.mcp-against-source.result }}
         run: |
-          test "$PUBLISHED_RESULT" = success
+          test "$COHORT_RESULT" = success
           test "$SOURCE_RESULT" = success
 
   version-gate:
@@ -164,15 +164,27 @@ jobs:
           cache: npm
           cache-dependency-path: mcp/package-lock.json
 
-      # Lockfile regenerated alongside node/ — `npm ci` keeps it authoritative.
-      # Note: mcp depends on the *published* @aifinpay/agent from npm, not on
-      # the sibling node/ directory, so this job validates the MCP server
-      # against the released SDK.
-      - name: Install dependencies
+      # New MCP descriptors require agent2.4.0. Validate the source cohort
+      # before publishing either package; do not invent a registry lock entry.
+      # Release gate remains Node publish -> published MCP dependency/lock
+      # refresh -> standalone registry CI -> MCP publish.
+      - name: Build and pack same-commit agent cohort
+        working-directory: node
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          mkdir -p "$RUNNER_TEMP/aifp-agent-cohort"
+          node --input-type=module -e 'import fs from "node:fs"; console.log(JSON.stringify({source:process.env.GITHUB_SHA,package:JSON.parse(fs.readFileSync("package.json")).version}))'
+          npm pack --pack-destination "$RUNNER_TEMP/aifp-agent-cohort"
+
+      - name: Install locked MCP dependencies
         run: npm ci --no-audit --no-fund
 
       - name: Reject high and critical runtime dependency advisories
         run: npm audit --omit=dev --audit-level=high
+
+      - name: Install same-commit packed agent without changing registry lock
+        run: npm install --no-save --no-audit --no-fund "$RUNNER_TEMP"/aifp-agent-cohort/aifinpay-agent-*.tgz
 
       - name: Build (tsc)
         run: npm run build
@@ -189,15 +201,9 @@ jobs:
       - name: Test (vitest)
         run: npm test
 
-  # The job above installs @aifinpay/agent from the registry, which is the right
-  # thing for validating a release — but it means a breaking change in node/ is
-  # invisible until after it is published, and on a release commit it fails for
-  # a third reason: the version mcp/ now asks for does not exist on npm yet.
-  # That is what turned run 31308715367 red.
-  #
-  # This job answers the other question: does the MCP server still build against
-  # the agent code in THIS commit? Packed and installed as a tarball rather than
-  # linked, so it exercises the same file list npm publish would ship.
+  # Independent packed-package integration matrix also tests the same source
+  # cohort. Neither matrix is standalone registry release evidence until
+  # agent2.4.0 is published and the MCP dependency/lock is refreshed.
   mcp-against-source:
     name: mcp — built against the agent in this commit
     runs-on: ubuntu-latest
@@ -216,6 +222,7 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npm run build
+          node --input-type=module -e 'import fs from "node:fs"; console.log(JSON.stringify({source:process.env.GITHUB_SHA,package:JSON.parse(fs.readFileSync("package.json")).version}))'
           npm pack --pack-destination /tmp
 
       - name: Build the MCP server against it

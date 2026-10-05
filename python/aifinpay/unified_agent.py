@@ -46,6 +46,7 @@ from .cross_chain import (
     bridge_wait_for_arrival as _bridge_wait_for_arrival,
 )
 from .errors import AiFinPayError, X402Error
+from .payment_chains import PAYMENT_CHAINS
 
 # ── EVM imports — heavyish, lazy via top-level so missing deps fail clearly ──
 try:
@@ -531,6 +532,7 @@ class AiFinPayAgent:
         registry_url: [str] = None,
         polygon_rpc: [str] = None,
         base_rpc: [str] = None,
+        evm_rpc_urls: [dict[str, str]] = None,
         solana_rpc: [str] = None,
         base_url: [str] = None,
     ):
@@ -548,6 +550,8 @@ class AiFinPayAgent:
         self.polygon_rpc = polygon_rpc or os.environ.get("AIFINPAY_POLYGON_RPC", DEFAULT_POLYGON_RPC)
         self.base_rpc = base_rpc or os.environ.get("AIFINPAY_BASE_RPC", DEFAULT_BASE_RPC)
         self.solana_rpc = solana_rpc or os.environ.get("AIFINPAY_SOLANA_RPC", DEFAULT_SOLANA_RPC)
+        self.evm_rpc_urls = dict(evm_rpc_urls or {})
+        self._evm_w3 = {}
         self._w3: [Web3] = None
         self._registry_cache: [list[ProviderEntry]] = None
 
@@ -810,17 +814,33 @@ class AiFinPayAgent:
     # ── Lazy clients ──────────────────────────────────────────────────────
 
     def _web3(self, chain: str = "polygon") -> Web3:
-        if chain == "base":
-            if getattr(self, "_base_w3", None) is None:
-                self._base_w3 = Web3(Web3.HTTPProvider(self.base_rpc, request_kwargs={"timeout": 30}))
+        if chain not in PAYMENT_CHAINS:
+            raise AiFinPayError(f"unsupported EVM chain {chain!r}")
+        # Keep the documented Polygon override and the existing Base cache.
+        if chain == "polygon" and self._w3 is not None:
+            return self._w3
+        if chain == "base" and getattr(self, "_base_w3", None) is not None:
             return self._base_w3
-        if self._w3 is None:
-            w3 = Web3(Web3.HTTPProvider(self.polygon_rpc, request_kwargs={"timeout": 30}))
-            if _poa_middleware is not None:
+        if chain not in self._evm_w3:
+            w3 = Web3(Web3.HTTPProvider(self._payment_rpc(chain), request_kwargs={"timeout": 30}))
+            if chain in ("polygon", "bnb") and _poa_middleware is not None:
                 with contextlib.suppress(Exception):
                     w3.middleware_onion.inject(_poa_middleware, layer=0)
-            self._w3 = w3
-        return self._w3
+            self._evm_w3[chain] = w3
+            if chain == "polygon":
+                self._w3 = w3
+            elif chain == "base":
+                self._base_w3 = w3
+        return self._evm_w3[chain]
+
+    def _payment_rpc(self, chain: str) -> str:
+        if chain in self.evm_rpc_urls:
+            return self.evm_rpc_urls[chain]
+        if chain == "polygon":
+            return self.polygon_rpc
+        if chain == "base":
+            return self.base_rpc
+        return PAYMENT_CHAINS[chain]["defaultRpc"]
 
     def _splitter_treasury(self, splitter: str) -> [str]:
         """Read + cache B2BSplitter.treasury(). None on RPC failure."""
@@ -867,7 +887,7 @@ class AiFinPayAgent:
         max_gas_wei: [int] = None,
         journal_dir: [str] = None,
         asset: [str] = None,
-        chain: str = "polygon",
+        chain: [str] = None,
         scope: str = "prefix",
         units: [int] = None,
         api_base: str = "https://api.aifinpay.io",
@@ -875,8 +895,8 @@ class AiFinPayAgent:
         """
         GET an AIFP-1 paywalled URL, paying for one batch if it answers 402.
 
-        Settles on Polygon v1.4 (default) or explicitly selected ``chain="base"``.
-        Native payment defaults to POL/ETH respectively; ``asset="USDC"``
+        Settles on Polygon v1.4 by default or another explicitly selected EVM mainnet.
+        Native payment uses the selected POL/ETH/AVAX/BNB/XRP; ``asset="USDC"``
         approves exactly the gross, then settles using native funds for fees.
         Nothing is signed unless the URL is on ``allowed_origins``, the quote
         matches the challenge and the pinned deployment, and the batch fits
@@ -884,10 +904,11 @@ class AiFinPayAgent:
         prices come from independent POL/USD or ETH/USD sources, never the quote.
 
         ``max_gas_wei`` is the approval-plus-settlement fee budget in the selected
-        native asset's wei and is REQUIRED for Base. Polygon keeps its legacy
-        ``max_gas_pol=0.5`` default if ``max_gas_wei`` is omitted. Base checks
+        native asset's wei and is REQUIRED outside Polygon. Polygon keeps its legacy
+        ``max_gas_pol=0.5`` default if ``max_gas_wei`` is omitted. OP chains check
         L2 maximum gas plus oracle L1 data/operator estimates with 20% headroom;
-        those estimates are not a consensus cap on future L1 fees. Missing
+        those estimates are not a consensus cap on future L1 fees. Nitro
+        gas estimates include parent data once. Other RPCs use ``evm_rpc_urls``. Missing
         estimates or an exceeded budget refuse before signing. ``base_rpc``
         (constructor, or ``AIFINPAY_BASE_RPC``) is checked for chain ID 8453.
 
@@ -903,10 +924,12 @@ class AiFinPayAgent:
         from . import aifp1
         from .settlement_v14 import Web3ChainClient
 
+        requested_chain = chain
+        chain = "polygon" if chain is None else chain
         aifp1._native_asset(chain)  # authorize the chain before creating a journal or client
         if max_gas_wei is None:
-            if chain == "base":
-                raise aifp1.Aifp1QuoteError("Base requires an explicit max_gas_wei budget in ETH wei")
+            if chain != "polygon":
+                raise aifp1.Aifp1QuoteError(f"{chain} requires an explicit max_gas_wei budget in {PAYMENT_CHAINS[chain]['native']} wei")
             try:
                 max_gas_wei = int(max_gas_pol * 10**18)
             except (TypeError, ValueError, OverflowError):
@@ -922,26 +945,22 @@ class AiFinPayAgent:
 
         def on_prepared(entry: dict) -> None:
             path = os.path.join(journal, f"{entry['tx_ref']}.json")
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "w") as f:
-                json.dump({**entry, "journal_path": path}, f)
-                f.flush()
-                os.fsync(f.fileno())
+            aifp1._write_private_json(path, {**entry, "journal_path": path})
 
         try:
             return aifp1.aifp1_fetch(
                 url,
                 session=session,
                 account=self.evm_account,
-                client=Web3ChainClient(self._web3("base") if chain == "base" else self._web3()),
-                polygon_rpc=self.base_rpc if chain == "base" else self.polygon_rpc,
+                client=Web3ChainClient(self._web3(chain)),
+                polygon_rpc=self._payment_rpc(chain),
                 allowed_origins=list(allowed_origins),
                 ledger=ledger,
                 max_gas_wei=max_gas_wei,
                 on_prepared=on_prepared,
                 receipts=self._aifp1_receipts,
                 asset=asset,
-                chain=chain,
+                chain=requested_chain,
                 scope=scope,
                 api_base=api_base,
                 issuer=api_base,
@@ -963,7 +982,22 @@ class AiFinPayAgent:
 
         with open(journal_path) as f:
             recovery = json.load(f)
+        ledger = None
+        reservation_id = recovery.get("budget_reservation_id")
+        if reservation_id is not None:
+            if aifp1._prepared_hash(recovery.get("serialized_transaction")) != recovery["tx_ref"]:
+                raise aifp1.Aifp1QuoteError("recovery transaction hash disagrees with its signed bytes")
+            path = os.path.join(os.path.dirname(os.path.abspath(journal_path)), "spend.json")
+            if not os.path.isfile(path):
+                raise aifp1.Aifp1QuoteError("the original spending ledger is required to reconcile this payment")
+            # Recovery only. No limits from the journal authorize another transaction.
+            ledger = aifp1.SpendLedger(None, None, path)
+            binding = aifp1._budget_binding(recovery["quote"], self.evm_address, recovery.get("chain", "polygon"),
+                                           recovery["asset"], recovery["api_base"], recovery["issuer"])
+            ledger.assert_recovery(reservation_id, recovery["tx_ref"], binding)
         paid = aifp1.submit_payment(requests.Session(), self.evm_account, recovery, agent_id=self.evm_address)
+        if ledger is not None:
+            ledger.confirm(reservation_id, recovery["tx_ref"], binding, complete=True)
         if not hasattr(self, "_aifp1_receipts"):
             self._aifp1_receipts = {}
         self._aifp1_receipts.setdefault(paid["merchant_id"], []).append({
@@ -974,8 +1008,9 @@ class AiFinPayAgent:
 
     @staticmethod
     def _aifp1_journal_dir(journal_dir: [str]) -> str:
+        from .aifp1 import _durable_directory
         path = journal_dir or os.path.join(os.path.expanduser("~"), ".aifinpay", "journal")
-        os.makedirs(path, mode=0o700, exist_ok=True)
+        _durable_directory(path)
         return path
 
     def call(

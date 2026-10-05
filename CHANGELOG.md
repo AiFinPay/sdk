@@ -1,3 +1,36 @@
+## Node/Python2.4.0, MCP2.6.0 — release candidates
+
+- Reuse the signed EVM v1.4 kernel for nine explicitly owner-selected mainnets;
+  preserve Polygon defaults, merchant authorization, deployment/runtime/signer,
+  TokenList, payer proof, receipts, budgets, SSRF and durable recovery controls.
+- Bind USD micro-units to exact pinned6/18-decimal stablecoin units using additive
+  token_settlement; validate every split leg and approval.18dp requires metadata,
+  old6dp quotes remain accepted. Split token gross independently of USD rounding.
+- Budget OP data/operator fees for Base/Optimism/Unichain; count Nitro parent-data
+  estimates once on Arbitrum/Robinhood. Native symbols are POL/ETH/AVAX/BNB/XRP.
+- Add Python canonical RPC overrides/native gas caps and normalize valid token
+  destinations to checksum form before eth-account signing.
+- MCP reuses SDK metadata, permits pinned USDe and retains owner-only configuration.
+  Independent price freshness refuses implausible future timestamps.
+- Harden Node/Python shared local-file caps with atomic bound reservations before
+  signing, corruption refusal, indefinite unknown-broadcast retention, cross-rail
+  unresolved purchase guards and once-only verified receipt reconciliation.
+  Node locks are never stolen by age; old capped custom adapters need new hooks.
+- Match verified USDC.e/USDe receipt symbols to the existing uppercase backend
+  convention while preserving exact signed response consistency and token pins.
+- Persist MCP's exact prepared chain. Missing-chain legacy recovery requires
+  actual signed chain/payer/target/calldata evidence from owner configuration;
+  expired quote deadlines remain recoverable without replacement transactions.
+- No deployment pins, flags, ABI, economics, route profiles or production activation
+  change. Network deployment/receipt/indexing and paid acceptance remain required.
+- Release order: Node 2.4.0 publication, MCP published dependency/lock refresh,
+  standalone CI and canonical skill2.7.0 real publication/lock refresh, then
+  MCP2.6.0 publication. Exact installed/bundled/served skill bytes and an explicit
+  complete release target are guarded. Old registry inputs remain until actual
+  publication; this candidate is never publishable from that retained lock.
+  Source-packed integration verifies actual Node 2.4 exports without a fake
+  registry resolution. Python 2.4.0 publishes independently after review.
+
 ## MCP 2.5.0 — unreleased
 
 - `payable_fetch` pays on the chain the owner sets in `AIFINPAY_PAY_CHAIN`:

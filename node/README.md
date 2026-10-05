@@ -1,21 +1,26 @@
 # @aifinpay/agent (Node / TypeScript)
 
-Version **2.3.0** adds Base ETH and USDC to the AIFP-1 `fetchPaid` flow.
-Polygon remains the default. Select Base independently with `v14.chain: "base"`;
-a merchant quote cannot change that choice. Runtime, signer, token, RPC chain and
-current profile checks remain mandatory, along with a durable pre-broadcast
-journal and an explicit gas budget. Legacy `call()` remains unavailable.
+Version **2.4.0** (source candidate) extends the existing signed AIFP-1 `fetchPaid`
+flow to Polygon, Base, Optimism, Arbitrum, Avalanche, BNB, Unichain, XRPL EVM and
+Robinhood. Polygon remains the default; select another network explicitly with
+`v14.chain`. A descriptor is client capability, not production readiness: the
+merchant must authorize the chain and the backend must serve/verifiably settle it.
+Runtime, signer, token, RPC-chain and current profile checks remain mandatory,
+along with a durable pre-broadcast journal and explicit native gas budget.
 
-Native payments require a fresh independent `nativeUsdPrice`: POL/USD on Polygon,
-ETH/USD on Base. The SDK does not infer or fetch this price from a payment quote.
-Stablecoin payments use the selected deployment's pinned token and exact USD minor
-units. No native price is needed for stablecoin settlement.
+Native purchases require a fresh independent `nativeUsdPrice` for POL, ETH, AVAX,
+BNB or XRP on the selected chain. Stablecoins use an independently pinned token
+address and decimals. USD micro-units remain unchanged; `token_settlement` binds
+exact6/18-decimal token units and every gross-inclusive leg to the signed gross
+and exact approval.18-decimal tokens require this metadata; legacy6-decimal
+quotes remain accepted. XRPL EVM currently has no pinned stablecoin.
 
-On Base, `maxGasWei` covers the estimated L2 execution fee plus buffered L1 data and
-operator fees, including approval when needed. This preflight estimate can change
-before inclusion; the transaction cannot enforce a hard cap on L1/operator fees.
-An unavailable fee oracle blocks signing. See the [Base configuration and recovery
-guide](./PAYMENT_RECEIPTS.md).
+`maxGasWei` covers approval plus settlement. OP chains (Base/Optimism/Unichain)
+include buffered L1/operator estimates; Nitro (Arbitrum/Robinhood) already includes
+parent-data gas in the RPC estimate, so it is counted once. Unavailable OP fees
+block signing. These are preflight estimates, not inclusion-time guarantees.
+Current admin profiles remain mutable; receipt and recovery policy is unchanged.
+See [payment configuration and recovery](./PAYMENT_RECEIPTS.md).
 
 ### Link the agent to its owner's dashboard
 
@@ -154,7 +159,7 @@ live Seat PDA on-chain, and serves the resource. The retired v1 format
 
 - **The server never sees your private key.** Period.
 - Nonces are consumed on use; replay-resistant.
-- Payments settle on public chains — Polygon, or Base when selected — and are visible on-chain.
+- Payments settle on public chains — the explicitly selected EVM network — and are visible on-chain.
 
 ## License
 

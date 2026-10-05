@@ -19,3 +19,15 @@ Unified chain-opaque agent SDK: `AiFinPayAgent` call/balance/verify over Polygon
 - No live network in tests; mock HTTP/RPC at `client.py` / facilitator boundaries.
 - Never log or persist seeds/secret keys; non-custodial stays non-custodial.
 - Version bumps touch `pyproject.toml` + `README.md` together.
+
+
+## FULL-PAYMENT-FLOW-20261004 source state
+
+The user authorized coordinated Node/Python/MCP work on the existing v1.4 kernel.
+Nine EVM client descriptors do not establish production readiness or activate
+networks. Generated deployment pins, flags, profiles and economics are unchanged.
+Stable token units are independent chain/address-pinned6/18 decimals and additive
+quote metadata is validated. Preserve explicit owner chain, budgets, runtime,
+payer proof, receipt/SSRF and durable recovery controls. MCP2.6.0 requires
+agent2.4.0 source-pack integration, then published dependency/lock refresh before
+standalone release. No publish/merge/contract operations are authorized by this note.

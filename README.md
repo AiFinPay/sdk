@@ -12,17 +12,17 @@ Canonical domain: **https://aifinpay.io**
 
 | Package | Current source version | Install |
 |---|---:|---|
-| `aifinpay-agent` (Python) | `2.3.0` | `pip install aifinpay-agent` |
-| `aifinpay-gate` (Python merchant gate) | `0.1.0` | `pip install aifinpay-gate` |
-| `@aifinpay/agent` (Node / TypeScript) | `2.3.0` | `npm install @aifinpay/agent` |
-| `@aifinpay/mcp` | `2.4.1` | `npx @aifinpay/mcp` |
+| `aifinpay-agent` (Python) | `2.4.0` candidate | `pip install aifinpay-agent` |
+| `aifinpay-gate` (Python merchant gate) | `0.1.1` | `pip install aifinpay-gate` |
+| `@aifinpay/agent` (Node / TypeScript) | `2.4.0` candidate | `npm install @aifinpay/agent` |
+| `@aifinpay/mcp` | `2.6.0` release candidate | `npx @aifinpay/mcp` |
 | `@aifinpay/mcp-http` | `2.0.4` | Streamable HTTP wrapper |
-| `@aifinpay/skill` | `2.5.1` (source: [AiFinPay/skill](https://github.com/AiFinPay/skill); bundled by `@aifinpay/mcp`) | `npm install @aifinpay/skill` |
-| `@aifinpay/gate` | `0.3.4` | `npm install @aifinpay/gate` |
-| `@aifinpay/wallet` | `1.1.0` | `npm install @aifinpay/wallet` |
+| `@aifinpay/skill` | `2.7.0` coordinated target; existing registry lock pending refresh ([AiFinPay/skill](https://github.com/AiFinPay/skill); bundled by `@aifinpay/mcp`) | `npm install @aifinpay/skill` |
+| `@aifinpay/gate` | `0.3.5` | `npm install @aifinpay/gate` |
+| `@aifinpay/wallet` | `1.2.0` | `npm install @aifinpay/wallet` |
 | `@aifinpay/deployments` | `1.1.3` | deployment registry package |
 
-Package lines are versioned independently. The package manifests in this repository and the corresponding npm/PyPI registries are the source of truth.
+These are local manifest versions. Install commands resolve separately published versions. The Node/Python2.4.0 and MCP2.6.0 changes in this checkout are release candidates. MCP release requires real agent2.4.0 and canonical skill2.7.0 publication, a registry dependency/lock refresh and standalone CI. The retained old lock is not publishable; no registry entry is fabricated. Same-commit source-cohort CI validates the candidate without pretending that the new Node exports are already published.
 
 ## Install
 
@@ -52,7 +52,7 @@ The current `@aifinpay/mcp` source registers these tools:
 | `agent_address` | Read the current EVM, Solana and Casper public addresses. |
 | `agent_reload` | Reload configured local wallet files without starting a new conversation. |
 | `agent_claim_self` | Link the agent to its owner's dashboard with a one-time URL from dash.aifinpay.io. Signs only an AiFinPay claim challenge for the agent's own address; moves no funds. |
-| `payable_fetch` | **Only when the owner enables payments.** Fetch a GET resource from an owner-approved AIFP-1 merchant, buying a prepaid batch on Polygon v1.4 (POL or a pinned stablecoin) within the owner's limits. |
+| `payable_fetch` | **Only when the owner enables payments.** Fetch a GET resource from an owner-approved AIFP-1 merchant, buying a prepaid batch on the explicitly configured EVM v1.4 chain within owner limits; Polygon remains the default. |
 | `agent_quota` | Read the agent's quota. |
 | `agent_history` | Read indexed AiFinPay payment history or retained receipt history. |
 | `agent_passport_resolve` | Resolve a public Agent Passport identity and verified wallet bindings. |
@@ -64,7 +64,7 @@ The current `@aifinpay/mcp` source registers these tools:
 
 With `AIFINPAY_MODE=dev`, an additional `dev_payment_quote` tool is available for dev-only quote inspection.
 
-**Without owner payment configuration the MCP server is read-only:** it signs no payment, and creating an invoice or quote is not a completed payment. `payable_fetch` is registered — and signs and broadcasts locally — only when the owner sets `AIFINPAY_PAYMENTS_ENABLED=1` together with `AIFINPAY_MAX_USD`, `AIFINPAY_DAILY_USD`, `AIFINPAY_GATEWAY_ORIGINS` and `AIFINPAY_MAX_GAS_POL`; with payments enabled and any of them missing, the server does not start. See [mcp/README.md](./mcp/README.md).
+**Without owner payment configuration the MCP server is read-only:** it signs no payment, and creating an invoice or quote is not a completed payment. `payable_fetch` is registered — and signs and broadcasts locally — only when the owner sets `AIFINPAY_PAYMENTS_ENABLED=1` together with `AIFINPAY_MAX_USD`, `AIFINPAY_DAILY_USD`, `AIFINPAY_GATEWAY_ORIGINS` and a native gas cap (`AIFINPAY_MAX_GAS`; legacy `AIFINPAY_MAX_GAS_POL` is Polygon-only). Incomplete enabled configuration refuses startup. See [mcp/README.md](./mcp/README.md).
 
 Legacy tools such as `agent_call`, `agent_quote`, `pay_with_split` and `quote_split` are not registered by the current MCP server.
 
@@ -99,13 +99,13 @@ The SDK surfaces have different execution status. Do not treat them as interchan
 
 ### Node / TypeScript
 
-`@aifinpay/agent` includes the AIFP-1 `fetchPaid` path. The 2.3.0 source candidate adds explicitly selected Base v1.4 (ETH or pinned USDC) alongside default Polygon v1.4. Paid execution validates the selected chain, pinned deployment/profile, token and RPC before signing; native payments also require a fresh independent price. Legacy Polygon v1.3 still requires its separately reviewed settlement pin. Source support does not activate a production route or publish a package.
+`@aifinpay/agent` includes the AIFP-1 `fetchPaid` path. The 2.4.0 source candidate supports Polygon, Base, Optimism, Arbitrum, Avalanche, BNB, Unichain, XRPL EVM and Robinhood. Every non-Polygon rail requires explicit owner selection. Paid execution validates the selected chain, deployment/runtime/signer/profile, pinned token and RPC before signing; native payments require a fresh independent price. Durable bound reservations prevent unresolved payments from resetting the daily cap or buying the same access on another rail. Legacy Polygon v1.3 still requires its separately reviewed settlement pin. Source support does not activate a production route or publish a package.
 
 See [node/README.md](./node/README.md) and [node/PAYMENT_RECEIPTS.md](./node/PAYMENT_RECEIPTS.md).
 
 ### Python
 
-The Python package pays AIFP-1 merchants with `AiFinPayAgent.fetch_paid` (Polygon v1.4, POL or USDC). The 2.3.0 source candidate also supports explicit `chain="base"` with ETH or pinned USDC and a required gas budget in wei. Its legacy paid `call()` settlement path stays disabled. MCP's current payment configuration remains Polygon; these source changes do not add a Base MCP setting.
+The Python 2.4.0 source candidate uses `AiFinPayAgent.fetch_paid` for the same nine EVM mainnets, pinned native/stable assets and exact six/eighteen-decimal token amounts. Every non-Polygon chain requires an explicit native gas budget in wei. Shared local-file reservations serialize concurrent processes, survive unknown broadcasts and reconcile recovered receipts once. Its legacy paid `call()` settlement path stays disabled. The MCP candidate consumes the Node source cohort with explicit owner chain/asset configuration and private durable recovery.
 
 See [python/README.md](./python/README.md).
 

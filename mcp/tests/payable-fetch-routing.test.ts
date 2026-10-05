@@ -37,6 +37,7 @@ const prepared = {
   },
   txRef: tx,
   asset: "POL",
+  chain: "polygon",
   serializedTransaction: "0xdeadbeef",
 };
 function fixture() {

@@ -1,214 +1,334 @@
-// Making a daily spending cap mean something.
-//
-// The cap was a number compared against a ring buffer in one object's memory.
-// Two consequences, both of which defeat it entirely.
-//
-// A new process starts at zero. An agent that restarts — a crash loop, a
-// deploy, a cron that runs it hourly — gets its full daily allowance again each
-// time, and the "daily" cap becomes a per-process cap.
-//
-// And the check was separate from the record: `checkBudget()` read the total,
-// the payment happened, and only then was the cost added. Two calls in flight
-// at once both read the same total, both passed, and both paid. The cap held
-// only for an agent making one call at a time, which is not the kind of agent
-// this SDK is for.
-//
-// So a cap now goes through reserve → commit or release, where the reservation
-// is what the next check sees. A reservation that is never resolved — the
-// process died mid-payment — expires, because the alternative is an agent that
-// loses its budget to a crash and cannot spend again until tomorrow.
-//
-// Durability is engaged only when a daily cap is actually set. A library that
-// writes to a user's disk because it was imported would be rude; one that
-// promises a daily limit and forgets it on restart is worse.
-
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile, rename, open, unlink } from "node:fs/promises";
+// Daily caps use reserve → confirmed commit or proven nonpayment release.
+// Unknown outcomes never expire: a process restart is not evidence of no payment.
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, open, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
-/** An outstanding or settled amount. */
+/** Exact trusted purchase context; a quote cannot select the ledger or cap. */
+export interface SpendLedgerBinding {
+  apiBaseUrl: string;
+  paymentIssuer: string;
+  payer: string;
+  merchantId: string;
+  scope: string;
+  resource: string;
+  networkMode: string;
+  chain: string;
+  asset: string;
+  token: string;
+  grossAmount: string;
+  quoteId: string;
+}
 interface Entry {
   id: string;
   usd: number;
   at: number;
-  /** Set while the payment is in flight; cleared when it settles. */
+  /** Legacy field retained as an unresolved marker; it no longer expires. */
   expiresAt?: number;
+  binding?: SpendLedgerBinding;
+  txRef?: string;
+  receiptPending?: boolean;
 }
-
 export interface SpendLedger {
-  /**
-   * Claim `usd` of the cap, atomically, or refuse.
-   *
-   * The cap is checked here rather than by the caller because a caller that
-   * checks and then reserves has reintroduced the race this exists to close.
-   * Returns a reservation id, or null when the window total would exceed `cap`.
-   */
-  reserve(usd: number, cap: number, windowMs: number): Promise<string | null>;
-  /** The payment happened. `actualUsd` corrects the estimate when known. */
+  reserve(usd: number, cap: number, windowMs: number, binding?: SpendLedgerBinding): Promise<string | null>;
   commit(id: string, actualUsd?: number): Promise<void>;
-  /** The payment did not happen. Give the budget back now, not at expiry. */
+  /** Caller must prove settlement never broadcast or reverted. */
   release(id: string): Promise<void>;
-  /** Settled plus outstanding, over the window. */
   total(windowMs: number): Promise<number>;
+  /** Required by capped v1.4 callers; old custom adapters fail before broadcast. */
+  prepare?(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void>;
+  assertRecovery?(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void>;
+  complete?(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void>;
 }
-
-/** How long a reservation survives without being committed or released. */
-const RESERVATION_TTL_MS = 5 * 60_000;
-
-function liveTotal(entries: Entry[], windowMs: number, now: number): number {
-  const cutoff = now - windowMs;
-  return entries.filter((e) => e.at >= cutoff && (!e.expiresAt || e.expiresAt > now)).reduce((s, e) => s + e.usd, 0);
+const RESERVATION_MARKER_MS = 5 * 60_000;
+const LOCK_TIMEOUT_MS = 5_000;
+const BINDING_FIELDS = [
+  "apiBaseUrl",
+  "paymentIssuer",
+  "payer",
+  "merchantId",
+  "scope",
+  "resource",
+  "networkMode",
+  "chain",
+  "asset",
+  "token",
+  "grossAmount",
+  "quoteId",
+] as const;
+function validBinding(binding: unknown): binding is SpendLedgerBinding {
+  return (
+    !!binding &&
+    typeof binding === "object" &&
+    Object.keys(binding).length === BINDING_FIELDS.length &&
+    BINDING_FIELDS.every(
+      (k) => typeof (binding as SpendLedgerBinding)[k] === "string" && !!(binding as SpendLedgerBinding)[k]
+    )
+  );
 }
-
+function sameBinding(left: SpendLedgerBinding | undefined, right: SpendLedgerBinding): boolean {
+  return !!left && BINDING_FIELDS.every((k) => left[k] === right[k]);
+}
+function purchaseKey(binding: SpendLedgerBinding): string {
+  // Exact chain/token binding is retained, but changing rail cannot rebuy unresolved access.
+  return createHash("sha256")
+    .update(
+      JSON.stringify([
+        binding.apiBaseUrl,
+        binding.paymentIssuer,
+        binding.payer,
+        binding.merchantId,
+        binding.scope,
+        binding.resource,
+        binding.networkMode,
+      ])
+    )
+    .digest("hex");
+}
+function finiteNonnegative(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+function validateCost(usd: number, cap: number, windowMs: number, binding?: SpendLedgerBinding): void {
+  if (
+    !finiteNonnegative(usd) ||
+    !(Number.isFinite(cap) && cap > 0) ||
+    !(Number.isFinite(windowMs) && windowMs > 0) ||
+    (binding !== undefined && !validBinding(binding))
+  )
+    throw new Error("Invalid spending reservation parameters");
+}
 function prune(entries: Entry[], windowMs: number, now: number): Entry[] {
-  const cutoff = now - windowMs;
-  // Drop what has aged out of the window, and reservations nobody resolved.
-  return entries.filter((e) => e.at >= cutoff && (!e.expiresAt || e.expiresAt > now));
+  // Retain confirmed-but-unreceipted purchases too; never silently remove their guard.
+  return entries.filter(
+    (e) => e.binding !== undefined || e.expiresAt !== undefined || e.receiptPending === true || e.at >= now - windowMs
+  );
+}
+function liveTotal(entries: Entry[], windowMs: number, now: number): number {
+  return entries.filter((e) => e.expiresAt !== undefined || e.at >= now - windowMs).reduce((sum, e) => sum + e.usd, 0);
+}
+function reserveEntry(entries: Entry[], usd: number, cap: number, windowMs: number, binding?: SpendLedgerBinding) {
+  validateCost(usd, cap, windowMs, binding);
+  const now = Date.now(),
+    live = prune(entries, windowMs, now);
+  if (
+    binding &&
+    live.some(
+      (e) =>
+        e.binding &&
+        (e.expiresAt !== undefined || e.receiptPending === true) &&
+        purchaseKey(e.binding) === purchaseKey(binding)
+    )
+  )
+    throw new Error("Unresolved purchase; recover its existing payment before buying again");
+  if (liveTotal(live, windowMs, now) + usd > cap) return { entries: live, result: null };
+  const id = randomUUID();
+  live.push({
+    id,
+    usd,
+    at: now,
+    expiresAt: now + RESERVATION_MARKER_MS,
+    ...(binding ? { binding: { ...binding } } : {}),
+  });
+  return { entries: live, result: id };
+}
+function commitEntry(entries: Entry[], id: string, actualUsd?: number): void {
+  if (actualUsd !== undefined && !finiteNonnegative(actualUsd)) throw new Error("Invalid confirmed spending amount");
+  const entry = entries.find((e) => e.id === id);
+  if (!entry) throw new Error("Spending reservation is missing; reconciliation is required");
+  if (actualUsd !== undefined) entry.usd = actualUsd;
+  if (entry.expiresAt !== undefined) entry.at = Date.now();
+  delete entry.expiresAt;
+}
+function boundEntry(entries: Entry[], id: string, txRef: string, binding: SpendLedgerBinding): Entry {
+  const entry = entries.find((e) => e.id === id);
+  if (!entry || !validBinding(binding) || !sameBinding(entry.binding, binding) || entry.txRef !== txRef)
+    throw new Error("Recovery disagrees with the original spending reservation");
+  return entry;
+}
+function prepareEntry(entries: Entry[], id: string, txRef: string, binding: SpendLedgerBinding): void {
+  const entry = entries.find((e) => e.id === id);
+  if (
+    !entry ||
+    entry.expiresAt === undefined ||
+    !sameBinding(entry.binding, binding) ||
+    !/^0x[0-9a-fA-F]{64}$/.test(txRef) ||
+    (entry.txRef !== undefined && entry.txRef !== txRef)
+  )
+    throw new Error("Prepared transaction disagrees with the spending reservation");
+  entry.txRef = txRef;
+  entry.receiptPending = true;
+}
+function releaseEntries(entries: Entry[], id: string): Entry[] {
+  if (entries.some((e) => e.id === id && e.expiresAt === undefined))
+    throw new Error("Confirmed spending cannot be released");
+  return entries.filter((e) => e.id !== id);
+}
+function validateEntries(data: unknown): Entry[] {
+  if (
+    !Array.isArray(data) ||
+    data.some(
+      (e) =>
+        !e ||
+        typeof e !== "object" ||
+        typeof e.id !== "string" ||
+        !e.id ||
+        !finiteNonnegative(e.usd) ||
+        !finiteNonnegative(e.at) ||
+        (e.expiresAt !== undefined && !finiteNonnegative(e.expiresAt)) ||
+        (e.binding !== undefined && !validBinding(e.binding)) ||
+        (e.txRef !== undefined && (!/^0x[0-9a-fA-F]{64}$/.test(e.txRef) || !e.binding)) ||
+        (e.receiptPending !== undefined && (typeof e.receiptPending !== "boolean" || !e.txRef))
+    )
+  )
+    throw new Error("Spending ledger is malformed; refusing to reset the budget");
+  if (new Set(data.map((e) => e.id)).size !== data.length)
+    throw new Error("Spending ledger contains duplicate reservations");
+  return data as Entry[];
 }
 
-/**
- * In-process ledger. Correct for one process, forgotten on restart.
- *
- * Kept because it is the right answer when no daily cap is set — there is
- * nothing to remember — and because a test should not need a filesystem.
- */
+/** One-process implementation; use one shared instance or the local file ledger. */
 export class MemorySpendLedger implements SpendLedger {
   private entries: Entry[] = [];
-
-  async reserve(usd: number, cap: number, windowMs: number): Promise<string | null> {
-    const now = Date.now();
-    this.entries = prune(this.entries, windowMs, now);
-    if (liveTotal(this.entries, windowMs, now) + usd > cap) return null;
-    const id = randomUUID();
-    this.entries.push({ id, usd, at: now, expiresAt: now + RESERVATION_TTL_MS });
-    return id;
+  async reserve(usd: number, cap: number, windowMs: number, binding?: SpendLedgerBinding): Promise<string | null> {
+    const next = reserveEntry(this.entries, usd, cap, windowMs, binding);
+    this.entries = next.entries;
+    return next.result;
   }
-
   async commit(id: string, actualUsd?: number): Promise<void> {
-    const e = this.entries.find((x) => x.id === id);
-    if (!e) return;
-    if (typeof actualUsd === "number" && Number.isFinite(actualUsd)) e.usd = actualUsd;
-    delete e.expiresAt;
+    commitEntry(this.entries, id, actualUsd);
   }
-
   async release(id: string): Promise<void> {
-    this.entries = this.entries.filter((x) => x.id !== id);
+    this.entries = releaseEntries(this.entries, id);
   }
-
   async total(windowMs: number): Promise<number> {
     return liveTotal(this.entries, windowMs, Date.now());
   }
+  async prepare(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void> {
+    prepareEntry(this.entries, id, txRef, binding);
+  }
+  async assertRecovery(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void> {
+    boundEntry(this.entries, id, txRef, binding);
+  }
+  async complete(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void> {
+    const entry = boundEntry(this.entries, id, txRef, binding);
+    commitEntry(this.entries, id);
+    delete entry.receiptPending;
+  }
 }
 
-/**
- * A ledger on disk, so a restart does not hand the agent its allowance again.
- *
- * Read-modify-write is guarded by an exclusive lock file, which is atomic on a
- * local filesystem: `open(..., "wx")` either creates the file or fails, with no
- * window in between. That covers several processes on one host, which is what
- * a restart, a cron and a worker pool actually are.
- *
- * It does NOT cover several hosts — a lock file on a network filesystem is not
- * a lock. An agent fleet spanning machines should pass its own SpendLedger
- * backed by something that can answer for all of them; that is why this is an
- * interface rather than a class the SDK insists on.
- */
+/** Shared cap for processes on one local filesystem; never a cross-host lock. */
 export class FileSpendLedger implements SpendLedger {
   constructor(private readonly path: string) {}
-
-  /** Default location, one file per agent address. */
   static forAgent(address: string): FileSpendLedger {
     const base = process.env.AIFINPAY_STATE_DIR || join(homedir(), ".aifinpay");
     return new FileSpendLedger(join(base, "spend", `${address.toLowerCase()}.json`));
   }
-
   private async withLock<T>(fn: (entries: Entry[]) => { entries: Entry[]; result: T }): Promise<T> {
-    await mkdir(dirname(this.path), { recursive: true });
+    const directoryPath = resolve(dirname(this.path));
+    await mkdir(directoryPath, { recursive: true, mode: 0o700 });
+    // Another process, or an earlier failed sync, may have just created these
+    // entries. Existing directories therefore also need ancestor durability.
+    for (let current = directoryPath; ; current = dirname(current)) {
+      const directory = await open(current, "r");
+      try {
+        await directory.sync();
+      } finally {
+        await directory.close();
+      }
+      if (dirname(current) === current) break;
+    }
     const lockPath = `${this.path}.lock`;
-
-    // Spin briefly rather than failing: contention here is two of our own
-    // calls, and they are milliseconds apart.
     let handle;
-    const deadline = Date.now() + 5_000;
+    const deadline = Date.now() + LOCK_TIMEOUT_MS;
     for (;;) {
       try {
-        handle = await open(lockPath, "wx");
+        handle = await open(lockPath, "wx", 0o600);
         break;
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-        if (Date.now() > deadline) {
-          // A lock this old belongs to a process that died holding it. Breaking
-          // it risks a lost update; refusing to ever break it means one crash
-          // disables the cap permanently, which is worse.
-          await unlink(lockPath).catch(() => {});
-          continue;
-        }
-        await new Promise((r) => setTimeout(r, 5 + Math.floor(Math.random() * 15)));
+        if (Date.now() >= deadline)
+          throw new Error("Spending ledger lock is held; stop all users and reconcile before owner lock recovery");
+        await new Promise((resolve) => setTimeout(resolve, 5 + Math.floor(Math.random() * 15)));
       }
     }
-
+    const temporary = `${this.path}.${process.pid}.${randomUUID()}.tmp`;
     try {
-      let entries: Entry[] = [];
+      let entries: Entry[];
       try {
-        entries = JSON.parse(await readFile(this.path, "utf8")) as Entry[];
-        if (!Array.isArray(entries)) entries = [];
-      } catch {
-        // Absent or unreadable. Starting from empty is the only option, and it
-        // errs toward letting a payment through rather than blocking one — the
-        // same direction the old in-memory behaviour erred, every restart.
+        entries = validateEntries(JSON.parse(await readFile(this.path, "utf8")));
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
         entries = [];
       }
       const { entries: next, result } = fn(entries);
-      // Write to a sibling and rename: a crash mid-write leaves the previous
-      // ledger intact rather than a truncated one.
-      const tmp = `${this.path}.${process.pid}.tmp`;
-      await writeFile(tmp, JSON.stringify(next), "utf8");
-      await rename(tmp, this.path);
+      validateEntries(next);
+      const file = await open(temporary, "wx", 0o600);
+      try {
+        await file.writeFile(JSON.stringify(next), "utf8");
+        await file.sync();
+      } finally {
+        await file.close();
+      }
+      await rename(temporary, this.path);
+      const directory = await open(dirname(this.path), "r");
+      try {
+        await directory.sync();
+      } finally {
+        await directory.close();
+      }
       return result;
     } finally {
-      await handle.close().catch(() => {});
-      await unlink(lockPath).catch(() => {});
-    }
-  }
-
-  async reserve(usd: number, cap: number, windowMs: number): Promise<string | null> {
-    return this.withLock((entries) => {
-      const now = Date.now();
-      const live = prune(entries, windowMs, now);
-      if (liveTotal(live, windowMs, now) + usd > cap) {
-        return { entries: live, result: null };
-      }
-      const id = randomUUID();
-      live.push({ id, usd, at: now, expiresAt: now + RESERVATION_TTL_MS });
-      return { entries: live, result: id };
-    });
-  }
-
-  async commit(id: string, actualUsd?: number): Promise<void> {
-    await this.withLock((entries) => {
-      for (const e of entries) {
-        if (e.id === id) {
-          if (typeof actualUsd === "number" && Number.isFinite(actualUsd)) e.usd = actualUsd;
-          delete e.expiresAt;
+      try {
+        await unlink(temporary).catch((e: NodeJS.ErrnoException) => {
+          if (e.code !== "ENOENT") throw e;
+        });
+      } finally {
+        try {
+          await handle.close();
+        } finally {
+          // Only this acquired lock is removed, never one guessed stale from age.
+          await unlink(lockPath);
         }
       }
+    }
+  }
+  async reserve(usd: number, cap: number, windowMs: number, binding?: SpendLedgerBinding): Promise<string | null> {
+    return this.withLock((entries) => reserveEntry(entries, usd, cap, windowMs, binding));
+  }
+  async commit(id: string, actualUsd?: number): Promise<void> {
+    await this.withLock((entries) => {
+      commitEntry(entries, id, actualUsd);
       return { entries, result: undefined };
     });
   }
-
   async release(id: string): Promise<void> {
-    await this.withLock((entries) => ({
-      entries: entries.filter((e) => e.id !== id),
-      result: undefined,
-    }));
+    await this.withLock((entries) => ({ entries: releaseEntries(entries, id), result: undefined }));
   }
-
   async total(windowMs: number): Promise<number> {
     return this.withLock((entries) => {
-      const now = Date.now();
-      const live = prune(entries, windowMs, now);
-      return { entries: live, result: liveTotal(live, windowMs, now) };
+      const live = prune(entries, windowMs, Date.now());
+      return { entries: live, result: liveTotal(live, windowMs, Date.now()) };
+    });
+  }
+  async prepare(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void> {
+    await this.withLock((entries) => {
+      prepareEntry(entries, id, txRef, binding);
+      return { entries, result: undefined };
+    });
+  }
+  async assertRecovery(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void> {
+    await this.withLock((entries) => {
+      boundEntry(entries, id, txRef, binding);
+      return { entries, result: undefined };
+    });
+  }
+  async complete(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void> {
+    await this.withLock((entries) => {
+      const entry = boundEntry(entries, id, txRef, binding);
+      commitEntry(entries, id);
+      delete entry.receiptPending;
+      return { entries, result: undefined };
     });
   }
 }

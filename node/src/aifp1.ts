@@ -35,11 +35,12 @@
 // ──────────────────────────────────────────────────────────────────────────
 import { createHash, createPublicKey, verify as verifySignature } from "node:crypto";
 import { keccak256, parseUnits, stringToHex } from "viem";
-import { V14_DEPLOYMENTS } from "./generated/v14Deployments.generated.js";
+import { paymentChain, paymentStableAsset, type PaymentChain } from "./paymentChains.js";
 import { AiFinPayError } from "./errors.js";
-import { validateV14SettlementCall, type V14SettlementCall } from "./settlementV14.js";
+import { validateV14SettlementCall, V14SettlementError, type V14SettlementCall } from "./settlementV14.js";
 import { SettlementConfirmationPendingError } from "./settlement.js";
 import { settlementHttp, SettlementHttpError } from "./settlementHttp.js";
+import type { SpendLedgerBinding } from "./spendLedger.js";
 
 // ── Errors ────────────────────────────────────────────────────────────────
 //
@@ -85,12 +86,40 @@ export interface Aifp1PaymentRecovery {
   /** Trusted payment chain saved before broadcast; omitted legacy journals mean Polygon. */
   chain?: Aifp1V14Chain;
   paymentIssuer?: string;
+  /** Local budget identity; never an amount, cap or server-selected ledger path. */
+  budgetReservationId?: string;
+  serializedTransaction?: `0x${string}`;
 }
 
 export interface Aifp1PaymentSigner {
   payerAddress: string;
   signPaymentAuthorization(message: string): Promise<string>;
   fetchImpl?: typeof fetch;
+  assertReservation?(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void>;
+  completeReservation?(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void>;
+}
+
+/** Exact owner/quote binding for a locally selected capped v1.4 payment. */
+export function paymentBudgetBinding(
+  payment: Pick<Aifp1PaymentRecovery, "apiBaseUrl" | "paymentIssuer" | "quote" | "chain" | "asset">,
+  payer: string
+): SpendLedgerBinding {
+  const call = payment.quote.settlement_call as V14SettlementCall;
+  if (call?.splitter_version !== "1.4") throw new Aifp1QuoteError("Bound budgets require the original v1.4 call");
+  return {
+    apiBaseUrl: payment.apiBaseUrl.replace(/\/+$/, ""),
+    paymentIssuer: payment.paymentIssuer ?? "https://api.aifinpay.io",
+    payer: payer.toLowerCase(),
+    merchantId: payment.quote.merchant_id,
+    scope: payment.quote.scope,
+    resource: payment.quote.resource,
+    networkMode: payment.quote.network_mode ?? "live",
+    chain: authorizedV14Chain(payment.chain),
+    asset: payment.asset,
+    token: call.args.quote.token.toLowerCase(),
+    grossAmount: call.args.quote.grossAmount,
+    quoteId: payment.quote.quote_id,
+  };
 }
 
 /** Recover an already settled payment. Never sends an on-chain transaction. */
@@ -102,7 +131,7 @@ export function recoverAifp1Payment(
   const chain = authorizedV14Chain(recovery.chain);
   const call = recovery.quote.settlement_call;
   if (chain !== "polygon" && call?.splitter_version !== "1.4") {
-    throw new Aifp1QuoteError("Base recovery requires the original v1.4 settlement call");
+    throw new Aifp1QuoteError(`Recovery on ${chain} requires the original v1.4 settlement call`);
   }
   if (
     call?.splitter_version === "1.4" &&
@@ -113,6 +142,33 @@ export function recoverAifp1Payment(
       !recovery.quote.accepted_assets.includes(recovery.asset))
   ) {
     throw new Aifp1QuoteError("recovery chain or asset disagrees with the saved purchase");
+  }
+  if (recovery.budgetReservationId !== undefined) {
+    if (
+      typeof recovery.budgetReservationId !== "string" ||
+      !recovery.budgetReservationId ||
+      !/^0x(?:[0-9a-fA-F]{2})+$/.test(recovery.serializedTransaction ?? "") ||
+      keccak256(recovery.serializedTransaction!) !== recovery.txRef ||
+      !signer.assertReservation ||
+      !signer.completeReservation
+    ) {
+      throw new Aifp1QuoteError("Bound budget recovery requires the original signed bytes and ledger hooks");
+    }
+    const binding = paymentBudgetBinding(recovery, signer.payerAddress);
+    return (async () => {
+      await signer.assertReservation!(recovery.budgetReservationId!, recovery.txRef, binding);
+      const paid = await submitPayment(
+        { ...signer, agentId: signer.payerAddress, fetchImpl: signer.fetchImpl ?? fetch },
+        recovery.apiBaseUrl,
+        recovery.quote,
+        recovery.txRef,
+        recovery.asset,
+        chain,
+        { paymentIssuer: recovery.paymentIssuer, ...options }
+      );
+      await signer.completeReservation!(recovery.budgetReservationId!, recovery.txRef, binding);
+      return paid;
+    })();
   }
   return submitPayment(
     { ...signer, agentId: signer.payerAddress, fetchImpl: signer.fetchImpl ?? fetch },
@@ -188,6 +244,17 @@ export interface Aifp1Quote {
           order_id: string;
         };
       };
+  /** Exact stablecoin minor units; required for18dp, optional for legacy6dp. */
+  token_settlement?: {
+    asset: string;
+    token: string;
+    decimals: number;
+    total_units: string;
+    merchant_units: string;
+    protocol_fee_units: string;
+    creator_units: string;
+    settlement_semantics: "gross-inclusive";
+  };
   /** Native gross settlement in the selected chain currency, when backend readiness permits. */
   native_settlement?: {
     asset: string; // "POL" on Polygon, "ETH" on Base
@@ -612,7 +679,7 @@ export class Aifp1ReceiptCache {
 
 // ── Options ───────────────────────────────────────────────────────────────
 
-export type Aifp1V14Chain = "polygon" | "base";
+export type Aifp1V14Chain = PaymentChain;
 
 export interface Aifp1FetchOptions {
   /** Explicit native v1.4 authorization. Deployment/signer pins come from the
@@ -782,9 +849,12 @@ export interface Aifp1Deps {
   /** Per-call cap. false ⇒ the caller asked to skip rather than throw. */
   checkPerCall(usd: number): boolean;
   /** Daily cap. "skip" ⇒ drop the call; a string is a reservation to resolve. */
-  reserveDaily(usd: number): Promise<string | null | "skip">;
+  reserveDaily(usd: number, binding?: SpendLedgerBinding): Promise<string | null | "skip">;
   commit(reservationId: string, usd: number): Promise<void>;
   release(reservationId: string): Promise<void>;
+  prepareReservation?(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void>;
+  assertReservation?(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void>;
+  completeReservation?(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void>;
   onPaid?(info: { merchantId: string; amountUsd: number; txRef: string; receiptId: string }): void;
 }
 
@@ -863,7 +933,7 @@ export async function aifp1Fetch(
     throw new Aifp1QuoteError("maxAmountUsd must be nonnegative and finite");
   }
   const chain = authorizedV14Chain(opts.v14?.chain);
-  const nativeAsset = chain === "base" ? "ETH" : "POL";
+  const nativeAsset = paymentChain(chain)!.native;
   const direct = opts.resourcePathMode === "direct";
   const parsed = parseGatewayUrl(url, opts.gatewayOrigins ?? DEFAULT_GATEWAY_ORIGINS, opts.resourcePathMode);
   let site = parsed.site;
@@ -1017,6 +1087,7 @@ export async function aifp1Fetch(
         units: opts.units ?? defaultUnitsFor(challenge),
         agent_id: deps.agentId,
         ...(opts.v14 ? { asset: stableAsset ?? nativeAsset } : {}),
+        ...(opts.v14?.chain !== undefined ? { settlement_chain: chain } : {}),
       },
       opts.apiTimeoutMs
     );
@@ -1108,6 +1179,7 @@ export async function aifp1Fetch(
       const args = call?.args as
         Exclude<Aifp1Quote["settlement_call"], V14SettlementCall | undefined>["args"] | undefined;
       if (
+        quote.token_settlement !== undefined ||
         native.asset !== nativeAsset ||
         native.decimals !== 18 ||
         (opts.v14
@@ -1159,11 +1231,33 @@ export async function aifp1Fetch(
       );
     }
     if (!deps.checkPerCall(amountUsd)) return null;
-    const reservation = await deps.reserveDaily(amountUsd);
+    const budgetContext = {
+      apiBaseUrl: apiBase,
+      quote,
+      asset: stableAsset ?? nativeAsset,
+      chain,
+      paymentIssuer: opts.paymentIssuer,
+    };
+    const binding = opts.v14 ? paymentBudgetBinding(budgetContext, deps.payerAddress) : undefined;
+    const reservation = await deps.reserveDaily(amountUsd, binding);
     if (reservation === "skip") return null;
 
     let settled = false;
+    let preparedTx: { hash: `0x${string}`; serializedTransaction: `0x${string}` } | undefined;
+    const recoveryFor = (txRef: `0x${string}`): Aifp1PaymentRecovery => ({
+      ...budgetContext,
+      txRef,
+      ...(binding && typeof reservation === "string" ? { budgetReservationId: reservation } : {}),
+      ...(preparedTx?.hash === txRef ? { serializedTransaction: preparedTx.serializedTransaction } : {}),
+    });
     try {
+      if (
+        binding &&
+        typeof reservation === "string" &&
+        (!deps.prepareReservation || !deps.assertReservation || !deps.completeReservation)
+      ) {
+        throw new Aifp1QuoteError("Capped v1.4 payments require durable bound-journal ledger hooks before broadcast");
+      }
       // 4. Settle on-chain, then exchange the tx for a receipt.
       let settleParams: {
         merchantWallet: `0x${string}`;
@@ -1273,47 +1367,36 @@ export async function aifp1Fetch(
           ...(opts.v14
             ? {
                 onPrepared: async (tx: { hash: `0x${string}`; serializedTransaction: `0x${string}` }) => {
+                  if (
+                    !/^0x(?:[0-9a-fA-F]{2})+$/.test(tx.serializedTransaction) ||
+                    keccak256(tx.serializedTransaction) !== tx.hash
+                  ) {
+                    throw new Aifp1QuoteError("Prepared transaction hash disagrees with its signed bytes");
+                  }
+                  if (binding && typeof reservation === "string")
+                    await deps.prepareReservation!(reservation, tx.hash, binding);
                   await opts.v14!.onPrepared({
-                    apiBaseUrl: apiBase,
-                    quote,
-                    txRef: tx.hash,
-                    asset: paidAsset,
-                    chain,
-                    paymentIssuer: opts.paymentIssuer,
+                    ...recoveryFor(tx.hash),
                     serializedTransaction: tx.serializedTransaction,
                   });
+                  preparedTx = tx;
                 },
               }
             : {}),
         });
       } catch (error) {
-        if (error instanceof SettlementConfirmationPendingError && error.stage === "settlement") {
+        const pending = error instanceof SettlementConfirmationPendingError && error.stage === "settlement";
+        const provenRevert = error instanceof V14SettlementError && error.code === "V14_TRANSACTION_REVERTED";
+        if (pending || (preparedTx && !provenRevert)) {
           // Treat unknown confirmation as spent until reconciliation. Releasing
           // the reservation here would let a retry spend the same budget again.
           settled = true;
-          const recovery = {
-            apiBaseUrl: apiBase,
-            quote,
-            txRef: error.txHash,
-            asset: paidAsset,
-            chain,
-            paymentIssuer: opts.paymentIssuer,
-          };
-          try {
-            if (typeof reservation === "string") await deps.commit(reservation, amountUsd);
-          } catch {
-            throw new Aifp1PayError(
-              "payment broadcast; confirmation and budget reconciliation required",
-              error.txHash,
-              quote.quote_id,
-              recovery
-            );
-          }
+          const hash = pending ? error.txHash : preparedTx!.hash;
           throw new Aifp1PayError(
             "payment broadcast; recover its confirmation and receipt without paying again",
-            error.txHash,
+            hash,
             quote.quote_id,
-            recovery
+            recoveryFor(hash)
           );
         }
         throw error;
@@ -1330,18 +1413,22 @@ export async function aifp1Fetch(
           "payment settled; budget reconciliation and receipt recovery required",
           txRef,
           quote.quote_id,
-          {
-            apiBaseUrl: apiBase,
-            quote,
-            txRef,
-            asset: paidAsset,
-            chain,
-            paymentIssuer: opts.paymentIssuer,
-          }
+          recoveryFor(txRef)
         );
       }
 
-      const paid = await submitPayment(deps, apiBase, quote, txRef, paidAsset, chain, opts);
+      let paid: Aifp1PayResult;
+      try {
+        paid = await submitPayment(deps, apiBase, quote, txRef, paidAsset, chain, opts);
+        if (binding && typeof reservation === "string") await deps.completeReservation!(reservation, txRef, binding);
+      } catch (error) {
+        throw new Aifp1PayError(
+          error instanceof Error ? error.message : "Payment receipt/budget recovery required",
+          txRef,
+          quote.quote_id,
+          recoveryFor(txRef)
+        );
+      }
 
       // 6. Keep the batch. This is the whole point of the design: the next call
       // this receipt covers costs a header, not a transaction.
@@ -1383,14 +1470,7 @@ export async function aifp1Fetch(
           "payment settled and receipt cached; content request failed, retry without paying again",
           txRef,
           quote.quote_id,
-          {
-            apiBaseUrl: apiBase,
-            quote,
-            txRef,
-            asset: paidAsset,
-            chain,
-            paymentIssuer: opts.paymentIssuer,
-          }
+          recoveryFor(txRef)
         );
       }
       if (receiptResp.status === 402) {
@@ -1412,8 +1492,7 @@ export async function aifp1Fetch(
       });
       return receiptResp;
     } finally {
-      // Anything that did not move money gives the cap back now rather than
-      // waiting for the reservation to expire — same rule as call().
+      // Only a proven prebroadcast failure/reverted settlement gives the cap back.
       if (typeof reservation === "string" && !settled) await deps.release(reservation);
     }
   };
@@ -1431,19 +1510,16 @@ export async function aifp1Fetch(
 /** Trusted input only: neither a quote nor a receipt may choose a payment chain. */
 function authorizedV14Chain(chain: Aifp1V14Chain | undefined): Aifp1V14Chain {
   if (chain === undefined) return "polygon";
-  if (chain !== "polygon" && chain !== "base") throw new Aifp1QuoteError(`unsupported v1.4 chain "${chain}"`);
+  if (!paymentChain(chain)) throw new Aifp1QuoteError(`unsupported v1.4 chain "${chain}"`);
   return chain;
 }
 
 /** Native by default; stablecoin symbols must be pinned for the selected chain. */
 function pinnedStableAsset(asset: string | undefined, chain: Aifp1V14Chain): string | null {
-  if (asset === undefined || asset === (chain === "base" ? "ETH" : "POL")) return null;
-  const pinned = V14_DEPLOYMENTS[chain]?.splitter.assets.find((a) => a.symbol === asset);
+  if (asset === undefined || asset === paymentChain(chain)!.native) return null;
+  const pinned = paymentStableAsset(chain, asset);
   if (!pinned) {
-    throw new Aifp1QuoteError(
-      `v14.asset "${asset}" is not a stablecoin pinned for ${chain} v1.4 ` +
-        `(${(V14_DEPLOYMENTS[chain]?.splitter.assets ?? []).map((a) => a.symbol).join(", ") || "none"})`
-    );
+    throw new Aifp1QuoteError(`v14.asset "${asset}" is not a stablecoin pinned for ${chain} v1.4`);
   }
   return pinned.symbol;
 }
@@ -1451,8 +1527,8 @@ function pinnedStableAsset(asset: string | undefined, chain: Aifp1V14Chain): str
 /**
  * Check a v1.4 stablecoin quote before any budget is reserved. A token quote
  * has no FX to cross-check, so the binding is exact instead: the signed gross
- * equals the stated settlement units, which equal the stated USD amount in
- * 6-decimal micro-dollars; the token is the pinned one; the approval is for
+ * equals the pinned-decimal conversion of the stated USD micro-dollars;
+ * optional token metadata is checked in exact token units; the approval is for
  * exactly that gross; and the quote accepts nothing else.
  */
 function validateStableV14Quote(
@@ -1468,16 +1544,37 @@ function validateStableV14Quote(
   }
   const signed = call as V14SettlementCall;
   validateV14SettlementCall(signed, { orderId: quote.quote_id, payer });
-  const token = V14_DEPLOYMENTS[chain]?.splitter.assets.find((a) => a.symbol === asset)?.address;
+  const pin = paymentStableAsset(chain, asset);
+  const token = pin?.address;
   const merchant = quote.pay_to[chain] ?? quote.pay_to.evm;
   const q = signed.args.quote;
   let micro: bigint;
   try {
+    if (!/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,6})?$/.test(String(quote.amount))) throw new Error("non-exact USD amount");
     micro = parseUnits(String(quote.amount), 6);
   } catch {
     throw new Aifp1QuoteError(`quote ${quote.quote_id} has an unusable amount "${quote.amount}"`);
   }
-  const units = (quote as { settlement?: { total_units?: string } }).settlement?.total_units;
+  const units = quote.settlement?.total_units;
+  const gross = pin ? micro * 10n ** BigInt(pin.decimals - 6) : 0n;
+  const metadata = quote.token_settlement;
+  // Split the actual token gross, not the rounded legacy micro-dollar legs.
+  const treasury = gross / 100n;
+  if (
+    (pin?.decimals === 18 && metadata === undefined) ||
+    (metadata !== undefined &&
+      (!metadata ||
+        typeof metadata !== "object" ||
+        metadata.asset !== asset ||
+        metadata.token?.toLowerCase() !== token?.toLowerCase() ||
+        metadata.decimals !== pin?.decimals ||
+        metadata.settlement_semantics !== "gross-inclusive" ||
+        metadata.total_units !== String(gross) ||
+        metadata.merchant_units !== String(gross - treasury) ||
+        metadata.protocol_fee_units !== String(treasury) ||
+        metadata.creator_units !== "0"))
+  )
+    throw new Aifp1QuoteError("token_settlement disagrees with pinned token, decimals or exact gross-inclusive split");
   if (
     signed.chain !== chain ||
     signed.asset !== asset ||
@@ -1492,8 +1589,9 @@ function validateStableV14Quote(
     quote.accepted_assets.length !== 1 ||
     quote.accepted_assets[0] !== asset ||
     units === undefined ||
-    q.grossAmount !== units ||
-    BigInt(q.grossAmount) !== micro ||
+    units !== String(micro) ||
+    q.grossAmount !== String(gross) ||
+    gross >= 2n ** 256n ||
     micro <= 0n ||
     !signed.approval ||
     signed.approval.token.toLowerCase() !== token.toLowerCase() ||
@@ -1744,7 +1842,8 @@ async function verifyPaidReceipt(
     claims.scope !== quote.scope ||
     claims.resource !== quote.resource ||
     claims.chain !== chain ||
-    claims.asset !== asset ||
+    typeof claims.asset !== "string" ||
+    claims.asset.toUpperCase() !== asset.toUpperCase() ||
     claims.currency !== "USD" ||
     (claims.network_mode ?? "live") !== "live" ||
     Number(claims.amount) !== Number(quote.amount) ||

@@ -214,7 +214,7 @@ export type {
   PayOptions,
 } from "./facilitators/index.js";
 
-export { type SpendLedger, MemorySpendLedger, FileSpendLedger } from "./spendLedger.js";
+export { type SpendLedger, type SpendLedgerBinding, MemorySpendLedger, FileSpendLedger } from "./spendLedger.js";
 
 export { deriveWallet, newWallet } from "./wallet.js";
 export { getAgentHistory, getQuota, AGENT_RECEIPT_FIELDS, AGENT_TRANSACTION_FIELDS } from "./agentHistory.js";
@@ -228,5 +228,10 @@ export {
   checkV14Submittable,
   V14SettlementError,
   routeIdOf,
+  assertPreparedV14Recovery,
 } from "./settlementV14.js";
 export type { V14ExecutionContext, V14SettlementCall, V14Quote, V14ValidateOptions } from "./settlementV14.js";
+
+// Independent chain/native/gas/token descriptors, without activation authority.
+export { PAYMENT_CHAINS, paymentChain, paymentStableAsset } from "./paymentChains.js";
+export type { PaymentChain } from "./paymentChains.js";

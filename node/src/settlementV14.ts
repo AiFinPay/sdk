@@ -1,3 +1,10 @@
+import {
+  PAYMENT_CHAINS,
+  paymentChain,
+  paymentStableAsset,
+  pinnedTokenDecimals,
+  type PaymentChain,
+} from "./paymentChains.js";
 /**
  * B2BSplitter v1.4 settlement — the client half.
  *
@@ -21,6 +28,8 @@ import {
   encodeAbiParameters,
   decodeEventLog,
   recoverTypedDataAddress,
+  recoverTransactionAddress,
+  parseTransaction,
   isAddress,
   type PublicClient,
   type WalletClient,
@@ -322,6 +331,80 @@ const PROFILE_ABI = parseAbi([
   "function getProfile(bytes32) view returns ((uint16 treasuryBps,uint16 ipCreatorBps,bool enabled,uint64 configuredAt,address routeTreasury))",
 ]);
 
+/** Read-only recovery evidence. The independently configured owner chain wins;
+ * no clock/profile check here may invalidate an already broadcast payment. */
+export async function assertPreparedV14Recovery(
+  call: V14SettlementCall,
+  transaction: { hash: Hex; serializedTransaction: Hex },
+  expectedChain: PaymentChain,
+  payer: string,
+  orderId: string
+): Promise<void> {
+  const fail = () => {
+    throw new V14SettlementError(
+      "V14_RECOVERY_MISMATCH",
+      "Signed recovery evidence disagrees with owner chain, payer or pinned purchase; reconcile the original transaction"
+    );
+  };
+  if (!isAddress(payer)) return fail();
+  const descriptor = paymentChain(expectedChain);
+  const deployment = descriptor && V14_DEPLOYMENTS[expectedChain];
+  if (
+    !descriptor ||
+    !deployment ||
+    !call ||
+    call.chain !== expectedChain ||
+    call.splitter_version !== "1.4" ||
+    deployment.chainId !== descriptor.chainId ||
+    deployment.status !== "enabled" ||
+    !deployment.settlementEnabled ||
+    lc(call.contract) !== lc(deployment.splitter.address) ||
+    !/^0x02(?:[0-9a-fA-F]{2})+$/.test(transaction.serializedTransaction) ||
+    keccak256(transaction.serializedTransaction) !== transaction.hash
+  )
+    fail();
+  const q = call.args.quote;
+  // Shape/order/payer checks only: the quote may legitimately have expired after mining.
+  validateV14SettlementCall(call, { orderId, payer, nowMs: 0 });
+  const stable = lc(q.token) !== ZERO;
+  const pin = stable ? paymentStableAsset(expectedChain, call.asset) : undefined;
+  if (
+    call.route !== "merchant-aifp1" ||
+    lc(q.ipCreator) !== ZERO ||
+    call.arg_encoding !== "struct+signature" ||
+    call.function !== (stable ? STABLE_FUNCTION : NATIVE_FUNCTION) ||
+    (stable ? !pin || lc(pin.address) !== lc(q.token) : call.asset !== descriptor!.native) ||
+    (stable &&
+      (lc(call.approval?.token ?? "") !== lc(q.token) ||
+        lc(call.approval?.spender ?? "") !== lc(call.contract) ||
+        call.approval?.amount !== q.grossAmount))
+  )
+    fail();
+  const message = {
+    ...q,
+    grossAmount: BigInt(q.grossAmount),
+    validUntil: BigInt(q.validUntil),
+    nonce: BigInt(q.nonce),
+  };
+  const data = encodeFunctionData({
+    abi: EXECUTION_ABI,
+    functionName: stable ? "settleStable" : "settleNative",
+    args: [message, call.args.signature],
+  });
+  const signed = parseTransaction(transaction.serializedTransaction);
+  if (
+    signed.chainId !== descriptor!.chainId ||
+    lc(signed.to ?? "") !== lc(call.contract) ||
+    signed.data !== data ||
+    (signed.value ?? 0n) !== (stable ? 0n : message.grossAmount) ||
+    // The executor signs type2; the checked prefix narrows viem's serialized union.
+    lc(
+      await recoverTransactionAddress({ serializedTransaction: transaction.serializedTransaction as `0x02${string}` })
+    ) !== lc(payer)
+  )
+    fail();
+}
+
 export interface V14ExecutionContext {
   publicClient: PublicClient;
   walletClient: WalletClient;
@@ -331,8 +414,8 @@ export interface V14ExecutionContext {
   /** Independently authorized purchase, not defaults copied from settlement_call. */
   expectedMerchant?: Address;
   expectedGrossAmount?: bigint;
-  /** Trusted chain selected by the caller. Base must be explicit; legacy Polygon/Amoy callers remain valid. */
-  expectedChain?: "polygon" | "amoy" | "base";
+  /** Trusted chain selected by the caller. Every non-Polygon mainnet must be explicit; legacy Polygon/Amoy callers remain valid. */
+  expectedChain?: PaymentChain | "amoy";
   /** The token the purchase was authorized in; address(0) or omitted = selected native currency. */
   expectedToken?: Address;
   /** Native fee budget. Base includes buffered L1/operator estimates, which can vary before inclusion. */
@@ -410,10 +493,13 @@ export async function executeV14Settlement(
     fail("V14_CALL_MISMATCH", "route, method or quote field order disagrees with the supported ABI");
   }
   const expectedChain = ctx.expectedChain ?? (call.chain === "amoy" ? "amoy" : "polygon");
-  if (!["polygon", "amoy", "base"].includes(expectedChain) || call.chain !== expectedChain) {
+  if ((expectedChain !== "amoy" && !paymentChain(expectedChain)) || call.chain !== expectedChain) {
     fail("V14_CHAIN_MISMATCH", "signed chain does not match the independently authorized purchase");
   }
-  if (lc(q.ipCreator) !== ZERO || (!stable && call.asset !== (expectedChain === "base" ? "ETH" : "POL"))) {
+  if (
+    lc(q.ipCreator) !== ZERO ||
+    (!stable && call.asset !== (expectedChain === "amoy" ? "POL" : paymentChain(expectedChain)!.native))
+  ) {
     fail(
       "V14_UNSUPPORTED_ASSET",
       "This executor supports the selected native currency or a pinned stablecoin, without creator payments"
@@ -433,7 +519,8 @@ export async function executeV14Settlement(
     fail("V14_MALFORMED", "nonce metadata disagrees with signed quote");
   const deployment = V14_DEPLOYMENTS[call.chain];
   if (
-    !["polygon", "amoy", "base"].includes(call.chain) ||
+    (call.chain !== "amoy" && !paymentChain(call.chain)) ||
+    deployment?.chainId !== (call.chain === "amoy" ? 80002 : paymentChain(call.chain)?.chainId) ||
     !deployment ||
     deployment.status !== "enabled" ||
     !deployment.settlementEnabled ||
@@ -580,7 +667,7 @@ export async function executeV14Settlement(
     publicClient.getBalance({ address: ctx.account, blockTag: "pending" }),
   ]);
   const gas = (estimatedGas * 120n + 99n) / 100n;
-  const extraFee = await baseExtraFee(publicClient, deployment.chainId, data, gas);
+  const extraFee = await additionalChainFee(publicClient, deployment.chainId, data, gas);
   const transactionCost = gas * fees.maxFeePerGas + extraFee;
   if (
     gas <= 0n ||
@@ -719,7 +806,9 @@ async function ensureExactApproval(
     }),
   ]);
   if (!allowed) fail("V14_TOKEN_NOT_ALLOWED", "the splitter's tokenList no longer allows this token");
-  if (Number(decimals) !== 6) fail("V14_TOKEN_DECIMALS", "token decimals differ from the 6 the quote is priced in");
+  const expectedDecimals = pinnedTokenDecimals(deployment.network, token);
+  if (expectedDecimals === undefined || Number(decimals) !== expectedDecimals)
+    fail("V14_TOKEN_DECIMALS", "token decimals differ from the independent chain/address pin");
   if (held < gross) fail("V14_INSUFFICIENT_BALANCE", "token balance cannot cover the authorized gross");
   if (current >= gross) return 0n;
 
@@ -739,12 +828,18 @@ async function ensureExactApproval(
   ]);
   const gas = (estimated * 120n + 99n) / 100n;
   const [approvalExtra, settlementExtra] = await Promise.all([
-    baseExtraFee(publicClient, chainId, approveData, gas),
-    baseExtraFee(publicClient, chainId, settlementData, STABLE_SETTLE_GAS_BOUND),
+    additionalChainFee(publicClient, chainId, approveData, gas),
+    additionalChainFee(publicClient, chainId, settlementData, STABLE_SETTLE_GAS_BOUND),
   ]);
   const approvalCost = gas * fees.maxFeePerGas + approvalExtra;
   const worstCase = approvalCost + STABLE_SETTLE_GAS_BOUND * fees.maxFeePerGas + settlementExtra;
-  if (gas <= 0n || fees.maxFeePerGas <= 0n || worstCase > ctx.maxGasWei!) {
+  if (
+    gas <= 0n ||
+    fees.maxFeePerGas <= 0n ||
+    fees.maxPriorityFeePerGas < 0n ||
+    fees.maxPriorityFeePerGas > fees.maxFeePerGas ||
+    worstCase > ctx.maxGasWei!
+  ) {
     fail("V14_GAS_BUDGET_EXCEEDED", "approval plus settlement gas exceeds the operator gas budget");
   }
   if (native < worstCase) fail("V14_INSUFFICIENT_BALANCE", "native balance cannot cover approval and settlement gas");
@@ -779,15 +874,17 @@ async function ensureExactApproval(
   return approvalCost;
 }
 
-/** Base charges L1 data and operator fees outside the EIP-1559 execution fee.
+/** OP chains charge L1 data and operator fees outside the EIP-1559 execution fee.
  * The oracle owns the active fork's formula. Its unavailable/invalid response
  * blocks payment; zero is accepted only as an actual oracle result.
  * No access list is signed here. Calldata bytes + 512 conservatively covers
  * the entire unsigned EIP-1559 envelope (including maximal uint256 fields).
  * This is a buffered preflight estimate, not an inclusion-time fee guarantee.
  */
-async function baseExtraFee(client: PublicClient, chainId: number, data: Hex, gas: bigint): Promise<bigint> {
-  if (chainId !== 8453) return 0n;
+async function additionalChainFee(client: PublicClient, chainId: number, data: Hex, gas: bigint): Promise<bigint> {
+  // Nitro eth_estimateGas already includes parent-data gas. Never add the
+  // OP oracle estimate there; ordinary EVM chains also have no separate fee.
+  if (!Object.values(PAYMENT_CHAINS).some((c) => c.chainId === chainId && c.gasModel === "op")) return 0n;
   try {
     const oracle = "0x420000000000000000000000000000000000000F" as const;
     const abi = parseAbi([
@@ -810,7 +907,7 @@ async function baseExtraFee(client: PublicClient, chainId: number, data: Hex, ga
   } catch {
     throw new V14SettlementError(
       "V14_FEE_ESTIMATE_UNAVAILABLE",
-      "Base L1/operator fee estimate unavailable; refusing to sign"
+      "OP L1/operator fee estimate unavailable; refusing to sign"
     );
   }
 }

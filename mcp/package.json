@@ -1,8 +1,8 @@
 {
   "name": "@aifinpay/mcp",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "mcpName": "io.github.daochild/aifinpay",
-  "description": "AiFinPay MCP: persistent agent wallets, discovery and owner-enabled verified native Polygon v1.4 payments with durable receipt recovery.",
+  "description": "AiFinPay MCP: persistent agent wallets, discovery and owner-enabled verified EVM v1.4 payments with durable budget and receipt recovery.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

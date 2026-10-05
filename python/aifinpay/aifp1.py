@@ -9,7 +9,7 @@ Safety properties kept from Node:
 
 * only owner-listed HTTPS origins are paid;
 * the signed call must match the quote (merchant, amount, expiry, asset);
-* the caller chooses Polygon or Base; native POL/ETH uses an independent price;
+* the caller authorizes the EVM chain; its native asset uses an independent price;
 * a stablecoin quote must bind its gross exactly to the quoted dollars;
 * per-payment and rolling-24h USD limits are enforced before anything is signed;
 * the prepared transaction is journaled before it is sent, and an unknown
@@ -23,10 +23,15 @@ the chain client, the durable journal and the persisted spend ledger.
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import json
+import math
 import os
+import tempfile
+import threading
 import time
+import uuid
 from calendar import timegm
 from decimal import ROUND_CEILING, Decimal, InvalidOperation
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -36,11 +41,14 @@ import nacl.exceptions
 import nacl.signing
 import requests
 from eth_account.messages import encode_defunct
+from eth_utils import keccak
 
 from ._v14_deployments import V14_DEPLOYMENTS
+from .payment_chains import PAYMENT_CHAINS, pinned_token_decimals
 from .settlement_v14 import (
     SettlementConfirmationPending,
     V14ExecutionContext,
+    V14SettlementError,
     execute_v14_settlement,
     validate_v14_settlement_call,
 )
@@ -57,7 +65,7 @@ class Aifp1Error(Exception):
 
 
 class Aifp1QuoteError(Aifp1Error):
-    """Refused before any budget was reserved or anything was signed."""
+    """Purchase or recovery refused without authorizing another settlement."""
 
 
 class Aifp1PayError(Aifp1Error):
@@ -150,9 +158,9 @@ def _micro_usd(amount: Any) -> int:
 
 
 def _native_asset(chain: str) -> str:
-    if chain not in ("polygon", "base"):
-        raise Aifp1QuoteError("AIFP-1 supports only an explicitly selected Polygon or Base chain")
-    return "ETH" if chain == "base" else "POL"
+    if chain not in PAYMENT_CHAINS:
+        raise Aifp1QuoteError(f"unsupported explicitly selected AIFP-1 chain {chain!r}")
+    return PAYMENT_CHAINS[chain]["native"]
 
 
 def _merchant_address(quote: dict[str, Any], chain: str) -> str:
@@ -163,7 +171,7 @@ def _merchant_address(quote: dict[str, Any], chain: str) -> str:
 
 
 def _sane(usd: float, asset: str = "POL") -> bool:
-    return 0 < usd < (1_000_000 if asset == "ETH" else 1000)
+    return 0 < usd < (1000 if asset in ("POL", "XRP") else 100_000)
 
 
 def independent_pol_usd(session: requests.Session, polygon_rpc: str) -> Tuple[float, str]:
@@ -172,7 +180,7 @@ def independent_pol_usd(session: requests.Session, polygon_rpc: str) -> Tuple[fl
 
 
 def independent_native_usd(session: requests.Session, rpc: str, chain: str) -> tuple[float, str]:
-    """Independent POL or ETH spot price; never substitute the other chain's asset."""
+    """Independent native-asset spot price; never substitute another chain's asset."""
     asset = _native_asset(chain)
     errors = []
     if chain == "polygon":
@@ -201,7 +209,7 @@ def independent_native_usd(session: requests.Session, rpc: str, chain: str) -> t
     except Exception as e:  # noqa: BLE001
         errors.append(f"coinbase: {type(e).__name__}")
     try:
-        coin_id = "ethereum" if asset == "ETH" else "polygon-ecosystem-token"
+        coin_id = PAYMENT_CHAINS[chain]["coingeckoId"]
         r = session.get(
             f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}"
             "&vs_currencies=usd&include_last_updated_at=true",
@@ -224,7 +232,7 @@ def independent_native_usd(session: requests.Session, rpc: str, chain: str) -> t
 def _pinned_stable(asset: str, chain: str = "polygon") -> str:
     _native_asset(chain)
     for a in V14_DEPLOYMENTS[chain]["splitter"]["assets"]:
-        if a["symbol"] == asset:
+        if a["symbol"] == asset and pinned_token_decimals(chain, a["address"]) is not None:
             return a["address"]
     raise Aifp1QuoteError(f'asset "{asset}" is not a stablecoin pinned for {chain} v1.4')
 
@@ -232,7 +240,7 @@ def _pinned_stable(asset: str, chain: str = "polygon") -> str:
 def validate_stable_quote(
     quote: Dict[str, Any], asset: str, payer: str, expiry_s: int, chain: str = "polygon",
 ) -> int:
-    """The signed gross = settlement units = the quoted USD in micro-dollars. Returns it."""
+    """Bind USD micro-units to exact pinned token minor units; return USD micro-units."""
     call = quote.get("settlement_call") or {}
     if call.get("splitter_version") != "1.4":
         raise Aifp1QuoteError("a stablecoin purchase requires a signed v1.4 quote")
@@ -240,6 +248,25 @@ def validate_stable_quote(
     q = call["args"]["quote"]
     token = _pinned_stable(asset, chain)
     micro = _micro_usd(quote.get("amount"))
+    decimals = pinned_token_decimals(chain, token)
+    gross = micro * 10 ** (decimals - 6)
+    metadata = quote.get("token_settlement")
+    treasury = gross // 100
+    if (
+        (decimals == 18 and metadata is None)
+        or ("token_settlement" in quote and (
+            not isinstance(metadata, dict)
+            or metadata.get("asset") != asset
+            or str(metadata.get("token", "")).lower() != token.lower()
+            or type(metadata.get("decimals")) is not int or metadata.get("decimals") != decimals
+            or metadata.get("settlement_semantics") != "gross-inclusive"
+            or metadata.get("total_units") != str(gross)
+            or metadata.get("merchant_units") != str(gross - treasury)
+            or metadata.get("protocol_fee_units") != str(treasury)
+            or metadata.get("creator_units") != "0"
+        ))
+    ):
+        raise Aifp1QuoteError("token_settlement disagrees with pinned token, decimals or exact gross-inclusive split")
     approval = call.get("approval") or {}
     units = (quote.get("settlement") or {}).get("total_units")
     if (
@@ -253,8 +280,9 @@ def validate_stable_quote(
         or "native_settlement" in quote
         or quote.get("accepted_assets") != [asset]
         or units is None
-        or q["grossAmount"] != str(units)
-        or int(q["grossAmount"]) != micro
+        or units != str(micro)
+        or q["grossAmount"] != str(gross)
+        or gross >= 2**256
         or str(approval.get("token", "")).lower() != token.lower()
         or str(approval.get("spender", "")).lower() != call["contract"].lower()
         or str(approval.get("amount")) != q["grossAmount"]
@@ -291,6 +319,7 @@ def validate_native_quote(
         or q["merchant"].lower() != _merchant_address(quote, chain).lower()
         or q["grossAmount"] != total
         or int(q["validUntil"]) != expiry_s
+        or "token_settlement" in quote
         or native.get("settlement_semantics") != "gross-inclusive"
         or int(native.get("creator_wei", -1)) != 0
         or treasury != gross // 100
@@ -364,7 +393,7 @@ def verify_paid_receipt(
         or claims.get("scope") != quote.get("scope")
         or claims.get("resource") != quote.get("resource")
         or claims.get("chain") != chain
-        or claims.get("asset") != asset
+        or not isinstance(claims.get("asset"), str) or claims["asset"].upper() != asset.upper()
         or claims.get("currency") != "USD"
         or (claims.get("network_mode") or "live") != "live"
         or not amounts_match
@@ -463,36 +492,271 @@ def submit_payment(
 # ── Budget ──────────────────────────────────────────────────────────────────
 
 
-class SpendLedger:
-    """Per-payment and rolling-24h USD limits, optionally persisted (mode 600)."""
+def _durable_directory(path: str) -> None:
+    """Persist each newly created private directory and its parent entry."""
+    directory = os.path.abspath(path)
+    missing = []
+    while not os.path.exists(directory):
+        missing.append(directory)
+        directory = os.path.dirname(directory)
+    for created in reversed(missing):
+        try:
+            os.mkdir(created, mode=0o700)
+        except FileExistsError:
+            if not os.path.isdir(created):
+                raise
+    # Existing entries may come from a concurrent creator or an earlier failed
+    # sync. Persist the ancestry too; existence alone is not durable evidence.
+    directory = os.path.abspath(path)
+    while True:
+        fd = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        parent = os.path.dirname(directory)
+        if parent == directory:
+            break
+        directory = parent
 
-    def __init__(self, per_payment_usd: float, daily_usd: float, path: Optional[str] = None):
-        if not (per_payment_usd > 0 and daily_usd > 0):
-            raise ValueError("spending limits must be positive")
+
+def _write_private_json(path: str, data: Dict[str, Any]) -> None:
+    """Durably replace an owner-only JSON file; callers hold the budget lock."""
+    directory = os.path.dirname(os.path.abspath(path))
+    fd, temporary = tempfile.mkstemp(prefix=f".{os.path.basename(path)}.", suffix=".tmp", dir=directory)
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f, allow_nan=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, path)
+        directory_fd = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(temporary)
+
+
+def _budget_binding(quote: Dict[str, Any], payer: str, chain: str, asset: str,
+                    api_base: str, issuer: str) -> Dict[str, str]:
+    signed = quote["settlement_call"]["args"]["quote"]
+    return {
+        "api_base": api_base.rstrip("/"), "issuer": issuer, "payer": payer.lower(),
+        "merchant_id": quote["merchant_id"], "scope": quote["scope"], "resource": quote["resource"],
+        "network_mode": quote.get("network_mode") or "live", "chain": chain, "asset": asset,
+        "token": signed["token"].lower(), "gross_amount": signed["grossAmount"], "quote_id": quote["quote_id"],
+    }
+
+
+def _prepared_hash(serialized: str) -> str:
+    try:
+        if not isinstance(serialized, str) or not serialized.startswith("0x"):
+            raise ValueError()
+        raw = bytes.fromhex(serialized[2:])
+        if not raw:
+            raise ValueError()
+        return "0x" + keccak(raw).hex()
+    except ValueError:
+        raise Aifp1QuoteError("recovery transaction is not a serialized signed transaction") from None
+
+
+class SpendLedger:
+    """Atomic reserve/confirm/release across processes sharing one local journal.
+
+    Unknown broadcasts do not expire. Confirmed debits follow the 24-hour
+    window, but an unresolved receipt retains its purchase guard. ``check``
+    is advisory; a payment must use ``reserve`` before signing. ``record``
+    remains available for recording legacy actual debits, not authorization.
+    """
+
+    def __init__(self, per_payment_usd: Optional[float], daily_usd: Optional[float], path: Optional[str] = None):
+        # Both absent is a reconciliation-only view, never payment authorization.
+        if (per_payment_usd, daily_usd) != (None, None) and not all(
+            self._positive(v) for v in (per_payment_usd, daily_usd)
+        ):
+            raise ValueError("spending limits must be finite and positive")
         self.per_payment_usd = per_payment_usd
         self.daily_usd = daily_usd
-        self.path = path
+        self.path = os.path.abspath(path) if path else None
+        self._lock = threading.RLock()
+        self._memory: Dict[str, Any] = {"version": 2, "spend": [], "reservations": []}
         self.spend: List[Dict[str, float]] = []
-        if path and os.path.exists(path):
-            with open(path) as f:
-                self.spend = json.load(f).get("spend", [])
+        with self._state():
+            pass  # Validate existing state without resetting malformed/unknown data.
 
-    def spent_24h(self) -> float:
+    @staticmethod
+    def _positive(value: Any) -> bool:
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value > 0
+
+    @staticmethod
+    def _valid_binding(binding: Any) -> bool:
+        fields = {"api_base", "issuer", "payer", "merchant_id", "scope", "resource", "network_mode",
+                  "chain", "asset", "token", "gross_amount", "quote_id"}
+        return (isinstance(binding, dict) and set(binding) == fields
+                and all(isinstance(v, str) and v for v in binding.values()))
+
+    def _read(self) -> Dict[str, Any]:
+        if not self.path or not os.path.exists(self.path):
+            return self._memory if not self.path else {"version": 2, "spend": [], "reservations": []}
+        try:
+            with open(self.path) as f:
+                data = json.load(f)
+            if (not isinstance(data, dict) or ("version" in data and (
+                type(data["version"]) is not int or data["version"] != 2
+            ))):
+                raise ValueError()
+            # The exact old {spend:[{at,usd}]} format migrates without losing entries.
+            if "version" not in data and set(data) != {"spend"}:
+                raise ValueError()
+            if "version" in data and set(data) != {"version", "spend", "reservations"}:
+                raise ValueError()
+            spend, reservations = data["spend"], data.get("reservations", [])
+            if not isinstance(spend, list) or not isinstance(reservations, list):
+                raise ValueError()
+            for entry in spend + reservations:
+                if not isinstance(entry, dict) or not self._positive(entry.get("usd")) or not self._positive(entry.get("at")):
+                    raise ValueError()
+                if "id" in entry and (not isinstance(entry["id"], str) or not entry["id"]
+                                      or not self._valid_binding(entry.get("binding"))):
+                    raise ValueError()
+            ids = [e["id"] for e in spend if "id" in e]
+            if len(ids) != len(set(ids)):
+                raise ValueError()
+            reservation_ids = []
+            for entry in reservations:
+                reservation_ids.append(entry["id"])
+                if (not isinstance(entry["purchase_key"], str) or not entry["purchase_key"]
+                        or type(entry["confirmed"]) is not bool
+                        or (entry["tx_ref"] is not None and not isinstance(entry["tx_ref"], str))):
+                    raise ValueError()
+                debit = next((e for e in spend if e.get("id") == entry["id"]), None)
+                if bool(debit) != entry["confirmed"] or (debit and any(
+                    debit.get(k) != entry.get(k) for k in ("usd", "tx_ref", "binding", "purchase_key")
+                )):
+                    raise ValueError()
+            if len(reservation_ids) != len(set(reservation_ids)):
+                raise ValueError()
+            return {"version": 2, "spend": spend, "reservations": reservations}
+        except (ValueError, TypeError, KeyError):
+            raise Aifp1QuoteError("spending ledger is malformed or unsupported; refusing to reset the budget") from None
+
+    @contextlib.contextmanager
+    def _state(self, write: bool = False):
+        with self._lock:
+            lock_fd = None
+            if self.path:
+                try:
+                    import fcntl
+                except ImportError:
+                    raise Aifp1QuoteError("durable spending limits require operating-system file locking") from None
+                _durable_directory(os.path.dirname(self.path))
+                lock_fd = os.open(self.path + ".lock", os.O_WRONLY | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+                try:
+                    fcntl.flock(lock_fd, fcntl.LOCK_EX)
+                except Exception:
+                    os.close(lock_fd)
+                    raise
+            try:
+                data = self._read()
+                yield data
+                if write and self.path:
+                    _write_private_json(self.path, data)
+                self.spend = data["spend"]
+            finally:
+                if lock_fd is not None:
+                    os.close(lock_fd)  # Kernel releases the lock even after process death.
+
+    @staticmethod
+    def _total(data: Dict[str, Any]) -> Decimal:
         cutoff = time.time() - 86400
-        return sum(e["usd"] for e in self.spend if e["at"] >= cutoff)
+        debits = [e["usd"] for e in data["spend"] if e["at"] >= cutoff]
+        outstanding = [e["usd"] for e in data["reservations"] if not e["confirmed"]]
+        return sum((Decimal(str(v)) for v in debits + outstanding), Decimal(0))
 
-    def check(self, usd: float) -> None:
-        if usd > self.per_payment_usd:
+    def _check(self, data: Dict[str, Any], usd: float) -> None:
+        if self.per_payment_usd is None or self.daily_usd is None:
+            raise Aifp1QuoteError("owner spending limits are required to authorize a new payment")
+        if not self._positive(usd):
+            raise Aifp1QuoteError("payment cost must be finite and positive")
+        if Decimal(str(usd)) > Decimal(str(self.per_payment_usd)):
             raise Aifp1QuoteError(f"batch costs ${usd:.6f}, above the per-payment limit ${self.per_payment_usd}")
-        if self.spent_24h() + usd > self.daily_usd:
+        if self._total(data) + Decimal(str(usd)) > Decimal(str(self.daily_usd)):
             raise Aifp1QuoteError("the 24-hour spending limit would be exceeded")
 
+    def spent_24h(self) -> float:
+        with self._state() as data:
+            return float(self._total(data))
+
+    def check(self, usd: float) -> None:
+        with self._state() as data:
+            self._check(data, usd)
+
+    def reserve(self, usd: float, binding: Dict[str, str]) -> str:
+        if not self._valid_binding(binding):
+            raise Aifp1QuoteError("a spending reservation requires the exact authorized purchase binding")
+        # Chain/token remain in the exact binding. The access key intentionally
+        # excludes them: changing rail/asset must not duplicate unresolved access.
+        purchase_key = hashlib.sha256(json.dumps(
+            [binding[k] for k in ("api_base", "issuer", "payer", "merchant_id", "scope", "resource", "network_mode")],
+            separators=(",", ":"),
+        ).encode()).hexdigest()
+        with self._state(write=True) as data:
+            if any(e["purchase_key"] == purchase_key for e in data["reservations"]):
+                raise Aifp1QuoteError("this purchase is unresolved; recover the journaled payment before buying again")
+            self._check(data, usd)
+            reservation_id = uuid.uuid4().hex
+            data["reservations"].append({
+                "id": reservation_id, "at": time.time(), "usd": usd, "binding": dict(binding),
+                "purchase_key": purchase_key, "tx_ref": None, "confirmed": False,
+            })
+            return reservation_id
+
+    def prepared(self, reservation_id: str, tx_ref: str, binding: Dict[str, str]) -> None:
+        with self._state(write=True) as data:
+            entry = next((e for e in data["reservations"] if e["id"] == reservation_id), None)
+            if not entry or entry["binding"] != binding or entry["tx_ref"] not in (None, tx_ref):
+                raise Aifp1QuoteError("prepared transaction disagrees with its spending reservation")
+            entry["tx_ref"] = tx_ref
+
+    def assert_recovery(self, reservation_id: str, tx_ref: str, binding: Dict[str, str]) -> None:
+        with self._state() as data:
+            self._bound_entry(data, reservation_id, tx_ref, binding)
+
+    @staticmethod
+    def _bound_entry(data: Dict[str, Any], reservation_id: str, tx_ref: str, binding: Dict[str, str]) -> Dict[str, Any]:
+        original = next((e for e in data["reservations"] if e["id"] == reservation_id), None) or next(
+            (e for e in data["spend"] if e.get("id") == reservation_id), None
+        )
+        if not original or original.get("binding") != binding or original.get("tx_ref") != tx_ref:
+            raise Aifp1QuoteError("receipt recovery disagrees with its spending reservation")
+        return original
+
+    def confirm(self, reservation_id: str, tx_ref: str, binding: Dict[str, str], *, complete: bool = False) -> None:
+        with self._state(write=True) as data:
+            entry = next((e for e in data["reservations"] if e["id"] == reservation_id), None)
+            debit = next((e for e in data["spend"] if e.get("id") == reservation_id), None)
+            self._bound_entry(data, reservation_id, tx_ref, binding)
+            if not debit:
+                data["spend"].append({**entry, "at": time.time(), "confirmed": True})
+            if entry:
+                entry["confirmed"] = True
+            if complete:
+                data["reservations"] = [e for e in data["reservations"] if e["id"] != reservation_id]
+
+    def release(self, reservation_id: str) -> None:
+        with self._state(write=True) as data:
+            if any(e.get("id") == reservation_id for e in data["spend"]):
+                raise Aifp1QuoteError("a confirmed payment debit cannot be released")
+            data["reservations"] = [e for e in data["reservations"] if e["id"] != reservation_id]
+
     def record(self, usd: float) -> None:
-        self.spend.append({"at": time.time(), "usd": usd})
-        if self.path:
-            fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "w") as f:
-                json.dump({"spend": self.spend[-1000:]}, f)
+        if not self._positive(usd):
+            raise Aifp1QuoteError("recorded spending must be finite and positive")
+        with self._state(write=True) as data:
+            data["spend"].append({"at": time.time(), "usd": usd})
 
 
 # ── The purchase ────────────────────────────────────────────────────────────
@@ -516,7 +780,7 @@ def aifp1_fetch(
     on_prepared: Callable[[Dict[str, Any]], None],
     receipts: Dict[str, List[Dict[str, Any]]],
     asset: str | None = None,
-    chain: str = "polygon",
+    chain: Optional[str] = None,
     scope: str = "prefix",
     api_base: str = DEFAULT_API_BASE,
     issuer: str = DEFAULT_API_BASE,
@@ -530,6 +794,8 @@ def aifp1_fetch(
     "prefix" by default for the same reason as in Node: an "exact" batch per URL
     costs the $0.10 floor and a transaction for every distinct page.
     """
+    requested_chain = chain
+    chain = "polygon" if chain is None else chain
     native_asset = _native_asset(chain)
     asset = native_asset if asset is None else asset
     stable = asset != native_asset
@@ -569,7 +835,7 @@ def aifp1_fetch(
         "merchant_id": merchant_id, "payer": account.address, "scope": scope,
         **({} if scope == "merchant" else {"resource": want_resource}),
         "units": units or default_units_for(challenge), **({"agent_id": agent_id} if agent_id else {}),
-        "asset": asset,
+        "asset": asset, **({"settlement_chain": chain} if requested_chain is not None else {}),
     }, timeout=15, allow_redirects=False)
     if not r.ok:
         raise Aifp1QuoteError(f"POST /v1/quote → {r.status_code}: {r.text[:300]}")
@@ -598,16 +864,22 @@ def aifp1_fetch(
         native_usd, _source = independent_native_usd(session, polygon_rpc, chain)
         amount_usd = validate_native_quote(quote, account.address, expiry_s, native_usd, chain)
         paid_asset = native_asset
-    ledger.check(amount_usd)
-
     call = quote["settlement_call"]
     q = call["args"]["quote"]
+    binding = _budget_binding(quote, account.address, chain, paid_asset, api_base, issuer)
+    reservation_id = ledger.reserve(amount_usd, binding)
     recovery = {"api_base": api_base, "issuer": issuer, "quote": quote, "tx_ref": None, "asset": paid_asset,
-                "chain": chain}
+                "chain": chain, "budget_reservation_id": reservation_id}
+    prepared = False
 
     def journal(tx: Dict[str, str]) -> None:
+        nonlocal prepared
+        if _prepared_hash(tx["serialized_transaction"]) != tx["hash"]:
+            raise Aifp1QuoteError("prepared transaction hash disagrees with its signed bytes")
+        ledger.prepared(reservation_id, tx["hash"], binding)
         recovery["tx_ref"] = tx["hash"]
         on_prepared({**recovery, "serialized_transaction": tx["serialized_transaction"]})
+        prepared = True
 
     ctx = V14ExecutionContext(
         client=client, account=account, order_id=quote["quote_id"], expected_merchant=_merchant_address(quote, chain),
@@ -617,13 +889,25 @@ def aifp1_fetch(
     try:
         result = execute_v14_settlement(call, ctx)
     except SettlementConfirmationPending as e:
-        ledger.record(amount_usd)  # treat as spent until reconciled; never pay again
         recovery["tx_ref"] = e.tx_hash
         raise Aifp1PayError("payment broadcast; recover its receipt without paying again",
                             e.tx_hash, quote["quote_id"], recovery)
-    ledger.record(amount_usd)
+    except Exception as e:
+        if not prepared or (isinstance(e, V14SettlementError) and e.code == "V14_TRANSACTION_REVERTED"):
+            ledger.release(reservation_id)  # No settlement debit; approval/revert gas has its separate cap.
+            raise
+        raise Aifp1PayError("settlement outcome unknown; preserve its spending reservation and recover",
+                            recovery["tx_ref"], quote["quote_id"], recovery) from e
     recovery["tx_ref"] = result["hash"]
-    paid = submit_payment(session, account, recovery, agent_id=agent_id)
+    try:
+        ledger.confirm(reservation_id, result["hash"], binding)
+        paid = submit_payment(session, account, recovery, agent_id=agent_id)
+        ledger.confirm(reservation_id, result["hash"], binding, complete=True)
+    except Aifp1PayError:
+        raise
+    except Exception as e:
+        raise Aifp1PayError("payment settled; recover its receipt and spending journal without paying again",
+                            result["hash"], quote["quote_id"], recovery) from e
     held.append({"jwt": paid["receipt"], "expires_at": _iso_to_unix(paid["expires_at"]), "scope": paid["scope"],
                  "resource": paid["resource"], "receipt_id": paid["receipt_id"], "unit_quota": paid["unit_quota"]})
     return session.get(url, headers={"AIFP-Receipt": paid["receipt"]}, timeout=30, allow_redirects=False)

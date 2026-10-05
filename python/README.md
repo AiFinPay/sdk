@@ -1,9 +1,9 @@
 # aifinpay-agent (Python)
 
-Version `2.3.2`: agent identity (EVM and Solana addresses from one seed), native
+Version `2.4.0` (source candidate): agent identity (EVM and Solana addresses from one seed), native
 request authentication, linking an agent to its owner's dashboard, and paying
 AiFinPay merchants (`fetch_paid`, AIFP-1 on Polygon v1.4 in POL or USDC,
-or explicitly selected Base v1.4 in ETH or USDC).
+or explicitly selected EVM v1.4 networks).
 
 Canonical domain **aifinpay.io**. A
 wallet address alone does not mean a payment route is enabled. The keypair is
@@ -80,8 +80,20 @@ ETH uses independent ETH/USD prices from Coinbase, falling back to a fresh
 CoinGecko quote. The SDK rejects a quote with another chain, native asset,
 token address or receipt chain. It uses Base's pinned USDC address; a token
 named USDC on another chain does not authorize a Base payment. Omitting `chain`
-keeps Polygon behavior, even if a merchant advertises Base. Other EVM chains
-are not enabled by this change.
+keeps Polygon behavior, even if a merchant advertises another network.
+
+The same `chain` option accepts polygon, base, optimism, arbitrum, avalanche, bnb,
+unichain, xrplevm and robinhood. Every non-Polygon network requires an explicit
+`max_gas_wei` in that network's native units. Configure other RPCs with constructor
+`evm_rpc_urls={"bnb": "https://..."}`; existing polygon_rpc/base_rpc options remain.
+Native prices use POL/ETH/AVAX/BNB/XRP. OP oracle fees are budgeted separately;
+Nitro gas estimates already include parent-data costs. Address/decimal-pinned
+stablecoins bind USD micro-units to exact6/18-decimal token units through additive
+`token_settlement` (required for18dp); every leg and the exact approval are checked.
+XRPL EVM currently supports native XRP only. These are client capabilities;
+merchant authorization, backend readiness and per-chain paid acceptance are required
+before production activation. Admin fee profiles remain mutable; preflight checks
+current profiles and the existing receipt/recovery policy is preserved.
 
 Every settlement is journaled to `journal_dir` (default `~/.aifinpay/journal`,
 mode 600) before it is sent. If the outcome is unknown, `Aifp1PayError` carries
@@ -89,6 +101,28 @@ mode 600) before it is sent. If the outcome is unknown, `Aifp1PayError` carries
 New journals preserve the explicitly selected chain; older journals without
 it remain Polygon-only. Recovery can fetch a receipt after the original quote
 expires when the existing transaction settled in time.
+
+Processes using the same local journal directory share one atomic USD budget.
+The SDK reserves the validated debit under an operating-system file lock before
+approval or settlement signing, then replaces and fsyncs the ledger atomically.
+Unknown broadcasts retain their reservation beyond24hours. Once the chain confirms
+the payment, the debit follows the24-hour window; the purchase remains blocked
+until its receipt is verified. A receipt or HTTP failure never refunds a confirmed
+debit. A proven prebroadcast failure or reverted settlement releases the gross
+reservation; transaction gas remains subject to its separate native-wei budget.
+The purchase guard covers the same issuer/API, payer, merchant and resource scope
+across payment rails, so changing chain or token cannot buy unresolved access again.
+
+`recover_paid` binds the adjacent `spend.json` reservation to the payer, original
+purchase, chain/token/gross and hash derived from the signed transaction bytes.
+It commits the debit once and unlocks only that purchase after a verified receipt.
+Legacy confirmed-spend files and Polygon journals migrate without losing entries.
+**Do not downgrade to an older SDK with pending2.4 reservations**: older releases
+ignore the new reservation state. Reconcile outstanding transactions first.
+Malformed/unknown ledgers and unavailable OS file locking refuse payment; no empty
+budget fallback is used. These locks cover processes on one local filesystem;
+they do not establish a budget shared across separate hosts. The in-memory ledger
+used by lower-level callers is shared only within that ledger instance.
 
 ## Link the agent to its owner's dashboard
 
@@ -146,7 +180,7 @@ entitled to it. Paying for access is `fetch_paid` (above).
 
 - **The server never sees your private key.** Period.
 - Nonces are consumed on use; replay-resistant.
-- All payments are public and on-chain (Polygon or explicitly selected Base).
+- All payments are public and on-chain (the explicitly selected EVM network).
 
 ## License
 

@@ -4,7 +4,10 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Version **2.5.0**. Owner-enabled v1.4 purchases with `payable_fetch` are
+Version **2.6.0** is prepared in this checkout, requiring agent2.4.0 and canonical skill2.7.0.
+The published baseline checked2026-10-04 was MCP2.5.0. Package publication and
+real registry dependency/lock refresh remain release gates; a source-cohort
+build does not prove those steps. Owner-enabled v1.4 purchases with `payable_fetch` are
 released: on Polygon since 2.2.0, on Base (ETH or USDC) since 2.5.0; site-wide
 batches with `scope: "merchant"` since 2.4.1. Without payment configuration the server keeps
 its inspection-only tool inventory.
@@ -49,8 +52,9 @@ POL for gas: an exact-amount token approval plus the settlement, both within
 
 ### Paying on another chain
 
-`AIFINPAY_PAY_CHAIN` picks the chain `payable_fetch` settles on: `polygon`
-(default) or `base`. Only the owner sets it, and a merchant is paid on a chain
+`AIFINPAY_PAY_CHAIN` explicitly picks the chain `payable_fetch` settles on:
+`polygon` by default, or an exact supported name in the capability list below.
+Only the owner sets it, and a merchant is paid on a chain
 only if its quote is for that chain; a quote for any other chain is refused,
 never followed. On Base the batch is paid in ETH (or `AIFINPAY_PAY_ASSET:
 "USDC"`) and gas is ETH, so the cap is `AIFINPAY_MAX_GAS`, in ETH:
@@ -65,8 +69,8 @@ never followed. On Base the batch is paid in ETH (or `AIFINPAY_PAY_ASSET:
 `AIFINPAY_MAX_GAS` is the gas cap in the pay chain's native currency;
 `AIFINPAY_MAX_GAS_POL` remains accepted on Polygon and is refused on Base rather
 than read as ETH (0.3 POL is about $0.04; 0.3 ETH is several hundred dollars).
-On Base the worst case includes the L1 data fee, typically well under 0.0001 ETH
-for one settlement. The wallet's EVM address is the same on every chain, so
+On Base the worst case includes L1 data and operator fees; the owner must set
+the cap from the current estimate. The wallet's EVM address is the same on every chain, so
 fund it with ETH on Base, not on Ethereum mainnet. `AIFINPAY_RPC_URL` optionally
 replaces the chain's public RPC (`https://mainnet.base.org`,
 `https://polygon.drpc.org`).
@@ -94,9 +98,10 @@ owner can add it.
 ### Network access
 
 A sandbox that allowlists outbound hosts must allow `api.aifinpay.io` (quotes and
-receipts) and an RPC for the pay chain. The independent POL/USD or ETH/USD rate
-comes from Chainlink on that chain over the same RPC, then `api.coinbase.com`,
-then `api.coingecko.com`; one of them is enough. If none answers, `payable_fetch` stops before paying and
+receipts) and an RPC for the pay chain. The independent native/USD rate
+uses the pinned Chainlink feed on Polygon/Base, then `api.coinbase.com`,
+then `api.coingecko.com`; other chains use those HTTP price sources.
+If none provides a valid fresh rate, `payable_fetch` stops before paying and
 the error names each host it tried.
 
 ## Link the agent to its owner's dashboard
@@ -197,7 +202,7 @@ A client configuration can use the keystore without embedding its secret:
   "mcpServers": {
     "aifinpay": {
       "command": "npx",
-      "args": ["-y", "@aifinpay/mcp@2.5.0"],
+      "args": ["-y", "@aifinpay/mcp"],
       "env": {
         "AIFINPAY_AGENTS_FILE": "/absolute/project/aifinpay/agents.json",
         "AIFINPAY_AGENT_ID": "research-agent"
@@ -239,20 +244,23 @@ snapshot. Verify `agent_address` against the wallet you intend to use.
 | `AIFINPAY_MAX_USD`           | —                     | Per-payment USD cap for `payable_fetch`; required when payments are enabled.          |
 | `AIFINPAY_GATEWAY_ORIGINS`   | —                     | Comma-separated exact HTTPS origins the agent may pay; required with payments.        |
 | `AIFINPAY_GATEWAY_PATH_MODE` | `gateway`             | Use `gateway` for merchant-slug identity or `direct` for full request-path identity.  |
-| `AIFINPAY_PAY_CHAIN`         | `polygon`             | Chain `payable_fetch` settles on: `polygon` or `base`.                                |
-| `AIFINPAY_MAX_GAS`           | —                     | Gas cap per payment in the pay chain's native currency (POL, ETH).                    |
+| `AIFINPAY_PAY_CHAIN`         | `polygon`             | Owner-selected EVM chain; see the2.6.0 source capability list.                                |
+| `AIFINPAY_MAX_GAS`           | —                     | Gas cap per payment in the pay chain's native currency (POL, ETH, AVAX, BNB, XRP).                    |
 | `AIFINPAY_RPC_URL`           | chain's public RPC    | HTTPS RPC for the pay chain.                                                          |
 | `AIFINPAY_CLAIM_ORIGINS`     | AiFinPay dashboards   | Exact origins `agent_claim_self` may link the agent to.                               |
 
-`agent_history({address, source:"transactions"})` reads indexed Polygon
-settlements; `source:"receipts"` reads retained batches, including test-mode
+`agent_history({address, source:"transactions", network:"polygon"})` reads
+indexed settlements for that network when the backend's durable indexer serves
+it. The dated production baseline has Polygon indexing; another client chain
+descriptor alone does not prove history coverage. `source:"receipts"` reads retained batches, including test-mode
 payments. Pass `passport` instead of, or alongside, `address` to resolve a
 public passport first. A backend without the passport resolver cannot satisfy
 passport-only queries. No secret API key is needed for public metadata.
 
 Responses do not include bearer receipts. Limits are 1..100; follow
 `next_offset`. History source/coverage is explicit: it is not a full wallet
-explorer. Dev networks currently use receipt history, not the Polygon ledger.
+explorer. Test-mode indexing depends on backend capabilities; retained receipt
+history is a separate source and does not establish mainnet activation.
 
 ```
 const { server } = await createServer(loadConfigFromEnv());
@@ -285,3 +293,35 @@ executor; this MCP does not expose Amoy paid receipt purchases.
 ## License
 
 MIT.
+
+
+## Additional EVM networks in the 2.6.0 source candidate
+
+Owner `AIFINPAY_PAY_CHAIN` accepts polygon, base, optimism, arbitrum, avalanche,
+bnb, unichain, xrplevm and robinhood. `AIFINPAY_MAX_GAS` is in the selected native
+POL/ETH/AVAX/BNB/XRP currency; the legacy POL cap applies only on Polygon. Assets
+must be pinned for that chain, including BNB 18-decimal USDC/USDT and Robinhood
+18-decimal USDe/6-decimal USDG. XRPL EVM has native XRP only. Metadata comes from
+agent 2.4.0; the backend must still authorize and serve that merchant/network.
+Source support does not activate networks in production. Pending journals retain
+the original chain and are recovered without another settlement. A legacy
+missing-chain journal is adopted only when the owner-configured chain and the
+actual signed transaction's chain ID, payer, pinned target and exact call agree.
+Insufficient evidence requires manual receipt reconciliation. A later quote
+expiry does not invalidate receipt recovery for an existing payment.
+
+Release order: publish reviewed canonical skill2.7.0 and agent2.4.0, refresh MCP
+dependencies and lock from those real registry releases, pass standalone MCP
+CI, then publish MCP2.6.0. This candidate is tested against fresh source-packed
+agent2.4.0 and skill2.7.0. The existing registry entries remain until publication;
+no npm integrity/resolution is fabricated. An old2.3.x agent cannot build the
+new descriptor/helper imports, and old skill2.6.0 cannot satisfy the exact
+release-target guard. Hosted MCP CI remains blocked by those real inputs until
+the lock is refreshed. Source-cohort evidence is recorded separately. Never
+publish the candidate with the old registry dependency lock.
+
+Use one shared local filesystem for a wallet's ledger/journal and reconcile
+pending transactions before downgrading. Node 2.4 reservations never expire for
+an unknown outcome; receipt failures never refund confirmed spend. Older SDK
+versions can expire or reset this state. Custom capped v1.4 ledger adapters need
+the new bound preparation/recovery/completion hooks; absence refuses payment.

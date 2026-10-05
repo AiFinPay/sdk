@@ -1,4 +1,10 @@
-import { Aifp1SettlementUnsupportedError, parseGatewayUrl, type Aifp1CachedReceipt } from "@aifinpay/agent";
+import {
+  Aifp1SettlementUnsupportedError,
+  assertPreparedV14Recovery,
+  parseGatewayUrl,
+  type Aifp1CachedReceipt,
+  type V14SettlementCall,
+} from "@aifinpay/agent";
 import type { ToolContext } from "../server.js";
 import { validatePaymentConfig } from "../config.js";
 import { PaymentStateError, type PaymentState } from "../payment-state.js";
@@ -14,7 +20,7 @@ export function payableFetchTool() {
   return {
     name: "payable_fetch",
     description:
-      'Fetch a GET resource from an owner-approved AiFinPay merchant. Buys a prepaid batch through verified v1.4 on the chain the owner set in AIFINPAY_PAY_CHAIN (Polygon by default, or Base) — in its native currency (POL, ETH), or in the stablecoin the owner set in AIFINPAY_PAY_ASSET (e.g. USDC; gas is still native) — within owner limits, then reuses its receipt. With scope "merchant" one batch covers every path on the site. Pending payments are recovered without sending another transaction. Other payment protocols are unsupported.',
+      'Fetch a GET resource from an owner-approved AiFinPay merchant. Buys a prepaid batch through verified v1.4 on the chain the owner set in AIFINPAY_PAY_CHAIN (Polygon by default; other EVM chains require explicit owner selection) — in its native currency (POL, ETH, AVAX, BNB or XRP), or in the stablecoin the owner set in AIFINPAY_PAY_ASSET (e.g. USDC; gas is still native) — within owner limits, then reuses its receipt. With scope "merchant" one batch covers every path on the site. Pending payments are recovered without sending another transaction. Other payment protocols are unsupported.',
     inputSchema: {
       type: "object",
       properties: {
@@ -95,6 +101,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
           pending.recovery.apiBaseUrl.replace(/\/+$/, "") !== configuredApi ||
           (pending.recovery.paymentIssuer ?? configuredApi).replace(/\/+$/, "") !== configuredApi ||
           pending.recovery.quote.payer?.toLowerCase() !== ctx.agent.evmAddress.toLowerCase() ||
+          (pending.recovery.chain !== undefined && pending.recovery.chain !== pay.name) ||
           call?.chain !== pay.name ||
           call.splitter_version !== "1.4" ||
           // Native calls from earlier versions may lack the field; they were POL.
@@ -105,7 +112,19 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
           // to that chain; it is never re-sent here and never forgotten.
           throw new Error(`Pending payment does not match the configured wallet/API/${pay.name} v1.4 route and asset`);
         }
-        const paid = await ctx.agent.recoverPaidPayment(pending.recovery, { paymentIssuer: configuredApi });
+        if (pending.recovery.chain === undefined) {
+          // Legacy missing-chain state is adopted only from independent owner
+          // configuration after the signed bytes prove chain/payer/call pins.
+          await assertPreparedV14Recovery(
+            call as V14SettlementCall,
+            { hash: pending.recovery.txRef, serializedTransaction: pending.serializedTransaction },
+            pay.name,
+            ctx.agent.evmAddress,
+            pending.recovery.quote.quote_id
+          );
+        }
+        const recovery = { ...pending.recovery, chain: pending.recovery.chain ?? pay.name };
+        const paid = await ctx.agent.recoverPaidPayment(recovery, { paymentIssuer: configuredApi });
         const receipt: Aifp1CachedReceipt = {
           site: pending.site,
           merchantId: paid.merchant_id,
@@ -186,7 +205,14 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
                     quote: prepared.quote,
                     txRef: prepared.txRef,
                     asset: prepared.asset,
+                    chain: prepared.chain,
                     paymentIssuer: prepared.paymentIssuer,
+                    ...(prepared.budgetReservationId
+                      ? {
+                          budgetReservationId: prepared.budgetReservationId,
+                          serializedTransaction: prepared.serializedTransaction,
+                        }
+                      : {}),
                   },
                   serializedTransaction: prepared.serializedTransaction,
                   site,

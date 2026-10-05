@@ -1,12 +1,12 @@
 ---
 name: aifinpay
-description: Pay for x402-gated APIs and sites as an agent (AIFP-1 on Polygon or Base,
+description: Pay for x402-gated APIs and sites as an agent (AIFP-1 on an owner-selected EVM network,
   within owner-set limits) — including when the owner just says "buy access for
   this site" — link the agent to its owner's AiFinPay dashboard, and read
   wallet, payment history, prepaid quotas and Agent Passport records through
   the AiFinPay MCP server or SDK.
 license: MIT
-version: 2.5.0
+version: 2.7.0
 author: AiFinPay Support
 metadata:
   hermes:
@@ -61,20 +61,54 @@ your language. There is no "install together" scenario.
 
 ## Version and release status
 
-Released and current: MCP **2.5.0**, Node SDK **2.3.0**, Python **2.3.0**.
-Payments are released — `payable_fetch` has shipped since MCP 2.2.0. An older
-copy of this skill that calls MCP "read-only" or payments "release pending" is
-out of date; follow this one. Install the `latest` release.
+Release target: MCP **2.6.0**, Node SDK **2.4.0**, Python **2.4.0**.
+This skill describes that coordinated package cohort. Check the installed
+versions before using its additional-network instructions; a release target
+does not establish npm/PyPI publication or production network activation.
+Published baseline checked 2026-10-04: MCP **2.5.0**, Node SDK **2.3.2**.
+`payable_fetch` has shipped since MCP 2.2.0, and Base since MCP 2.5.0.
+Published packages remain usable within their documented capabilities.
 
 | Surface | Can it pay? |
 |---|---|
-| MCP `@aifinpay/mcp` 2.5.x | Yes — `payable_fetch`, once the owner enables payments; on Polygon (POL) or, with `AIFINPAY_PAY_CHAIN=base`, on Base (ETH); USDC on either with `AIFINPAY_PAY_ASSET=USDC`; `scope: "merchant"` buys a whole site |
-| Node `@aifinpay/agent` 2.3.x | Yes — `fetchPaid` with a v14 journal and gas cap; Polygon by default or `v14.chain: "base"`; native POL/ETH (with your own native/USD rate) or USDC (`v14.asset: "USDC"`) |
-| Python `aifinpay-agent` 2.3.x | Yes — `agent.fetch_paid(url, allowed_origins=…, max_amount_usd=…, daily_amount_usd=…)`; Polygon by default or `chain="base"`; native POL/ETH (priced independently) or USDC (`asset="USDC"`); recover an unconfirmed payment with `agent.recover_paid(journal_path)` |
+| MCP `@aifinpay/mcp` 2.6.x | `payable_fetch`, only with a persistent wallet and every owner limit set. Polygon is the default; other networks require explicit `AIFINPAY_PAY_CHAIN`. The merchant and backend must authorize and serve that network. `scope: "merchant"` buys a site-wide batch. |
+| Node `@aifinpay/agent` 2.4.x | `fetchPaid` with a v14 journal, gas cap and owner budgets. Select another network with `v14.chain`; select a pinned stablecoin with `v14.asset`. Native payments require an independent native/USD rate. |
+| Python `aifinpay-agent` 2.4.x | `agent.fetch_paid(url, allowed_origins=…, max_amount_usd=…, daily_amount_usd=…)`; use explicit `chain` and the chain's native gas cap for another network, or a pinned stablecoin `asset`. `agent.recover_paid(journal_path)` recovers the original transaction. |
+
+The client descriptors below are shared by the target cohort. They do not
+activate a deployment, enroll a merchant or prove a completed payment.
+
+| Owner chain name | Chain ID | Native payment and gas | Pinned stablecoin symbols |
+|---|---|---|---|
+| `polygon` | 137 | POL | `USDC`, `USDC.e` |
+| `base` | 8453 | ETH | `USDC` |
+| `optimism` | 10 | ETH | `USDC` |
+| `arbitrum` | 42161 | ETH | `USDC` |
+| `avalanche` | 43114 | AVAX | `USDC`, `USDT` |
+| `bnb` | 56 | BNB | `USDC`, `USDT` |
+| `unichain` | 130 | ETH | `USDC` |
+| `xrplevm` | 1440000 | XRP | None |
+| `robinhood` | 4663 | ETH | `USDe`, `USDG` |
+
+Use the exact symbols and chain names. Token addresses and decimals are pinned
+independently per network; a token with the same symbol at another address is
+not accepted. BNB USDC/USDT and Robinhood USDe use 18 decimals; the other pinned
+stablecoins use 6. USD micro-units remain 6 decimals. The SDK validates exact
+integer `token_settlement` amounts, approval, signed gross and every split leg;
+never scale, round or edit quote fields yourself.
+
+Read the selected issuer's `/api/payment-capabilities` and the merchant's
+discovery/quote. A new network also requires the merchant's explicit accepted
+network set, verified payout, a served deployment and a working verifier/rate.
+If the backend refuses a network, retain the refusal and ask the owner to
+resolve readiness; do not switch networks or construct a manual payment.
+Solana, NEAR, Aptos and Casper are not paid executors in this MCP/SDK cohort.
+Historical BOT is not an alias for Robinhood. Wallet derivation on a network
+does not establish payment support.
 
 # AiFinPay agent workflow
 
-Use the tools actually returned by MCP tools/list. MCP 2.5.0 exposes
+Use the tools actually returned by MCP tools/list. MCP 2.6.0 exposes
 agent_address, agent_reload, agent_claim_self, agent_history, agent_quota,
 agent_passport_resolve, settlement_routes, settlement_invoice and
 deployment_info; `payable_fetch` appears when the owner has enabled payments.
@@ -99,7 +133,8 @@ into ratersapp.com", "купи доступ до цього сайту". Handle 
    $0.10 for 200 standard requests), that it covers every path on the origin,
    and how it drains — each request costs its own listed `unit_price_usd`, so
    the same $0.10 is 200 standard or 20 premium requests in any mix. Gas is
-   separate, in POL. Use the display rules in "Transaction display" below.
+   separate, in the selected network's native currency. Use the display rules
+   in "Transaction display" below.
 4. **Check readiness.** `payable_fetch` must be in your tools and the origin
    must be in `AIFINPAY_GATEWAY_ORIGINS`; the tool names a refused origin. If
    either is missing, show the owner the exact change — the environment block
@@ -154,34 +189,51 @@ fund its EVM address on Polygon with POL, or with USDC plus some POL. Funding a 
 unlimited spend authority. Use the owner's actual approved limits and origins,
 then call `payable_fetch({"url":"https://merchant.example/api/data"})`.
 
-To pay on **Base**, the owner sets `"AIFINPAY_PAY_CHAIN": "base"` and the gas
-cap in ETH as `"AIFINPAY_MAX_GAS"` (e.g. `"0.0002"`; one settlement's worst
-case including the L1 data fee is typically well under 0.0001 ETH).
-`AIFINPAY_MAX_GAS_POL` is refused on Base rather than read as ETH. The wallet's
-EVM address is the same on every chain: fund it with ETH **on Base**, not on
-Ethereum mainnet. A merchant whose quote names another chain is refused, never
-paid on a different chain; only the owner changes the chain. A payment pending
-on one chain is recovered only with that chain configured.
+For another network, the owner sets `AIFINPAY_PAY_CHAIN` to an exact name in
+the table and `AIFINPAY_MAX_GAS` in its native currency. For Base, for example,
+the currency is ETH; the owner must choose a cap that covers the current
+worst-case estimate. `AIFINPAY_MAX_GAS_POL` is refused outside Polygon rather
+than interpreted as another currency. Fund the same EVM address **on the
+selected network** with its native currency for gas and the selected asset
+for the batch. A quote for another network is refused; only the owner changes
+the network or limits.
 
-It supports GET resources and AIFP-1 v1.4 payments on Polygon (POL or USDC) and
-Base (ETH or USDC). It verifies
+Stablecoin payments budget approval and settlement together. Base, Optimism
+and Unichain include L1 data and operator fees in the worst-case gas estimate;
+an unavailable required fee read stops payment before signing. Arbitrum and
+Robinhood use the Nitro estimate that already includes parent-chain data and
+do not add that fee twice. A refusal never authorizes raising a gas cap.
+
+It supports GET resources and authorized AIFP-1 v1.4 payments on the selected
+supported EVM network. It verifies
 the quote, price, deployment, signer and receipt, saves the transaction before
 broadcasting, and reuses the purchased batch. No custom merchant script is
 needed. Other protocol/version/asset paths fail closed.
 
-A pending result retains the original transaction. Retrying recovers its receipt;
-do not delete its journal, create a replacement wallet or switch contract versions.
-Prepared-but-unbroadcast/reverted transactions and stale process locks require
-owner reconciliation. Raw transactions and receipt JWTs remain private.
+A pending result retains the original signed transaction and network.
+Retrying recovers its receipt without sending a replacement transaction.
+Unknown broadcasts keep their budget reservation indefinitely; confirmed
+spend is never refunded by a later receipt or HTTP failure. Daily confirmed
+spend uses a rolling 24-hour window. Unresolved access stays guarded even if
+the owner later changes networks. Use one shared local filesystem for the
+wallet's ledger/journal across local processes; this is not a multi-host lock.
+Do not delete journals, remove an unknown lock, replace a wallet, bypass a
+reservation or downgrade with unresolved state. Reconcile with the original
+transaction and verified receipt/revert evidence first. A legacy journal
+without its network can be adopted only when actual signed bytes match the
+owner-selected chain, payer, pinned target and exact call. Insufficient
+evidence requires manual receipt reconciliation. Quote signing expiry does
+not itself require a second settlement. Raw transactions and receipt JWTs
+remain private.
 
 ### Network access
 
 In a sandbox that allowlists outbound hosts, allow `api.aifinpay.io` and an RPC
-for the pay chain (Polygon, or Base: `mainnet.base.org` unless the owner set
-`AIFINPAY_RPC_URL`). USDC payments need nothing else. For the independent
-native/USD check MCP reads Chainlink on the pay chain over that RPC (POL/USD on
-Polygon since 2.3.0, ETH/USD on Base since 2.5.0), then `api.coinbase.com`, then
-`api.coingecko.com` — one is enough. (MCP 2.2.3 used only `api.coinbase.com`.) If no rate is available,
+for the owner-selected pay chain (`AIFINPAY_RPC_URL` overrides its default).
+Stablecoin payments need the issuer, merchant and that RPC. For the independent
+native/USD check MCP uses the pinned Chainlink feed on Polygon or Base, then
+`api.coinbase.com`, then `api.coingecko.com`. Other networks use those independent
+HTTP price sources. An implausible, stale or future-dated rate is refused. If no rate is available,
 `payable_fetch` stops before paying and nothing is spent; tell the owner which
 hosts to allow rather than inventing a workaround. With the Node SDK, pass your
 own `nativeUsdPrice`: Chainlink POL/USD on Polygon, Coinbase `POL-USD`, or
@@ -265,8 +317,10 @@ Use agent_history. Do not guess /v1/history, /v1/payments or /v1/wallet/tx.
 
 Canonical AIFP-1 economics are gross-inclusive: the agent pays the quoted
 price, AiFinPay takes **1 %** (100 bps) from it, and the merchant receives
-**99 %**. No fixed fee is implied. AIFP-1 settles live
-on Polygon and Base (splitter v1.4); Solana settlement is disabled. The smallest batch is
+**99 %**. No fixed fee is implied. Production served Polygon and Base
+(splitter v1.4) at the 2026-10-04 baseline check. Additional client descriptors
+do not prove production activation; check issuer capabilities and merchant
+authorization. This cohort does not add a Solana payment executor. The smallest batch is
 $0.10 plus gas.
 
 (The older "98.99 / 1 / 0.01" figure was the v1.2 fee-on-top model.)
@@ -274,8 +328,10 @@ $0.10 plus gas.
 Routes:
 
 - GET /v1/agents/:address/transactions?chain=polygon&limit=25&offset=0:
-  public facts from indexed AiFinPay Polygon settlements in the durable
-  ledger. Excludes arbitrary wallet transfers and may lag the chain.
+  public facts from indexed AiFinPay settlements in the durable ledger on
+  backends with that network's indexer. Select the configured network with
+  `chain`; a source descriptor does not prove indexing coverage. Excludes
+  arbitrary wallet transfers and may lag the chain.
 - GET /v1/agents/:address/receipts?limit=25&offset=0: retained prepaid-batch
   metadata, including test payments. Never includes the spendable receipt JWT.
 - GET /v1/agents/:address/statement?days=7: retained billing statement.
@@ -370,8 +426,9 @@ retype from memory:
   `setBudget({ per_call_usd, daily_usd })`, discovery + `fetchPaid`
 - `wallet-budget-paid.mjs` (JavaScript, ESM): same flow, no types
 - `wallet-budget-call.py` (Python): `from_seed(os.environ["SEED_HASH"])`,
-  `call(provider, body, cost=…)` cap; fails closed on paid 402s — use Node
-  `fetchPaid` for paid settlement
+  `call(provider, body, cost=…)` cap; this legacy snippet fails closed on paid
+  402s. For a paid purchase use the current SDK `fetch_paid` guide or Node
+  `fetchPaid`, with explicit origin, amount and gas limits.
 
 Browse: `https://github.com/AiFinPay/sdk/tree/main/examples/agent-snippets`
 
@@ -425,8 +482,8 @@ terminal for that request: do not lower units below the server minimum, edit
 quotes, or construct a manual nonce, receipt or transaction workaround.
 
 This dev quote tool never broadcasts. The new low-level SDK executor supports
-native Amoy v1.4, while MCP/fetchPaid receipt purchases are live on Polygon and Base only.
-A full paid testnet receipt flow is not yet claimed. A prepaid batch means one settlement funding
+native Amoy v1.4; this MCP exposes no Amoy paid receipt executor.
+A full paid testnet receipt flow is not claimed. A prepaid batch means one settlement funding
 multiple API calls, not an arbitrary batch of on-chain transfers.
 
 After any actual settlement, retain its quote and transaction reference.

@@ -1,3 +1,4 @@
+import { paymentStableAsset } from "@aifinpay/agent";
 import { payChain } from "./pay-chains.js";
 
 /** Runtime configuration loaded from env. */
@@ -194,8 +195,12 @@ export function validatePaymentConfig(config: McpConfig): bigint {
     })
   )
     throw new Error("Payments require explicit exact HTTPS AIFINPAY_GATEWAY_ORIGINS");
-  if (config.payAsset !== undefined && !/^[A-Z][A-Z0-9.]{1,11}$/.test(config.payAsset))
-    throw new Error(`AIFINPAY_PAY_ASSET must be "${chain.native}" or a stablecoin symbol such as "USDC"`);
+  if (
+    config.payAsset !== undefined &&
+    config.payAsset !== chain.native &&
+    !paymentStableAsset(chain.name, config.payAsset)
+  )
+    throw new Error(`AIFINPAY_PAY_ASSET must be "${chain.native}" or a stablecoin symbol pinned for ${chain.name}`);
   // The POL-named cap means POL. Read on another chain it would silently cap
   // ETH gas at a number chosen for POL — 0.3 POL is ~$0.04, 0.3 ETH is ~$800.
   if (config.maxGasPol !== undefined && chain.name !== "polygon")

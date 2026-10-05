@@ -139,6 +139,10 @@ describe("persistent wallet identity", () => {
       // to say MCP was read-only and payments were "release pending" — this line
       // asserted exactly that — and agents following it refused to pay.
       const skillText = String((skill.contents[0] as { text?: string }).text);
+      expect(skillText).toBe(readFileSync(new URL("../skills/SKILL.md", import.meta.url), "utf8"));
+      expect(client.getServerVersion()?.version).toBe(
+        JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version
+      );
       expect(skillText).toContain("payable_fetch");
       expect(skillText).toContain("agent_claim_self");
       expect(skillText).not.toMatch(/Published MCP 2\.1\.0 is read-only|not yet released/);
