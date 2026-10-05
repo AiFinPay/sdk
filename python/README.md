@@ -1,6 +1,6 @@
 # aifinpay-agent (Python)
 
-Version `2.4.0` (source candidate): agent identity (EVM and Solana addresses from one seed), native
+Version `2.5.0` (source candidate): agent identity (EVM and Solana addresses from one seed), native
 request authentication, linking an agent to its owner's dashboard, and paying
 AiFinPay merchants (`fetch_paid`, AIFP-1 on Polygon v1.4 in POL or USDC,
 or explicitly selected EVM v1.4 networks).
@@ -8,6 +8,77 @@ or explicitly selected EVM v1.4 networks).
 Canonical domain **aifinpay.io**. A
 wallet address alone does not mean a payment route is enabled. The keypair is
 generated locally and never leaves your process.
+
+## Solana paid access candidate
+
+Canonical Solana records remain disabled. The following owner configuration
+is implemented conditionally in 2.5 source; it refuses before any quote/signature
+when canonical availability is false. It is not a published or enabled route.
+
+```python
+from aifinpay import AiFinPayAgent, Aifp1FinalizedFailureError
+
+agent = AiFinPayAgent.from_seed(SEED_HEX, solana_rpc=OWNER_SOLANA_RPC)
+r = agent.fetch_paid(
+    URL,
+    allowed_origins=["https://merchant.example"],
+    max_amount_usd=OWNER_BATCH_USD_LIMIT,
+    daily_amount_usd=OWNER_DAILY_USD_LIMIT,
+    chain="solana",
+    environment="prod",
+    solana_network="mainnet",
+    asset="SOL",  # mainnet also USDC/USDT; devnet only reviewed USDC
+    max_fee_lamports=OWNER_FEE_AND_RENT_LIMIT_LAMPORTS,
+    journal_dir=PRIVATE_JOURNAL_DIRECTORY,
+)
+```
+
+Cluster/mode are independent owner choices: `dev` + `devnet`, or `prod` +
+`mainnet`. The durable shared ledger persists the exact Ed25519-authorized quote request
+before POST. Unknown transport outcomes retain that nonce/body across restart,
+and retry the same admission after authorization expiry. The original response
+is durably adopted, then converted atomically into the monetary reservation;
+owner RPC/limits/cluster/program changes refuse replay. Policy, preflight and
+ambiguous responses never automatically rotate the nonce.
+
+Only an exact bound expired `410 not_admitted` from the owner API can close the
+zero-debit phase. An exact expired issued quote can become a local nonbroadcast
+terminal only before any monetary/signing transition and after validating its
+original signed deadline and Config signer. Original ID/time/evidence persist,
+and the same invocation returns failure without a new POST. A later explicit
+fetch may request another quote; the backend continues counting its old issued
+quote, so its policy allowance can remain constrained. This grants no refund.
+The version 3 ledger migrates every exact v2 debit/reservation unchanged. Older
+SDKs refuse v3; reconcile before downgrade and never reset state to retry.
+
+`max_fee_lamports` is a positive integer covering transaction fees and
+all missing nonce/ATA rent. EVM `max_gas_wei` is refused for Solana. Classic
+Tokenkeg mints/decimals, live Config/profile/nonce/allowlist and final-message
+simulation are checked before the local Ed25519 transaction signature. The
+independent fresh SOL/USD source values both gross and fees/rent even for SPL.
+No additional dependencies are introduced.
+
+One private shared ledger binds both derived wallet families, exact purchase,
+program/cluster, signed bytes, admission rate and fee caps. Signed bytes are
+fsynced before one send; timeout/blockhash expiry never permits replacement.
+`Aifp1PayError.recovery["journal_path"]` identifies the original journal. Restore
+it with `agent.recover_paid(path,environment="prod",solana_network="mainnet")`.
+Recovery uses the original signature and verifies issuer JWKS/EdDSA JWT plus exact
+payer, cluster/program and quote bindings; it does not send a transaction.
+
+A canonical finalized failure raises `Aifp1FinalizedFailureError` after atomic
+fee-only reconciliation. It exposes `fee_amount_usd`, `actual_fee_lamports` and
+original `recovery`, never a paid receipt. Missing/invalid/pruned final block or
+fee evidence keeps the full reservation. Identical restart recovery is
+idempotent; successful spending cannot be refunded through this path. Backend
+signed-quote reservations are separate. Reconcile 2.5 state before downgrade; do
+not delete a journal or spending file to retry an unresolved purchase.
+
+`agent.get_payment_history(chain="solana",solana_network="mainnet")` and
+`agent.get_quota(chain="solana",solana_network="mainnet")` read public metadata
+without a passport or signature, preserve case, and redact bearer receipts.
+Indexed history may lag and excludes unrelated wallet transfers. See
+[architecture decision](../docs/adr/0004-solana-payment-flow.md).
 
 ## Install
 
@@ -117,7 +188,7 @@ across payment rails, so changing chain or token cannot buy unresolved access ag
 purchase, chain/token/gross and hash derived from the signed transaction bytes.
 It commits the debit once and unlocks only that purchase after a verified receipt.
 Legacy confirmed-spend files and Polygon journals migrate without losing entries.
-**Do not downgrade to an older SDK with pending2.4 reservations**: older releases
+**Do not downgrade to an older SDK with pending 2.4 reservations**: older releases
 ignore the new reservation state. Reconcile outstanding transactions first.
 Malformed/unknown ledgers and unavailable OS file locking refuse payment; no empty
 budget fallback is used. These locks cover processes on one local filesystem;
@@ -165,7 +236,7 @@ agent = Agent.from_secret_b58("3RvZm7Gw...")
      the response are on the origin configured as the agent's `base_url` and
      the body digest matches; signs, with Ed25519, the SHA-256 of the JSON
      array `["AiFinPay-x402", "v2", nonce, pubkey, origin, METHOD, path+query,
-     bodySha256, expiresAt]`; sets `x-agent-pubkey`, `x-nonce`, `x-signature`
+bodySha256, expiresAt]`; sets `x-agent-pubkey`, `x-nonce`, `x-signature`
      and `x-aifinpay-auth-version: 2`. The retired v1 format is refused and
      `auth_headers()` raises.
    - Coinbase x402 → detected and parsed (a price above

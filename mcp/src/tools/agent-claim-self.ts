@@ -1,4 +1,5 @@
 import type { ToolContext } from "../server.js";
+import { payChain } from "../pay-chains.js";
 
 /**
  * `agent_claim_self` — agent attaches itself to a user's AiFinPay account
@@ -11,8 +12,8 @@ import type { ToolContext } from "../server.js";
  *      using this magic link"
  *   3. Agent calls this tool with the magic_link_url
  *   4. Tool hits the magic link → server issues session cookie
- *   5. Tool POSTs to /api/me/agents/challenge with the agent's EVM address
- *   6. Tool signs the returned message with the agent's EVM key (EIP-191)
+ *   5. Tool requests a challenge for the owner-selected payment family
+ *   6. Tool signs only that address's claim (EIP-191 or Ed25519)
  *   7. Tool POSTs to /api/me/agents/claim → server verifies signature →
  *      agent attached to user's watchlist
  *
@@ -20,7 +21,7 @@ import type { ToolContext } from "../server.js";
  *
  * Security model:
  *   - Magic-link URL is one-shot, 15-min TTL, identifies the user
- *   - Signature proves the agent holds the EVM private key
+ *   - Signature proves the agent controls the selected wallet
  *   - Combination: "this user OWNS this agent". Either alone is
  *     insufficient (signature alone can't pick an account; magic link
  *     alone can't prove key control).
@@ -173,10 +174,10 @@ export async function runAgentClaimSelf(ctx: ToolContext, args: Record<string, u
         ],
       };
     }
-  } catch (e) {
+  } catch {
     return {
       isError: true,
-      content: [{ type: "text", text: `Failed to fetch magic link: ${(e as Error).message}` }],
+      content: [{ type: "text", text: "Failed to fetch magic link; no claim was completed." }],
     };
   }
   // Some setups split multiple cookies; grab the session one we care about.
@@ -185,14 +186,12 @@ export async function runAgentClaimSelf(ctx: ToolContext, args: Record<string, u
     .map((c) => c.trim().split(";")[0])
     .join("; ");
 
-  // Claim both chains (EVM + Solana). Each is its own challenge + sig.
-  // We try Polygon first because that's where live bridges settle today;
-  // Solana side is best-effort — if anything fails we still consider the
-  // overall claim successful as long as Polygon went through.
+  // The owner-selected payment family is required. The other wallet is
+  // best-effort and can never turn a failed primary claim into success.
+  const selected = payChain(ctx.config?.payChain);
+  const primarySolana = selected.name === "solana";
   const evmAddr = ctx.agent.evmAddress;
   const solAddr = ctx.agent.solanaAddress;
-  const innerAny = ctx.agent.inner as unknown as { secretKey: Uint8Array };
-  const solSecret = innerAny.secretKey; // tweetnacl 64-byte secretKey
 
   async function claimOne(
     address: string,
@@ -206,8 +205,8 @@ export async function runAgentClaimSelf(ctx: ToolContext, args: Record<string, u
       body: JSON.stringify({ address }),
     });
     const cj = (await cr.json()) as { error?: string; challenge_id?: string; message?: string };
-    if (!cr.ok || !cj.challenge_id || !cj.message) {
-      return { ok: false as const, reason: cj.error || `challenge HTTP ${cr.status}` };
+    if (!cr.ok || !cj || typeof cj.challenge_id !== "string" || !cj.challenge_id || typeof cj.message !== "string") {
+      return { ok: false as const, reason: `challenge refused (HTTP ${cr.status})` };
     }
     // 2) sign — but only the one shape this exchange is defined to produce.
     if (!challengeIsWellFormed(cj.message, address)) {
@@ -219,8 +218,8 @@ export async function runAgentClaimSelf(ctx: ToolContext, args: Record<string, u
     let sigPayload: { signature?: string; signature_base58?: string };
     try {
       sigPayload = await sigFn(cj.message);
-    } catch (e) {
-      return { ok: false as const, reason: `sign: ${(e as Error).message}` };
+    } catch {
+      return { ok: false as const, reason: "local claim signer unavailable" };
     }
     // 3) submit
     const sr = await fetch(`${apiBase}/api/me/agents/claim`, {
@@ -229,94 +228,70 @@ export async function runAgentClaimSelf(ctx: ToolContext, args: Record<string, u
       headers: { "content-type": "application/json", cookie: cookieHeader },
       body: JSON.stringify({ challenge_id: cj.challenge_id, label, ...sigPayload }),
     });
-    const sj = (await sr.json()) as { error?: string; reason?: string };
-    if (!sr.ok) {
-      return { ok: false as const, reason: sj.error + (sj.reason ? ` (${sj.reason})` : "") };
+    const sj = (await sr.json()) as { ok?: unknown; chain?: unknown; agent_address?: unknown } | null;
+    const expectedChain = address.startsWith("0x") ? "polygon" : "solana";
+    const sameAddress =
+      typeof sj?.agent_address === "string" &&
+      (expectedChain === "polygon"
+        ? sj.agent_address.toLowerCase() === address.toLowerCase()
+        : sj.agent_address === address);
+    if (!sr.ok || sj?.ok !== true || sj.chain !== expectedChain || !sameAddress) {
+      return { ok: false as const, reason: "claim response does not confirm this wallet and family" };
     }
     return { ok: true as const };
   }
 
-  // ── 2. Claim Polygon EVM ───────────────────────────────────────────
-  const polRes = await claimOne(evmAddr, async (msg) => ({
-    signature: await ctx.agent.evmAccount.signMessage({ message: msg }),
-  }));
-  if (!polRes.ok) {
+  async function claimFamily(solana: boolean): Promise<{ ok: boolean; reason?: string }> {
+    try {
+      if (!solana) {
+        return await claimOne(evmAddr, async (msg) => ({
+          signature: await ctx.agent.evmAccount.signMessage({ message: msg }),
+        }));
+      }
+      const nacl = (await import("tweetnacl")).default;
+      const bs58 = (await import("bs58")).default;
+      const inner = ctx.agent.inner as unknown as { secretKey: Uint8Array };
+      return await claimOne(solAddr, async (msg) => ({
+        signature_base58: bs58.encode(nacl.sign.detached(Buffer.from(msg, "utf8"), inner.secretKey)),
+      }));
+    } catch {
+      // Do not echo URL tokens, cookies, signing material or remote error text.
+      return { ok: false, reason: "claim exchange failed" };
+    }
+  }
+
+  const primary = await claimFamily(primarySolana);
+  if (!primary.ok) {
     return {
       isError: true,
-      content: [{ type: "text", text: `Polygon claim failed: ${polRes.reason}` }],
+      content: [{ type: "text", text: `${primarySolana ? "Solana" : "EVM"} claim failed: ${primary.reason}` }],
     };
   }
-
-  // ── 3. Claim Solana (best-effort) ──────────────────────────────────
-  let solRes: { ok: boolean; reason?: string };
-  try {
-    const nacl = (await import("tweetnacl")).default;
-    const bs58 = (await import("bs58")).default;
-    solRes = await claimOne(solAddr, async (msg) => {
-      const sig = nacl.sign.detached(Buffer.from(msg, "utf8"), solSecret);
-      return { signature_base58: bs58.encode(sig) };
-    });
-  } catch (e) {
-    solRes = { ok: false, reason: `solana_signer_unavailable: ${(e as Error).message}` };
-  }
-
-  // ── 4. Balance check (best-effort) — drives funded-vs-unfunded copy ─
-  // Never block the claim flow on a balance check; if the RPC is down or
-  // balance() throws, fall back to the standard funding recommendation.
-  // payable_fetch settles AIFP-1 v1.4 in native POL, so POL is what counts.
-  let polygonPol = 0;
-  let polUsd: number | null = null;
-  try {
-    const bal = await ctx.agent.balance();
-    polygonPol = bal.chains.polygon.matic ?? 0;
-    polUsd = Number.isFinite(bal.prices?.pol?.usd) ? bal.prices.pol.usd : null;
-  } catch {
-    /* swallow — keep funding_recommendation as-is */
-  }
-
-  // ── 5. Report ──────────────────────────────────────────────────────
-  try {
-    // The dashboard is dash.aifinpay.io; /me redirects to My Agents.
-    // (dashboard.aifinpay.io only 301s here.)
-    const DASHBOARD_BASE = "https://dash.aifinpay.io";
-
-    // Funded threshold: $0.20 of POL — the smallest batch ($0.10) plus gas.
-    // At or above it we say so, so the agent does not ask for money it has.
-    const FUNDED_USD_THRESHOLD = 0.2;
-    const polValueUsd = polUsd === null ? null : polygonPol * polUsd;
-    const fundingFields: Record<string, string> =
-      polValueUsd !== null && polValueUsd >= FUNDED_USD_THRESHOLD
-        ? { funding_status: `Funded — ${polygonPol.toFixed(4)} POL (≈ $${polValueUsd.toFixed(2)}) on Polygon` }
-        : {
-            // AIFP-1 v1.4 settles in native POL on Polygon, and gas is POL too.
-            funding_recommendation: `Send POL on Polygon to ${evmAddr}. The smallest batch is $0.10 plus gas; 2–3 POL covers many batches.`,
-          };
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(
-            {
-              ok: true,
-              polygon_address: evmAddr,
-              polygon_claim: "ok",
-              solana_address: solAddr,
-              solana_claim: solRes.ok ? "ok" : `skipped (${solRes.reason})`,
-              label: label || null,
-              ...fundingFields,
-              next: `Open ${DASHBOARD_BASE}/me (My Agents) to see this agent's balance, payments and receipts. Public page: ${DASHBOARD_BASE}/agents/${evmAddr}.`,
-            },
-            null,
-            2
-          ),
-        },
-      ],
-    };
-  } catch (e) {
-    return {
-      isError: true,
-      content: [{ type: "text", text: `Claim POST failed: ${(e as Error).message}` }],
-    };
-  }
+  const secondary = await claimFamily(!primarySolana);
+  const evmResult = primarySolana ? secondary : primary;
+  const solanaResult = primarySolana ? primary : secondary;
+  const primaryAddress = primarySolana ? solAddr : evmAddr;
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(
+          {
+            ok: true,
+            primary_family: primarySolana ? "solana" : "evm",
+            primary_address: primaryAddress,
+            payment_chain: selected.name,
+            polygon_address: evmAddr,
+            polygon_claim: evmResult.ok ? "ok" : `skipped (${evmResult.reason})`,
+            solana_address: solAddr,
+            solana_claim: solanaResult.ok ? "ok" : `skipped (${solanaResult.reason})`,
+            label: label || null,
+            next: `Open https://dash.aifinpay.io/my-agents/${encodeURIComponent(primaryAddress)}. Use Fund to view available payment networks and assets. Wallet binding does not enable payments on a disabled network.`,
+          },
+          null,
+          2
+        ),
+      },
+    ],
+  };
 }

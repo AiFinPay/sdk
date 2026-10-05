@@ -2,6 +2,9 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { mkdtemp, rm, readFile, writeFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import bs58 from "bs58";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { MemorySpendLedger, FileSpendLedger, type SpendLedgerBinding } from "../src/spendLedger.js";
 
 // The daily cap was a number compared against a ring buffer in one object's
@@ -139,6 +142,42 @@ describe.each([
   ["memory", () => new MemorySpendLedger()],
   ["file", () => fileLedger()],
 ])("bound recovery on %s", (_label, make) => {
+  it("first canonical failure after rollover preserves admission time and its immutable fee identity", async () => {
+    const ledger = make(),
+      admittedAt = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(admittedAt);
+    const purchase = {
+      ...binding(),
+      chain: "solana:mainnet:pinned-program:pinned-idl",
+      asset: "SOL",
+      token: "11111111111111111111111111111111",
+      solanaAdmissionRateUsd: "100",
+      solanaMaxFeeLamports: "1000000",
+      solanaTransactionFeeLamports: "5000",
+    };
+    const signature = bs58.encode(new Uint8Array(64).fill(7));
+    const id = (await ledger.reserve(0.6, 1, DAY, purchase))!;
+    await ledger.prepare(id, signature, purchase);
+    clock.mockReturnValue(admittedAt + 3 * DAY);
+    expect(await ledger.total(DAY)).toBe(0.6);
+    await ledger.finalizeFailure(id, signature, purchase, 0.0005);
+    expect(await ledger.total(DAY)).toBe(0);
+    await ledger.assertRecovery(id, signature, purchase);
+    await expect(ledger.complete(id, signature, purchase)).rejects.toThrow();
+    await expect(ledger.release(id)).rejects.toThrow();
+    clock.mockReturnValue(admittedAt + 4 * DAY);
+    await ledger.finalizeFailure(id, signature, purchase, 0.0005);
+    expect(await ledger.total(DAY)).toBe(0);
+    if (_label === "file") {
+      const entries = JSON.parse(await readFile(join(dir, "spend.json"), "utf8"));
+      expect(entries.find((e: { id: string }) => e.id === id)).toMatchObject({
+        at: admittedAt,
+        usd: 0.0005,
+        failure: true,
+      });
+      await new FileSpendLedger(join(dir, "spend.json")).assertRecovery(id, signature, purchase);
+    }
+  });
   it("does not expire unresolved reservations when the clock advances", async () => {
     const l = make(),
       now = Date.now();
@@ -186,6 +225,48 @@ describe.each([
 });
 
 describe("durable refusal and shared admission", () => {
+  it("two real processes reconcile the same finalized failure once without overwriting a successful debit", async () => {
+    const path = join(dir, "spend.json"),
+      ledger = new FileSpendLedger(path);
+    const purchase = {
+      ...binding(),
+      chain: "solana:mainnet:pinned-program:pinned-idl",
+      asset: "SOL",
+      token: "11111111111111111111111111111111",
+      solanaAdmissionRateUsd: "100",
+      solanaMaxFeeLamports: "1000000",
+      solanaTransactionFeeLamports: "5000",
+    };
+    const signature = bs58.encode(new Uint8Array(64).fill(7)),
+      id = (await ledger.reserve(0.6, 1, DAY, purchase))!;
+    await ledger.prepare(id, signature, purchase);
+    const script =
+      "const {FileSpendLedger}=await import(process.argv[1]); await new FileSpendLedger(process.argv[2]).finalizeFailure(process.argv[3],process.argv[4],JSON.parse(process.argv[5]),.0005);";
+    await Promise.all(
+      Array.from({ length: 2 }, () =>
+        promisify(execFile)(process.execPath, [
+          "--input-type=module",
+          "-e",
+          script,
+          new URL("../dist/spendLedger.js", import.meta.url).href,
+          path,
+          id,
+          signature,
+          JSON.stringify(purchase),
+        ])
+      )
+    );
+    expect(await new FileSpendLedger(path).total(DAY)).toBe(0.0005);
+    const entries = JSON.parse(await readFile(path, "utf8"));
+    expect(entries.filter((e: { id: string }) => e.id === id)).toHaveLength(1);
+    await expect(ledger.finalizeFailure(id, signature, purchase, 0.0004)).rejects.toThrow(/immutable/);
+    const successful = { ...purchase, resource: "/success", quoteId: "qt_success" },
+      success = (await ledger.reserve(0.6, 1, DAY, successful))!;
+    await ledger.prepare(success, signature, successful);
+    await ledger.commit(success);
+    await expect(ledger.finalizeFailure(success, signature, successful, 0.0005)).rejects.toThrow(/successful/);
+    expect(await ledger.total(DAY)).toBeCloseTo(0.6005, 10);
+  });
   it("two instances admit at most one60cent payment under a dollar cap", async () => {
     const results = await Promise.all([
       fileLedger().reserve(0.6, 1, DAY, binding()),
@@ -223,4 +304,102 @@ describe("durable refusal and shared admission", () => {
     expect(await readFile(lock, "utf8")).toBe("another process");
     await expect(readFile(path, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
+});
+
+const quoteBinding: SpendLedgerBinding = {
+  apiBaseUrl: "https://api.example",
+  paymentIssuer: "https://issuer.example",
+  payer: "SolanaCaseSensitivePayer",
+  walletIdentity: "one-local-wallet",
+  merchantId: "mrch_admission",
+  scope: "exact",
+  resource: "/admission",
+  networkMode: "live",
+  chain: "solana:mainnet:program:idl",
+  asset: "SOL",
+  token: "11111111111111111111111111111111",
+  grossAmount: "0",
+  quoteId: "quote-admission",
+  quoteAdmissionVersion: "1",
+};
+const admittedQuote = JSON.stringify({ quote_id: "qt_original" });
+const monetaryBinding: SpendLedgerBinding = { ...quoteBinding, grossAmount: "1000000", quoteId: "qt_original" };
+delete monetaryBinding.quoteAdmissionVersion;
+describe.each([
+  ["memory", () => new MemorySpendLedger()],
+  ["file", () => fileLedger()],
+])("quote phase %s", (_name, make) => {
+  it("creates one admission under concurrent callers, then atomically converts without a purchase-guard gap", async () => {
+    const ledger = make();
+    let created = 0;
+    const create = async () => {
+      created++;
+      await Promise.resolve();
+      return { requestBody: "same raw JSON", statement: "same statement" };
+    };
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () => ledger.beginQuoteAdmission(quoteBinding, "owner context", create))
+    );
+    expect(new Set(results.map((e) => e.id)).size).toBe(1);
+    expect(created).toBe(1);
+    const original = results[0]!;
+    expect(await ledger.total(DAY)).toBe(0);
+    await expect(
+      ledger.reserve(0.6, 1, DAY, { ...monetaryBinding, chain: "polygon", payer: "0xOther", token: "0xToken" })
+    ).rejects.toThrow("Unresolved purchase");
+    await ledger.adoptQuoteAdmission(original.id, quoteBinding, "owner context", admittedQuote);
+    expect(await ledger.reserve(0.6, 1, DAY, monetaryBinding, original.id)).toBe(original.id);
+    expect(await ledger.total(DAY)).toBe(0.6);
+    await expect(ledger.beginQuoteAdmission(quoteBinding, "owner context", create)).rejects.toThrow("Unresolved");
+    expect(created).toBe(1);
+    await expect(
+      ledger.closeQuoteAdmission(original.id, quoteBinding, "owner context", "expired-unbroadcast", admittedQuote)
+    ).rejects.toThrow();
+    await ledger.release(original.id); // an explicit proven prebroadcast failure retains the original admission, not a new nonce.
+    const resumed = await ledger.beginQuoteAdmission(quoteBinding, "owner context", create);
+    expect(resumed.id).toBe(original.id);
+    expect(resumed.quoteJson).toBe(admittedQuote);
+    expect(resumed.wasReserved).toBe(true);
+    await expect(
+      ledger.closeQuoteAdmission(original.id, quoteBinding, "owner context", "expired-unbroadcast", admittedQuote)
+    ).rejects.toThrow();
+    expect(created).toBe(1);
+  });
+  it("preserves pending admission on cap refusal and refuses changed quote or owner context", async () => {
+    const ledger = make(),
+      create = async () => ({ requestBody: "raw", statement: "statement" });
+    const e = await ledger.beginQuoteAdmission(quoteBinding, "owner", create);
+    await ledger.adoptQuoteAdmission(e.id, quoteBinding, "owner", admittedQuote);
+    expect(await ledger.reserve(0.6, 0.5, DAY, monetaryBinding, e.id)).toBeNull();
+    await expect(
+      ledger.adoptQuoteAdmission(e.id, quoteBinding, "owner", JSON.stringify({ quote_id: "different" }))
+    ).rejects.toThrow("immutable");
+    await expect(ledger.beginQuoteAdmission(quoteBinding, "changed owner", create)).rejects.toThrow();
+    await expect(ledger.reserve(0.6, 1, DAY, { ...monetaryBinding, quoteId: "different" }, e.id)).rejects.toThrow();
+    expect((await ledger.beginQuoteAdmission(quoteBinding, "owner", create)).id).toBe(e.id);
+  });
+});
+it("two real processes persist one prequote authorization; restart and day rollover do not rotate it", async () => {
+  const run = promisify(execFile),
+    path = join(dir, "shared-admission.json");
+  const source = `import { FileSpendLedger } from './dist/index.js'; import { randomUUID } from 'node:crypto';
+    const ledger = new FileSpendLedger(process.argv[1]);
+    const e = await ledger.beginQuoteAdmission(JSON.parse(process.argv[2]), 'owner', async () => ({requestBody:randomUUID(),statement:'owner signature'}));
+    process.stdout.write(JSON.stringify(e));`;
+  const rows = await Promise.all(
+    Array.from({ length: 2 }, () =>
+      run(process.execPath, ["--input-type=module", "-e", source, path, JSON.stringify(quoteBinding)], {
+        cwd: process.cwd(),
+      })
+    )
+  );
+  const a = JSON.parse(rows[0]!.stdout),
+    b = JSON.parse(rows[1]!.stdout);
+  expect(a).toEqual(b);
+  vi.spyOn(Date, "now").mockReturnValue(Date.now() + 3 * DAY);
+  const restart = await new FileSpendLedger(path).beginQuoteAdmission(quoteBinding, "owner", async () => {
+    throw Error("must not create");
+  });
+  expect(restart).toEqual(a);
+  expect(JSON.parse(await readFile(path, "utf8"))).toHaveLength(1);
 });

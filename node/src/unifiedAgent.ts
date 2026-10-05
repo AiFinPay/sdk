@@ -51,12 +51,22 @@ import {
   type SettlementRouteClass,
 } from "./settlement.js";
 import { executeV14Settlement, assertPreparedV14Recovery, type V14SettlementCall } from "./settlementV14.js";
-import { getQuota, type QuotaSummary } from "./agentHistory.js";
+import {
+  solanaV14Rpc,
+  authorizedSolanaV14Inventory,
+  prepareSolanaV14Settlement,
+  executeSolanaV14Settlement,
+  verifyHistoricalSolanaV14Quote,
+  solanaStableMint,
+  SOLANA_GENESIS,
+} from "./settlementSolanaV14.js";
+import { getAgentHistory, getQuota, type AgentHistoryOptions, type QuotaSummary } from "./agentHistory.js";
 import { type SpendLedger, type SpendLedgerBinding, MemorySpendLedger, FileSpendLedger } from "./spendLedger.js";
 import {
   aifp1Fetch,
   recoverAifp1Payment,
   type Aifp1PaymentRecovery,
+  type Aifp1RecoveryOptions,
   type Aifp1PayResult,
   Aifp1ReceiptCache,
   Aifp1QuoteError,
@@ -117,6 +127,9 @@ export interface BalanceSnapshot {
       sol: number;
       usdc: number;
       msecco_balance: number;
+      network: "mainnet" | "devnet" | null;
+      usdc_mint: string;
+      valuation: "spot-estimate" | "test-assets-not-valued" | "unverified-owner-rpc/mainnet-mint";
     };
     polygon: {
       matic: number;
@@ -133,7 +146,7 @@ export interface BalanceSnapshot {
   /** Native price observations behind the total (env var or price feed). */
   prices: {
     pol: { usd: number; source: string };
-    sol: { usd: number; source: string };
+    sol: { usd: number | null; source: string };
   };
   /** Native legs excluded from the total for lack of a price. Absent when empty. */
   unknown_legs?: ("pol" | "sol")[];
@@ -1689,8 +1702,13 @@ export class AiFinPayAgent {
    * `budgetCaps.on_limit_exceeded` is "skip".
    */
   async fetchPaid(url: string, init: RequestInit = {}, opts: Aifp1FetchOptions = {}): Promise<Response | null> {
+    // Quote admission is durable even when the owner did not configure a daily cap.
+    const ledger =
+      opts.solanaV14 && !this.ledgerOverride ? (this._ledger = FileSpendLedger.forAgent(this.evmAddress)) : this.ledger;
+    if (opts.solanaV14 && (!ledger.beginQuoteAdmission || !ledger.adoptQuoteAdmission || !ledger.closeQuoteAdmission))
+      throw new Aifp1QuoteError("Solana custom ledger requires durable quote-admission hooks before POST");
     if (
-      opts.v14 &&
+      (opts.v14 || opts.solanaV14) &&
       this.budgetCaps.daily_usd !== undefined &&
       (!this.ledger.prepare || !this.ledger.assertRecovery || !this.ledger.complete)
     ) {
@@ -1699,17 +1717,60 @@ export class AiFinPayAgent {
       );
     }
     const deps: Aifp1Deps = {
+      walletIdentity: this.evmAddress.toLowerCase(),
+      quoteOwnerContext: JSON.stringify([
+        this.solanaRpc,
+        this.budgetCaps.daily_usd ?? null,
+        this.budgetCaps.per_call_usd ?? null,
+        this.budgetCaps.on_limit_exceeded ?? "throw",
+      ]),
+      beginQuoteAdmission: (binding, context, create) => ledger.beginQuoteAdmission!(binding, context, create),
+      adoptQuoteAdmission: (id, binding, context, quoteJson) =>
+        ledger.adoptQuoteAdmission!(id, binding, context, quoteJson),
+      closeQuoteAdmission: (id, binding, context, terminal, quoteJson) =>
+        ledger.closeQuoteAdmission!(id, binding, context, terminal, quoteJson),
+      verifyHistoricalSolanaQuote: (call, auth, orderId) =>
+        verifyHistoricalSolanaV14Quote(call, {
+          rpc: solanaV14Rpc(this.solanaRpc, this.inner.fetchImpl),
+          deployment: authorizedSolanaV14Inventory(auth.environment, auth.network),
+          payer: this.solanaAddress,
+          orderId,
+        }),
       fetchImpl: this.inner.fetchImpl,
       cache: this._aifp1Cache,
       // A 0x address, because AIFP agent policies are address-keyed
       // (backend/aifp/agent-policy.js normalizeAddress) — a Solana pubkey here
       // would silently opt the agent out of its owner's own limits.
-      agentId: opts.agentId ?? this.evmAddress,
-      payerAddress: this.evmAddress,
-      signPaymentAuthorization: (message) => this.evmAccount.signMessage({ message }),
+      agentId: opts.agentId ?? (opts.solanaV14 ? this.solanaAddress : this.evmAddress),
+      payerAddress: opts.solanaV14 ? this.solanaAddress : this.evmAddress,
+      signPaymentAuthorization: (message) =>
+        opts.solanaV14
+          ? Promise.resolve(bs58.encode(nacl.sign.detached(Buffer.from(message), this.inner.secretKey)))
+          : this.evmAccount.signMessage({ message }),
+      prepareSolana: (call, auth, orderId) =>
+        prepareSolanaV14Settlement(call, {
+          rpc: solanaV14Rpc(this.solanaRpc, this.inner.fetchImpl),
+          deployment: authorizedSolanaV14Inventory(auth.environment, auth.network),
+          payer: this.solanaAddress,
+          orderId,
+          maxFeeLamports: auth.maxFeeLamports,
+        }),
+      settleSolana: (plan, onPrepared) =>
+        executeSolanaV14Settlement(plan, {
+          rpc: solanaV14Rpc(this.solanaRpc, this.inner.fetchImpl),
+          keypair: Keypair.fromSecretKey(this.inner.secretKey),
+          onPrepared,
+        }),
       settle: (p) => this.settleAifp1NativeV13(p, opts),
       checkPerCall: (usd) => this.checkPerCall(usd),
-      reserveDaily: (usd, binding) => this.reserveDaily(usd, binding),
+      reserveDaily: async (usd, binding, admissionId) => {
+        if (!admissionId) return this.reserveDaily(usd, binding);
+        const cap = this.budgetCaps.daily_usd ?? Number.MAX_VALUE;
+        const id = await ledger.reserve(usd, cap, 24 * 3600 * 1000, binding, admissionId);
+        if (id) return id;
+        if (this.budgetCaps.on_limit_exceeded === "skip") return "skip";
+        throw new BudgetCapExceededError("daily", `this call would take daily spend past the $${cap} cap`);
+      },
       commit: (id, usd) => this.ledger.commit(id, usd),
       release: (id) => this.ledger.release(id),
       prepareReservation: async (id, tx, binding) => {
@@ -1727,13 +1788,18 @@ export class AiFinPayAgent {
         if (!this.ledger.complete) throw new Aifp1QuoteError("Custom ledger cannot reconcile the prepared payment");
         await this.ledger.complete(id, tx, binding);
       },
+      finalizeFailedReservation: async (id, tx, binding, feeUsd) => {
+        if (!this.ledger.finalizeFailure)
+          throw new Aifp1QuoteError("Custom ledger cannot reconcile proven finalized failure; retain the reservation");
+        await this.ledger.finalizeFailure(id, tx, binding, feeUsd);
+      },
       onPaid: ({ merchantId, amountUsd, txRef }) => {
         this.spend24h.add(amountUsd);
         if (this.telemetry) {
           this.reportTelemetry({
             kind: "aifp1",
             merchant: merchantId,
-            chain: opts.v14?.chain ?? "polygon",
+            chain: opts.solanaV14 ? "solana" : (opts.v14?.chain ?? "polygon"),
             cost: amountUsd,
             tx: txRef,
           });
@@ -1744,11 +1810,8 @@ export class AiFinPayAgent {
   }
 
   /** Recover receipt issuance for an existing payment; never sends a transaction. */
-  async recoverPaidPayment(
-    recovery: Aifp1PaymentRecovery,
-    opts: Pick<Aifp1FetchOptions, "settlementConfirmMs" | "apiTimeoutMs" | "paymentIssuer"> = {}
-  ): Promise<Aifp1PayResult> {
-    if (recovery.budgetReservationId !== undefined) {
+  async recoverPaidPayment(recovery: Aifp1PaymentRecovery, opts: Aifp1RecoveryOptions = {}): Promise<Aifp1PayResult> {
+    if (recovery.family !== "solana" && recovery.budgetReservationId !== undefined) {
       const chain = recovery.chain ?? "polygon";
       await assertPreparedV14Recovery(
         recovery.quote.settlement_call as V14SettlementCall,
@@ -1761,8 +1824,27 @@ export class AiFinPayAgent {
     return recoverAifp1Payment(
       recovery,
       {
-        payerAddress: this.evmAddress,
-        signPaymentAuthorization: (message) => this.evmAccount.signMessage({ message }),
+        walletIdentity: this.evmAddress.toLowerCase(),
+        payerAddress: recovery.family === "solana" ? this.solanaAddress : this.evmAddress,
+        ...(recovery.family === "solana"
+          ? {
+              solanaRpc: solanaV14Rpc(this.solanaRpc, this.inner.fetchImpl),
+              finalizeFailedReservation: async (
+                id: string,
+                tx: string,
+                binding: SpendLedgerBinding,
+                feeUsd: number
+              ) => {
+                if (!this.ledger.finalizeFailure)
+                  throw new Aifp1QuoteError("Custom ledger cannot reconcile canonical failure; retain reservation");
+                await this.ledger.finalizeFailure(id, tx, binding, feeUsd);
+              },
+            }
+          : {}),
+        signPaymentAuthorization: (message) =>
+          recovery.family === "solana"
+            ? Promise.resolve(bs58.encode(nacl.sign.detached(Buffer.from(message), this.inner.secretKey)))
+            : this.evmAccount.signMessage({ message }),
         fetchImpl: this.inner.fetchImpl,
         assertReservation: async (id, tx, binding) => {
           if (!this.ledger.assertRecovery)
@@ -1808,11 +1890,29 @@ export class AiFinPayAgent {
    * Prepaid quota batches for this agent's address, most room first with a
    * per-merchant rollup. Non-signing read of retained receipts metadata.
    */
+  async getPaymentHistory(
+    opts: Omit<AgentHistoryOptions, "address" | "passport" | "fetchImpl"> = {}
+  ): Promise<Record<string, unknown>> {
+    return getAgentHistory({
+      ...opts,
+      address: opts.network === "solana" ? this.solanaAddress : this.evmAddress,
+      fetchImpl: this.inner.fetchImpl,
+    });
+  }
+
   async getQuota(
-    opts: { merchantId?: string; includeExhausted?: boolean; baseUrl?: string } = {}
+    opts: {
+      merchantId?: string;
+      includeExhausted?: boolean;
+      baseUrl?: string;
+      network?: import("./agentPassport.js").AgentPassportNetwork;
+      solanaNetwork?: import("./generated/solanaV14Deployments.generated.js").SolanaNetwork;
+    } = {}
   ): Promise<QuotaSummary> {
     return getQuota({
-      address: this.evmAddress,
+      address: opts.network === "solana" ? this.solanaAddress : this.evmAddress,
+      network: opts.network,
+      solanaNetwork: opts.solanaNetwork,
       merchantId: opts.merchantId,
       includeExhausted: opts.includeExhausted,
       baseUrl: opts.baseUrl,
@@ -1840,28 +1940,55 @@ export class AiFinPayAgent {
    * with no known price is excluded from the total and listed in
    * `unknown_legs` instead of being fabricated.
    */
-  async balance(): Promise<BalanceSnapshot> {
+  async balance(options: { solanaNetwork?: "mainnet" | "devnet" } = {}): Promise<BalanceSnapshot> {
+    const cluster = options.solanaNetwork;
+    if (cluster !== undefined) {
+      if (cluster !== "mainnet" && cluster !== "devnet")
+        throw new AiFinPayError("Explicit Solana balance cluster is invalid");
+      if (
+        (await solanaV14Rpc(this.solanaRpc, this.inner.fetchImpl).request("getGenesisHash", [])) !==
+        SOLANA_GENESIS[cluster]
+      )
+        throw new AiFinPayError("Solana balance RPC does not match the owner-selected cluster");
+    }
+    const mint = cluster ? solanaStableMint(cluster, "USDC") : USDC_SOLANA_MINT;
     const [pol, sol] = await Promise.all([
       this.tokenUsd("POL", SPLITTER_DEPLOYMENTS.polygon.nativeUsdEnv),
-      this.tokenUsd("SOL", "AIFINPAY_SOL_USD"),
+      cluster === "devnet"
+        ? Promise.resolve({ usd: null, source: "test-assets-not-valued" })
+        : this.tokenUsd("SOL", "AIFINPAY_SOL_USD"),
     ]);
 
     const polygon = await this.fetchPolygonNative().catch(() => 0);
-    const solana = await this.fetchSolanaNative().catch(() => 0);
-    const solana_usdc = await this.fetchSolanaUsdc().catch(() => 0);
+    const solana = cluster ? await this.fetchSolanaNative(true) : await this.fetchSolanaNative().catch(() => 0);
+    const solana_usdc = cluster
+      ? await this.fetchSolanaUsdc(mint, true)
+      : await this.fetchSolanaUsdc(mint).catch(() => 0);
     const polygon_usdc = await this.fetchPolygonUsdc().catch(() => 0);
 
     const unknown_legs: ("pol" | "sol")[] = [];
-    let agent_balance_usd = solana_usdc + polygon_usdc; // USDC ≈ $1
+    let agent_balance_usd = (cluster === "devnet" ? 0 : solana_usdc) + polygon_usdc; // Devnet tokens have no fiat value.
     if (Number.isFinite(pol.usd)) agent_balance_usd += polygon * pol.usd;
     else unknown_legs.push("pol");
-    if (Number.isFinite(sol.usd)) agent_balance_usd += solana * sol.usd;
+    if (typeof sol.usd === "number" && Number.isFinite(sol.usd)) agent_balance_usd += solana * sol.usd;
     else unknown_legs.push("sol");
 
     return {
       agent_balance_usd,
       chains: {
-        solana: { sol: solana, usdc: solana_usdc, msecco_balance: 0 },
+        solana: {
+          sol: solana,
+          usdc: solana_usdc,
+          msecco_balance: 0,
+          network: cluster ?? null,
+          usdc_mint: mint,
+          valuation:
+            cluster === "devnet"
+              ? "test-assets-not-valued"
+              : cluster === "mainnet"
+                ? "spot-estimate"
+                : "unverified-owner-rpc/mainnet-mint",
+        },
         polygon: { matic: polygon, usdc: polygon_usdc, msecco_balance: 0 },
       },
       spend_24h_usd: this.spend24h.total24h(),
@@ -1880,7 +2007,15 @@ export class AiFinPayAgent {
     return Number(wei) / 1e18;
   }
 
-  private async fetchSolanaNative(): Promise<number> {
+  private async fetchSolanaNative(strict = false): Promise<number> {
+    if (strict) {
+      const result = (await solanaV14Rpc(this.solanaRpc, this.inner.fetchImpl).request("getBalance", [
+        this.solanaAddress,
+      ])) as { value?: unknown } | null;
+      if (!result || !Number.isSafeInteger(result.value) || (result.value as number) < 0)
+        throw new AiFinPayError("Solana balance RPC returned an invalid native balance");
+      return (result.value as number) / 1e9;
+    }
     // Raw JSON-RPC; honours the constructor's solanaRpc option (previously
     // re-read env here with a different default endpoint).
     const rpc = this.solanaRpc;
@@ -1904,10 +2039,28 @@ export class AiFinPayAgent {
    * Sum SPL USDC balances across all token accounts owned by the agent's
    * Solana pubkey. Uses raw JSON-RPC `getTokenAccountsByOwner` so we don't
    * pull `@solana/spl-token` as a dep. Returns 0 (never throws) when the
-   * RPC is unreachable or returns nothing — `balance()` must remain a
-   * non-blocking introspection call.
+   * RPC is unreachable or returns nothing in the legacy, unverified context.
+   * An explicit cluster requires a successful, well-formed balance read.
    */
-  private async fetchSolanaUsdc(): Promise<number> {
+  private async fetchSolanaUsdc(mint = USDC_SOLANA_MINT, strict = false): Promise<number> {
+    if (strict) {
+      const result = (await solanaV14Rpc(this.solanaRpc, this.inner.fetchImpl).request("getTokenAccountsByOwner", [
+        this.solanaAddress,
+        { mint },
+        { encoding: "jsonParsed" },
+      ])) as { value?: unknown } | null;
+      if (!result || !Array.isArray(result.value))
+        throw new AiFinPayError("Solana balance RPC returned invalid token accounts");
+      let total = 0;
+      for (const account of result.value) {
+        const ui = account?.account?.data?.parsed?.info?.tokenAmount?.uiAmount;
+        if (typeof ui !== "number" || !Number.isFinite(ui) || ui < 0)
+          throw new AiFinPayError("Solana balance RPC returned an invalid token balance");
+        total += ui;
+        if (!Number.isFinite(total)) throw new AiFinPayError("Solana token balance overflow");
+      }
+      return total;
+    }
     const rpc = this.solanaRpc;
     try {
       const r = await this.inner.fetchImpl(rpc, {
@@ -1917,7 +2070,7 @@ export class AiFinPayAgent {
           jsonrpc: "2.0",
           id: 1,
           method: "getTokenAccountsByOwner",
-          params: [this.solanaAddress, { mint: USDC_SOLANA_MINT }, { encoding: "jsonParsed" }],
+          params: [this.solanaAddress, { mint }, { encoding: "jsonParsed" }],
         }),
       });
       if (!r.ok) return 0;

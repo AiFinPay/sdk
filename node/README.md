@@ -1,6 +1,6 @@
 # @aifinpay/agent (Node / TypeScript)
 
-Version **2.4.0** (source candidate) extends the existing signed AIFP-1 `fetchPaid`
+Version **2.5.0** (source candidate) extends the existing signed AIFP-1 `fetchPaid`
 flow to Polygon, Base, Optimism, Arbitrum, Avalanche, BNB, Unichain, XRPL EVM and
 Robinhood. Polygon remains the default; select another network explicitly with
 `v14.chain`. A descriptor is client capability, not production readiness: the
@@ -21,6 +21,21 @@ parent-data gas in the RPC estimate, so it is counted once. Unavailable OP fees
 block signing. These are preflight estimates, not inclusion-time guarantees.
 Current admin profiles remain mutable; receipt and recovery policy is unchanged.
 See [payment configuration and recovery](./PAYMENT_RECEIPTS.md).
+
+The 2.5 candidate also adds owner-selected `solanaV14` paid access for SOL9 and
+classic SPL6 USDC/USDT. Network and environment, local Ed25519 payer,
+independently sourced SOL/USD and `maxFeeLamports` (transaction fees **plus all
+nonce/ATA rent**) are separate from EVM options. `v14` and `solanaV14` together
+are rejected. Canonical Solana flags remain disabled: this source is conditional,
+not a production activation or published 2.5 claim.
+
+The exact 216-byte quote and 297-byte instruction follow the packaged pinned IDL.
+Fresh genesis/config/profile/mint/nonce/account evidence and unsigned final-message
+simulation precede budget reservation and local signing. Signed bytes are saved
+before the single send. Unknown signature outcomes never expire or authorize a
+replacement transaction. A canonical finalized failure retains only its proven
+fee debit; missing proof retains the full reservation. Public history/quota
+select Solana cluster explicitly and never expose bearer receipts.
 
 ### Link the agent to its owner's dashboard
 

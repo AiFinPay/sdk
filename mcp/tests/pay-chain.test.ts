@@ -33,7 +33,7 @@ describe("AIFINPAY_PAY_CHAIN configuration", () => {
       /AIFINPAY_MAX_GAS_POL caps POL gas and does not apply on base; set AIFINPAY_MAX_GAS in ETH/
     );
   });
-  it.each(["botchain", "Base", "solana", "amoy", "", "__proto__"])("refuses unsupported chain %j", (name) => {
+  it.each(["botchain", "Base", "amoy", "", "__proto__"])("refuses unsupported chain %j", (name) => {
     expect(() => validatePaymentConfig({ ...owner, payChain: name, maxGas: "0.1" })).toThrow(
       /AIFINPAY_PAY_CHAIN must be one of polygon, base/
     );

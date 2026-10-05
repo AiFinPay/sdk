@@ -174,6 +174,7 @@ export {
   Aifp1Error,
   Aifp1QuoteError,
   Aifp1PayError,
+  Aifp1FinalizedFailureError,
   Aifp1SettlementUnsupportedError,
   Aifp1ReceiptRejectedError,
 } from "./aifp1.js";
@@ -214,7 +215,13 @@ export type {
   PayOptions,
 } from "./facilitators/index.js";
 
-export { type SpendLedger, type SpendLedgerBinding, MemorySpendLedger, FileSpendLedger } from "./spendLedger.js";
+export {
+  type SpendLedger,
+  type SpendLedgerBinding,
+  type QuoteAdmission,
+  MemorySpendLedger,
+  FileSpendLedger,
+} from "./spendLedger.js";
 
 export { deriveWallet, newWallet } from "./wallet.js";
 export { getAgentHistory, getQuota, AGENT_RECEIPT_FIELDS, AGENT_TRANSACTION_FIELDS } from "./agentHistory.js";
@@ -235,3 +242,14 @@ export type { V14ExecutionContext, V14SettlementCall, V14Quote, V14ValidateOptio
 // Independent chain/native/gas/token descriptors, without activation authority.
 export { PAYMENT_CHAINS, paymentChain, paymentStableAsset } from "./paymentChains.js";
 export type { PaymentChain } from "./paymentChains.js";
+
+// Solana v1.4 codecs/preflight are inventory-aware; public payment availability
+// stays subject to the canonical registry gate.
+export * from "./settlementSolanaV14.js";
+export type {
+  Aifp1EvmPaymentRecovery,
+  Aifp1SolanaPaymentRecovery,
+  Aifp1SettlementChain,
+  Aifp1RecoveryOptions,
+} from "./aifp1.js";
+export { solanaQuoteAuthorizationMessage } from "./aifp1.js";

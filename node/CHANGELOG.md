@@ -1,5 +1,28 @@
 # Changelog
 
+The 2.5.0 source build now clears its literal generated `dist/` before TypeScript
+compilation, including pretest/prepublication builds, so retired modules cannot
+remain in the package.
+
+## 2.5.0 — Solana v1.4 source candidate
+
+- Persist zero-debit quote authorization before POST, replay exact bytes after
+  timeout/restart, and atomically adopt into the shared monetary reservation.
+  Narrow proof-bound local terminal outcomes never refund server policy caps.
+- Validate public Solana wallet identity and conserved unit quota; preserve partial
+  retained-history coverage and nullable shared costs. Explicit balance cluster
+  verifies genesis/mint and excludes devnet test assets from aggregate USD.
+
+- Add owner-selected SOL/SPL preflight, signed-byte journaling, shared caps and same-signature receipt recovery. Canonical disabled deployments remain unavailable; this source candidate is not activated or published.
+- Validate pinned IDL/quote/account layouts, fresh config/profile/mint/nonce evidence,
+  request-bound Ed25519 quote authorization and the exact final unsigned simulation.
+  Fees and all missing nonce/ATA rent count against the independent owner cap.
+- Add cluster/program-bound receipt verification and public history/quota with
+  case-preserved Solana keys and redacted bearer receipts.
+- Canonical finalized failure reconciles a proven fee once at the ledger-bound
+  admission rate/time, keeps an immutable failed ID and survives crash/restart.
+  Incomplete proof preserves the full reserve; recovery never resends or refunds success.
+
 ## 2.4.0 — source candidate, unreleased
 
 - Reuse the signed EVM v1.4 kernel for nine explicitly owner-selected mainnets;
@@ -29,7 +52,6 @@
 - Release order: Node2.4.0 publication, MCP published dependency/lock refresh and
   standalone CI, then MCP2.6.0. Existing registry lock is preserved; source-packed
   integration verifies the candidate. Python2.4.0 publishes independently after review.
-
 
 ## 2.3.2
 

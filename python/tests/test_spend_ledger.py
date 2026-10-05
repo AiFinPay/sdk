@@ -128,7 +128,7 @@ def test_legacy_state_is_migrated_exactly_without_truncating_active_debits(tmp_p
     ledger = a.SpendLedger(2, 2, str(path))
     ledger.record(0.2)
     state = json.loads(path.read_text())
-    assert state["version"] == 2 and state["spend"][:-1] == old
+    assert state["version"] == 3 and state["spend"][:-1] == old
     assert ledger.spent_24h() == pytest.approx(1.201)
     with pytest.raises(a.Aifp1QuoteError, match="24-hour"):
         a.SpendLedger(2, 2, str(path)).reserve(0.8, binding())

@@ -32,6 +32,17 @@ Current integration proposal and acceptance criteria:
 [v1.4 public payment](docs/architecture/v14-public-payment.md).
 Decision provenance: [ADR 0001](docs/adr/0001-v14-public-payment.md).
 
+The conditional Solana extension retains these boundaries. Separate owner
+`solanaV14` options and the exact packaged IDL drive Node
+`settlementSolanaV14.ts` and Python `settlement_solana_v14.py`; the ordinary
+`fetchPaid`/`fetch_paid` facade dispatches them. Local Ed25519 proofs, exact SOL9
+and classic SPL6 amounts, fee/rent preflight and same-signature recovery share the
+existing private wallet ledger. Failure-only fee accounting is canonical-proof
+bound and atomic; it cannot refund successful spending. Public history/quota
+preserve payer case and select cluster/program independently. Canonical records
+remain disabled. Source checks, deployed ELF/governance and funded acceptance
+are separate. See [ADR0004](docs/adr/0004-solana-payment-flow.md).
+
 The user-approved full-flow extension retains this architecture and reuses the
 existing EVM v1.4 kernel across the current nine mainnets. Caller-authorized
 chain/native/token metadata and network-specific gas estimates remain separate

@@ -1,8 +1,8 @@
 {
   "name": "@aifinpay/mcp",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "mcpName": "io.github.daochild/aifinpay",
-  "description": "AiFinPay MCP: persistent agent wallets, discovery and owner-enabled verified EVM v1.4 payments with durable budget and receipt recovery.",
+  "description": "AiFinPay MCP: persistent local agent wallets, owner-configured EVM and Solana payment adapters, durable budgets and receipt recovery.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -28,9 +28,9 @@
   "scripts": {
     "sync:skills": "node scripts/sync-skills.mjs",
     "prebuild": "npm run sync:skills",
-    "build": "tsc -p tsconfig.json",
+    "build": "node scripts/build.mjs",
     "test": "vitest run",
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "node scripts/verify-release-inputs.mjs && npm run build && npm test",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"**/*.{js,mjs,cjs,jsx,ts,tsx,json,md}\"",
@@ -76,8 +76,8 @@
   },
   "bugs": "https://github.com/AiFinPay/sdk/issues",
   "dependencies": {
-    "@aifinpay/agent": "^2.3.0",
-    "@aifinpay/skill": "^2.6.0",
+    "@aifinpay/agent": "^2.5.0",
+    "@aifinpay/skill": "^2.8.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "bs58": "^6.0.0",
     "tweetnacl": "^1.0.3"

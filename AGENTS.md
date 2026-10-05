@@ -2,14 +2,14 @@
 
 Primary instructions: `node_modules/@daochild/agents-config/AGENTS.md` — read in full and follow unless overridden below.
 
-Payment rail for AI agents (AIFP-1 gross-inclusive settlement, AIFP-2/x402 negotiation). Node `@aifinpay/agent` and Python `aifinpay-agent` source 2.4.0 extend the signed EVM v1.4 kernel to nine explicitly owner-selected mainnets; Polygon remains the default. This is source capability, not publication or production activation. The MCP2.6.0 candidate consumes that exact Node source cohort and canonical skill2.7.0 release target. Real registry publications, MCP dependency/lock refresh and standalone CI remain required; never publish from the retained old registry lock. Build and test from source. Never use `npm install @aifinpay/agent@latest` or `pip install aifinpay-agent` to stand in for this source. Canonical domain is `aifinpay.io` (`aifinpay.company` is retired).
+Payment rail for AI agents (AIFP-1 gross-inclusive settlement, AIFP-2/x402 negotiation). Node `@aifinpay/agent` and Python `aifinpay-agent` source 2.5.0 retain the nine owner-selected EVM mainnets introduced in 2.4 and add conditional Solana v1.4 SOL/classic SPL settlement; Polygon remains the default. MCP 2.7.0 consumes that exact source cohort with canonical skill 2.8.0. Both real Solana records remain disabled: no availability bypass or production activation is authorized. The earlier Node 2.4/MCP 2.6/skill 2.7 candidate is preserved separately; Python 2.4 was published on 2026-10-05. Real registry publications, MCP dependency/lock refresh and standalone CI remain required; never publish from the retained old registry lock. Build and test from source. Never use `npm install @aifinpay/agent@latest` or `pip install aifinpay-agent` to stand in for this source. Canonical domain is `aifinpay.io` (`aifinpay.company` is retired).
 
 ## Layout
 
 Monorepo of independent packages. Each package owns its own `AGENTS.md`; respect its scope.
 
 - `node/` — `@aifinpay/agent` (Node/TS SDK, publishes `dist/`, `README.md`, `PAYMENT_RECEIPTS.md`).
-- `mcp/` — `@aifinpay/mcp` (MCP server). Depends on the **published** `@aifinpay/agent` from npm, *not* `../node`.
+- `mcp/` — `@aifinpay/mcp` (MCP server). Depends on the **published** `@aifinpay/agent` from npm, _not_ `../node`.
 - `wallet/` — `@aifinpay/wallet` (light wallet + CLI). Keystore: `~/.aifinpay/agent.json`.
 - `gate/` — `@aifinpay/gate` (merchant AIFP-1 paywall, optional Express peer dep).
 - `mcp-http/` — transport shim for `https://mcp.aifinpay.io/mcp`.

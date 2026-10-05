@@ -1,4 +1,25 @@
-## Node/Python2.4.0, MCP2.6.0 — release candidates
+## Solana v1.4 source candidate — Node/Python 2.5.0, MCP 2.7.0
+
+- Persist zero-debit quote authorization before POST, replay exact bytes after
+  timeout/restart, and atomically adopt into the shared monetary reservation.
+  Narrow proof-bound local terminal outcomes never refund server policy caps.
+- Validate public Solana wallet identity and conserved unit quota; preserve partial
+  retained-history coverage and nullable shared costs. Explicit balance cluster
+  verifies genesis/mint and excludes devnet test assets from aggregate USD.
+
+- Add explicit owner network/fee-and-rent authorization, exact SOL9/classic SPL settlement, durable shared budgets and recovery of the original signature. Registry availability and production activation remain separate gates.
+- Validate the exact pinned quote/instruction, request-bound Ed25519 quote proof,
+  live Config/profile/mint/PDA evidence, exact final simulation and complete fee/rent
+  budget before signing. Persist the original signed bytes before a single send.
+- Bind Solana receipts and public history/quota to the independently selected
+  cluster/program; preserve base58 case and redact bearer receipts.
+- Reconcile canonical finalized failures atomically to the proven fee at the
+  original admission rate and timestamp. Retain immutable recovery IDs, recover
+  crashes idempotently and never resend unknown transactions or rewrite success.
+- Node/Python 2.5, MCP 2.7 and canonical skill 2.8 are source candidates. No new
+  dependency, settlement activation, contract/profile or registry flag change.
+
+## Node 2.4.0, MCP 2.6.0 — previous release candidates; Python 2.4.0 published 2026-10-05
 
 - Reuse the signed EVM v1.4 kernel for nine explicitly owner-selected mainnets;
   preserve Polygon defaults, merchant authorization, deployment/runtime/signer,
@@ -161,7 +182,7 @@ Documentation only; no code change in either SDK.
 ## Python 2.2.0 — unreleased
 
 - `AiFinPayAgent.fetch_paid(url, allowed_origins=…, max_amount_usd=…,
-  daily_amount_usd=…, asset="POL"|"USDC")` pays AIFP-1 merchants on the Polygon
+daily_amount_usd=…, asset="POL"|"USDC")` pays AIFP-1 merchants on the Polygon
   v1.4 splitter, at parity with Node `fetchPaid`: the same signed-call checks and
   refusal codes against the pinned deployment (`settlement_v14.py`, generated
   `_v14_deployments.py`), exact-amount USDC approval, independent POL/USD
@@ -505,21 +526,23 @@ Minor rather than patch: an agent that upgrades builds a different transaction.
 ## @aifinpay/agent 1.4.0 · aifinpay-agent 1.2.0 — 2026-08-01
 
 ### Changed
+
 - **B2BSplitter v1.2 on Polygon, Optimism, BOT Chain and XRPL EVM.** The
   entrypoint is now `payNative(bytes32 paymentId, address merchant, address
-  ipCreator, string memo)` and the contract rejects a paymentId it has already
+ipCreator, string memo)` and the contract rejects a paymentId it has already
   settled. Base and Unichain were not part of that rollout and still use
   `payMatic`, so the ABI is selected per chain rather than per release — sending
   v1.2 calldata to a v1.1 contract reverts with no useful reason.
 - `paymentId` is derived deterministically from the quote's order id. Random ids
   would satisfy the contract while defeating the guard: the point is that the
-  same order cannot be paid twice. A retry after a *reverted* transaction is
+  same order cannot be paid twice. A retry after a _reverted_ transaction is
   unaffected, since a revert settles nothing.
 - A bridge may now send `splitter_version` alongside `splitter`; it takes
   precedence over the built-in registry, because the server knows what it just
   deployed. Absent, it is treated as 1.1.
 
 ### Fixed
+
 - The registry shipped the superseded Polygon splitter `0xE34F…8440`, which v1.2
   replaced. Every address here was re-checked with `eth_getCode` on its own
   chain on 2026-08-01.
@@ -527,6 +550,7 @@ Minor rather than patch: an agent that upgrades builds a different transaction.
 ## @aifinpay/agent 1.3.3 · aifinpay-agent 1.1.3 — 2026-07-30
 
 ### Fixed
+
 - **1.3.2 broke the default registry lookup it was meant to fix.** That release
   reordered the candidate paths to try `/providers` first, which is right for
   `api.aifinpay.io` but wrong for the Node SDK's default base of
@@ -547,6 +571,7 @@ Minor rather than patch: an agent that upgrades builds a different transaction.
 ## @aifinpay/agent 1.3.2 · aifinpay-agent 1.1.2 — 2026-07-30
 
 ### Fixed
+
 - **Provider registry lookup 404'd against production**, so
   `agent.call({provider})` / `agent.call(provider=...)` could not resolve any
   provider through `api.aifinpay.io`. Both SDKs defaulted the registry to
@@ -562,6 +587,7 @@ Minor rather than patch: an agent that upgrades builds a different transaction.
 ## @aifinpay/agent 1.3.0 — 2026-07-16
 
 ### Added
+
 - **Multi-EVM splitter settlement (native token, direct path)** —
   `AiFinPayAgent.call()` now settles `B2BSplitter.payMatic` on every
   chain in the new exported `SPLITTER_DEPLOYMENTS` registry: Polygon
@@ -579,6 +605,7 @@ Minor rather than patch: an agent that upgrades builds a different transaction.
   `AIFINPAY_MATIC_USD` kept for Polygon back-compat).
 
 ### Unchanged
+
 - Solana settlement (`b2b_pay_with_split`) byte-identical.
 - Backend-quoted invoice flow (`/api/b2b/pay-with-split`,
   `/api/b2b/quote-split`, MCP `pay_with_split` / `quote_split` tools)
@@ -591,11 +618,13 @@ First stable release. The three packages graduate from alpha to a
 semver-stable `1.0.0` on PyPI and npm under the default (`latest`) tag.
 
 ### Packages
+
 - `aifinpay-agent` (Python) — `1.0.0`
 - `@aifinpay/agent` (Node / TypeScript) — `1.0.0`
 - `@aifinpay/mcp` (MCP server) — `1.0.0`
 
 ### Stable
+
 - **Unified `AiFinPayAgent` surface** — chain-opaque `call({provider})`
   plus `openSession` / `balance` / `verify` / `deposit`. The legacy
   chain-aware `Agent` class stays exported and continues to work.
@@ -612,6 +641,7 @@ semver-stable `1.0.0` on PyPI and npm under the default (`latest`) tag.
   AiFinPay infra).
 
 ### Changed
+
 - Install commands no longer require a prerelease tag:
   `pip install aifinpay-agent` and `npm install @aifinpay/agent`.
 - All documentation, example endpoints, and contact email moved to the
@@ -619,5 +649,6 @@ semver-stable `1.0.0` on PyPI and npm under the default (`latest`) tag.
   fully retired (DNS removed).
 
 ### Notes
+
 - Semver guarantees apply from `1.0.0`: no breaking changes without a
   major bump; deprecations ship with a minor and a migration note.

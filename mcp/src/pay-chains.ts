@@ -10,7 +10,7 @@ import { PAYMENT_CHAINS, type Aifp1V14Chain } from "@aifinpay/agent";
  * compile) and the backend serves it.
  */
 export interface PayChain {
-  name: Aifp1V14Chain;
+  name: Aifp1V14Chain | "solana";
   /** How messages to the owner name it. */
   label: string;
   /** Native currency: the default pay asset and the gas currency. */
@@ -45,9 +45,19 @@ for (const name of Object.keys(PAYMENT_CHAINS) as Aifp1V14Chain[]) {
 }
 export const PAY_CHAINS: Readonly<Record<Aifp1V14Chain, PayChain>> = Object.freeze(payChains);
 
-export const PAY_CHAIN_NAMES = Object.keys(PAY_CHAINS) as Aifp1V14Chain[];
+export const SOLANA_PAY_CHAIN: Readonly<PayChain> = Object.freeze({
+  name: "solana",
+  label: "Solana",
+  native: "SOL",
+  defaultRpc: "https://api.mainnet-beta.solana.com",
+  coinbasePair: "SOL-USD",
+  coingeckoId: "solana",
+  maxSaneUsd: 100_000,
+});
+export const PAY_CHAIN_NAMES = [...Object.keys(PAY_CHAINS), "solana"];
 
 export function payChain(name: string | undefined): PayChain {
+  if (name === "solana") return SOLANA_PAY_CHAIN;
   const key = (name ?? "polygon") as Aifp1V14Chain;
   const chain = Object.hasOwn(PAY_CHAINS, key) ? PAY_CHAINS[key] : undefined;
   if (!chain) throw new Error(`AIFINPAY_PAY_CHAIN must be one of ${PAY_CHAIN_NAMES.join(", ")}`);
