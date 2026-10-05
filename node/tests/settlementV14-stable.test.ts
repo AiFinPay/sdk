@@ -1,3 +1,4 @@
+import { PAYMENT_CHAINS, paymentStableAsset, type PaymentChain } from "../src/paymentChains.js";
 // v1.4 settleStable execution: approve exactly the gross, then settle.
 //
 // A token quote needs two transactions. The approval moves no funds and is
@@ -62,21 +63,23 @@ const paymentAbi = parseAbi([
 ]);
 const erc20 = parseAbi(["function approve(address,uint256) returns (bool)"]);
 
-async function fixture(network: "polygon" | "base" = "polygon") {
+async function fixture(network: PaymentChain = "polygon", asset = "USDC", micro = GROSS) {
   const dep = V14_DEPLOYMENTS[network];
-  const USDC = dep.splitter.assets.find((a) => a.symbol === "USDC")!.address;
+  const pin = paymentStableAsset(network, asset)!;
+  const USDC = pin.address;
+  const gross = micro * 10n ** BigInt(pin.decimals - 6);
   const q = {
     payer: payer.address,
     merchant,
     token: USDC,
-    grossAmount: String(GROSS),
+    grossAmount: String(gross),
     ipCreator: zero,
     validUntil: String(Math.floor(Date.now() / 1000) + 300),
     orderIdHash: keccak256(stringToHex("order-1")),
     nonce: "0",
     routeId: routeIdOf("merchant-aifp1"),
   } as const;
-  const message = { ...q, grossAmount: GROSS, validUntil: BigInt(q.validUntil), nonce: 0n };
+  const message = { ...q, grossAmount: gross, validUntil: BigInt(q.validUntil), nonce: 0n };
   const domain = {
     name: "B2BSplitterV14",
     version: "1",
@@ -89,12 +92,12 @@ async function fixture(network: "polygon" | "base" = "polygon") {
     contract: dep.splitter.address,
     splitter_version: "1.4",
     route: "merchant-aifp1",
-    asset: "USDC",
+    asset,
     function: "settleStable((address,address,address,uint256,address,uint256,bytes32,uint256,bytes32),bytes)",
     arg_encoding: "struct+signature",
     field_order: fields.map((f) => f.name),
     value_wei: "0",
-    approval: { token: USDC, spender: dep.splitter.address, amount: String(GROSS) },
+    approval: { token: USDC, spender: dep.splitter.address, amount: String(gross) },
     args: { quote: { ...q }, signature },
   };
   const paymentId = keccak256(
@@ -102,7 +105,7 @@ async function fixture(network: "polygon" | "base" = "polygon") {
       q.payer,
       q.merchant,
       q.token,
-      GROSS,
+      gross,
       q.ipCreator,
       message.validUntil,
       q.orderIdHash,
@@ -121,7 +124,7 @@ async function fixture(network: "polygon" | "base" = "polygon") {
       ["address", "uint256", "uint256", "uint256", "uint256", "uint256", "bytes32", "bytes32"].map((type) => ({
         type,
       })),
-      [token, GROSS, 99000n, 1000n, 0n, message.validUntil, q.routeId, q.orderIdHash]
+      [token, gross, gross - gross / 100n, gross / 100n, 0n, message.validUntil, q.routeId, q.orderIdHash]
     ),
   });
   const state: Record<string, unknown> = {
@@ -134,8 +137,8 @@ async function fixture(network: "polygon" | "base" = "polygon") {
     payerNonce: 0n,
     paused: false,
     isAllowed: true,
-    decimals: 6,
-    balanceOf: 5_000_000n,
+    decimals: pin.decimals,
+    balanceOf: gross * 50n,
     allowance: 0n,
     getL1FeeUpperBound: 1000n,
     getOperatorFee: 100n,
@@ -185,7 +188,7 @@ async function fixture(network: "polygon" | "base" = "polygon") {
     account: payer.address,
     orderId: "order-1",
     expectedMerchant: merchant,
-    expectedGrossAmount: GROSS,
+    expectedGrossAmount: gross,
     expectedToken: USDC,
     expectedChain: network,
     maxGasWei: 10_000_000n,
@@ -329,5 +332,30 @@ describe("Base USDC execution", () => {
     expect(f.wallet.account.signTransaction).not.toHaveBeenCalled();
     expect(f.client.sendRawTransaction).not.toHaveBeenCalled();
     expect(f.onPrepared).not.toHaveBeenCalled();
+  });
+});
+
+describe("per-network stable approval, exact denomination and gas family", () => {
+  const pairs = (Object.keys(PAYMENT_CHAINS) as PaymentChain[]).flatMap((chain) =>
+    V14_DEPLOYMENTS[chain].splitter.assets.map(({ symbol }) => ({ chain, asset: symbol }))
+  );
+  it.each(pairs)("signs exact bounded approval+settlement on $chain/$asset", async ({ chain, asset }) => {
+    const f = await fixture(chain, asset, 100001n);
+    await executeV14Settlement(f.call, f.ctx);
+    const [approval, settlement] = f.sent.map((raw) => parseTransaction(raw));
+    expect(approval.chainId).toBe(PAYMENT_CHAINS[chain].chainId);
+    expect(settlement.chainId).toBe(PAYMENT_CHAINS[chain].chainId);
+    const approved = decodeFunctionData({ abi: erc20, data: approval.data! });
+    expect(approved.args[1]).toBe(BigInt(f.call.args.quote.grossAmount));
+    const feeCalls = f.client.readContract.mock.calls.filter(([c]) => c.functionName === "getL1FeeUpperBound");
+    expect(feeCalls.length).toBe(PAYMENT_CHAINS[chain].gasModel === "op" ? 3 : 0);
+    expect(f.onPrepared).toHaveBeenCalledOnce();
+  });
+  it.each(["bnb", "robinhood"] as const)("refuses live decimals differing from18dp pin on %s", async (chain) => {
+    const f = await fixture(chain, chain === "robinhood" ? "USDe" : "USDC");
+    f.state.decimals = 6;
+    await expect(executeV14Settlement(f.call, f.ctx)).rejects.toMatchObject({ code: "V14_TOKEN_DECIMALS" });
+    expect(f.wallet.account.signTransaction).not.toHaveBeenCalled();
+    expect(f.sent).toHaveLength(0);
   });
 });

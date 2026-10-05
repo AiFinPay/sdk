@@ -65,7 +65,7 @@ async function fromChainlink(fetchImpl: FetchImpl, rpc: string, chain: PayChain)
   const updatedAt = Number(word(3));
   if (answer <= 0n || answer >= 2n ** 255n) throw new Error("non-positive answer");
   const ageS = Math.floor(Date.now() / 1000) - updatedAt;
-  if (ageS > MAX_FEED_AGE_S) throw new Error(`feed is ${ageS}s old`);
+  if (ageS < -30 || ageS > MAX_FEED_AGE_S) throw new Error(`feed is ${ageS}s old`);
   const usd = Number(answer) / 10 ** CHAINLINK_DECIMALS;
   if (!sane(usd, chain)) throw new Error("implausible answer");
   return { usd, observedAtMs: Date.now(), source: `chainlink-${chain.name}` };
@@ -96,7 +96,7 @@ async function fromCoinGecko(fetchImpl: FetchImpl, chain: PayChain): Promise<Nat
   const usd = Number(entry?.usd);
   const ageS = Math.floor(Date.now() / 1000) - Number(entry?.last_updated_at ?? 0);
   if (!sane(usd, chain)) throw new Error("invalid response");
-  if (!(ageS <= MAX_FEED_AGE_S)) throw new Error(`price is ${ageS}s old`);
+  if (!(ageS >= -30 && ageS <= MAX_FEED_AGE_S)) throw new Error(`price is ${ageS}s old`);
   return { usd, observedAtMs: Date.now(), source: "coingecko" };
 }
 
@@ -113,7 +113,7 @@ export async function independentNativeUsd(opts: {
   const { chain } = opts;
   const attempts: Array<[string, () => Promise<NativePrice>]> = [];
   const rpc = opts.rpc;
-  if (rpc)
+  if (rpc && chain.chainlinkNativeUsd)
     attempts.push([`Chainlink on ${chain.label} via ${hostOf(rpc)}`, () => fromChainlink(opts.fetchImpl, rpc, chain)]);
   attempts.push(["api.coinbase.com", () => fromCoinbase(opts.fetchImpl, chain)]);
   attempts.push(["api.coingecko.com", () => fromCoinGecko(opts.fetchImpl, chain)]);

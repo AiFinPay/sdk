@@ -10,19 +10,41 @@ Canonical domain: **https://aifinpay.io**
 
 ## Current package versions
 
-| Package | Current source version | Install |
-|---|---:|---|
-| `aifinpay-agent` (Python) | `2.3.0` | `pip install aifinpay-agent` |
-| `aifinpay-gate` (Python merchant gate) | `0.1.0` | `pip install aifinpay-gate` |
-| `@aifinpay/agent` (Node / TypeScript) | `2.3.0` | `npm install @aifinpay/agent` |
-| `@aifinpay/mcp` | `2.4.1` | `npx @aifinpay/mcp` |
-| `@aifinpay/mcp-http` | `2.0.4` | Streamable HTTP wrapper |
-| `@aifinpay/skill` | `2.5.1` (source: [AiFinPay/skill](https://github.com/AiFinPay/skill); bundled by `@aifinpay/mcp`) | `npm install @aifinpay/skill` |
-| `@aifinpay/gate` | `0.3.4` | `npm install @aifinpay/gate` |
-| `@aifinpay/wallet` | `1.1.0` | `npm install @aifinpay/wallet` |
-| `@aifinpay/deployments` | `1.1.3` | deployment registry package |
+| Package                                |                                                                                                                               Current source version | Install                        |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------: | ------------------------------ |
+| `aifinpay-agent` (Python)              |                                                                                                                                    `2.5.0` candidate | `pip install aifinpay-agent`   |
+| `aifinpay-gate` (Python merchant gate) |                                                                                                                                              `0.1.1` | `pip install aifinpay-gate`    |
+| `@aifinpay/agent` (Node / TypeScript)  |                                                                                                                                    `2.5.0` candidate | `npm install @aifinpay/agent`  |
+| `@aifinpay/mcp`                        |                                                                                                                            `2.7.0` release candidate | `npx @aifinpay/mcp`            |
+| `@aifinpay/mcp-http`                   |                                                                                                                                              `2.0.4` | Streamable HTTP wrapper        |
+| `@aifinpay/skill`                      | `2.8.0` coordinated target; existing registry lock pending refresh ([AiFinPay/skill](https://github.com/AiFinPay/skill); bundled by `@aifinpay/mcp`) | `npm install @aifinpay/skill`  |
+| `@aifinpay/gate`                       |                                                                                                                                              `0.3.5` | `npm install @aifinpay/gate`   |
+| `@aifinpay/wallet`                     |                                                                                                                                              `1.2.0` | `npm install @aifinpay/wallet` |
+| `@aifinpay/deployments`                |                                                                                                                                              `1.1.3` | deployment registry package    |
 
-Package lines are versioned independently. The package manifests in this repository and the corresponding npm/PyPI registries are the source of truth.
+These are local source versions, not publication claims. The Solana integration
+candidate is Node/Python2.5.0, MCP2.7.0 and canonical sibling skill2.8.0. Python2.4.0
+was published on2026-10-05; the previous Node2.4/MCP2.6 cohort is preserved on its
+release branch. Registry publication, genuine MCP dependency/lock refresh and
+standalone CI are separate release gates. No fabricated registry resolutions are
+used. Source-cohort checks install the actual packed SDK and skill together.
+
+## Solana paid access candidate
+
+The candidate adds complete conditional `fetchPaid` / `fetch_paid` execution for
+native SOL and classic SPL USDC/USDT. Owners select Solana and its cluster/mode
+explicitly, supply a fee **plus rent** budget and keep the keys locally. The same
+local wallet ledger covers EVM and Solana unresolved purchases. Quote, signed
+transaction, receipt and public history bind the exact network/program; base58
+addresses retain their case.
+
+Both canonical Solana records remain disabled. High-level payment refuses before
+quote signing or HTTP when the selected registry record is unavailable. The
+source tests use injected synthetic approved records; they do not activate a
+network or establish deployed-program/funded acceptance. See
+[node payment instructions](node/PAYMENT_RECEIPTS.md),
+[Python instructions](python/README.md), and
+[Solana decision and acceptance](docs/adr/0004-solana-payment-flow.md).
 
 ## Install
 
@@ -47,24 +69,24 @@ npm install @aifinpay/skill
 
 The current `@aifinpay/mcp` source registers these tools:
 
-| Tool | Purpose |
-|---|---|
-| `agent_address` | Read the current EVM, Solana and Casper public addresses. |
-| `agent_reload` | Reload configured local wallet files without starting a new conversation. |
-| `agent_claim_self` | Link the agent to its owner's dashboard with a one-time URL from dash.aifinpay.io. Signs only an AiFinPay claim challenge for the agent's own address; moves no funds. |
-| `payable_fetch` | **Only when the owner enables payments.** Fetch a GET resource from an owner-approved AIFP-1 merchant, buying a prepaid batch on Polygon v1.4 (POL or a pinned stablecoin) within the owner's limits. |
-| `agent_quota` | Read the agent's quota. |
-| `agent_history` | Read indexed AiFinPay payment history or retained receipt history. |
-| `agent_passport_resolve` | Resolve a public Agent Passport identity and verified wallet bindings. |
-| `settlement_routes` | Read currently runtime-verified AIFP-1 / AIFP-2 settlement routes. |
-| `settlement_invoice` | Build and validate a **non-signing** EVM settlement invoice. |
-| `settlement_solana` | Build and validate a **non-signing** Solana settlement invoice. |
-| `settlement_casper` | Build and validate a **non-signing** Casper settlement invoice. |
-| `deployment_info` | Read deployment addresses, program IDs and settlement status across supported ecosystems. |
+| Tool                     | Purpose                                                                                                                                                                                                                     |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `agent_address`          | Read the current EVM, Solana and Casper public addresses.                                                                                                                                                                   |
+| `agent_reload`           | Reload configured local wallet files without starting a new conversation.                                                                                                                                                   |
+| `agent_claim_self`       | Link the agent to its owner's dashboard with a one-time URL from dash.aifinpay.io. Signs only an AiFinPay claim challenge for the agent's own address; moves no funds.                                                      |
+| `payable_fetch`          | **Only when the owner enables payments.** Fetch a GET resource from an owner-approved AIFP-1 merchant, buying a prepaid batch on the explicitly configured EVM v1.4 chain within owner limits; Polygon remains the default. |
+| `agent_quota`            | Read the agent's quota.                                                                                                                                                                                                     |
+| `agent_history`          | Read indexed AiFinPay payment history or retained receipt history.                                                                                                                                                          |
+| `agent_passport_resolve` | Resolve a public Agent Passport identity and verified wallet bindings.                                                                                                                                                      |
+| `settlement_routes`      | Read currently runtime-verified AIFP-1 / AIFP-2 settlement routes.                                                                                                                                                          |
+| `settlement_invoice`     | Build and validate a **non-signing** EVM settlement invoice.                                                                                                                                                                |
+| `settlement_solana`      | Build and validate a **non-signing** Solana settlement invoice.                                                                                                                                                             |
+| `settlement_casper`      | Build and validate a **non-signing** Casper settlement invoice.                                                                                                                                                             |
+| `deployment_info`        | Read deployment addresses, program IDs and settlement status across supported ecosystems.                                                                                                                                   |
 
 With `AIFINPAY_MODE=dev`, an additional `dev_payment_quote` tool is available for dev-only quote inspection.
 
-**Without owner payment configuration the MCP server is read-only:** it signs no payment, and creating an invoice or quote is not a completed payment. `payable_fetch` is registered — and signs and broadcasts locally — only when the owner sets `AIFINPAY_PAYMENTS_ENABLED=1` together with `AIFINPAY_MAX_USD`, `AIFINPAY_DAILY_USD`, `AIFINPAY_GATEWAY_ORIGINS` and `AIFINPAY_MAX_GAS_POL`; with payments enabled and any of them missing, the server does not start. See [mcp/README.md](./mcp/README.md).
+**Without owner payment configuration the MCP server is read-only:** it signs no payment, and creating an invoice or quote is not a completed payment. `payable_fetch` is registered — and signs and broadcasts locally — only when the owner sets `AIFINPAY_PAYMENTS_ENABLED=1` together with `AIFINPAY_MAX_USD`, `AIFINPAY_DAILY_USD`, `AIFINPAY_GATEWAY_ORIGINS` and a native gas cap (`AIFINPAY_MAX_GAS`; legacy `AIFINPAY_MAX_GAS_POL` is Polygon-only). Incomplete enabled configuration refuses startup. See [mcp/README.md](./mcp/README.md).
 
 Legacy tools such as `agent_call`, `agent_quote`, `pay_with_split` and `quote_split` are not registered by the current MCP server.
 
@@ -99,13 +121,13 @@ The SDK surfaces have different execution status. Do not treat them as interchan
 
 ### Node / TypeScript
 
-`@aifinpay/agent` includes the AIFP-1 `fetchPaid` path. The 2.3.0 source candidate adds explicitly selected Base v1.4 (ETH or pinned USDC) alongside default Polygon v1.4. Paid execution validates the selected chain, pinned deployment/profile, token and RPC before signing; native payments also require a fresh independent price. Legacy Polygon v1.3 still requires its separately reviewed settlement pin. Source support does not activate a production route or publish a package.
+`@aifinpay/agent` includes the AIFP-1 `fetchPaid` path. The 2.4.0 source candidate supports Polygon, Base, Optimism, Arbitrum, Avalanche, BNB, Unichain, XRPL EVM and Robinhood. Every non-Polygon rail requires explicit owner selection. Paid execution validates the selected chain, deployment/runtime/signer/profile, pinned token and RPC before signing; native payments require a fresh independent price. Durable bound reservations prevent unresolved payments from resetting the daily cap or buying the same access on another rail. Legacy Polygon v1.3 still requires its separately reviewed settlement pin. Source support does not activate a production route or publish a package.
 
 See [node/README.md](./node/README.md) and [node/PAYMENT_RECEIPTS.md](./node/PAYMENT_RECEIPTS.md).
 
 ### Python
 
-The Python package pays AIFP-1 merchants with `AiFinPayAgent.fetch_paid` (Polygon v1.4, POL or USDC). The 2.3.0 source candidate also supports explicit `chain="base"` with ETH or pinned USDC and a required gas budget in wei. Its legacy paid `call()` settlement path stays disabled. MCP's current payment configuration remains Polygon; these source changes do not add a Base MCP setting.
+The Python 2.4.0 source candidate uses `AiFinPayAgent.fetch_paid` for the same nine EVM mainnets, pinned native/stable assets and exact six/eighteen-decimal token amounts. Every non-Polygon chain requires an explicit native gas budget in wei. Shared local-file reservations serialize concurrent processes, survive unknown broadcasts and reconcile recovered receipts once. Its legacy paid `call()` settlement path stays disabled. The MCP candidate consumes the Node source cohort with explicit owner chain/asset configuration and private durable recovery.
 
 See [python/README.md](./python/README.md).
 
@@ -138,10 +160,10 @@ The old Solana program `5g9zWHF1Vv6GiGpA2ZbJQbSCDZd5hAk9AyvabRJvKFx2` was closed
 
 The current registry contains the redeployed v1.4.1 programs below, both currently disabled for settlement:
 
-| Network | Program ID | Settlement status | Reason |
-|---|---|---|---|
-| Devnet | `8dty5bD738Z9TzEkDu8vLSnhpJNWtEGMUEcYaKCUTY6y` | Disabled | Backend receipt verification is not implemented. |
-| Mainnet | `724Ut31i4ecY4dJ25z8HuZetu3A43xtNkPdk4JdbsfdD` | Disabled | Backend receipt verification is not implemented and upgrade authority is not multisig. |
+| Network | Program ID                                     | Settlement status | Reason                                                                                 |
+| ------- | ---------------------------------------------- | ----------------- | -------------------------------------------------------------------------------------- |
+| Devnet  | `8dty5bD738Z9TzEkDu8vLSnhpJNWtEGMUEcYaKCUTY6y` | Disabled          | Backend receipt verification is not implemented.                                       |
+| Mainnet | `724Ut31i4ecY4dJ25z8HuZetu3A43xtNkPdk4JdbsfdD` | Disabled          | Backend receipt verification is not implemented and upgrade authority is not multisig. |
 
 Canonical registry source: [deployments/registry/splitter/solana/deployments.json](./deployments/registry/splitter/solana/deployments.json)
 
@@ -149,10 +171,10 @@ Canonical registry source: [deployments/registry/splitter/solana/deployments.jso
 
 These are **historical transactions only**. They do not certify the current release, fee model or current production readiness.
 
-| Provider | Asset | Historical use | Transaction |
-|---|---|---|---|
-| Exa Search | POL | SDK call via Exa | [`0xeb13c5eddf645b3e5b5e5db82d8b19d301a4c0c8593f6e7dce9cd4c3359c8700`](https://polygonscan.com/tx/0xeb13c5eddf645b3e5b5e5db82d8b19d301a4c0c8593f6e7dce9cd4c3359c8700) |
-| io.net | POL | Llama-3.3-70B inference, $0.025 | [`0x7c6ca0ffcf75b1ca3ade4800fb896c4bb08bc5f1a91916dc2cf4918f16129f0a`](https://polygonscan.com/tx/0x7c6ca0ffcf75b1ca3ade4800fb896c4bb08bc5f1a91916dc2cf4918f16129f0a) |
+| Provider   | Asset | Historical use                  | Transaction                                                                                                                                                           |
+| ---------- | ----- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Exa Search | POL   | SDK call via Exa                | [`0xeb13c5eddf645b3e5b5e5db82d8b19d301a4c0c8593f6e7dce9cd4c3359c8700`](https://polygonscan.com/tx/0xeb13c5eddf645b3e5b5e5db82d8b19d301a4c0c8593f6e7dce9cd4c3359c8700) |
+| io.net     | POL   | Llama-3.3-70B inference, $0.025 | [`0x7c6ca0ffcf75b1ca3ade4800fb896c4bb08bc5f1a91916dc2cf4918f16129f0a`](https://polygonscan.com/tx/0x7c6ca0ffcf75b1ca3ade4800fb896c4bb08bc5f1a91916dc2cf4918f16129f0a) |
 
 ## Repository layout
 

@@ -12,7 +12,7 @@ export interface SolanaV14Deployment {
   settlementEnabled: boolean;
   disabledReason?: string;
   programId: string;
-  idl: { name: string; version: string; artifact: string };
+  idl: { name: string; version: string; artifact: string; sha256: string };
 }
 
 export const SOLANA_V14_DEPLOYMENTS_SOURCE = {
@@ -34,7 +34,8 @@ export const SOLANA_V14_DEPLOYMENTS: Record<string, SolanaV14Deployment> = {
     "idl": {
       "name": "splitter",
       "version": "1.4.1",
-      "artifact": "deployments/splitter_v14/splitter.devnet.json"
+      "artifact": "deployments/splitter_v14/splitter.devnet.json",
+      "sha256": "75a0419e6f2a2dd20e2345dfd7b027bcbcd0be2bcd02cd108f6bda8d8c4035f2"
     }
   },
   "mainnet": {
@@ -48,7 +49,8 @@ export const SOLANA_V14_DEPLOYMENTS: Record<string, SolanaV14Deployment> = {
     "idl": {
       "name": "splitter",
       "version": "1.4.1",
-      "artifact": "deployments/splitter_v14/splitter.mainnet.json"
+      "artifact": "deployments/splitter_v14/splitter.mainnet.json",
+      "sha256": "d7890e226fc27d4d54801b9b208c44851567578793ff1855a007395f420ebee2"
     }
   }
 };

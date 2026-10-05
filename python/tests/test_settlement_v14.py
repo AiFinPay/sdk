@@ -16,6 +16,7 @@ from eth_utils import keccak
 
 import aifinpay.settlement_v14 as s
 from aifinpay._v14_deployments import V14_DEPLOYMENTS
+from aifinpay.payment_chains import PAYMENT_CHAINS, pinned_token_decimals
 
 SIGNER = Account.from_key("0x" + "01" * 32)
 PAYER = Account.from_key("0x" + "02" * 32)
@@ -59,7 +60,7 @@ def signed_call(dep, token=ZERO, gross=100000, order="order-1"):
     stable = token != ZERO
     call = {
         "chain": chain, "contract": dep["splitter"]["address"], "splitter_version": "1.4",
-        "route": "merchant-aifp1", "asset": "USDC" if stable else ("ETH" if chain == "base" else "POL"),
+        "route": "merchant-aifp1", "asset": next(a["symbol"] for a in dep["splitter"]["assets"] if a["address"].lower() == token.lower()) if stable else ("POL" if chain == "amoy" else PAYMENT_CHAINS[chain]["native"]),
         "function": s.STABLE_FUNCTION if stable else s.NATIVE_FUNCTION,
         "arg_encoding": "struct+signature", "field_order": [n for n, _ in s.QUOTE_FIELDS],
         "value_wei": "0" if stable else str(gross),
@@ -90,7 +91,7 @@ class FakeChain:
             "treasury()": dep["splitter"]["treasury"], "hasRole(bytes32,address)": True,
             "getProfile(bytes32)": (100, 0, True, 1, ZERO),
             "consumedNonce(address,uint256)": False, "payerNonce(address)": 0, "paused()": False,
-            "isAllowed(address)": True, "decimals()": 6, "balanceOf(address)": 5_000_000,
+            "isAllowed(address)": True, "decimals()": pinned_token_decimals(dep["network"], q["token"]) or 6, "balanceOf(address)": int(q["grossAmount"]) * 50,
             "allowance(address,address)": 0,
             "getL1FeeUpperBound(uint256)": 1000, "getOperatorFee(uint256)": 100,
         }

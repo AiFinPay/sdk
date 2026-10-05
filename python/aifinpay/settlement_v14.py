@@ -31,9 +31,10 @@ from eth_abi import decode as abi_decode
 from eth_abi import encode as abi_encode
 from eth_account import Account
 from eth_account.messages import encode_typed_data
-from eth_utils import is_address, keccak
+from eth_utils import is_address, keccak, to_checksum_address
 
 from ._v14_deployments import V14_DEPLOYMENTS
+from .payment_chains import PAYMENT_CHAINS, pinned_token_decimals
 
 ZERO = "0x0000000000000000000000000000000000000000"
 KNOWN_V14_ROUTES = ("merchant-aifp1", "agent-x402")
@@ -360,6 +361,9 @@ def _payments_in(receipt: Dict[str, Any], contract: str) -> List[Dict[str, Any]]
 
 
 def _sign(account: Any, tx: Dict[str, Any]) -> bytes:
+    # eth-account requires checksum form for a string destination; registry
+    # addresses are compared case-insensitively and can legitimately be lower-case.
+    tx = dict(tx, to=to_checksum_address(tx["to"]))
     signed = account.sign_transaction(tx)
     raw = getattr(signed, "raw_transaction", None) or getattr(signed, "rawTransaction")
     return bytes(raw)
@@ -370,7 +374,7 @@ def _gas_with_margin(estimate: int) -> int:
 
 
 def _transaction_fee(c: ChainClient, deployment: dict[str, Any], data: bytes, gas: int, max_fee: int) -> int:
-    """L2 maximum fee plus a buffered current Base L1/operator fee estimate.
+    """L2 maximum fee plus a buffered current OP L1/operator fee estimate.
 
     calldata + 512 bounds our type-2 transaction encoding (no access list).
     The OP oracle accounts for compression and the current operator-fee rules;
@@ -379,7 +383,8 @@ def _transaction_fee(c: ChainClient, deployment: dict[str, Any], data: bytes, ga
     if gas <= 0 or max_fee <= 0:
         _fail("V14_GAS_BUDGET_EXCEEDED", "gas and maximum fee must be positive")
     cost = gas * max_fee
-    if deployment["chainId"] != 8453:
+    # Nitro eth_estimateGas includes parent-data gas: never add OP fees twice.
+    if not any(d["chainId"] == deployment["chainId"] and d["gasModel"] == "op" for d in PAYMENT_CHAINS.values()):
         return cost
     try:
         l1 = _read(c, BASE_GAS_PRICE_ORACLE, "getL1FeeUpperBound(uint256)",
@@ -389,7 +394,7 @@ def _transaction_fee(c: ChainClient, deployment: dict[str, Any], data: bytes, ga
         if type(l1) is not int or type(operator) is not int or l1 < 0 or operator < 0:
             raise ValueError("invalid fee estimate")
     except Exception:
-        _fail("V14_FEE_ESTIMATE_UNAVAILABLE", "Base L1 data and operator fees must be estimated before signing")
+        _fail("V14_FEE_ESTIMATE_UNAVAILABLE", "OP L1 data and operator fees must be estimated before signing")
     return cost + ((l1 + operator) * 120 + 99) // 100
 
 
@@ -404,8 +409,9 @@ def _ensure_exact_approval(ctx: V14ExecutionContext, deployment: Dict[str, Any],
     current = _read(c, token, "allowance(address,address)", ["address", "address"], [me, spender], ["uint256"])
     if not allowed:
         _fail("V14_TOKEN_NOT_ALLOWED", "the splitter's tokenList no longer allows this token")
-    if int(decimals) != 6:
-        _fail("V14_TOKEN_DECIMALS", "token decimals differ from the 6 the quote is priced in")
+    expected_decimals = pinned_token_decimals(deployment["network"], token)
+    if expected_decimals is None or int(decimals) != expected_decimals:
+        _fail("V14_TOKEN_DECIMALS", "token decimals differ from the independent chain/address pin")
     if held < gross:
         _fail("V14_INSUFFICIENT_BALANCE", "token balance cannot cover the authorized gross")
     if current >= gross:
@@ -478,9 +484,10 @@ def execute_v14_settlement(call: Dict[str, Any], ctx: V14ExecutionContext) -> Di
     validated = validate_v14_settlement_call(
         call, order_id=ctx.order_id, payer=account_address, min_seconds_remaining=ctx.min_seconds_remaining
     )
+    expected_chain = ctx.expected_chain or ("amoy" if call.get("chain") == "amoy" else "polygon")
     if (
-        (ctx.expected_chain is not None and call.get("chain") != ctx.expected_chain)
-        or (call.get("chain") == "base" and ctx.expected_chain != "base")
+        (expected_chain != "amoy" and expected_chain not in PAYMENT_CHAINS)
+        or call.get("chain") != expected_chain
     ):
         _fail("V14_CHAIN_MISMATCH", "settlement chain differs from the explicitly authorized purchase")
     stable = _lc(q["token"]) != ZERO
@@ -491,7 +498,7 @@ def execute_v14_settlement(call: Dict[str, Any], ctx: V14ExecutionContext) -> Di
         or list(call.get("field_order") or []) != [n for n, _ in QUOTE_FIELDS]
     ):
         _fail("V14_CALL_MISMATCH", "route, method or quote field order disagrees with the supported ABI")
-    native_asset = "ETH" if call.get("chain") == "base" else "POL"
+    native_asset = "POL" if expected_chain == "amoy" else PAYMENT_CHAINS[expected_chain]["native"]
     if _lc(q["ipCreator"]) != ZERO or (not stable and call.get("asset") != native_asset):
         _fail("V14_UNSUPPORTED_ASSET", "This executor supports the chain's native asset or a pinned stablecoin, "
                                       "without creator payments")
@@ -507,7 +514,8 @@ def execute_v14_settlement(call: Dict[str, Any], ctx: V14ExecutionContext) -> Di
         _fail("V14_MALFORMED", "nonce metadata disagrees with signed quote")
     deployment = V14_DEPLOYMENTS.get(call.get("chain"))
     if (
-        call.get("chain") not in ("polygon", "amoy", "base")
+        (call.get("chain") != "amoy" and call.get("chain") not in PAYMENT_CHAINS)
+        or (deployment and deployment["chainId"] != (80002 if expected_chain == "amoy" else PAYMENT_CHAINS[expected_chain]["chainId"]))
         or not deployment
         or deployment["status"] != "enabled"
         or not deployment["settlementEnabled"]

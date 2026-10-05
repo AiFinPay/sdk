@@ -57,6 +57,10 @@ from .facilitators import (
 # Lazy import so installs without the EVM/Solana extras keep working with
 # the legacy Agent class.
 def __getattr__(name: str):
+    if name in ("get_agent_history", "get_quota"):
+        from . import agent_history
+
+        return getattr(agent_history, name)
     if name in (
         "AiFinPayAgent",
         "NetworkAgent",
@@ -74,7 +78,7 @@ def __getattr__(name: str):
         return getattr(unified_agent, name)
     # The errors fetch_paid raises, importable from the package as in the Node
     # SDK (Aifp1Error, Aifp1QuoteError, Aifp1PayError, V14SettlementError).
-    if name in ("Aifp1Error", "Aifp1QuoteError", "Aifp1PayError"):
+    if name in ("Aifp1Error", "Aifp1QuoteError", "Aifp1PayError", "Aifp1FinalizedFailureError"):
         from . import aifp1
 
         return getattr(aifp1, name)
@@ -118,6 +122,9 @@ __all__ = [
     "Aifp1Error",
     "Aifp1QuoteError",
     "Aifp1PayError",
+    "Aifp1FinalizedFailureError",
+    "get_agent_history",
+    "get_quota",
     "V14SettlementError",
     "PayOptions",
     "Facilitator",

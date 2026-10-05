@@ -29,7 +29,8 @@
  * Program ids live in solanaV14Deployments.generated.ts, never inline here —
  * this module is selection logic only.
  */
-import { DeploymentResolverError, type SdkEnvironment } from "./deploymentResolver.js";
+import type { SdkEnvironment } from "./deploymentResolver.js";
+import { DeploymentResolverError } from "./deploymentErrors.js";
 import {
   SOLANA_DEV_NETWORKS,
   SOLANA_V14_DEPLOYMENTS,

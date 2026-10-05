@@ -25,6 +25,7 @@ from test_settlement_v14 import MERCHANT, PAYER, FakeChain, signed_call
 import aifinpay.aifp1 as a
 import aifinpay.settlement_v14 as s
 from aifinpay._v14_deployments import V14_DEPLOYMENTS
+from aifinpay.payment_chains import PAYMENT_CHAINS, pinned_token_decimals
 
 SHOP = "https://shop.example"
 API = "https://api.aifinpay.io"
@@ -77,9 +78,9 @@ class Server:
     def __init__(self, dep):
         self.dep = dep
         self.chain = dep["network"]
-        self.native_asset = "ETH" if self.chain == "base" else "POL"
-        self.native_usd = 2500 if self.chain == "base" else POL_USD
-        self.usdc = next(asset["address"] for asset in dep["splitter"]["assets"] if asset["symbol"] == "USDC")
+        self.native_asset = PAYMENT_CHAINS[self.chain]["native"]
+        self.native_usd = 2500 if self.native_asset == "ETH" else POL_USD
+        self.usdc = next((asset["address"] for asset in dep["splitter"]["assets"] if asset["symbol"] == "USDC"), None)
         self.quotes = 0
         self.pays = []
         self.pay_statuses = []  # answered, in order, before a /v1/pay succeeds
@@ -137,8 +138,12 @@ class Server:
         stable = body.get("asset") not in (None, self.native_asset)
         assert body["payer"] == PAYER.address and body["units"] == 200
         order = f"qt_{self.quotes:016d}"
-        gross = STABLE_GROSS if stable else int(float(AMOUNT) / self.native_usd * 10**18)
-        self.call = signed_call(self.dep, token=self.usdc if stable else s.ZERO, gross=gross, order=order)
+        asset = body.get("asset") or self.native_asset
+        self.last_quote_request = body
+        token = next((t["address"] for t in self.dep["splitter"]["assets"] if t["symbol"] == asset), s.ZERO)
+        decimals = pinned_token_decimals(self.chain, token) if stable else 18
+        gross = STABLE_GROSS * 10 ** (decimals - 6) if stable else int(float(AMOUNT) / self.native_usd * 10**18)
+        self.call = signed_call(self.dep, token=token, gross=gross, order=order)
         valid_until = int(self.call["args"]["quote"]["validUntil"])
         quote = {
             "quote_id": order, "nonce": "n-" + order, "payer": body["payer"], "merchant_id": body["merchant_id"],
@@ -150,8 +155,13 @@ class Server:
             "payment_authorization": {"scheme": "wallet-signature-v1", "domain": API},
         }
         if stable:
-            quote["accepted_assets"] = ["USDC"]
-            quote["settlement"] = {"total_units": str(gross)}
+            quote["accepted_assets"] = [asset]
+            quote["settlement"] = {"total_units": str(STABLE_GROSS)}
+            quote["token_settlement"] = {
+                "asset": asset, "token": token, "decimals": decimals, "total_units": str(gross),
+                "merchant_units": str(gross - gross // 100), "protocol_fee_units": str(gross // 100),
+                "creator_units": "0", "settlement_semantics": "gross-inclusive",
+            }
         else:
             quote["accepted_assets"] = [self.native_asset]
             quote["native_settlement"] = {
@@ -185,7 +195,7 @@ class Server:
         receipt_id = "rcpt_" + body["tx_ref"][2:10]
         claims = {
             "iss": API, "aud": quote["merchant_id"], "sub": auth["payer"], "tx_ref": body["tx_ref"],
-            "scope": quote["scope"], "resource": quote["resource"], "chain": self.chain, "asset": body["asset"],
+            "scope": quote["scope"], "resource": quote["resource"], "chain": self.chain, "asset": body["asset"].upper(),
             "currency": "USD", "network_mode": "live", "amount": AMOUNT, "unit_quota": quote["unit_quota"],
             "iat": now, "exp": now + 3600, "receipt_id": receipt_id,
         }
@@ -197,7 +207,7 @@ class Server:
         return Resp(200, {
             "receipt": f"{head}.{payload}.{sig}", "receipt_id": receipt_id, "merchant_id": quote["merchant_id"],
             "tx_ref": body["tx_ref"], "scope": quote["scope"], "resource": quote["resource"],
-            "unit_quota": quote["unit_quota"], "chain": self.chain, "asset": body["asset"], "currency": "USD",
+            "unit_quota": quote["unit_quota"], "chain": self.chain, "asset": body["asset"].upper(), "currency": "USD",
             "amount": AMOUNT, "expires_at": iso(now + 3600), **self.paid_override,
         })
 

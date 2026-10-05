@@ -1,9 +1,11 @@
+import { PAYMENT_CHAINS, paymentStableAsset, type PaymentChain } from "../src/paymentChains.js";
 import { describe, it, expect, vi } from "vitest";
 import { privateKeyToAccount } from "viem/accounts";
 import {
   decodeFunctionData,
   encodeAbiParameters,
   encodeEventTopics,
+  encodeFunctionData,
   keccak256,
   parseAbi,
   parseTransaction,
@@ -12,6 +14,7 @@ import {
 } from "viem";
 import {
   executeV14Settlement,
+  assertPreparedV14Recovery,
   routeIdOf,
   type V14SettlementCall,
   type V14ExecutionContext,
@@ -78,7 +81,7 @@ async function fixture(network = "polygon", route = "merchant-aifp1") {
     contract: dep.splitter.address,
     splitter_version: "1.4",
     route,
-    asset: network === "base" ? "ETH" : "POL",
+    asset: network === "amoy" ? "POL" : PAYMENT_CHAINS[network as PaymentChain].native,
     function: "settleNative((address,address,address,uint256,address,uint256,bytes32,uint256,bytes32),bytes)",
     arg_encoding: "struct+signature",
     field_order: fields.map((f) => f.name),
@@ -179,15 +182,15 @@ async function fixture(network = "polygon", route = "merchant-aifp1") {
     orderId: "order-1",
     expectedMerchant: merchant,
     expectedGrossAmount: 1000000n,
-    ...(network === "base" ? { expectedChain: "base" as const } : {}),
-    maxGasWei: network === "base" ? 2000000n : 1200000n,
+    ...(network !== "polygon" && network !== "amoy" ? { expectedChain: network as PaymentChain } : {}),
+    maxGasWei: PAYMENT_CHAINS[network as PaymentChain]?.gasModel === "op" ? 2000000n : 1200000n,
     onPrepared,
   };
   return { call, ctx, client, wallet, state, onPrepared, log, domain, message };
 }
 
 describe("authorized native v1.4 execution", () => {
-  it.each(["polygon", "amoy", "base"])(
+  it.each(["amoy", ...Object.keys(PAYMENT_CHAINS)])(
     "journals locally signed bounded transaction and verifies mined Payment on %s",
     async (network) => {
       const f = await fixture(network);
@@ -220,6 +223,99 @@ describe("authorized native v1.4 execution", () => {
     const f = await fixture("polygon", "agent-x402");
     await expect(executeV14Settlement(f.call, f.ctx)).resolves.toMatchObject({ route: "agent-x402" });
   });
+  it.each(Object.keys(PAYMENT_CHAINS))(
+    "binds actual signed recovery bytes to independently selected %s without new RPC or expiry rejection",
+    async (network) => {
+      const f = await fixture(network);
+      await executeV14Settlement(f.call, f.ctx);
+      const prepared = f.onPrepared.mock.calls[0][0];
+      vi.clearAllMocks();
+      const now = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 86400000);
+      try {
+        await expect(
+          assertPreparedV14Recovery(f.call, prepared, network as PaymentChain, payer.address, "order-1")
+        ).resolves.toBeUndefined();
+        expect(f.client.readContract).not.toHaveBeenCalled();
+        expect(f.client.sendRawTransaction).not.toHaveBeenCalled();
+        expect(f.wallet.account.signTransaction).not.toHaveBeenCalled();
+      } finally {
+        now.mockRestore();
+      }
+    }
+  );
+  it.each(["owner-chain", "payer", "hash", "raw-bytes", "contract", "asset", "gross", "order", "signature", "method"])(
+    "refuses altered %s in legacy signed recovery evidence",
+    async (kind) => {
+      const f = await fixture("base");
+      await executeV14Settlement(f.call, f.ctx);
+      const prepared = { ...f.onPrepared.mock.calls[0][0] };
+      let selected: PaymentChain = "base",
+        account: string = payer.address,
+        order = "order-1";
+      if (kind === "owner-chain") selected = "polygon";
+      if (kind === "payer") account = merchant;
+      if (kind === "hash") prepared.hash = `0x${"aa".repeat(32)}`;
+      if (kind === "raw-bytes") prepared.serializedTransaction = "0x0200";
+      if (kind === "contract") f.call.contract = merchant;
+      if (kind === "asset") f.call.asset = "POL";
+      if (kind === "gross") f.call.args.quote.grossAmount = "999999";
+      if (kind === "order") order = "other-order";
+      if (kind === "signature") f.call.args.signature = `0x${"01".repeat(65)}`;
+      if (kind === "method") f.call.function = "settleStable";
+      vi.clearAllMocks();
+      await expect(assertPreparedV14Recovery(f.call, prepared, selected, account, order)).rejects.toThrow();
+      expect(f.client.sendRawTransaction).not.toHaveBeenCalled();
+    }
+  );
+  it.each([
+    ["bnb", "USDC"],
+    ["robinhood", "USDe"],
+  ] as const)(
+    "recovers an actual signed %s/%s token call only against pinned token and exact approval",
+    async (chain, asset) => {
+      const f = await fixture(chain);
+      const pin = paymentStableAsset(chain, asset)!;
+      const gross = 100000n * 10n ** BigInt(pin.decimals - 6);
+      const q = { ...f.message, token: pin.address, grossAmount: gross };
+      const signature = await signer.signTypedData({
+        domain: f.domain,
+        types: { Quote: fields },
+        primaryType: "Quote",
+        message: q,
+      });
+      const call = {
+        ...f.call,
+        asset,
+        value_wei: "0",
+        function: "settleStable((address,address,address,uint256,address,uint256,bytes32,uint256,bytes32),bytes)",
+        args: { quote: { ...f.call.args.quote, token: pin.address, grossAmount: String(gross) }, signature },
+        approval: { token: pin.address, spender: f.call.contract, amount: String(gross) },
+      };
+      const data = encodeFunctionData({
+        abi: parseAbi([
+          "function settleStable((address payer,address merchant,address token,uint256 grossAmount,address ipCreator,uint256 validUntil,bytes32 orderIdHash,uint256 nonce,bytes32 routeId) quote,bytes signature)",
+        ]),
+        functionName: "settleStable",
+        args: [q, signature],
+      });
+      const serializedTransaction = await payer.signTransaction({
+        type: "eip1559",
+        chainId: PAYMENT_CHAINS[chain].chainId,
+        to: call.contract,
+        data,
+        value: 0n,
+        nonce: 7,
+        gas: 120000n,
+        maxFeePerGas: 10n,
+        maxPriorityFeePerGas: 1n,
+      });
+      const prepared = { hash: keccak256(serializedTransaction), serializedTransaction };
+      await expect(assertPreparedV14Recovery(call, prepared, chain, payer.address, "order-1")).resolves.toBeUndefined();
+      call.approval.amount = "1";
+      await expect(assertPreparedV14Recovery(call, prepared, chain, payer.address, "order-1")).rejects.toThrow();
+      expect(f.client.sendRawTransaction).not.toHaveBeenCalled();
+    }
+  );
   it.each([
     [
       "merchant",
@@ -567,5 +663,24 @@ describe("Base native fee and domain preflight", () => {
     await expect(executeV14Settlement(f.call, f.ctx)).rejects.toMatchObject({ code: "V14_UNTRUSTED_SIGNER" });
     expect(f.wallet.account.signTransaction).not.toHaveBeenCalled();
     expect(f.client.sendRawTransaction).not.toHaveBeenCalled();
+  });
+});
+
+describe("per-chain native fee safety", () => {
+  it.each(["base", "optimism", "unichain"])("missing OP oracle blocks %s before signing", async (chain) => {
+    const f = await fixture(chain);
+    delete f.state.getOperatorFee;
+    await expect(executeV14Settlement(f.call, f.ctx)).rejects.toMatchObject({ code: "V14_FEE_ESTIMATE_UNAVAILABLE" });
+    expect(f.wallet.account.signTransaction).not.toHaveBeenCalled();
+    expect(f.onPrepared).not.toHaveBeenCalled();
+  });
+  it.each(["arbitrum", "robinhood"])("Nitro %s includes data fees only once in the gas estimate", async (chain) => {
+    const f = await fixture(chain);
+    await executeV14Settlement(f.call, f.ctx);
+    expect(f.client.readContract.mock.calls.some(([c]) => c.functionName === "getL1FeeUpperBound")).toBe(false);
+    f.wallet.account.signTransaction.mockClear();
+    f.ctx.maxGasWei = 1199999n;
+    await expect(executeV14Settlement(f.call, f.ctx)).rejects.toMatchObject({ code: "V14_GAS_BUDGET_EXCEEDED" });
+    expect(f.wallet.account.signTransaction).not.toHaveBeenCalled();
   });
 });

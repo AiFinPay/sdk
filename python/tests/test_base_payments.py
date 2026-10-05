@@ -81,7 +81,7 @@ def test_server_cannot_choose_base_for_a_default_polygon_purchase(base):
     assert_nothing_paid(h)
 
 
-@pytest.mark.parametrize("chain,asset", [("base", "POL"), ("base", "USDT"), ("optimism", "ETH"), ("amoy", "POL")])
+@pytest.mark.parametrize("chain,asset", [("base", "POL"), ("base", "USDT"), ("ethereum", "ETH"), ("amoy", "POL")])
 def test_other_chains_or_assets_are_refused_before_contacting_merchant(base, chain, asset):
     h = Harness(base, asset=asset)
     with pytest.raises(a.Aifp1QuoteError):

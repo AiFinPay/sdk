@@ -33,13 +33,32 @@
 // AiFinPayAgent, but nothing else here does, and a test should be able to drive
 // the whole protocol without an RPC endpoint.
 // ──────────────────────────────────────────────────────────────────────────
-import { createHash, createPublicKey, verify as verifySignature } from "node:crypto";
+import { createHash, createPublicKey, randomBytes, verify as verifySignature } from "node:crypto";
+import bs58 from "bs58";
 import { keccak256, parseUnits, stringToHex } from "viem";
-import { V14_DEPLOYMENTS } from "./generated/v14Deployments.generated.js";
+import { paymentChain, paymentStableAsset, type PaymentChain } from "./paymentChains.js";
 import { AiFinPayError } from "./errors.js";
-import { validateV14SettlementCall, type V14SettlementCall } from "./settlementV14.js";
+import { validateV14SettlementCall, V14SettlementError, type V14SettlementCall } from "./settlementV14.js";
 import { SettlementConfirmationPendingError } from "./settlement.js";
 import { settlementHttp, SettlementHttpError } from "./settlementHttp.js";
+import type { SpendLedgerBinding, QuoteAdmission } from "./spendLedger.js";
+import {
+  authorizedSolanaV14Inventory,
+  solanaV14Inventory,
+  validateSolanaV14Call,
+  solanaStableMint,
+  assertPreparedSolanaV14Recovery,
+  readSolanaV14FinalizedFailure,
+  solanaLamportCostUsd,
+  SolanaV14Error,
+  type SolanaV14Rpc,
+  type SolanaV14SettlementCall,
+  type SolanaV14Prepared,
+  type SolanaV14Plan,
+} from "./settlementSolanaV14.js";
+import type { SolanaNetwork } from "./generated/solanaV14Deployments.generated.js";
+import type { SdkEnvironment } from "./deploymentResolver.js";
+import type { SolanaV14Deployment } from "./generated/solanaV14Deployments.generated.js";
 
 // ── Errors ────────────────────────────────────────────────────────────────
 //
@@ -75,9 +94,26 @@ export class Aifp1PayError extends Aifp1Error {
     super(msg);
   }
 }
+/** Canonical failed original transaction reconciled to one fee-only debit. */
+export class Aifp1FinalizedFailureError extends Aifp1PayError {
+  readonly code = "AIFP1_FINALIZED_FAILURE";
+  constructor(
+    recovery: Aifp1SolanaPaymentRecovery,
+    public readonly feeAmountUsd: number,
+    public readonly actualFeeLamports: bigint
+  ) {
+    super(
+      "Original Solana transaction finalized with failure; fee-only debit reconciled without resending",
+      recovery.txRef,
+      recovery.quote.quote_id,
+      recovery
+    );
+  }
+}
 
 /** Public settlement context; contains no private key or authorization signature. */
-export interface Aifp1PaymentRecovery {
+export interface Aifp1EvmPaymentRecovery {
+  family?: "evm";
   apiBaseUrl: string;
   quote: Aifp1Quote;
   txRef: `0x${string}`;
@@ -85,24 +121,174 @@ export interface Aifp1PaymentRecovery {
   /** Trusted payment chain saved before broadcast; omitted legacy journals mean Polygon. */
   chain?: Aifp1V14Chain;
   paymentIssuer?: string;
+  /** Local budget identity; never an amount, cap or server-selected ledger path. */
+  budgetReservationId?: string;
+  /** Version2 binds the independent cross-family wallet identity. */
+  budgetBindingVersion?: 2;
+  serializedTransaction?: `0x${string}`;
 }
 
+export interface Aifp1SolanaPaymentRecovery extends Omit<
+  Aifp1EvmPaymentRecovery,
+  "family" | "chain" | "txRef" | "serializedTransaction"
+> {
+  family: "solana";
+  chain: "solana";
+  txRef: string;
+  solana: SolanaV14Prepared;
+  /** Locally validated gross plus fresh fee/rent cost; never recovery authority. */
+  reservedAmountUsd: number;
+  admissionSolUsdPrice: string;
+  maxFeeLamports: string;
+  transactionFeeLamports: string;
+}
+export type Aifp1PaymentRecovery = Aifp1EvmPaymentRecovery | Aifp1SolanaPaymentRecovery;
+export type Aifp1SettlementChain = Aifp1V14Chain | "solana";
 export interface Aifp1PaymentSigner {
+  /** Independent local identity shared by all rails; never copied from a journal. */
+  walletIdentity?: string;
   payerAddress: string;
   signPaymentAuthorization(message: string): Promise<string>;
   fetchImpl?: typeof fetch;
+  assertReservation?(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void>;
+  completeReservation?(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void>;
+  finalizeFailedReservation?(id: string, txRef: string, binding: SpendLedgerBinding, feeUsd: number): Promise<void>;
+  solanaRpc?: SolanaV14Rpc;
+}
+export type Aifp1RecoveryOptions = Pick<Aifp1FetchOptions, "settlementConfirmMs" | "apiTimeoutMs" | "paymentIssuer"> & {
+  solanaNetwork?: SolanaNetwork;
+  solanaEnvironment?: SdkEnvironment;
+};
+
+/** Exact owner/quote binding for a locally selected capped v1.4 payment. */
+export function paymentBudgetBinding(
+  payment: Pick<Aifp1PaymentRecovery, "apiBaseUrl" | "paymentIssuer" | "quote" | "chain" | "asset"> & {
+    admissionSolUsdPrice?: string;
+    maxFeeLamports?: string;
+    transactionFeeLamports?: string;
+  },
+  payer: string,
+  walletIdentity?: string
+): SpendLedgerBinding {
+  const call = payment.quote.settlement_call as V14SettlementCall | SolanaV14SettlementCall;
+  if (call?.splitter_version !== "1.4") throw new Aifp1QuoteError("Bound budgets require the original v1.4 call");
+  return {
+    apiBaseUrl: payment.apiBaseUrl.replace(/\/+$/, ""),
+    paymentIssuer: payment.paymentIssuer ?? "https://api.aifinpay.io",
+    payer: payment.chain === "solana" ? payer : payer.toLowerCase(),
+    ...(walletIdentity ? { walletIdentity } : {}),
+    ...(payment.chain === "solana" && payment.admissionSolUsdPrice !== undefined
+      ? {
+          solanaAdmissionRateUsd: payment.admissionSolUsdPrice,
+          solanaMaxFeeLamports: payment.maxFeeLamports,
+          solanaTransactionFeeLamports: payment.transactionFeeLamports,
+        }
+      : {}),
+    merchantId: payment.quote.merchant_id,
+    scope: payment.quote.scope,
+    resource: payment.quote.resource,
+    networkMode: payment.quote.network_mode ?? "live",
+    chain:
+      payment.chain === "solana"
+        ? `solana:${(call as SolanaV14SettlementCall).network}:${call.contract}:${(call as SolanaV14SettlementCall).idl_sha256}`
+        : authorizedV14Chain(payment.chain),
+    asset: payment.asset,
+    token: payment.chain === "solana" ? call.args.quote.token : call.args.quote.token.toLowerCase(),
+    grossAmount: call.args.quote.grossAmount,
+    quoteId: payment.quote.quote_id,
+  };
 }
 
 /** Recover an already settled payment. Never sends an on-chain transaction. */
 export function recoverAifp1Payment(
   recovery: Aifp1PaymentRecovery,
   signer: Aifp1PaymentSigner,
-  options: Pick<Aifp1FetchOptions, "settlementConfirmMs" | "apiTimeoutMs" | "paymentIssuer"> = {}
+  options: Aifp1RecoveryOptions = {}
 ): Promise<Aifp1PayResult> {
+  if (recovery.family === "solana") {
+    const call = recovery.quote.settlement_call as SolanaV14SettlementCall;
+    if (!options.solanaNetwork || !options.solanaEnvironment)
+      throw new Aifp1QuoteError("Solana recovery requires independent owner environment/network");
+    const d = solanaV14Inventory(options.solanaEnvironment, options.solanaNetwork);
+    assertPreparedSolanaV14Recovery(call, recovery.solana, d, signer.payerAddress, recovery.quote.quote_id);
+    if (
+      recovery.chain !== "solana" ||
+      recovery.txRef !== recovery.solana.hash ||
+      call.asset !== recovery.asset ||
+      recovery.quote.payer !== signer.payerAddress ||
+      recovery.quote.accepted_chains.join() !== "solana" ||
+      recovery.quote.accepted_assets.join() !== recovery.asset
+    )
+      throw new Aifp1QuoteError("Solana recovery purchase mismatch");
+    return (async () => {
+      const binding = paymentBudgetBinding(
+        recovery,
+        signer.payerAddress,
+        recovery.budgetBindingVersion === 2 ? signer.walletIdentity : undefined
+      );
+      if (recovery.budgetReservationId !== undefined) {
+        if (!signer.assertReservation || !signer.completeReservation)
+          throw new Aifp1QuoteError("Original bound ledger hooks required");
+        await signer.assertReservation(recovery.budgetReservationId, recovery.txRef, binding);
+      }
+      if (signer.solanaRpc && signer.finalizeFailedReservation && recovery.budgetReservationId !== undefined) {
+        let fee: bigint | null;
+        try {
+          solanaLamportCostUsd(0n, recovery.admissionSolUsdPrice);
+          if (
+            !/^(?:0|[1-9][0-9]*)$/.test(recovery.transactionFeeLamports) ||
+            !/^[1-9][0-9]*$/.test(recovery.maxFeeLamports)
+          )
+            throw new Aifp1QuoteError("Original fee cap metadata is required");
+          fee = await readSolanaV14FinalizedFailure(call, recovery.solana, {
+            rpc: signer.solanaRpc,
+            deployment: d,
+            payer: signer.payerAddress,
+            orderId: recovery.quote.quote_id,
+            transactionFeeLamports: BigInt(recovery.transactionFeeLamports),
+            maxFeeLamports: BigInt(recovery.maxFeeLamports),
+          });
+        } catch (error) {
+          throw new Aifp1PayError(
+            error instanceof Error ? error.message : "Failure proof is incomplete; retain original reservation",
+            recovery.txRef,
+            recovery.quote.quote_id,
+            recovery
+          );
+        }
+        if (fee !== null) {
+          const feeUsd = solanaLamportCostUsd(fee, recovery.admissionSolUsdPrice);
+          try {
+            await signer.finalizeFailedReservation(recovery.budgetReservationId, recovery.txRef, binding, feeUsd);
+          } catch (error) {
+            throw new Aifp1PayError(
+              error instanceof Error ? error.message : "Canonical failure fee journal requires reconciliation",
+              recovery.txRef,
+              recovery.quote.quote_id,
+              recovery
+            );
+          }
+          throw new Aifp1FinalizedFailureError(recovery, feeUsd, fee);
+        }
+      }
+      const paid = await submitPayment(
+        { ...signer, agentId: signer.payerAddress, fetchImpl: signer.fetchImpl ?? fetch },
+        recovery.apiBaseUrl,
+        recovery.quote,
+        recovery.txRef,
+        recovery.asset,
+        "solana",
+        { paymentIssuer: recovery.paymentIssuer, ...options }
+      );
+      if (recovery.budgetReservationId !== undefined)
+        await signer.completeReservation!(recovery.budgetReservationId, recovery.txRef, binding);
+      return paid;
+    })();
+  }
   const chain = authorizedV14Chain(recovery.chain);
   const call = recovery.quote.settlement_call;
   if (chain !== "polygon" && call?.splitter_version !== "1.4") {
-    throw new Aifp1QuoteError("Base recovery requires the original v1.4 settlement call");
+    throw new Aifp1QuoteError(`Recovery on ${chain} requires the original v1.4 settlement call`);
   }
   if (
     call?.splitter_version === "1.4" &&
@@ -113,6 +299,37 @@ export function recoverAifp1Payment(
       !recovery.quote.accepted_assets.includes(recovery.asset))
   ) {
     throw new Aifp1QuoteError("recovery chain or asset disagrees with the saved purchase");
+  }
+  if (recovery.budgetReservationId !== undefined) {
+    if (
+      typeof recovery.budgetReservationId !== "string" ||
+      !recovery.budgetReservationId ||
+      !/^0x(?:[0-9a-fA-F]{2})+$/.test(recovery.serializedTransaction ?? "") ||
+      keccak256(recovery.serializedTransaction!) !== recovery.txRef ||
+      !signer.assertReservation ||
+      !signer.completeReservation
+    ) {
+      throw new Aifp1QuoteError("Bound budget recovery requires the original signed bytes and ledger hooks");
+    }
+    const binding = paymentBudgetBinding(
+      recovery,
+      signer.payerAddress,
+      recovery.budgetBindingVersion === 2 ? signer.walletIdentity : undefined
+    );
+    return (async () => {
+      await signer.assertReservation!(recovery.budgetReservationId!, recovery.txRef, binding);
+      const paid = await submitPayment(
+        { ...signer, agentId: signer.payerAddress, fetchImpl: signer.fetchImpl ?? fetch },
+        recovery.apiBaseUrl,
+        recovery.quote,
+        recovery.txRef,
+        recovery.asset,
+        chain,
+        { paymentIssuer: recovery.paymentIssuer, ...options }
+      );
+      await signer.completeReservation!(recovery.budgetReservationId!, recovery.txRef, binding);
+      return paid;
+    })();
   }
   return submitPayment(
     { ...signer, agentId: signer.payerAddress, fetchImpl: signer.fetchImpl ?? fetch },
@@ -171,6 +388,7 @@ export interface Aifp1Quote {
   /** The target and calldata the receipt verifier expects for this quote. */
   settlement_call?:
     | V14SettlementCall
+    | SolanaV14SettlementCall
     | {
         chain: string;
         contract: string;
@@ -188,21 +406,19 @@ export interface Aifp1Quote {
           order_id: string;
         };
       };
-  /** Native gross settlement in the selected chain currency, when backend readiness permits. */
-  native_settlement?: {
-    asset: string; // "POL" on Polygon, "ETH" on Base
+  /** Exact stablecoin minor units; required for18dp, optional for legacy6dp. */
+  token_settlement?: {
+    asset: string;
+    token: string;
     decimals: number;
-    rate_usd: string;
-    rate_fixed_at?: string;
-    total_wei: string; // gross payer amount
-    gross_wei?: string;
-    payer_total_wei?: string;
-    merchant_wei: string;
-    treasury_wei: string;
-    creator_wei: string;
-    valid_until?: number | string; // Unix seconds; must equal expires_at
-    settlement_semantics?: "gross-inclusive";
+    total_units: string;
+    merchant_units: string;
+    protocol_fee_units: string;
+    creator_units: string;
+    settlement_semantics: "gross-inclusive";
   };
+  /** Native gross settlement in the selected chain currency, when backend readiness permits. */
+  native_settlement?: Aifp1EvmNativeSettlement | Aifp1SolanaNativeSettlement;
   settlement: {
     batch_units: string;
     total_units: string;
@@ -217,6 +433,33 @@ export interface Aifp1Quote {
   };
   nonce: string;
   expires_at: string;
+}
+
+export interface Aifp1EvmNativeSettlement {
+  asset: string;
+  decimals: number;
+  rate_usd: string;
+  rate_fixed_at?: string;
+  total_wei: string;
+  gross_wei?: string;
+  payer_total_wei?: string;
+  merchant_wei: string;
+  treasury_wei: string;
+  creator_wei: string;
+  valid_until?: number | string;
+  settlement_semantics?: "gross-inclusive";
+}
+export interface Aifp1SolanaNativeSettlement {
+  asset: "SOL";
+  decimals: 9;
+  rate_usd: string;
+  rate_fixed_at?: string;
+  total_lamports: string;
+  merchant_lamports: string;
+  treasury_lamports: string;
+  creator_lamports: string;
+  valid_until?: number | string;
+  settlement_semantics: "gross-inclusive";
 }
 
 /**
@@ -250,7 +493,9 @@ export interface QuoteSummary {
 
 export function describeQuote(q: Aifp1Quote): QuoteSummary {
   const ns = q.native_settlement;
-  const pay = ns ? { amount: formatUnits(ns.total_wei, ns.decimals), asset: ns.asset } : null;
+  const pay = ns
+    ? { amount: formatUnits("total_lamports" in ns ? ns.total_lamports : ns.total_wei, ns.decimals), asset: ns.asset }
+    : null;
 
   // Fee as basis points, from the split the quote already carries. Stated so the
   // agent sees the rate, not just the total — the same reason the 402 does.
@@ -301,6 +546,8 @@ function formatUnits(raw: string, decimals: number): string {
 
 /** POST /v1/pay 200 body — routes/aifp.js. */
 export interface Aifp1PayResult {
+  network?: SolanaNetwork;
+  program?: string;
   receipt_id: string;
   receipt: string; // the bearer JWT
   status: string; // "settled"
@@ -612,9 +859,18 @@ export class Aifp1ReceiptCache {
 
 // ── Options ───────────────────────────────────────────────────────────────
 
-export type Aifp1V14Chain = "polygon" | "base";
+export type Aifp1V14Chain = PaymentChain;
 
 export interface Aifp1FetchOptions {
+  /** Solana is explicitly owner-authorized; cannot coexist with EVM v14.
+   * maxFeeLamports includes transaction fees AND nonce/ATA account rent. */
+  solanaV14?: {
+    environment: SdkEnvironment;
+    network: SolanaNetwork;
+    asset?: string;
+    maxFeeLamports: bigint;
+    onPrepared: (payment: Aifp1SolanaPaymentRecovery) => Promise<void>;
+  };
   /** Explicit native v1.4 authorization. Deployment/signer pins come from the
    * SDK registry, never from a merchant response. The journal must be durable
    * before broadcast; a prepared transaction must be recovered, never replaced. */
@@ -754,6 +1010,33 @@ function resolveScope(
  * what lets the protocol be tested without a chain.
  */
 export interface Aifp1Deps {
+  walletIdentity?: string;
+  /** Independently configured RPC/owner limits, never recovered from the journal. */
+  quoteOwnerContext?: string;
+  beginQuoteAdmission?(
+    binding: SpendLedgerBinding,
+    context: string,
+    create: () => Promise<{ requestBody: string; statement: string }>
+  ): Promise<QuoteAdmission>;
+  adoptQuoteAdmission?(id: string, binding: SpendLedgerBinding, context: string, quoteJson: string): Promise<void>;
+  closeQuoteAdmission?(
+    id: string,
+    binding: SpendLedgerBinding,
+    context: string,
+    terminal: "not-admitted" | "expired-unbroadcast",
+    quoteJson?: string
+  ): Promise<void>;
+  verifyHistoricalSolanaQuote?(
+    call: SolanaV14SettlementCall,
+    auth: NonNullable<Aifp1FetchOptions["solanaV14"]>,
+    orderId: string
+  ): Promise<void>;
+  prepareSolana?(
+    call: SolanaV14SettlementCall,
+    authorization: NonNullable<Aifp1FetchOptions["solanaV14"]>,
+    orderId: string
+  ): Promise<SolanaV14Plan>;
+  settleSolana?(plan: SolanaV14Plan, onPrepared: (tx: SolanaV14Prepared) => Promise<void>): Promise<SolanaV14Prepared>;
   fetchImpl: typeof fetch;
   cache: Aifp1ReceiptCache;
   /** AIFP-Agent-Id / agent_id — a 0x address, or agent policies cannot key on it. */
@@ -782,9 +1065,13 @@ export interface Aifp1Deps {
   /** Per-call cap. false ⇒ the caller asked to skip rather than throw. */
   checkPerCall(usd: number): boolean;
   /** Daily cap. "skip" ⇒ drop the call; a string is a reservation to resolve. */
-  reserveDaily(usd: number): Promise<string | null | "skip">;
+  reserveDaily(usd: number, binding?: SpendLedgerBinding, admissionId?: string): Promise<string | null | "skip">;
   commit(reservationId: string, usd: number): Promise<void>;
   release(reservationId: string): Promise<void>;
+  prepareReservation?(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void>;
+  assertReservation?(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void>;
+  completeReservation?(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void>;
+  finalizeFailedReservation?(id: string, txRef: string, binding: SpendLedgerBinding, feeUsd: number): Promise<void>;
   onPaid?(info: { merchantId: string; amountUsd: number; txRef: string; receiptId: string }): void;
 }
 
@@ -830,6 +1117,181 @@ function validateCanonicalQuoteEconomics(quote: Aifp1Quote): void {
   }
 }
 
+function validateSolanaQuote(
+  quote: Aifp1Quote,
+  auth: NonNullable<Aifp1FetchOptions["solanaV14"]>,
+  payer: string,
+  expiryMs: number,
+  d: SolanaV14Deployment,
+  historical = false
+): void {
+  const call = quote.settlement_call as SolanaV14SettlementCall;
+  validateSolanaV14Call(call, d, payer, quote.quote_id, historical);
+  const asset = auth.asset ?? "SOL",
+    q = call.args.quote,
+    gross = BigInt(q.grossAmount),
+    treasury = gross / 100n;
+  if (
+    !/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,6})?$/.test(quote.amount) ||
+    quote.accepted_chains.join() !== "solana" ||
+    quote.accepted_assets.join() !== asset ||
+    call.asset !== asset ||
+    quote.payer !== payer ||
+    q.merchant !== quote.pay_to.solana ||
+    q.validUntil !== String(Math.floor(expiryMs / 1000)) ||
+    quote.settlement.total_units !== parseUnits(quote.amount, 6).toString()
+  )
+    throw new Aifp1QuoteError("Solana quote amount/payer/network/merchant binding mismatch");
+  if (asset === "SOL") {
+    const n = quote.native_settlement as Aifp1SolanaNativeSettlement;
+    if (
+      !n ||
+      n.asset !== "SOL" ||
+      n.decimals !== 9 ||
+      n.settlement_semantics !== "gross-inclusive" ||
+      n.total_lamports !== q.grossAmount ||
+      n.merchant_lamports !== String(gross - treasury) ||
+      n.treasury_lamports !== String(treasury) ||
+      n.creator_lamports !== "0" ||
+      quote.token_settlement !== undefined ||
+      (n.valid_until !== undefined && String(n.valid_until) !== q.validUntil)
+    )
+      throw new Aifp1QuoteError("SOL9 gross-inclusive amount mismatch");
+  } else {
+    const t = quote.token_settlement;
+    if (
+      quote.native_settlement !== undefined ||
+      !t ||
+      t.asset !== asset ||
+      t.token !== solanaStableMint(auth.network, asset) ||
+      t.decimals !== 6 ||
+      t.settlement_semantics !== "gross-inclusive" ||
+      t.total_units !== q.grossAmount ||
+      t.total_units !== parseUnits(quote.amount, 6).toString() ||
+      t.merchant_units !== String(gross - treasury) ||
+      t.protocol_fee_units !== String(treasury) ||
+      t.creator_units !== "0"
+    )
+      throw new Aifp1QuoteError("SPL6 token gross-inclusive amount mismatch");
+  }
+}
+
+async function settleSolanaBatch(
+  deps: Aifp1Deps,
+  opts: Aifp1FetchOptions,
+  quote: Aifp1Quote,
+  plan: SolanaV14Plan,
+  amountUsd: number,
+  binding: SpendLedgerBinding,
+  reservation: string | null,
+  site: string,
+  send: (receipt?: string) => Promise<Response>,
+  markSettled: () => void
+): Promise<Response> {
+  const auth = opts.solanaV14!;
+  if (
+    typeof reservation === "string" &&
+    (!deps.prepareReservation || !deps.assertReservation || !deps.completeReservation)
+  )
+    throw new Aifp1QuoteError("Solana capped payments require durable bound-journal hooks");
+  let prepared: SolanaV14Prepared | undefined;
+  const recoveryFor = (tx: SolanaV14Prepared): Aifp1SolanaPaymentRecovery => ({
+    family: "solana",
+    chain: "solana",
+    apiBaseUrl: opts.apiBaseUrl ?? DEFAULT_API_BASE,
+    paymentIssuer: opts.paymentIssuer,
+    ...(deps.walletIdentity ? { budgetBindingVersion: 2 as const } : {}),
+    quote,
+    asset: auth.asset ?? "SOL",
+    txRef: tx.hash,
+    solana: tx,
+    reservedAmountUsd: amountUsd,
+    admissionSolUsdPrice: binding.solanaAdmissionRateUsd!,
+    maxFeeLamports: binding.solanaMaxFeeLamports!,
+    transactionFeeLamports: binding.solanaTransactionFeeLamports!,
+    ...(typeof reservation === "string" ? { budgetReservationId: reservation } : {}),
+  });
+  let result: SolanaV14Prepared;
+  try {
+    result = await deps.settleSolana!(plan, async (tx) => {
+      assertPreparedSolanaV14Recovery(
+        quote.settlement_call as SolanaV14SettlementCall,
+        tx,
+        plan.deployment,
+        deps.payerAddress,
+        quote.quote_id
+      );
+      if (typeof reservation === "string") await deps.prepareReservation!(reservation, tx.hash, binding);
+      await auth.onPrepared(recoveryFor(tx));
+      prepared = tx;
+    });
+  } catch (error) {
+    if (prepared) {
+      markSettled(); // Unknown funds remain reserved even after blockhash expiry.
+      if (
+        error instanceof SolanaV14Error &&
+        error.code === "SOLANA_V14_TRANSACTION_REVERTED" &&
+        error.prepared?.hash === prepared.hash &&
+        error.actualFeeLamports !== undefined &&
+        error.actualFeeLamports <= BigInt(binding.solanaMaxFeeLamports!) &&
+        typeof reservation === "string" &&
+        deps.finalizeFailedReservation
+      ) {
+        const feeUsd = solanaLamportCostUsd(error.actualFeeLamports, binding.solanaAdmissionRateUsd!);
+        try {
+          await deps.finalizeFailedReservation(reservation, prepared.hash, binding, feeUsd);
+        } catch (error) {
+          throw new Aifp1PayError(
+            error instanceof Error ? error.message : "Canonical failure fee journal requires reconciliation",
+            prepared.hash,
+            quote.quote_id,
+            recoveryFor(prepared)
+          );
+        }
+        throw new Aifp1FinalizedFailureError(recoveryFor(prepared), feeUsd, error.actualFeeLamports);
+      }
+      throw new Aifp1PayError(
+        "Solana transaction prepared; recover its original signature without resending",
+        prepared.hash,
+        quote.quote_id,
+        recoveryFor(prepared)
+      );
+    }
+    throw error;
+  }
+  markSettled();
+  const recovery = recoveryFor(result);
+  try {
+    if (typeof reservation === "string") await deps.commit(reservation, amountUsd);
+    const paid = await submitPayment(deps, recovery.apiBaseUrl, quote, result.hash, recovery.asset, "solana", opts);
+    if (typeof reservation === "string") await deps.completeReservation!(reservation, result.hash, binding);
+    deps.cache.put({
+      site,
+      merchantId: paid.merchant_id,
+      receiptId: paid.receipt_id,
+      jwt: paid.receipt,
+      scope: paid.scope,
+      resource: paid.resource,
+      unitQuota: paid.unit_quota,
+      remaining: paid.unit_quota,
+      expiresAt: Date.parse(paid.expires_at),
+      amountUsd,
+    });
+    const response = await send(paid.receipt);
+    if (response.status === 402)
+      throw new Aifp1ReceiptRejectedError("Gateway rejected paid Solana receipt; recover existing purchase");
+    deps.onPaid?.({ merchantId: paid.merchant_id, amountUsd, txRef: result.hash, receiptId: paid.receipt_id });
+    return response;
+  } catch (error) {
+    throw new Aifp1PayError(
+      error instanceof Error ? error.message : "Solana receipt recovery required",
+      result.hash,
+      quote.quote_id,
+      recovery
+    );
+  }
+}
+
 /** Is this response the AIFP-1 paywall asking for money? */
 function isAifp1Challenge(body: unknown): body is Aifp1Challenge {
   const b = body as Partial<Aifp1Challenge> | null;
@@ -862,8 +1324,14 @@ export async function aifp1Fetch(
   if (opts.maxAmountUsd !== undefined && (!Number.isFinite(opts.maxAmountUsd) || opts.maxAmountUsd < 0)) {
     throw new Aifp1QuoteError("maxAmountUsd must be nonnegative and finite");
   }
-  const chain = authorizedV14Chain(opts.v14?.chain);
-  const nativeAsset = chain === "base" ? "ETH" : "POL";
+  if (opts.v14 && opts.solanaV14) throw new Aifp1QuoteError("Only one payment family may be authorized");
+  const sol = opts.solanaV14;
+  const evmChain = authorizedV14Chain(opts.v14?.chain);
+  const chain: Aifp1SettlementChain = sol ? "solana" : evmChain;
+  const solDeployment = sol ? authorizedSolanaV14Inventory(sol.environment, sol.network) : undefined;
+  if (sol && (typeof sol.maxFeeLamports !== "bigint" || sol.maxFeeLamports <= 0n))
+    throw new Aifp1QuoteError("Explicit positive Solana fee plus rent budget required");
+  const nativeAsset = sol ? "SOL" : paymentChain(evmChain)!.native;
   const direct = opts.resourcePathMode === "direct";
   const parsed = parseGatewayUrl(url, opts.gatewayOrigins ?? DEFAULT_GATEWAY_ORIGINS, opts.resourcePathMode);
   let site = parsed.site;
@@ -999,42 +1467,182 @@ export async function aifp1Fetch(
   const buyBatch = async (): Promise<Response | null> => {
     if (opts.maxAmountUsd === 0)
       throw new Aifp1QuoteError("No payment budget remains; cached access can still be used");
-    if (typeof deps.signPaymentAuthorization !== "function" || !/^0x[0-9a-fA-F]{40}$/.test(deps.payerAddress || "")) {
+    let validPayer = /^0x[0-9a-fA-F]{40}$/.test(deps.payerAddress || "");
+    if (sol) {
+      try {
+        validPayer =
+          bs58.decode(deps.payerAddress).length === 32 &&
+          bs58.encode(bs58.decode(deps.payerAddress)) === deps.payerAddress;
+      } catch {
+        validPayer = false;
+      }
+    }
+    if (typeof deps.signPaymentAuthorization !== "function" || !validPayer) {
       throw new Aifp1QuoteError("a settlement wallet signer is required to receive a payment receipt");
     }
     // 2. Quote.
-    const stableAsset = pinnedStableAsset(opts.v14?.asset, chain);
+    const stableAsset = sol
+      ? sol.asset && sol.asset !== "SOL"
+        ? (solanaStableMint(sol.network, sol.asset), sol.asset)
+        : null
+      : pinnedStableAsset(opts.v14?.asset, evmChain);
     const apiBase = (opts.apiBaseUrl ?? DEFAULT_API_BASE).replace(/\/$/, "");
     const { scope, resource } = resolveScope(opts, challenge);
-    const quote = await requestQuote(
-      deps,
-      apiBase,
-      {
-        merchant_id: challenge.merchant_id,
+    const quoteBody: Record<string, unknown> = {
+      merchant_id: challenge.merchant_id,
+      payer: deps.payerAddress,
+      ...(resource !== undefined ? { resource } : {}),
+      scope,
+      units: opts.units ?? defaultUnitsFor(challenge),
+      agent_id: deps.agentId,
+      ...(opts.v14 || sol ? { asset: stableAsset ?? nativeAsset } : {}),
+      ...(sol || opts.v14?.chain !== undefined ? { settlement_chain: chain } : {}),
+    };
+    let admission: QuoteAdmission | undefined;
+    let admissionBinding: SpendLedgerBinding | undefined;
+    let admissionContext: string | undefined;
+    if (sol) {
+      if (
+        !deps.beginQuoteAdmission ||
+        !deps.adoptQuoteAdmission ||
+        !deps.closeQuoteAdmission ||
+        !deps.quoteOwnerContext
+      )
+        throw new Aifp1QuoteError("Solana requires a durable quote-admission ledger and independent owner context");
+      admissionBinding = {
+        apiBaseUrl: apiBase,
+        paymentIssuer: opts.paymentIssuer ?? DEFAULT_API_BASE,
         payer: deps.payerAddress,
-        ...(resource !== undefined ? { resource } : {}),
+        merchantId: challenge.merchant_id,
         scope,
-        units: opts.units ?? defaultUnitsFor(challenge),
-        agent_id: deps.agentId,
-        ...(opts.v14 ? { asset: stableAsset ?? nativeAsset } : {}),
-      },
-      opts.apiTimeoutMs
-    );
-    if (quote.payer && quote.payer.toLowerCase() !== deps.payerAddress.toLowerCase()) {
+        resource: resource ?? "*",
+        networkMode: sol.network === "devnet" ? "test" : "live",
+        chain: `solana:${sol.network}:${solDeployment!.programId}:${solDeployment!.idl.sha256}`,
+        asset: stableAsset ?? nativeAsset,
+        token: stableAsset ? solanaStableMint(sol.network, stableAsset) : "11111111111111111111111111111111",
+        grossAmount: "0",
+        quoteId: "quote-admission",
+        quoteAdmissionVersion: "1",
+        ...(deps.walletIdentity ? { walletIdentity: deps.walletIdentity } : {}),
+      };
+      admissionContext = JSON.stringify([
+        deps.quoteOwnerContext,
+        sol.environment,
+        sol.network,
+        solDeployment!.programId,
+        solDeployment!.idl.sha256,
+        sol.maxFeeLamports.toString(),
+        opts.maxAmountUsd ?? null,
+        new URL(url).origin,
+        { ...quoteBody, units: opts.units ?? null },
+      ]);
+      admission = await deps.beginQuoteAdmission(admissionBinding, admissionContext, async () => {
+        const authorization = {
+          payer: deps.payerAddress,
+          network: sol.network,
+          network_mode: sol.network === "devnet" ? ("test" as const) : ("live" as const),
+          nonce: randomBytes(32).toString("hex"),
+          expires_at: Math.floor(Date.now() / 1000) + 240,
+        };
+        const statement = solanaQuoteAuthorizationMessage(
+          quoteBody,
+          authorization,
+          opts.paymentIssuer ?? DEFAULT_API_BASE
+        );
+        const signature = await deps.signPaymentAuthorization(statement);
+        return {
+          requestBody: JSON.stringify({ ...quoteBody, quote_authorization: { ...authorization, signature } }),
+          statement,
+        };
+      });
+      // The file contains no authority to change the owner-selected request or key.
+      try {
+        const body = JSON.parse(admission.requestBody),
+          auth = body.quote_authorization;
+        const expected = { ...quoteBody, ...(opts.units === undefined ? { units: body.units } : {}) };
+        const { quote_authorization: _auth, ...originalBody } = body;
+        const statement = solanaQuoteAuthorizationMessage(body, auth, opts.paymentIssuer ?? DEFAULT_API_BASE);
+        const publicKey = createPublicKey({
+          key: Buffer.concat([
+            Buffer.from("302a300506032b6570032100", "hex"),
+            Buffer.from(bs58.decode(deps.payerAddress)),
+          ]),
+          format: "der",
+          type: "spki",
+        });
+        if (
+          admission.phase !== "pending" ||
+          JSON.stringify(originalBody) !== JSON.stringify(expected) ||
+          auth.payer !== deps.payerAddress ||
+          auth.network !== sol.network ||
+          auth.network_mode !== admissionBinding.networkMode ||
+          !/^[0-9a-f]{64}$/.test(auth.nonce) ||
+          !Number.isSafeInteger(auth.expires_at) ||
+          auth.expires_at <= 0 ||
+          !Number.isSafeInteger(body.units) ||
+          body.units <= 0 ||
+          statement !== admission.statement ||
+          bs58.decode(auth.signature).length !== 64 ||
+          bs58.encode(bs58.decode(auth.signature)) !== auth.signature ||
+          !verifySignature(null, Buffer.from(statement), publicKey, bs58.decode(auth.signature))
+        )
+          throw new Error("binding");
+      } catch {
+        throw new Aifp1QuoteError("Stored quote admission does not match the exact owner-authorized request");
+      }
+    }
+    const quote = admission?.quoteJson
+      ? (JSON.parse(admission.quoteJson) as Aifp1Quote)
+      : await requestQuote(
+          deps,
+          apiBase,
+          admission?.requestBody ?? quoteBody,
+          opts.apiTimeoutMs,
+          admission
+            ? async (status, detail) => {
+                const body = JSON.parse(admission!.requestBody),
+                  auth = body.quote_authorization;
+                if (
+                  status === 410 &&
+                  detail?.error === "AIFP-410-SOLANA" &&
+                  detail.reason === "solana_quote_authorization_expired" &&
+                  detail.admission_status === "not_admitted" &&
+                  auth.expires_at <= Math.floor(Date.now() / 1000) &&
+                  detail.authorization_nonce === auth.nonce &&
+                  detail.authorization_statement_hash ===
+                    createHash("sha256").update(admission!.statement).digest("hex") &&
+                  detail.network === auth.network &&
+                  detail.network_mode === auth.network_mode &&
+                  detail.payer === deps.payerAddress
+                )
+                  await deps.closeQuoteAdmission!(admission!.id, admissionBinding!, admissionContext!, "not-admitted");
+              }
+            : undefined
+        );
+    if (admission && !admission.quoteJson) {
+      const quoteJson = JSON.stringify(quote);
+      await deps.adoptQuoteAdmission!(admission.id, admissionBinding!, admissionContext!, quoteJson);
+      admission.quoteJson = quoteJson;
+    }
+    if (
+      quote.payer &&
+      (sol ? quote.payer !== deps.payerAddress : quote.payer.toLowerCase() !== deps.payerAddress.toLowerCase())
+    ) {
       throw new Aifp1QuoteError("quote names a different paying wallet");
     }
     if (quote.payment_authorization && quote.payment_authorization.scheme !== "wallet-signature-v1") {
       throw new Aifp1QuoteError("unsupported receipt authorization scheme");
     }
     trustedPaymentIssuer(quote, opts.paymentIssuer);
-    const merchantWallet = quote.pay_to[chain] ?? quote.pay_to.evm;
+    const merchantWallet = sol ? quote.pay_to.solana : (quote.pay_to[chain] ?? quote.pay_to.evm);
     if (
-      opts.v14 &&
+      (opts.v14 || sol) &&
       (quote.accepted_chains.length !== 1 ||
         quote.accepted_chains[0] !== chain ||
         quote.settlement_call?.chain !== chain ||
         !merchantWallet ||
-        (quote.pay_to[chain] !== undefined &&
+        (!sol &&
+          quote.pay_to[chain] !== undefined &&
           quote.pay_to.evm !== undefined &&
           quote.pay_to[chain].toLowerCase() !== quote.pay_to.evm.toLowerCase()))
     ) {
@@ -1050,11 +1658,11 @@ export async function aifp1Fetch(
     }
 
     if (
-      opts.v14 &&
+      (opts.v14 || sol) &&
       (quote.scope !== scope ||
         quote.resource !== (resource ?? "*") ||
         quote.currency !== "USD" ||
-        (quote.network_mode ?? "live") !== "live" ||
+        (quote.network_mode ?? "live") !== (sol?.network === "devnet" ? "test" : "live") ||
         !Number.isSafeInteger(quote.unit_quota) ||
         quote.unit_quota <= 0)
     ) {
@@ -1062,8 +1670,22 @@ export async function aifp1Fetch(
     }
     validateCanonicalQuoteEconomics(quote);
     const quoteExpiryMs = Date.parse(quote.expires_at);
-    if (!Number.isFinite(quoteExpiryMs) || quoteExpiryMs <= Date.now()) {
-      throw new Aifp1QuoteError(`quote ${quote.quote_id} is expired or has invalid expires_at`);
+    if (!Number.isFinite(quoteExpiryMs)) throw new Aifp1QuoteError("Quote has invalid expiry; retain its admission");
+    if (quoteExpiryMs <= Date.now()) {
+      if (sol && admission && !admission.wasReserved) {
+        validateSolanaQuote(quote, sol, deps.payerAddress, quoteExpiryMs, solDeployment!, true);
+        if (!deps.verifyHistoricalSolanaQuote)
+          throw new Aifp1QuoteError("Historical quote signer verification is required");
+        await deps.verifyHistoricalSolanaQuote(quote.settlement_call as SolanaV14SettlementCall, sol, quote.quote_id);
+        await deps.closeQuoteAdmission!(
+          admission.id,
+          admissionBinding!,
+          admissionContext!,
+          "expired-unbroadcast",
+          admission.quoteJson
+        );
+      }
+      throw new Aifp1QuoteError(`quote ${quote.quote_id} is expired; no transaction or new quote was submitted`);
     }
 
     // 3. Budget. The quote states the batch total in USD, so both caps are
@@ -1072,8 +1694,46 @@ export async function aifp1Fetch(
     if (!Number.isFinite(amountUsd) || amountUsd < 0) {
       throw new Aifp1QuoteError(`quote ${quote.quote_id} has an unusable amount "${quote.amount}"`);
     }
-    if (stableAsset) {
-      validateStableV14Quote(quote, stableAsset, deps.payerAddress as `0x${string}`, quoteExpiryMs, chain);
+    let solPlan: SolanaV14Plan | undefined;
+    let solRate: string | undefined;
+    if (sol) {
+      validateSolanaQuote(quote, sol, deps.payerAddress, quoteExpiryMs, solDeployment!);
+      const price = typeof opts.nativeUsdPrice === "function" ? await opts.nativeUsdPrice() : opts.nativeUsdPrice;
+      const age = price ? Date.now() - price.observedAtMs : NaN;
+      if (
+        !price ||
+        !Number.isFinite(price.usd) ||
+        price.usd <= 0 ||
+        !Number.isFinite(age) ||
+        age < -5000 ||
+        age > 60000
+      )
+        throw new Aifp1QuoteError("Fresh independent SOL/USD price required for gross and fee/rent budgeting");
+      solRate = String(price.usd);
+      solanaLamportCostUsd(0n, solRate); // Exact finite independently sourced rate.
+      const gross = BigInt((quote.settlement_call as SolanaV14SettlementCall).args.quote.grossAmount);
+      if (!stableAsset) {
+        const debitUsd = solanaLamportCostUsd(gross, solRate);
+        const quotedRate = Number(quote.native_settlement?.rate_usd);
+        if (
+          !Number.isFinite(debitUsd) ||
+          debitUsd <= 0 ||
+          !Number.isFinite(quotedRate) ||
+          quotedRate <= 0 ||
+          Math.abs(debitUsd - amountUsd) > Math.max(amountUsd * 0.02, 1e-6) ||
+          Math.abs(solanaLamportCostUsd(gross, String(quotedRate)) - amountUsd) > Math.max(amountUsd * 0.02, 1e-6)
+        )
+          throw new Aifp1QuoteError("SOL gross disagrees with independent/quoted USD rate");
+        amountUsd = Math.max(amountUsd, Math.ceil(debitUsd * 1e6) / 1e6);
+      }
+      if (!deps.prepareSolana || !deps.settleSolana)
+        throw new Aifp1SettlementUnsupportedError("Solana executor unavailable");
+      solPlan = await deps.prepareSolana(quote.settlement_call as SolanaV14SettlementCall, sol, quote.quote_id);
+      if (solPlan.feeRentLamports < 0n || solPlan.feeRentLamports > sol.maxFeeLamports)
+        throw new Aifp1QuoteError("Solana fee/rent cap exceeded");
+      amountUsd += solanaLamportCostUsd(solPlan.feeRentLamports, solRate);
+    } else if (stableAsset) {
+      validateStableV14Quote(quote, stableAsset, deps.payerAddress as `0x${string}`, quoteExpiryMs, evmChain);
     } else if (opts.settlementPin || opts.v14) {
       const price = typeof opts.nativeUsdPrice === "function" ? await opts.nativeUsdPrice() : opts.nativeUsdPrice;
       const age = price ? Date.now() - price.observedAtMs : NaN;
@@ -1089,7 +1749,7 @@ export async function aifp1Fetch(
           "a fresh independent nativeUsdPrice is required before native payment; quote-provided FX is not trusted"
         );
       }
-      const native = quote.native_settlement;
+      const native = quote.native_settlement as Aifp1EvmNativeSettlement | undefined;
       if (!native || !/^[0-9]{1,78}$/.test(native.total_wei)) {
         throw new Aifp1QuoteError("quote has no valid native debit to check against the independent price");
       }
@@ -1106,8 +1766,10 @@ export async function aifp1Fetch(
       amountUsd = Math.max(amountUsd, debitUsd);
       const call = quote.settlement_call;
       const args = call?.args as
-        Exclude<Aifp1Quote["settlement_call"], V14SettlementCall | undefined>["args"] | undefined;
+        | Exclude<Aifp1Quote["settlement_call"], V14SettlementCall | SolanaV14SettlementCall | undefined>["args"]
+        | undefined;
       if (
+        quote.token_settlement !== undefined ||
         native.asset !== nativeAsset ||
         native.decimals !== 18 ||
         (opts.v14
@@ -1159,11 +1821,59 @@ export async function aifp1Fetch(
       );
     }
     if (!deps.checkPerCall(amountUsd)) return null;
-    const reservation = await deps.reserveDaily(amountUsd);
+    const budgetContext = {
+      apiBaseUrl: apiBase,
+      quote,
+      asset: stableAsset ?? nativeAsset,
+      chain,
+      paymentIssuer: opts.paymentIssuer,
+      ...(sol
+        ? {
+            admissionSolUsdPrice: solRate!,
+            maxFeeLamports: sol.maxFeeLamports.toString(),
+            transactionFeeLamports: solPlan!.transactionFeeLamports.toString(),
+          }
+        : {}),
+    };
+    const binding =
+      opts.v14 || sol ? paymentBudgetBinding(budgetContext, deps.payerAddress, deps.walletIdentity) : undefined;
+    const reservation = await deps.reserveDaily(amountUsd, binding, admission?.id);
     if (reservation === "skip") return null;
 
     let settled = false;
+    let preparedTx: { hash: `0x${string}`; serializedTransaction: `0x${string}` } | undefined;
+    const recoveryFor = (txRef: `0x${string}`): Aifp1EvmPaymentRecovery => ({
+      ...budgetContext,
+      chain: evmChain,
+      txRef,
+      ...(deps.walletIdentity ? { budgetBindingVersion: 2 as const } : {}),
+      ...(binding && typeof reservation === "string" ? { budgetReservationId: reservation } : {}),
+      ...(preparedTx?.hash === txRef ? { serializedTransaction: preparedTx.serializedTransaction } : {}),
+    });
     try {
+      if (sol) {
+        return await settleSolanaBatch(
+          deps,
+          opts,
+          quote,
+          solPlan!,
+          amountUsd,
+          binding!,
+          reservation,
+          site,
+          send,
+          () => {
+            settled = true;
+          }
+        );
+      }
+      if (
+        binding &&
+        typeof reservation === "string" &&
+        (!deps.prepareReservation || !deps.assertReservation || !deps.completeReservation)
+      ) {
+        throw new Aifp1QuoteError("Capped v1.4 payments require durable bound-journal ledger hooks before broadcast");
+      }
       // 4. Settle on-chain, then exchange the tx for a receipt.
       let settleParams: {
         merchantWallet: `0x${string}`;
@@ -1192,7 +1902,7 @@ export async function aifp1Fetch(
         };
         paidAsset = stableAsset;
       } else {
-        const native = quote.native_settlement;
+        const native = quote.native_settlement as Aifp1EvmNativeSettlement | undefined;
         if (!native) {
           throw new Aifp1SettlementUnsupportedError(
             `quote ${quote.quote_id} carries no native_settlement for ${nativeAsset}; ` +
@@ -1273,47 +1983,36 @@ export async function aifp1Fetch(
           ...(opts.v14
             ? {
                 onPrepared: async (tx: { hash: `0x${string}`; serializedTransaction: `0x${string}` }) => {
+                  if (
+                    !/^0x(?:[0-9a-fA-F]{2})+$/.test(tx.serializedTransaction) ||
+                    keccak256(tx.serializedTransaction) !== tx.hash
+                  ) {
+                    throw new Aifp1QuoteError("Prepared transaction hash disagrees with its signed bytes");
+                  }
+                  if (binding && typeof reservation === "string")
+                    await deps.prepareReservation!(reservation, tx.hash, binding);
                   await opts.v14!.onPrepared({
-                    apiBaseUrl: apiBase,
-                    quote,
-                    txRef: tx.hash,
-                    asset: paidAsset,
-                    chain,
-                    paymentIssuer: opts.paymentIssuer,
+                    ...recoveryFor(tx.hash),
                     serializedTransaction: tx.serializedTransaction,
                   });
+                  preparedTx = tx;
                 },
               }
             : {}),
         });
       } catch (error) {
-        if (error instanceof SettlementConfirmationPendingError && error.stage === "settlement") {
+        const pending = error instanceof SettlementConfirmationPendingError && error.stage === "settlement";
+        const provenRevert = error instanceof V14SettlementError && error.code === "V14_TRANSACTION_REVERTED";
+        if (pending || (preparedTx && !provenRevert)) {
           // Treat unknown confirmation as spent until reconciliation. Releasing
           // the reservation here would let a retry spend the same budget again.
           settled = true;
-          const recovery = {
-            apiBaseUrl: apiBase,
-            quote,
-            txRef: error.txHash,
-            asset: paidAsset,
-            chain,
-            paymentIssuer: opts.paymentIssuer,
-          };
-          try {
-            if (typeof reservation === "string") await deps.commit(reservation, amountUsd);
-          } catch {
-            throw new Aifp1PayError(
-              "payment broadcast; confirmation and budget reconciliation required",
-              error.txHash,
-              quote.quote_id,
-              recovery
-            );
-          }
+          const hash = pending ? error.txHash : preparedTx!.hash;
           throw new Aifp1PayError(
             "payment broadcast; recover its confirmation and receipt without paying again",
-            error.txHash,
+            hash,
             quote.quote_id,
-            recovery
+            recoveryFor(hash)
           );
         }
         throw error;
@@ -1330,18 +2029,22 @@ export async function aifp1Fetch(
           "payment settled; budget reconciliation and receipt recovery required",
           txRef,
           quote.quote_id,
-          {
-            apiBaseUrl: apiBase,
-            quote,
-            txRef,
-            asset: paidAsset,
-            chain,
-            paymentIssuer: opts.paymentIssuer,
-          }
+          recoveryFor(txRef)
         );
       }
 
-      const paid = await submitPayment(deps, apiBase, quote, txRef, paidAsset, chain, opts);
+      let paid: Aifp1PayResult;
+      try {
+        paid = await submitPayment(deps, apiBase, quote, txRef, paidAsset, chain, opts);
+        if (binding && typeof reservation === "string") await deps.completeReservation!(reservation, txRef, binding);
+      } catch (error) {
+        throw new Aifp1PayError(
+          error instanceof Error ? error.message : "Payment receipt/budget recovery required",
+          txRef,
+          quote.quote_id,
+          recoveryFor(txRef)
+        );
+      }
 
       // 6. Keep the batch. This is the whole point of the design: the next call
       // this receipt covers costs a header, not a transaction.
@@ -1383,14 +2086,7 @@ export async function aifp1Fetch(
           "payment settled and receipt cached; content request failed, retry without paying again",
           txRef,
           quote.quote_id,
-          {
-            apiBaseUrl: apiBase,
-            quote,
-            txRef,
-            asset: paidAsset,
-            chain,
-            paymentIssuer: opts.paymentIssuer,
-          }
+          recoveryFor(txRef)
         );
       }
       if (receiptResp.status === 402) {
@@ -1412,8 +2108,7 @@ export async function aifp1Fetch(
       });
       return receiptResp;
     } finally {
-      // Anything that did not move money gives the cap back now rather than
-      // waiting for the reservation to expire — same rule as call().
+      // Only a proven prebroadcast failure/reverted settlement gives the cap back.
       if (typeof reservation === "string" && !settled) await deps.release(reservation);
     }
   };
@@ -1431,19 +2126,16 @@ export async function aifp1Fetch(
 /** Trusted input only: neither a quote nor a receipt may choose a payment chain. */
 function authorizedV14Chain(chain: Aifp1V14Chain | undefined): Aifp1V14Chain {
   if (chain === undefined) return "polygon";
-  if (chain !== "polygon" && chain !== "base") throw new Aifp1QuoteError(`unsupported v1.4 chain "${chain}"`);
+  if (!paymentChain(chain)) throw new Aifp1QuoteError(`unsupported v1.4 chain "${chain}"`);
   return chain;
 }
 
 /** Native by default; stablecoin symbols must be pinned for the selected chain. */
 function pinnedStableAsset(asset: string | undefined, chain: Aifp1V14Chain): string | null {
-  if (asset === undefined || asset === (chain === "base" ? "ETH" : "POL")) return null;
-  const pinned = V14_DEPLOYMENTS[chain]?.splitter.assets.find((a) => a.symbol === asset);
+  if (asset === undefined || asset === paymentChain(chain)!.native) return null;
+  const pinned = paymentStableAsset(chain, asset);
   if (!pinned) {
-    throw new Aifp1QuoteError(
-      `v14.asset "${asset}" is not a stablecoin pinned for ${chain} v1.4 ` +
-        `(${(V14_DEPLOYMENTS[chain]?.splitter.assets ?? []).map((a) => a.symbol).join(", ") || "none"})`
-    );
+    throw new Aifp1QuoteError(`v14.asset "${asset}" is not a stablecoin pinned for ${chain} v1.4`);
   }
   return pinned.symbol;
 }
@@ -1451,8 +2143,8 @@ function pinnedStableAsset(asset: string | undefined, chain: Aifp1V14Chain): str
 /**
  * Check a v1.4 stablecoin quote before any budget is reserved. A token quote
  * has no FX to cross-check, so the binding is exact instead: the signed gross
- * equals the stated settlement units, which equal the stated USD amount in
- * 6-decimal micro-dollars; the token is the pinned one; the approval is for
+ * equals the pinned-decimal conversion of the stated USD micro-dollars;
+ * optional token metadata is checked in exact token units; the approval is for
  * exactly that gross; and the quote accepts nothing else.
  */
 function validateStableV14Quote(
@@ -1468,16 +2160,37 @@ function validateStableV14Quote(
   }
   const signed = call as V14SettlementCall;
   validateV14SettlementCall(signed, { orderId: quote.quote_id, payer });
-  const token = V14_DEPLOYMENTS[chain]?.splitter.assets.find((a) => a.symbol === asset)?.address;
+  const pin = paymentStableAsset(chain, asset);
+  const token = pin?.address;
   const merchant = quote.pay_to[chain] ?? quote.pay_to.evm;
   const q = signed.args.quote;
   let micro: bigint;
   try {
+    if (!/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,6})?$/.test(String(quote.amount))) throw new Error("non-exact USD amount");
     micro = parseUnits(String(quote.amount), 6);
   } catch {
     throw new Aifp1QuoteError(`quote ${quote.quote_id} has an unusable amount "${quote.amount}"`);
   }
-  const units = (quote as { settlement?: { total_units?: string } }).settlement?.total_units;
+  const units = quote.settlement?.total_units;
+  const gross = pin ? micro * 10n ** BigInt(pin.decimals - 6) : 0n;
+  const metadata = quote.token_settlement;
+  // Split the actual token gross, not the rounded legacy micro-dollar legs.
+  const treasury = gross / 100n;
+  if (
+    (pin?.decimals === 18 && metadata === undefined) ||
+    (metadata !== undefined &&
+      (!metadata ||
+        typeof metadata !== "object" ||
+        metadata.asset !== asset ||
+        metadata.token?.toLowerCase() !== token?.toLowerCase() ||
+        metadata.decimals !== pin?.decimals ||
+        metadata.settlement_semantics !== "gross-inclusive" ||
+        metadata.total_units !== String(gross) ||
+        metadata.merchant_units !== String(gross - treasury) ||
+        metadata.protocol_fee_units !== String(treasury) ||
+        metadata.creator_units !== "0"))
+  )
+    throw new Aifp1QuoteError("token_settlement disagrees with pinned token, decimals or exact gross-inclusive split");
   if (
     signed.chain !== chain ||
     signed.asset !== asset ||
@@ -1492,8 +2205,9 @@ function validateStableV14Quote(
     quote.accepted_assets.length !== 1 ||
     quote.accepted_assets[0] !== asset ||
     units === undefined ||
-    q.grossAmount !== units ||
-    BigInt(q.grossAmount) !== micro ||
+    units !== String(micro) ||
+    q.grossAmount !== String(gross) ||
+    gross >= 2n ** 256n ||
     micro <= 0n ||
     !signed.approval ||
     signed.approval.token.toLowerCase() !== token.toLowerCase() ||
@@ -1510,8 +2224,9 @@ function validateStableV14Quote(
 async function requestQuote(
   deps: Aifp1Deps,
   apiBase: string,
-  body: Record<string, unknown>,
-  timeoutMs?: number
+  body: Record<string, unknown> | string,
+  timeoutMs?: number,
+  onRefusal?: (status: number, detail: Record<string, unknown> | null) => Promise<void>
 ): Promise<Aifp1Quote> {
   let r: Response;
   let text: string;
@@ -1522,7 +2237,7 @@ async function requestQuote(
       {
         method: "POST",
         headers: { "content-type": "application/json", "AIFP-Agent-Id": deps.agentId },
-        body: JSON.stringify(body),
+        body: typeof body === "string" ? body : JSON.stringify(body),
       },
       timeoutMs
     ));
@@ -1530,6 +2245,13 @@ async function requestQuote(
     throw new Aifp1QuoteError(`POST ${apiBase}/v1/quote failed: ${(e as Error).message}`);
   }
   if (!r.ok) {
+    let detail = null;
+    try {
+      detail = JSON.parse(text);
+    } catch {
+      /* Unknown response keeps the admission. */
+    }
+    await onRefusal?.(r.status, detail);
     // The server's own detail is the useful part — a scope refused for a
     // non-flat-rated tier, a batch under the minimum, an owner policy — and
     // none of that is guessable from the status alone.
@@ -1545,6 +2267,39 @@ async function requestQuote(
     throw new Aifp1QuoteError(`POST /v1/quote → 200 without a quote_id: ${text.slice(0, 200)}`);
   }
   return quote;
+}
+
+/** Sign only this locally constructed request; a server cannot choose the
+ * ownership statement. Retry the same body/nonce after an uncertain response. */
+export function solanaQuoteAuthorizationMessage(
+  body: Record<string, unknown>,
+  auth: {
+    network: SolanaNetwork;
+    network_mode: "live" | "test";
+    payer: string;
+    nonce: string;
+    expires_at: number;
+  },
+  issuer: string
+): string {
+  return JSON.stringify([
+    "AiFinPay quote authorization v1",
+    issuer,
+    auth.network,
+    auth.network_mode,
+    body.merchant_id,
+    body.resource ?? null,
+    body.tier ?? "standard",
+    body.requests ?? null,
+    body.units ?? null,
+    body.currency ?? "USD",
+    body.scope ?? "exact",
+    "solana",
+    body.asset ?? "SOL",
+    auth.payer,
+    auth.nonce,
+    auth.expires_at,
+  ]);
 }
 
 // ── /v1/pay ───────────────────────────────────────────────────────────────
@@ -1563,15 +2318,15 @@ async function submitPayment(
   deps: Pick<Aifp1Deps, "fetchImpl" | "agentId" | "payerAddress" | "signPaymentAuthorization">,
   apiBase: string,
   quote: Aifp1Quote,
-  txRef: `0x${string}`,
+  txRef: string,
   asset: string,
-  chain: Aifp1V14Chain,
+  chain: Aifp1SettlementChain,
   opts: Aifp1FetchOptions
 ): Promise<Aifp1PayResult> {
   const idempotencyKey = idempotencyKeyFor({ quoteId: quote.quote_id, chain, asset, txRef });
   const deadline = Date.now() + (opts.settlementConfirmMs ?? DEFAULT_SETTLEMENT_CONFIRM_MS);
 
-  const recovery: Aifp1PaymentRecovery = {
+  const recovery = {
     apiBaseUrl: apiBase,
     quote,
     txRef,
@@ -1579,13 +2334,14 @@ async function submitPayment(
     chain,
     paymentIssuer: opts.paymentIssuer,
   };
-  const failure = (message: string) => new Aifp1PayError(message, txRef, quote.quote_id, recovery);
+  const failure = (message: string) =>
+    new Aifp1PayError(message, txRef, quote.quote_id, recovery as Aifp1PaymentRecovery);
   let lastDetail = "";
   for (let attempt = 0; ; attempt++) {
     if (attempt > 0 && Date.now() >= deadline)
       throw failure("payment confirmation deadline elapsed; recover the existing transaction");
     const expiresAt = Math.floor(Date.now() / 1000) + 240;
-    const payer = deps.payerAddress.toLowerCase();
+    const payer = chain === "solana" ? deps.payerAddress : deps.payerAddress.toLowerCase();
     // Construct this locally; never sign an arbitrary server-provided message.
     const message = paymentAuthorizationMessage({
       quote,
@@ -1682,7 +2438,7 @@ async function verifyPaidReceipt(
   paid: Aifp1PayResult,
   quote: Aifp1Quote,
   asset: string,
-  chain: Aifp1V14Chain,
+  chain: Aifp1SettlementChain,
   txRef: string,
   payer: string,
   issuer: string,
@@ -1739,14 +2495,20 @@ async function verifyPaidReceipt(
     claims.iss !== issuer ||
     claims.aud !== quote.merchant_id ||
     typeof claims.sub !== "string" ||
-    claims.sub.toLowerCase() !== payer.toLowerCase() ||
+    (chain === "solana" ? claims.sub !== payer : claims.sub.toLowerCase() !== payer.toLowerCase()) ||
     claims.tx_ref !== txRef ||
     claims.scope !== quote.scope ||
     claims.resource !== quote.resource ||
     claims.chain !== chain ||
-    claims.asset !== asset ||
+    (chain === "solana" &&
+      (claims.network !== (quote.settlement_call as SolanaV14SettlementCall).network ||
+        claims.program !== quote.settlement_call!.contract ||
+        paid.network !== claims.network ||
+        paid.program !== claims.program)) ||
+    typeof claims.asset !== "string" ||
+    claims.asset.toUpperCase() !== asset.toUpperCase() ||
     claims.currency !== "USD" ||
-    (claims.network_mode ?? "live") !== "live" ||
+    (claims.network_mode ?? "live") !== (quote.network_mode ?? "live") ||
     Number(claims.amount) !== Number(quote.amount) ||
     claims.unit_quota !== quote.unit_quota ||
     !Number.isSafeInteger(claims.exp) ||
