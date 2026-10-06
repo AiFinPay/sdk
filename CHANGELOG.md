@@ -1,3 +1,10 @@
+## Merchant gate reporting — Node gate 0.3.6 / Python gate 0.1.2 (source candidate)
+
+- Add opt-in request reporting for self-hosted gates through existing callbacks,
+  bounded queues/retries and UUID deduplication; no receipt, quota, payer SDK or
+  settlement behavior changes. Dashboard API deployment and merchant integration
+  remain required; local source is not a production reporting claim.
+
 ## Solana v1.4 source candidate — Node/Python 2.5.0, MCP 2.7.0
 
 - Persist zero-debit quote authorization before POST, replay exact bytes after

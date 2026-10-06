@@ -385,10 +385,10 @@ and understand that you are trading exact metering for generosity.
   AiFinPay gateway. A second implementation of a rule you edit in our dashboard
   would be a second source of truth, and the two would disagree on the day it
   mattered. Use `allow` for rules that are genuinely yours.
-- **Self-hosted traffic does not populate the panel's funnel, geo and AI-client
-  charts.** Those are written by the hosted gateway from traffic that passes
-  through it. Your registered endpoints still appear; the per-request analytics
-  do not. Use `onEvent` to feed your own metrics.
+- **Self-hosted request counters need explicit reporting.** Wire the opt-in
+  `createGateReporter` below to `onEvent` to populate the dashboard's request
+  counters. It does not report geography, user agents or general website visits;
+  those charts require traffic through the hosted gateway.
 - **It cannot bind a receipt to a caller.** A receipt is a bearer token. Anyone
   who obtains the JWT can spend the batch. The honest guarantee is **bounded
   loss**: a stolen receipt can spend at most the units the payer prepaid, and
@@ -431,3 +431,67 @@ A production URL in a staging `llms.txt` can send agents to a missing catalog.
 The discovery file lists resource prices and scopes. A fresh quote supplies
 settlement terms; discovery is neither a receipt nor proof that a particular
 client can execute the offered route.
+
+## Opt-in dashboard request reporting (0.3.6)
+
+The reporter sends `402` challenges and gate-admitted `serve` events to the
+merchant analytics API. A `serve` is emitted before your route handler runs;
+it does **not** prove a successful response or delivered content. Exempt human
+requests, errors, receipt JWTs, payer IDs, IPs, headers and customer content are
+excluded. Payments and revenue continue to come from confirmed settlements.
+
+```ts
+import { createGateReporter, aifpGate, redisStore } from "@aifinpay/gate";
+
+const merchantId = process.env.AIFP_MERCHANT_ID!;
+// Keep the existing server-side merchant secret in the environment.
+const reporter = createGateReporter({
+  merchantId,
+  merchantSecret: process.env.AIFP_MERCHANT_SECRET!,
+});
+// Share this reporter across all mounts in this worker process.
+app.use(
+  "/api/agent/genres/list",
+  aifpGate({
+    merchantId,
+    resource: "/api/agent/genres/list",
+    store: redisStore(redis),
+    onEvent: reporter.onEvent,
+  })
+);
+// In the application's existing shutdown handler, after stopping new requests:
+await reporter.close();
+```
+
+Use your existing gate and shared quota store; adding `onEvent` is sufficient.
+Register the same static or prefix pattern in the merchant dashboard first.
+Registry mode already emits its matched `route_pattern`; for a static mount,
+set `resource` explicitly. The reporter rejects full URLs, query strings,
+fragments, encoded paths and invalid patterns instead of changing their
+identity. The API also rejects patterns not registered for this merchant.
+The merchant secret belongs only on the server, never in browser code.
+If you already have a metrics hook, compose it with `reporter.onEvent`.
+Do not configure two reporters for the same gate event or combine hosted and
+self-hosted reporting for a single request: that would report it twice with
+different IDs.
+
+`apiBase` defaults to `https://api.aifinpay.io` and accepts an HTTPS origin
+only. The reporting API must be deployed before enabling this hook. Redirects
+are never followed, so a redirect cannot forward the merchant secret.
+The callback enqueues synchronously; HTTP runs later in batches of at most 50
+with a 3 second request deadline. The queue includes in-flight events and holds
+at most 1000; overflow drops new events. Transient errors keep the original UUID
+and UTC timestamp for deduplicated retries (at most 5 attempts/15 minutes).
+Permanent 4xx (except 408/429) or redirects stop reporting and discard the queue.
+Create a new reporter only after fixing its credentials/configuration.
+
+`reporter.stats` exposes `queued`, `delivered` (API acknowledgements, including
+retry duplicates), `dropped`, `retries`, `lastError` (a sanitized code), `stopped`
+and `closed`. Monitor these locally; an outage or overflow loses telemetry,
+never payment access. This queue is in memory, so abrupt process termination
+loses unsent events. No historical requests are backfilled from purchased quota.
+`await reporter.flush()` attempts each event in its queue snapshot once,
+returns stats and retains transient failures for background retries.
+`await reporter.close()` stops acceptance, performs that one flush, then drops
+remaining events and stops timers. Neither method promises delivery; with a
+full queue a flush can take up to 60 seconds plus a current 3 second attempt.

@@ -1,3 +1,11 @@
+## 0.1.2 — unreleased
+
+- Add explicit opt-in merchant request reporting through the existing gate event
+  callback. UUID-stable bounded batches/retries, HTTPS-only/no redirects, sanitized
+  drop/outage status and best-effort flush/shutdown; no payment/quota changes.
+- Report only registered canonical 402/gate-admission events, excluding exempt
+  humans and sensitive request fields. Document observation coverage and lifecycle.
+
 ## 0.1.1 — unreleased
 
 Fixes for bugs found by the coverage pass (AiFinPay/sdk#96); P1, P5, P6 and
