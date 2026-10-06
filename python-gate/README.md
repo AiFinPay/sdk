@@ -128,3 +128,68 @@ and expires with the receipt.
 
 Not included, on purpose: free allowances, daily caps and per-agent blocks live
 in the AiFinPay dashboard, so there is one source of truth for each rule.
+
+
+## Opt-in dashboard request reporting (0.1.2)
+
+Use one `GateReporter` per merchant per worker, created **after worker fork**.
+It uses only Python's standard library. Add its callback to your existing gate;
+keep the gate's shared Redis quota store and verification settings.
+
+```python
+import os
+from aifinpay_gate import GateReporter, Gate, Route, RedisStore
+
+merchant_id = os.environ["AIFP_MERCHANT_ID"]
+reporter = GateReporter(
+    merchant_id=merchant_id,
+    merchant_secret=os.environ["AIFP_MERCHANT_SECRET"],
+)
+gate = Gate(
+    merchant_id=merchant_id,
+    routes=[Route(pattern="/api/agent/genres/list", tier="standard")],
+    store=RedisStore(redis_client),
+    on_event=reporter.on_event,
+)
+# In your existing worker shutdown hook, after stopping new requests:
+reporter.close(timeout=10.0)
+```
+
+Register the identical static or prefix route pattern in the dashboard first.
+Routes mode emits the matched `Route.pattern`; a single-resource gate must set
+`resource` explicitly. Full URLs, queries, fragments, encoded or invalid paths
+are rejected instead of rewritten. The API rejects unregistered patterns.
+Keep the merchant secret server-side. Share the reporter across mounts; do not
+report the same event through multiple reporters or through both hosted and
+self-hosted analytics. If you already have a callback, compose the two hooks.
+
+Only `402` and gate-admitted `serve` events are reported; exempt humans and
+other event kinds are excluded. `serve` is admission **before your handler**,
+not proof of successful HTTP response or delivered content. The payload has
+only UUID, kind, registered path and UTC timestamp; no headers, receipts,
+payer IDs, IPs or customer content. This populates request counters, not
+geographic/user-agent charts or general website visits. Settlements still
+supply payments/revenue; purchased quota is never backfilled as actual usage.
+
+`api_base` accepts an HTTPS origin only (default `https://api.aifinpay.io`);
+the reporting API must be deployed before enabling this hook. Redirects are
+blocked before a second request, including302, so secrets stay at that origin.
+`on_event` is synchronous enqueue only. The background daemon thread sends
+batches of at most 50 with a 3 second socket I/O timeout; it never performs HTTP
+on the gate thread. The memory queue includes in-flight events, holds at most
+1000, and drops new events when full. UUIDs and timestamps stay identical on
+transient retries (at most 5 attempts/15 minutes). Permanent 4xx except 408/429,
+or redirects, stop reporting and discard the queue. Fix configuration or
+credentials before creating a replacement reporter.
+
+`reporter.stats` returns `queued`, `delivered` (API acknowledgements including
+retry duplicates), `dropped`, `retries`, `last_error` (sanitized code), `stopped`
+and `closed`. Monitor these in your own service. An abrupt process stop loses
+unsent telemetry; reporting failures never alter verification or quotas.
+`reporter.flush(timeout=10.0)` requests one attempt per queued event and waits
+at most the deadline; transient failures remain for background retries.
+`reporter.close(timeout=10.0)` stops acceptance, flushes within that deadline,
+drops unsent events and tells the worker to stop. An already in-flight socket
+operation may finish later, but it cannot start another request. Neither method
+promises delivery. A reporter inherited across fork refuses to report and
+exposes `wrong_process`; construct a fresh reporter in each worker.
