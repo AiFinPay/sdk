@@ -14,6 +14,19 @@ const pythonOutput = path.resolve(nodeRoot, "../python/aifinpay/_v14_deployments
 const pythonSolanaOutput = path.resolve(nodeRoot, "../python/aifinpay/_solana_v14_deployments.py");
 const checkOnly = process.argv.includes("--check");
 const zeroAddress = "0x0000000000000000000000000000000000000000";
+// New registry entries are not implicit owner authorization to add SDK networks.
+const supportedEvmChains = new Set([
+  "optimism",
+  "bnb",
+  "unichain",
+  "polygon",
+  "robinhood",
+  "base",
+  "arbitrum",
+  "avalanche",
+  "xrplevm",
+  "amoy",
+]);
 
 // Source of truth: @aifinpay/deployments ships the canonical per-ecosystem
 // split registries. It is installed as a local file: dependency (the package is
@@ -25,6 +38,7 @@ const solanaRegistryPath = path.join(deploymentsRoot, "registry/splitter/solana/
 
 const evmRegistry = JSON.parse(fs.readFileSync(evmRegistryPath, "utf8"));
 const solanaRegistry = JSON.parse(fs.readFileSync(solanaRegistryPath, "utf8"));
+const sdkEvmDeployments = evmRegistry.deployments.filter((deployment) => supportedEvmChains.has(deployment.chain));
 
 function fail(message) {
   throw new Error(`Invalid payment deployment registry: ${message}`);
@@ -99,8 +113,12 @@ function json(value) {
 
 function evmTable() {
   return Object.fromEntries(
-    evmRegistry.deployments.map((deployment) => {
-      const findAsset = (symbol) => deployment.assets.find((asset) => asset.symbol === symbol)?.address ?? zeroAddress;
+    sdkEvmDeployments.map((deployment) => {
+      // The registry's new Polygon USDT entry is not part of the SDK token allowlist.
+      const assets = deployment.assets.filter(
+        (asset) => !(deployment.chain === "polygon" && asset.symbol === "USDT")
+      );
+      const findAsset = (symbol) => assets.find((asset) => asset.symbol === symbol)?.address ?? zeroAddress;
       return [
         deployment.chain,
         {
@@ -121,7 +139,7 @@ function evmTable() {
             treasury: deployment.contracts.treasury,
             tokenList: deployment.contracts.tokenList,
             profiles: deployment.contracts.profiles,
-            assets: deployment.assets,
+            assets,
             usdc: findAsset("USDC"),
             usdt: findAsset("USDT"),
           },
@@ -281,7 +299,7 @@ function writeOrCheck(outputPath, content) {
   }
 }
 
-validateEvm(evmRegistry.deployments);
+validateEvm(sdkEvmDeployments);
 validateSolana(solanaRegistry.deployments);
 writeOrCheck(evmOutput, renderEvm());
 writeOrCheck(solanaOutput, renderSolana());

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.5.1 — deployment registry provenance refresh
+
+- Refresh the v1.4 deployment source to the `@aifinpay/deployments` 1.1.4
+  registry while preserving the selected nine-mainnet cohort, Polygon token
+  allowlist and disabled Solana deployments.
+
 The 2.5.0 source build now clears its literal generated `dist/` before TypeScript
 compilation, including pretest/prepublication builds, so retired modules cannot
 remain in the package.

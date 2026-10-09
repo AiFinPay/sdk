@@ -8,12 +8,25 @@ import {
 
 describe("payment deployment registry provenance", () => {
   it("pins the CTO-provided EVM and Solana commits", () => {
-    expect(V14_DEPLOYMENTS_SOURCE.commit).toBe("a54a4c107de7bb42f54e411e621d3897938bfc31");
+    expect(V14_DEPLOYMENTS_SOURCE.commit).toBe("470b328494492dcb8567fc80ed1f5cad54ada9e7");
     expect(SOLANA_V14_DEPLOYMENTS_SOURCE.commit).toBe("e5df8f5436cf646ab495381eee04e0d1a10b4e2f");
   });
 
-  it("excludes BOT Chain and imports Robinhood with assets", () => {
+  it("preserves the selected network cohort and imports Robinhood with assets", () => {
     expect(V14_DEPLOYMENTS.botchain).toBeUndefined();
+    expect(V14_DEPLOYMENTS.arc).toBeUndefined();
+    expect(Object.keys(V14_DEPLOYMENTS).sort()).toEqual([
+      "amoy",
+      "arbitrum",
+      "avalanche",
+      "base",
+      "bnb",
+      "optimism",
+      "polygon",
+      "robinhood",
+      "unichain",
+      "xrplevm",
+    ]);
     const robinhood = V14_DEPLOYMENTS.robinhood;
     expect(robinhood.chainId).toBe(4663);
     expect(robinhood.status).toBe("enabled");

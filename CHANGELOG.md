@@ -6,6 +6,13 @@
 - Fix `deployments/src/grabber.ts` filename parsing for mixed-case networks
   (`arcTestnet-*-latest`) and treat `*testnet` networks as dev/testnet.
 
+## Node/Python 2.5.1 — deployment registry provenance refresh
+
+- Refresh generated v1.4 deployment metadata from `@aifinpay/deployments` 1.1.4.
+  Retain the selected nine EVM mainnets, existing Polygon token allowlist and
+  disabled Solana deployment records; Arc, Botchain and the newly listed Polygon
+  USDT token are not enabled in either SDK.
+
 ## Merchant gate reporting — Node gate 0.3.6 / Python gate 0.1.2 (source candidate)
 
 - Add opt-in request reporting for self-hosted gates through existing callbacks,
