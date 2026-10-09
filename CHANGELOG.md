@@ -1,3 +1,11 @@
+## @aifinpay/deployments 1.1.4 — Arc mainnet + testnet (evm-contract@470b328)
+
+- Add Arc mainnet (5042, prod, disabled, USDC/EURC) and Arc testnet (5042002,
+  dev, enabled, USDC/EURC) to `deployments/registry/splitter/evm/v1.4/deployments.json`
+  from `AiFinPay/evm-contract@470b328` dev head; also picks up Botchain (677).
+- Fix `deployments/src/grabber.ts` filename parsing for mixed-case networks
+  (`arcTestnet-*-latest`) and treat `*testnet` networks as dev/testnet.
+
 ## Solana v1.4 source candidate — Node/Python 2.5.0, MCP 2.7.0
 
 - Persist zero-debit quote authorization before POST, replay exact bytes after

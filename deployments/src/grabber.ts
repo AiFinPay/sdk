@@ -64,7 +64,8 @@ function parseEvmFilename(url: string): { network: string; timestamp: string; ve
   if (base.includes("-v13-") && !base.includes("-v14-")) return null;
 
   // E.g. amoy-2026-09-02T00-42-08-319Z
-  const datedMatch = /^(?<network>[a-z]+)-(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})T(?<hh>\d{2})-(?<mm>\d{2})-(?<ss>\d{2})-(?<ms>\d+)Z$/.exec(base);
+  // E.g. arcTestnet-2026-10-08T20-36-15-533Z (mixed-case network names)
+  const datedMatch = /^(?<network>[A-Za-z][A-Za-z0-9]*)-(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})T(?<hh>\d{2})-(?<mm>\d{2})-(?<ss>\d{2})-(?<ms>\d+)Z$/.exec(base);
   if (datedMatch?.groups) {
     const { network, year, month, day, hh, mm, ss, ms } = datedMatch.groups;
     return {
@@ -75,7 +76,8 @@ function parseEvmFilename(url: string): { network: string; timestamp: string; ve
   }
 
   // E.g. polygon-v14-polygon-latest -> treated as latest known for that network
-  const latestMatch = /^(?<network>[a-z]+)-v14-(?<network2>[a-z]+)-latest$/.exec(base);
+  // E.g. arcTestnet-v14-arcTestnet-latest
+  const latestMatch = /^(?<network>[A-Za-z][A-Za-z0-9]*)-v14-(?<network2>[A-Za-z][A-Za-z0-9]*)-latest$/.exec(base);
   if (latestMatch?.groups) {
     return {
       network: latestMatch.groups.network,
@@ -357,7 +359,7 @@ export async function writeSplitRegistries(registry: DeploymentRegistry, outDir:
       repo: "AiFinPay/evm-contract",
       // The evm-contract `dev` head this registry was generated from. Update it
       // with every regeneration, or the file names a commit its data is not from.
-      commit: "403bd742c33ace86c0131915db987a7063b73e06",
+      commit: "470b328494492dcb8567fc80ed1f5cad54ada9e7",
       path: "deployments/*-v14-*-latest.json",
     },
     governance: {
@@ -390,7 +392,7 @@ export async function writeSplitRegistries(registry: DeploymentRegistry, outDir:
       },
     },
     deployments: Object.values(registry.evm).map((evm) => {
-      const isTestnet = evm.network === "amoy";
+      const isTestnet = evm.network === "amoy" || evm.network.toLowerCase().includes("testnet");
       const disabledReasonMap: Record<string, string> = {
         disabled: "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
         invalid: "INVALID: splitter address equals TokenList; Profiles has no runtime code; redeploy required",
