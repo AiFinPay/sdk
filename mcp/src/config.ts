@@ -1,4 +1,5 @@
 import { paymentStableAsset, solanaStableMint } from "@aifinpay/agent";
+import type { EvmWalletClient } from "@aifinpay/agent";
 import { payChain } from "./pay-chains.js";
 
 /** Runtime configuration loaded from env. */
@@ -11,6 +12,8 @@ export interface McpConfig {
   agentId?: string;
   walletHome?: string;
   walletPassphrase?: string;
+  /** Programmatic external EVM signer supplied by an embedding MCP host. */
+  evmWalletClient?: EvmWalletClient;
   /** Dev environment. EVM payments stay live-only; Solana requires explicit devnet. */
   devMode?: boolean;
 

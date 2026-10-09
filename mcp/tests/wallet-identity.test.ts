@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
-import { AiFinPayAgent } from "@aifinpay/agent";
+import { AiFinPayAgent, type EvmWalletClient } from "@aifinpay/agent";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { loadWalletIdentity } from "../src/identity.js";
@@ -15,6 +15,27 @@ import { loadConfigFromEnv } from "../src/config.js";
 const dirs: string[] = [];
 const seedA = "11".repeat(32),
   seedB = "22".repeat(32);
+const externalEvmAddress = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8" as const;
+function externalWalletClient(chainId = 137, accountType: "local" | "json-rpc" = "local"): EvmWalletClient {
+  return {
+    account: {
+      address: externalEvmAddress,
+      type: accountType,
+      ...(accountType === "local" ? { signTransaction: async () => "0x" } : {}),
+    },
+    chain: {
+      id: chainId,
+      name: "test",
+      nativeCurrency: { name: "Test", symbol: "TST", decimals: 18 },
+      rpcUrls: { default: { http: ["https://example.invalid"] } },
+    },
+    signMessage: async () => "0x",
+    signTypedData: async () => "0x",
+    getChainId: async () => chainId,
+    writeContract: async () => "0x",
+    sendTransaction: async () => "0x",
+  } as unknown as EvmWalletClient;
+}
 function fixture() {
   const home = mkdtempSync(join(tmpdir(), "aifp-identity-"));
   dirs.push(home);
@@ -28,6 +49,72 @@ afterEach(() => {
 });
 
 describe("persistent wallet identity", () => {
+  it("uses a host-injected EVM WalletClient while retaining the local Solana identity", async () => {
+    const f = fixture();
+    const local = await AiFinPayAgent.fromSeed(seedA);
+    const active = await createServer({
+      seedHash: seedA,
+      walletHome: f.home,
+      evmWalletClient: externalWalletClient(),
+      paymentsEnabled: true,
+      maxAmountUsd: 0.1,
+      dailyAmountUsd: 1,
+      maxGasPol: "0.05",
+      gatewayOrigins: ["https://merchant.example"],
+      logFn: () => {},
+    });
+    try {
+      expect(active.agent.evmAddress).toBe(externalEvmAddress);
+      expect(active.agent.solanaAddress).toBe(local.solanaAddress);
+      expect(existsSync(join(f.home, "payments", externalEvmAddress.toLowerCase()))).toBe(true);
+      const client = new Client({ name: "external-wallet-surface-test", version: "1" });
+      const [left, right] = InMemoryTransport.createLinkedPair();
+      await active.server.connect(right);
+      await client.connect(left);
+      try {
+        expect((await client.listTools()).tools.map((tool) => tool.name)).toContain("payable_fetch");
+      } finally {
+        await client.close();
+      }
+    } finally {
+      await active.server.close();
+    }
+  });
+
+  it("refuses an injected EVM wallet client bound to the wrong payment chain", async () => {
+    const f = fixture();
+    await expect(
+      createServer({
+        seedHash: seedA,
+        walletHome: f.home,
+        evmWalletClient: externalWalletClient(1),
+        paymentsEnabled: true,
+        maxAmountUsd: 0.1,
+        dailyAmountUsd: 1,
+        maxGasPol: "0.05",
+        gatewayOrigins: ["https://merchant.example"],
+        logFn: () => {},
+      })
+    ).rejects.toThrow(/configured for polygon/);
+  });
+
+  it("refuses JSON-RPC send-only signers before enabling payments", async () => {
+    const f = fixture();
+    await expect(
+      createServer({
+        seedHash: seedA,
+        walletHome: f.home,
+        evmWalletClient: externalWalletClient(137, "json-rpc"),
+        paymentsEnabled: true,
+        maxAmountUsd: 0.1,
+        dailyAmountUsd: 1,
+        maxGasPol: "0.05",
+        gatewayOrigins: ["https://merchant.example"],
+        logFn: () => {},
+      })
+    ).rejects.toThrow(/sign raw transactions/);
+  });
+
   it("registers generic payment only with explicit owner limits and persistent wallet", async () => {
     const f = fixture();
     const config = {

@@ -225,7 +225,7 @@ export {
 
 export { deriveWallet, newWallet } from "./wallet.js";
 export { evmPrivateKeyWallet, eip1193Wallet, viemWalletClientWallet } from "./agentWallet.js";
-export type { AgentWallet, Eip1193Provider } from "./agentWallet.js";
+export type { AgentWallet, Eip1193Provider, EvmWalletClient } from "./agentWallet.js";
 export { getAgentHistory, getQuota, AGENT_RECEIPT_FIELDS, AGENT_TRANSACTION_FIELDS } from "./agentHistory.js";
 export type { AgentHistoryOptions, QuotaOptions, QuotaBatch, QuotaSummary } from "./agentHistory.js";
 export type { DerivedWallet } from "./wallet.js";

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.6.2 — programmatic external EVM transaction signer
+
+- Accept a viem `WalletClient` in `AiFinPayAgent` and route EVM transaction
+  signing through its `LocalAccount`; v1.4 persists signed bytes and broadcasts
+  them through the selected RPC. JSON-RPC/send-only accounts are refused.
+- Require a valid account, signing/transaction actions, and a chain matching
+  the active payment rail.
+- Export the `EvmWalletClient` host type. No provider-specific dependency or
+  browser runtime is added.
+
 ## 2.6.1
 
 - External wallet adapters with no new dependencies: `eip1193Wallet` wraps

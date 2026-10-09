@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { verifyMessage, stringToHex, type WalletClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { polygon } from "viem/chains";
 import { Agent } from "../src/agent.js";
 import { AiFinPayAgent } from "../src/unifiedAgent.js";
 import {
@@ -58,6 +59,19 @@ describe("AgentOptions.evmWallet", () => {
 });
 
 describe("AiFinPayAgentOptions.evmWallet", () => {
+  function localWalletClient(chain = polygon): WalletClient {
+    const account = privateKeyToAccount(PRIVATE_KEY);
+    return {
+      account,
+      chain,
+      signMessage: account.signMessage,
+      signTypedData: account.signTypedData,
+      getChainId: async () => chain.id,
+      writeContract: async () => FAKE_SIG,
+      sendTransaction: async () => FAKE_SIG,
+    } as WalletClient;
+  }
+
   it("AiFinPayAgent.fromSeed uses the injected wallet for the EVM side", async () => {
     const agent = await AiFinPayAgent.fromSeed("11".repeat(32), { evmWallet: evmPrivateKeyWallet(PRIVATE_KEY) });
     expect(agent.evmAccount.address.toLowerCase()).toBe(EXPECTED_ADDRESS.toLowerCase());
@@ -69,6 +83,52 @@ describe("AiFinPayAgentOptions.evmWallet", () => {
       evmWallet: evmPrivateKeyWallet(PRIVATE_KEY),
     });
     expect(agent.evmAccount.address.toLowerCase()).toBe(EXPECTED_ADDRESS.toLowerCase());
+  });
+
+  it("uses an injected WalletClient for EVM transactions on its configured chain", async () => {
+    const walletClient = localWalletClient();
+    const agent = await AiFinPayAgent.fromSeed("11".repeat(32), { evmWalletClient: walletClient });
+    const clients = (agent as unknown as { evmClients(name: string): { walletClient: WalletClient } }).evmClients(
+      "polygon"
+    );
+    expect(clients.walletClient).toBe(walletClient);
+    expect(agent.evmAddress).toBe(EXPECTED_ADDRESS);
+  });
+
+  it("supports a host-injected WalletClient with AiFinPayAgent.new", async () => {
+    const agent = await AiFinPayAgent.new({ evmWalletClient: localWalletClient() });
+    expect(agent.evmAddress).toBe(EXPECTED_ADDRESS);
+  });
+
+  it("refuses an injected WalletClient configured for another chain", async () => {
+    const walletClient = localWalletClient({ ...polygon, id: 1 });
+    const agent = await AiFinPayAgent.fromSeed("11".repeat(32), { evmWalletClient: walletClient });
+    expect(() => (agent as unknown as { evmClients(name: string): unknown }).evmClients("polygon")).toThrow(
+      /configured for Polygon/
+    );
+  });
+
+  it("rejects ambiguous external EVM wallet configuration", async () => {
+    const walletClient = {
+      account: { address: EXPECTED_ADDRESS },
+      chain: polygon,
+    } as WalletClient;
+    await expect(
+      AiFinPayAgent.fromSeed("11".repeat(32), {
+        evmWalletClient: walletClient,
+        evmPrivateKey: PRIVATE_KEY,
+      })
+    ).rejects.toThrow(/Set only one/);
+  });
+
+  it("rejects a JSON-RPC send-only account before exposing it as an EVM signer", async () => {
+    const walletClient = {
+      account: { address: EXPECTED_ADDRESS, type: "json-rpc" },
+      chain: polygon,
+    } as unknown as WalletClient;
+    await expect(AiFinPayAgent.fromSeed("11".repeat(32), { evmWalletClient: walletClient })).rejects.toThrow(
+      /sign raw transactions/
+    );
   });
 });
 

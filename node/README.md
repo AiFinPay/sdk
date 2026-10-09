@@ -178,11 +178,16 @@ const embedded = Agent.new({ evmWallet: viemWalletClientWallet(walletClient) });
 Server-side vendor SDKs (Coinbase CDP server wallets, Circle) are out of
 scope: they need vendor API credentials, which the SDK must not hold.
 
-The interface is `address` plus `signMessage`/`signTypedData` only; balances
-and settlement stay with the facilitator/backend layer. An injected wallet
-takes priority over `evmPrivateKey` and seed derivation. A message-only signer
-covers x402 flows; on-chain flows (bridge execution, splitter settlement)
-still need a full `LocalAccount` that signs transactions.
+`AgentWallet` is `address` plus `signMessage`/`signTypedData`; it is sufficient
+for message-based x402 authorization. `AiFinPayAgent` also accepts
+`evmWalletClient` for EVM on-chain flows, using that exact viem client for
+signing. Its account must be a viem `LocalAccount` with `signTransaction`:
+v1.4 signs and journals exact raw bytes before the SDK broadcasts them through
+the independently selected chain RPC for recovery. JSON-RPC/send-only and
+smart-account clients are refused for this flow. The client must be configured
+for the selected chain. This option cannot be combined with `evmWallet` or
+`evmPrivateKey`. The MCP programmatic integration uses the same option; its
+local identity continues to provide Solana identity and signing.
 
 ## How x402 auth works under the hood
 

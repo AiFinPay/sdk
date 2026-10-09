@@ -170,6 +170,41 @@ Invalid or ambiguous configured inputs fail; they never generate a replacement
 wallet. With no configured wallet at all the server has an ephemeral identity:
 **do not fund it**.
 
+### Embed an external EVM wallet
+
+An embedding host can pass a viem `WalletClient` directly to `createServer`.
+This is programmatic-only; `npx @aifinpay/mcp` and environment variables cannot
+carry a wallet client. Keep the existing local identity configured for Solana
+and other identity surfaces. When supplied, the client account becomes the EVM
+payment identity and the payment journal is keyed to that address. Its chain
+must match the owner-selected `AIFINPAY_PAY_CHAIN` (Polygon by default); the
+SDK refuses a mismatch rather than switching providers or falling back to the
+local EVM key.
+
+```ts
+import { createServer, loadConfigFromEnv } from "@aifinpay/mcp";
+import type { EvmWalletClient } from "@aifinpay/agent";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+
+// Constructed by the host from its chosen external signer/provider.
+declare const walletClient: EvmWalletClient;
+
+const { server } = await createServer({
+  ...loadConfigFromEnv(),
+  evmWalletClient: walletClient,
+});
+await server.connect(new StdioServerTransport());
+```
+
+The host must provide a viem `LocalAccount` with `signTransaction`, bound to
+the selected chain. v1.4 persists exact signed transaction bytes before the
+SDK broadcasts them through its verified RPC; JSON-RPC/send-only and smart
+account clients are refused rather than bypassing durable recovery. MCP still
+applies its configured spending limits, runtime and route checks, receipt
+verification, and recovery. Changing the injected account while payment
+recovery is pending requires reconciliation and reconnecting; it is not a
+tool-level wallet switch.
+
 ## Initialize and connect
 
 A quote or invoice is not a completed payment. `payable_fetch` pays only with the

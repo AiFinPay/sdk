@@ -1,3 +1,12 @@
+## Node 2.6.2 / MCP 2.7.2 — programmatic external EVM wallet
+
+- Reuse an embedding host's viem `WalletClient` for EVM signatures and
+  raw-transaction signing in the SDK and MCP server. Bind payment identity and
+  journal to the external account and selected chain; local Solana identity
+  and standard wallet CLI behavior remain unchanged.
+- Source integration requires publishing Node 2.6.2, then refreshing the MCP
+  dependency lock against that version before standalone release.
+
 ## Node 2.6.1 — unreleased
 
 - Zero-dependency external wallet adapters: `eip1193Wallet` (MetaMask and any

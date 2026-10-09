@@ -22,6 +22,8 @@ export interface AgentWallet {
 import { privateKeyToAccount } from "viem/accounts";
 import { stringToHex, type WalletClient } from "viem";
 
+export type EvmWalletClient = WalletClient;
+
 /**
  * AgentWallet backed by a raw EVM private key — the self-custodial default,
  * identical to what `evmPrivateKey` options already build internally.
@@ -81,6 +83,12 @@ export function viemWalletClientWallet(client: WalletClient): AgentWallet {
   const account = client.account;
   if (!account) {
     throw new Error("viemWalletClientWallet: the WalletClient has no account");
+  }
+  if (!/^0x[0-9a-f]{40}$/i.test(account.address)) {
+    throw new Error("viemWalletClientWallet: the WalletClient has an invalid account address");
+  }
+  if (typeof client.signMessage !== "function" || typeof client.signTypedData !== "function") {
+    throw new Error("viemWalletClientWallet: the WalletClient cannot sign messages and typed data");
   }
   return {
     address: account.address,
