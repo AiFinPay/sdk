@@ -43,7 +43,7 @@ const safeFetch = makeSafeFetch({
 });
 
 /** Read-only by default. Explicit owner configuration enables the reviewed
- * native Polygon v1.4 payable_fetch path; legacy signing tools stay retired. */
+ * family-specific v1.4 payable_fetch path; legacy signing tools stay retired. */
 export async function createServer(config: McpConfig = {}) {
   const log = config.logFn ?? defaultLog;
 
@@ -51,7 +51,17 @@ export async function createServer(config: McpConfig = {}) {
   async function configuredAgent() {
     const identity = loadWalletIdentity(config);
     if (!identity) return null;
-    const options = { fetchImpl: safeFetch, baseUrl: config.baseUrl, timeoutMs: config.timeoutMs };
+    // The owner's RPC for the pay chain, if set, is the one the SDK settles
+    // through; otherwise the SDK keeps its public default for that chain.
+    const rpc =
+      config.rpcUrl && config.payChain !== "solana" ? { [config.payChain ?? "polygon"]: config.rpcUrl } : undefined;
+    const options = {
+      fetchImpl: safeFetch,
+      baseUrl: config.baseUrl,
+      timeoutMs: config.timeoutMs,
+      ...(config.payChain === "solana" && config.rpcUrl ? { solanaRpc: config.rpcUrl } : {}),
+      ...(rpc ? { evmRpcUrls: rpc, ...(rpc.polygon ? { polygonRpc: rpc.polygon } : {}) } : {}),
+    };
     const loaded = identity.seedHash
       ? await AiFinPayAgent.fromSeed(identity.seedHash, options)
       : await AiFinPayAgent.fromSolanaSecret(identity.secretB58!, options);

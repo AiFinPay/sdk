@@ -32,7 +32,8 @@ export interface GateStore {
    *  the add. Sets `ttlMs` only when creating the key. Throws on backend
    *  failure. */
   incrBy(key: string, by: number, ttlMs: number): Promise<number>;
-  /** Optional compensating decrement for `refundOnError`. Best effort. */
+  /** Optional compensating decrement: `refundOnError`, and undoing the
+   *  increment of a call that was refused for not fitting. Best effort. */
   decrBy?(key: string, by: number): Promise<number>;
   /** Optional, read-only. Used by diagnostics; never by the decision. */
   get?(key: string): Promise<number | null>;

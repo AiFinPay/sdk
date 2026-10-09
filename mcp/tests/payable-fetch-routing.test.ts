@@ -37,6 +37,7 @@ const prepared = {
   },
   txRef: tx,
   asset: "POL",
+  chain: "polygon",
   serializedTransaction: "0xdeadbeef",
 };
 function fixture() {
@@ -122,6 +123,28 @@ describe("reviewed AIFP-1 payable_fetch", () => {
     const f = fixture();
     await runPayableFetch(f.ctx, { ...args, max_amount_usd: requested });
     expect(f.fetchPaid.mock.calls[0][2].maxAmountUsd).toBe(Math.min(0.2, requested));
+  });
+  it("buys one resource by default and the whole site only when asked", async () => {
+    const f = fixture();
+    await runPayableFetch(f.ctx, args);
+    await runPayableFetch(f.ctx, { ...args, scope: "exact" });
+    await runPayableFetch(f.ctx, { ...args, scope: "merchant" });
+    expect(f.fetchPaid.mock.calls.map((call) => call[2].scope)).toEqual(["exact", "exact", "merchant"]);
+    // A wider batch never widens the money: the owner caps apply unchanged.
+    expect(f.fetchPaid.mock.calls[2][2].maxAmountUsd).toBe(0.2);
+  });
+  it.each(["prefix", "MERCHANT", "", 1, null])("refuses scope %s before contacting anyone", async (scope) => {
+    const f = fixture();
+    expect((await runPayableFetch(f.ctx, { ...args, scope })).isError).toBe(true);
+    expect(f.fetchPaid).not.toHaveBeenCalled();
+  });
+  it("names an unapproved site and says only the owner can approve it", async () => {
+    const f = fixture();
+    const result = await runPayableFetch(f.ctx, { url: "https://other.example/data", scope: "merchant" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("https://other.example is not an owner-approved site");
+    expect(result.content[0].text).toContain("the agent cannot approve a site itself");
+    expect(f.fetchPaid).not.toHaveBeenCalled();
   });
   it.each([NaN, Infinity, -1, 0, "1"])("refuses invalid model cap %s", async (cap) => {
     const f = fixture();

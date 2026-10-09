@@ -1,21 +1,41 @@
 # @aifinpay/agent (Node / TypeScript)
 
-Version **2.3.2** adds Base ETH and USDC to the AIFP-1 `fetchPaid` flow.
-Polygon remains the default. Select Base independently with `v14.chain: "base"`;
-a merchant quote cannot change that choice. Runtime, signer, token, RPC chain and
-current profile checks remain mandatory, along with a durable pre-broadcast
-journal and an explicit gas budget. Legacy `call()` remains unavailable.
+Version **2.5.2** (source candidate) extends the existing signed AIFP-1 `fetchPaid`
+flow to Polygon, Base, Optimism, Arbitrum, Avalanche, BNB, Unichain, XRPL EVM and
+Robinhood. Polygon remains the default; select another network explicitly with
+`v14.chain`. A descriptor is client capability, not production readiness: the
+merchant must authorize the chain and the backend must serve/verifiably settle it.
+Runtime, signer, token, RPC-chain and current profile checks remain mandatory,
+along with a durable pre-broadcast journal and explicit native gas budget.
 
-Native payments require a fresh independent `nativeUsdPrice`: POL/USD on Polygon,
-ETH/USD on Base. The SDK does not infer or fetch this price from a payment quote.
-Stablecoin payments use the selected deployment's pinned token and exact USD minor
-units. No native price is needed for stablecoin settlement.
+Native purchases require a fresh independent `nativeUsdPrice` for POL, ETH, AVAX,
+BNB or XRP on the selected chain. Stablecoins use an independently pinned token
+address and decimals. USD micro-units remain unchanged; `token_settlement` binds
+exact6/18-decimal token units and every gross-inclusive leg to the signed gross
+and exact approval.18-decimal tokens require this metadata; legacy6-decimal
+quotes remain accepted. XRPL EVM currently has no pinned stablecoin.
 
-On Base, `maxGasWei` covers the estimated L2 execution fee plus buffered L1 data and
-operator fees, including approval when needed. This preflight estimate can change
-before inclusion; the transaction cannot enforce a hard cap on L1/operator fees.
-An unavailable fee oracle blocks signing. See the [Base configuration and recovery
-guide](./PAYMENT_RECEIPTS.md).
+`maxGasWei` covers approval plus settlement. OP chains (Base/Optimism/Unichain)
+include buffered L1/operator estimates; Nitro (Arbitrum/Robinhood) already includes
+parent-data gas in the RPC estimate, so it is counted once. Unavailable OP fees
+block signing. These are preflight estimates, not inclusion-time guarantees.
+Current admin profiles remain mutable; receipt and recovery policy is unchanged.
+See [payment configuration and recovery](./PAYMENT_RECEIPTS.md).
+
+The 2.5 candidate also adds owner-selected `solanaV14` paid access for SOL9 and
+classic SPL6 USDC/USDT. Network and environment, local Ed25519 payer,
+independently sourced SOL/USD and `maxFeeLamports` (transaction fees **plus all
+nonce/ATA rent**) are separate from EVM options. `v14` and `solanaV14` together
+are rejected. Canonical Solana flags remain disabled: this source is conditional,
+not a production activation or published 2.5 claim.
+
+The exact 216-byte quote and 297-byte instruction follow the packaged pinned IDL.
+Fresh genesis/config/profile/mint/nonce/account evidence and unsigned final-message
+simulation precede budget reservation and local signing. Signed bytes are saved
+before the single send. Unknown signature outcomes never expire or authorize a
+replacement transaction. A canonical finalized failure retains only its proven
+fee debit; missing proof retains the full reservation. Public history/quota
+select Solana cluster explicitly and never expose bearer receipts.
 
 ### Link the agent to its owner's dashboard
 
@@ -69,7 +89,7 @@ npm pack
 Install the resulting tarball in your application:
 
 ```bash
-npm install /absolute/path/to/sdk/node/aifinpay-agent-2.3.2.tgz
+npm install /absolute/path/to/sdk/node/aifinpay-agent-<version>.tgz
 ```
 
 ## Quick start
@@ -104,7 +124,8 @@ inputs and wallet files out of chats, logs and version control.
 The same configured inputs restore the same addresses after a process restart.
 An explicit `evmPrivateKey` option overrides the derived EVM identity; retain
 that separate key as well to recover the imported wallet. Loading a wallet
-does not enable the RC's gated settlement routes.
+does not by itself pay for anything; paid execution goes through `fetchPaid`
+and its checks.
 
 `AiFinPayAgent.new()` and `Agent.new()` intentionally create a fresh ephemeral
 wallet each time. They do not load existing environment variables or keystores
@@ -165,24 +186,34 @@ still need a full `LocalAccount` that signs transactions.
 
 ## How x402 auth works under the hood
 
-For every gated request the SDK:
+`Agent.pay(url)` (and `get`/`post`/`request`) handles an AiFinPay-native 402
+with request-bound auth (version 2). For a gated request the SDK:
 
-1. `GET /nonce` → receives a one-time UUID with 60s TTL.
-2. computes `SHA-256("AiFinPay-x402:{nonce}:{pubkey}")`.
-3. signs with Ed25519, base58-encodes the signature.
+1. sends the request without credentials; the 402 body carries a one-time
+   `x-nonce`, its expiry `x-nonce-expires-at`, `x-aifinpay-auth-version: 2`
+   and the SHA-256 of the request body it was issued for;
+2. refuses to sign unless the request went to the origin configured as the
+   agent's `baseUrl`, the response came from that origin, and the body digest
+   matches the body it sent;
+3. signs, with Ed25519, the SHA-256 of
+   `JSON.stringify(["AiFinPay-x402", "v2", nonce, pubkey, origin, METHOD, path+query, bodySha256, expiresAt])`
+   and base58-encodes the signature;
 4. retries the original request with headers:
    - `x-agent-pubkey: <base58 pubkey>`
-   - `x-nonce: <uuid>`
+   - `x-nonce: <nonce>`
    - `x-signature: <base58 sig>`
+   - `x-aifinpay-auth-version: 2`
 
-The server verifies the signature, checks the agent has a live Seat PDA
-on-chain, and serves the resource.
+The server verifies the signature, consumes the nonce, checks the agent has a
+live Seat PDA on-chain, and serves the resource. The retired v1 format
+(`GET /nonce`, `SHA-256("AiFinPay-x402:{nonce}:{pubkey}")`) is refused, and
+`Agent.authHeaders()` throws.
 
 ## Privacy
 
 - **The server never sees your private key.** Period.
 - Nonces are consumed on use; replay-resistant.
-- All transactions are public and on-chain — Solana + Polygon mainnet.
+- Payments settle on public chains — the explicitly selected EVM network — and are visible on-chain.
 
 ## License
 

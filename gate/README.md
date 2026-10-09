@@ -288,20 +288,26 @@ of a redeploy when we rotate keys).
   "error": "AIFP-402",
   "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
   "protocol": "AIFP-1",
+  "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+  "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+  "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
   "merchant_id": "mrch_acme",
   "resource": "/api/search",
   "tier": "complex",
   "unit_weight": 4,
   "unit_price_usd": "0.002",
   "min_requests": 50,
+  "scope": "exact",
   "protocol_fee_bps": 100,
   "no_minimum_fee": true,
+  "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
   "how_to_pay": [
-    "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_acme\",\"resource\":\"/api/search\",\"tier\":\"complex\"}",
+    "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_acme\",\"resource\":\"/api/search\",\"tier\":\"complex\",\"scope\":\"exact\",\"requests\":50,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
     "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
-    "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref} -> quota receipt",
+    "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
     "retry this request with header: AIFP-Receipt: <receipt JWT>"
-  ]
+  ],
+  "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
 }
 ```
 
@@ -331,15 +337,19 @@ provider-defined price, while any AiFinPay AIFP-2 fee is payer-side/on-top. The
 current AIFP-2 fee is 0%; a future non-zero fee requires a versioned AIFP-2
 settlement profile and must not reduce the provider amount.
 
-> **During the migration (as of 2026-08-23).** The table above is the canonical
-> model and what the v1.3 settlement contract enforces on-chain. Polygon
-> _mainnet_ still runs the previous splitter, whose immutable split is
-> 98.99/1.00/0.01, and the backend grosses the total up from the merchant
-> amount to match it — so today an AIFP-1 merchant is made whole and the agent
-> pays slightly more than the displayed price. When v1.3 is deployed to
-> mainnet, the displayed price becomes exactly what the agent pays and the
-> merchant nets 99% of it. If you are integrating now, that is the one number
-> that moves under you; nothing in this package's API changes with it.
+> **Which splitter a merchant settles on.** The table above is the canonical
+> model, and it is what a v1.4 quote settles: the backend publishes the gross,
+> checks the quote's fee bps against the live v1.4 profile, and the agent pays
+> exactly that gross. A new live merchant is registered on v1.4 unless it asks
+> for something else. Merchants registered before `settlement_version` existed
+> still read as the legacy v1.2 splitter, whose immutable split is
+> 98.99/1.00/0.01 and whose quotes the backend grosses up so the merchant is
+> made whole. The released clients (MCP `payable_fetch`, Node `fetchPaid`,
+> Python `fetch_paid`) refuse v1.2 quotes, so such a merchant needs to move to
+> v1.4 before those agents can pay it. v1.4 profile fees and treasury can be
+> changed by the contract administrators; clients verify the current values
+> before paying. Nothing in this package's API depends on which splitter
+> settles.
 
 Weight is always price ÷ base price. That equality is what lets one prepaid
 batch be spent across endpoints of different tiers and still drain at each
@@ -353,14 +363,14 @@ genuinely more expensive than its tier.
 | `store`             | `MemoryStore` | Anything beyond one process. See §3.                                                                              |
 | `registry`          | —             | Path-matched pricing from your registered endpoints.                                                              |
 | `onStoreError`      | `"closed"`    | `"open"` trades metering for availability, visibly.                                                               |
-| `onEvent`           | —             | `402` / `serve` / `403` / `meter_error` for your own metrics.                                                     |
+| `onEvent`           | —             | `402` / `serve` / `403` / `meter_error` / `pricing_unavailable` for your own metrics.                             |
 | `allow`             | —             | Your own veto, evaluated **before** any unit is metered, so a refused call costs the agent nothing.               |
 | `jwks`              | fetched       | Pin the key set; removes all runtime network dependency on us.                                                    |
 | `requireAgentMatch` | `false`       | Compares `AIFP-Agent-Id` to the receipt subject. Anti-accident, not anti-theft — the header is not authenticated. |
-| `refundOnError`     | `false`       | Give a unit back on a 5xx. Read the warning below first.                                                          |
+| `refundOnError`     | `false`       | Give the call's units back on a 5xx (Express adapter). Read the warning below first.                              |
 
 `refundOnError` fires after your response has already gone out. If the agent
-received a body, the refunded unit is a unit it got served for free — a slow
+received a body, the refunded units are units it got served for free — a slow
 double-spend. Enable it only when your upstream fails _before_ doing any work,
 and understand that you are trading exact metering for generosity.
 
@@ -375,10 +385,10 @@ and understand that you are trading exact metering for generosity.
   AiFinPay gateway. A second implementation of a rule you edit in our dashboard
   would be a second source of truth, and the two would disagree on the day it
   mattered. Use `allow` for rules that are genuinely yours.
-- **Self-hosted traffic does not populate the panel's funnel, geo and AI-client
-  charts.** Those are written by the hosted gateway from traffic that passes
-  through it. Your registered endpoints still appear; the per-request analytics
-  do not. Use `onEvent` to feed your own metrics.
+- **Self-hosted request counters need explicit reporting.** Wire the opt-in
+  `createGateReporter` below to `onEvent` to populate the dashboard's request
+  counters. It does not report geography, user agents or general website visits;
+  those charts require traffic through the hosted gateway.
 - **It cannot bind a receipt to a caller.** A receipt is a bearer token. Anyone
   who obtains the JWT can spend the batch. The honest guarantee is **bounded
   loss**: a stolen receipt can spend at most the units the payer prepaid, and
@@ -421,3 +431,67 @@ A production URL in a staging `llms.txt` can send agents to a missing catalog.
 The discovery file lists resource prices and scopes. A fresh quote supplies
 settlement terms; discovery is neither a receipt nor proof that a particular
 client can execute the offered route.
+
+## Opt-in dashboard request reporting (0.3.6)
+
+The reporter sends `402` challenges and gate-admitted `serve` events to the
+merchant analytics API. A `serve` is emitted before your route handler runs;
+it does **not** prove a successful response or delivered content. Exempt human
+requests, errors, receipt JWTs, payer IDs, IPs, headers and customer content are
+excluded. Payments and revenue continue to come from confirmed settlements.
+
+```ts
+import { createGateReporter, aifpGate, redisStore } from "@aifinpay/gate";
+
+const merchantId = process.env.AIFP_MERCHANT_ID!;
+// Keep the existing server-side merchant secret in the environment.
+const reporter = createGateReporter({
+  merchantId,
+  merchantSecret: process.env.AIFP_MERCHANT_SECRET!,
+});
+// Share this reporter across all mounts in this worker process.
+app.use(
+  "/api/agent/genres/list",
+  aifpGate({
+    merchantId,
+    resource: "/api/agent/genres/list",
+    store: redisStore(redis),
+    onEvent: reporter.onEvent,
+  })
+);
+// In the application's existing shutdown handler, after stopping new requests:
+await reporter.close();
+```
+
+Use your existing gate and shared quota store; adding `onEvent` is sufficient.
+Register the same static or prefix pattern in the merchant dashboard first.
+Registry mode already emits its matched `route_pattern`; for a static mount,
+set `resource` explicitly. The reporter rejects full URLs, query strings,
+fragments, encoded paths and invalid patterns instead of changing their
+identity. The API also rejects patterns not registered for this merchant.
+The merchant secret belongs only on the server, never in browser code.
+If you already have a metrics hook, compose it with `reporter.onEvent`.
+Do not configure two reporters for the same gate event or combine hosted and
+self-hosted reporting for a single request: that would report it twice with
+different IDs.
+
+`apiBase` defaults to `https://api.aifinpay.io` and accepts an HTTPS origin
+only. The reporting API must be deployed before enabling this hook. Redirects
+are never followed, so a redirect cannot forward the merchant secret.
+The callback enqueues synchronously; HTTP runs later in batches of at most 50
+with a 3 second request deadline. The queue includes in-flight events and holds
+at most 1000; overflow drops new events. Transient errors keep the original UUID
+and UTC timestamp for deduplicated retries (at most 5 attempts/15 minutes).
+Permanent 4xx (except 408/429) or redirects stop reporting and discard the queue.
+Create a new reporter only after fixing its credentials/configuration.
+
+`reporter.stats` exposes `queued`, `delivered` (API acknowledgements, including
+retry duplicates), `dropped`, `retries`, `lastError` (a sanitized code), `stopped`
+and `closed`. Monitor these locally; an outage or overflow loses telemetry,
+never payment access. This queue is in memory, so abrupt process termination
+loses unsent events. No historical requests are backfilled from purchased quota.
+`await reporter.flush()` attempts each event in its queue snapshot once,
+returns stats and retains transient failures for background retries.
+`await reporter.close()` stops acceptance, performs that one flush, then drops
+remaining events and stops timers. Neither method promises delivery; with a
+full queue a flush can take up to 60 seconds plus a current 3 second attempt.

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -10,8 +11,22 @@ const evmOutput = path.join(nodeRoot, "src/generated/v14Deployments.generated.ts
 const solanaOutput = path.join(nodeRoot, "src/generated/solanaV14Deployments.generated.ts");
 // The Python SDK reads the same pins; generated here so one check covers both.
 const pythonOutput = path.resolve(nodeRoot, "../python/aifinpay/_v14_deployments.py");
+const pythonSolanaOutput = path.resolve(nodeRoot, "../python/aifinpay/_solana_v14_deployments.py");
 const checkOnly = process.argv.includes("--check");
 const zeroAddress = "0x0000000000000000000000000000000000000000";
+// New registry entries are not implicit owner authorization to add SDK networks.
+const supportedEvmChains = new Set([
+  "optimism",
+  "bnb",
+  "unichain",
+  "polygon",
+  "robinhood",
+  "base",
+  "arbitrum",
+  "avalanche",
+  "xrplevm",
+  "amoy",
+]);
 
 // Source of truth: @aifinpay/deployments ships the canonical per-ecosystem
 // split registries. It is installed as a local file: dependency (the package is
@@ -23,6 +38,7 @@ const solanaRegistryPath = path.join(deploymentsRoot, "registry/splitter/solana/
 
 const evmRegistry = JSON.parse(fs.readFileSync(evmRegistryPath, "utf8"));
 const solanaRegistry = JSON.parse(fs.readFileSync(solanaRegistryPath, "utf8"));
+const sdkEvmDeployments = evmRegistry.deployments.filter((deployment) => supportedEvmChains.has(deployment.chain));
 
 function fail(message) {
   throw new Error(`Invalid payment deployment registry: ${message}`);
@@ -44,11 +60,7 @@ function validateEvm(deployments) {
     if (deployment.chain === "botchain") fail("BOT Chain must not be registered for v1.4");
     if (!Number.isInteger(deployment.chainId)) fail(`${key} has invalid chainId`);
 
-    const addresses = [
-      deployment.contracts?.splitter,
-      deployment.contracts?.tokenList,
-      deployment.contracts?.profiles,
-    ];
+    const addresses = [deployment.contracts?.splitter, deployment.contracts?.tokenList, deployment.contracts?.profiles];
     if (addresses.some((address) => !/^0x[0-9a-fA-F]{40}$/.test(address ?? ""))) {
       fail(`${key} has an invalid component address`);
     }
@@ -101,8 +113,12 @@ function json(value) {
 
 function evmTable() {
   return Object.fromEntries(
-    evmRegistry.deployments.map((deployment) => {
-      const findAsset = (symbol) => deployment.assets.find((asset) => asset.symbol === symbol)?.address ?? zeroAddress;
+    sdkEvmDeployments.map((deployment) => {
+      // The registry's new Polygon USDT entry is not part of the SDK token allowlist.
+      const assets = deployment.assets.filter(
+        (asset) => !(deployment.chain === "polygon" && asset.symbol === "USDT")
+      );
+      const findAsset = (symbol) => assets.find((asset) => asset.symbol === symbol)?.address ?? zeroAddress;
       return [
         deployment.chain,
         {
@@ -113,7 +129,8 @@ function evmTable() {
           status: deployment.status,
           settlementEnabled: deployment.settlementEnabled,
           ...(deployment.disabledReason ? { disabledReason: deployment.disabledReason } : {}),
-          sourceArtifact: deployment.sourceArtifact || `deployments/${deployment.chain}-v14-${deployment.chain}-latest.json`,
+          sourceArtifact:
+            deployment.sourceArtifact || `deployments/${deployment.chain}-v14-${deployment.chain}-latest.json`,
           splitter: {
             address: deployment.contracts.splitter,
             admin: deployment.contracts.admin,
@@ -122,7 +139,7 @@ function evmTable() {
             treasury: deployment.contracts.treasury,
             tokenList: deployment.contracts.tokenList,
             profiles: deployment.contracts.profiles,
-            assets: deployment.assets,
+            assets,
             usdc: findAsset("USDC"),
             usdt: findAsset("USDT"),
           },
@@ -197,7 +214,7 @@ export const V14_DEV_NETWORKS = ["amoy"] as const;
 `;
 }
 
-function renderSolana() {
+function solanaTable() {
   const deployments = Object.fromEntries(
     solanaRegistry.deployments.map((deployment) => [
       deployment.cluster,
@@ -209,10 +226,24 @@ function renderSolana() {
         settlementEnabled: deployment.settlementEnabled,
         disabledReason: deployment.disabledReason,
         programId: deployment.programId,
-        idl: { ...deployment.idl, artifact: deployment.sourceArtifact },
+        idl: {
+          ...deployment.idl,
+          artifact: deployment.sourceArtifact,
+          sha256: createHash("sha256")
+            .update(
+              fs.readFileSync(
+                path.join(deploymentsRoot, `registry/idl/solana/splitter-v14/splitter.${deployment.cluster}.json`)
+              )
+            )
+            .digest("hex"),
+        },
       },
     ])
   );
+  return deployments;
+}
+function renderSolana() {
+  const deployments = solanaTable();
   const source = solanaRegistry.source;
   return `// DO NOT EDIT. Generated by scripts/generate-payment-deployments.mjs from @aifinpay/deployments.
 
@@ -228,7 +259,7 @@ export interface SolanaV14Deployment {
   settlementEnabled: boolean;
   disabledReason?: string;
   programId: string;
-  idl: { name: string; version: string; artifact: string };
+  idl: { name: string; version: string; artifact: string; sha256: string };
 }
 
 export const SOLANA_V14_DEPLOYMENTS_SOURCE = ${json({ ...source, branch: "dev" })} as const;
@@ -268,9 +299,13 @@ function writeOrCheck(outputPath, content) {
   }
 }
 
-validateEvm(evmRegistry.deployments);
+validateEvm(sdkEvmDeployments);
 validateSolana(solanaRegistry.deployments);
 writeOrCheck(evmOutput, renderEvm());
 writeOrCheck(solanaOutput, renderSolana());
 writeOrCheck(pythonOutput, renderPython());
+writeOrCheck(
+  pythonSolanaOutput,
+  `# DO NOT EDIT. Generated by node/scripts/generate-payment-deployments.mjs\nimport json\nSOLANA_V14_DEPLOYMENTS = json.loads(r'''${json(solanaTable())}''')\n`
+);
 console.log(checkOnly ? "Payment deployment registry is current." : "Generated payment deployment tables.");

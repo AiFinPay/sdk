@@ -1,5 +1,36 @@
 # Changelog
 
+## @aifinpay/gate 0.3.6 — unreleased
+
+- Add explicit opt-in merchant request reporting through the existing gate event
+  callback. UUID-stable bounded batches/retries, HTTPS-only/no redirects, sanitized
+  drop/outage status and best-effort flush/shutdown; no payment/quota changes.
+- Report only registered canonical 402/gate-admission events, excluding exempt
+  humans and sensitive request fields. Document observation coverage and lifecycle.
+
+## @aifinpay/gate 0.3.5 — unreleased
+
+Metering fixes found while raising coverage on the Python port
+(AiFinPay/sdk#96). `python-gate` 0.1.1 carries the same changes.
+
+- A spent batch no longer refills inside the clock tolerance. The receipt is
+  accepted until `exp + clockToleranceSec` (30 s by default), but its quota
+  counter and single-use nonce expired at `exp`, so for those 30 seconds the
+  batch started again from zero. The TTL now covers the receipt's whole
+  verifiable life.
+- A call that does not fit no longer strands the units that remain. With
+  mixed weights on one receipt, a refused call's increment stayed on the
+  counter and every later call was refused. The refused call now takes its
+  increment back through `store.decrBy` (best effort; a store without it
+  behaves as before). Only refused increments are undone, so the units served
+  never exceed the batch.
+- A store failure between the nonce check and the quota counter no longer
+  burns a single-use receipt. With `onStoreError: "closed"` the agent is told
+  to retry, and the retry is now served instead of being refused as already
+  spent. With `"open"` the call was served and the nonce stays spent.
+- `createGate` throws on an unknown `tier`. `tier: "Premium"` used to price
+  the mount as standard, a tenth of the premium price.
+
 ## @aifinpay/gate 0.3.4 — 2026-09-22
 
 From an external QA pass on a Next.js merchant (Raters).

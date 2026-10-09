@@ -1,3 +1,4 @@
+import { PAYMENT_CHAINS, paymentStableAsset, type PaymentChain } from "../src/paymentChains.js";
 import { describe, it, expect, vi } from "vitest";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { keccak256, stringToHex } from "viem";
@@ -9,24 +10,28 @@ import {
   type Aifp1Deps,
   type Aifp1FetchOptions,
 } from "../src/aifp1.js";
-import { routeIdOf, type V14SettlementCall } from "../src/settlementV14.js";
+import { routeIdOf, V14SettlementError, type V14SettlementCall } from "../src/settlementV14.js";
+import { FileSpendLedger } from "../src/spendLedger.js";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { V14_DEPLOYMENTS } from "../src/generated/v14Deployments.generated.js";
 import { SettlementConfirmationPendingError } from "../src/settlement.js";
 
 const payer = "0x1111111111111111111111111111111111111111";
 const merchant = "0x2222222222222222222222222222222222222222";
 const zero = "0x0000000000000000000000000000000000000000";
-const tx = `0x${"ab".repeat(32)}` as const;
+const tx = keccak256("0x1234");
 const url = "https://merchant.example/api/genres";
 const api = "https://api.aifinpay.io";
 const { privateKey, publicKey } = generateKeyPairSync("ed25519");
 const json = (value: unknown, status = 200) =>
   new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
 
-function fixture(chain: "polygon" | "base" = "polygon") {
-  const nativeAsset = chain === "base" ? "ETH" : "POL";
-  const gross = chain === "base" ? 50_000_000_000_000n : 1_000_000_000_000_000_000n;
-  const rate = chain === "base" ? 2000 : 0.1;
+function fixture(chain: PaymentChain = "polygon") {
+  const nativeAsset = PAYMENT_CHAINS[chain].native;
+  const gross = nativeAsset === "ETH" ? 50_000_000_000_000n : 1_000_000_000_000_000_000n;
+  const rate = nativeAsset === "ETH" ? 2000 : 0.1;
   const expiry = Math.floor(Date.now() / 1000) + 600;
   const call: V14SettlementCall = {
     chain,
@@ -78,7 +83,7 @@ function fixture(chain: "polygon" | "base" = "polygon") {
     currency: "USD",
     accepted_assets: [nativeAsset],
     accepted_chains: [chain],
-    pay_to: chain === "base" ? { evm: merchant } : { polygon: merchant },
+    pay_to: chain === "base" ? { evm: merchant } : { [chain]: merchant },
     settlement_call: call,
     native_settlement: {
       asset: nativeAsset,
@@ -182,6 +187,9 @@ function fixture(chain: "polygon" | "base" = "polygon") {
     reserveDaily: vi.fn(async () => "reservation"),
     commit: vi.fn(async () => {}),
     release: vi.fn(async () => {}),
+    prepareReservation: vi.fn(async () => {}),
+    assertReservation: vi.fn(async () => {}),
+    completeReservation: vi.fn(async () => {}),
   };
   const price = vi.fn(async () => ({ usd: rate, observedAtMs: Date.now() }));
   const prepared = vi.fn(async () => {});
@@ -263,15 +271,59 @@ describe("public native v1.4 purchase", () => {
   );
   it("keeps pending broadcast charged and returns recoverable transaction", async () => {
     const f = fixture();
-    f.deps.settle = vi.fn(async () => {
+    f.deps.settle = vi.fn(async (p) => {
+      await p.onPrepared!({ hash: tx, serializedTransaction: "0x1234" });
       throw new SettlementConfirmationPendingError(tx, "settlement");
     });
     await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toMatchObject({
       txRef: tx,
       recovery: expect.objectContaining({ txRef: tx }),
     });
-    expect(f.deps.commit).toHaveBeenCalled();
+    expect(f.deps.commit).not.toHaveBeenCalled();
+    expect(f.deps.prepareReservation).toHaveBeenCalledOnce();
     expect(f.deps.release).not.toHaveBeenCalled();
+  });
+  it("keeps an unclassified error after journal preparation reserved for recovery", async () => {
+    const f = fixture();
+    f.deps.settle = vi.fn(async (p) => {
+      await p.onPrepared!({ hash: tx, serializedTransaction: "0x1234" });
+      throw new Error("RPC disconnected after sending");
+    });
+    await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toMatchObject({
+      recovery: expect.objectContaining({
+        budgetReservationId: "reservation",
+        txRef: tx,
+        serializedTransaction: "0x1234",
+      }),
+    });
+    expect(f.deps.commit).not.toHaveBeenCalled();
+    expect(f.deps.release).not.toHaveBeenCalled();
+  });
+  it("releases gross only after a verified settlement revert", async () => {
+    const f = fixture();
+    f.deps.settle = vi.fn(async (p) => {
+      await p.onPrepared!({ hash: tx, serializedTransaction: "0x1234" });
+      throw new V14SettlementError("V14_TRANSACTION_REVERTED", "verified reverted receipt");
+    });
+    await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toMatchObject({ code: "V14_TRANSACTION_REVERTED" });
+    expect(f.deps.release).toHaveBeenCalledOnce();
+    expect(f.deps.commit).not.toHaveBeenCalled();
+  });
+  it("releases a reservation when durable journal creation fails before broadcast", async () => {
+    const f = fixture();
+    f.opts.v14!.onPrepared = vi.fn(async () => {
+      throw new Error("disk full");
+    });
+    await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toThrow("disk full");
+    expect(f.deps.release).toHaveBeenCalledOnce();
+    expect(f.deps.commit).not.toHaveBeenCalled();
+  });
+  it("fails closed for old capped custom ledger hooks before settlement", async () => {
+    const f = fixture();
+    delete f.deps.prepareReservation;
+    await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toThrow(/durable bound-journal/);
+    expect(f.deps.settle).not.toHaveBeenCalled();
+    expect(f.deps.release).toHaveBeenCalledOnce();
   });
   it.each(["sub", "aud", "tx_ref", "unit_quota", "exp"])(
     "rejects signed receipt with foreign %s and preserves recovery",
@@ -305,30 +357,110 @@ describe("public native v1.4 purchase", () => {
   });
 });
 
+it("a real shared ledger preserves pending budget and commits recovered debit once across restarts", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "aifp-bound-driver-"));
+  try {
+    const f = stableFixture("bnb", "USDC");
+    let ledger = new FileSpendLedger(join(dir, "spend.json"));
+    f.deps.reserveDaily = async (usd, binding) => {
+      const id = await ledger.reserve(usd, 1, 86400000, binding);
+      if (!id) throw new Error("daily budget exceeded");
+      return id;
+    };
+    f.deps.prepareReservation = (id, hash, binding) => ledger.prepare(id, hash, binding);
+    f.deps.assertReservation = (id, hash, binding) => ledger.assertRecovery(id, hash, binding);
+    f.deps.completeReservation = (id, hash, binding) => ledger.complete(id, hash, binding);
+    f.deps.commit = (id, usd) => ledger.commit(id, usd);
+    f.deps.release = (id) => ledger.release(id);
+    f.deps.settle = vi.fn(async (p) => {
+      await p.onPrepared!({ hash: tx, serializedTransaction: "0x1234" });
+      throw new SettlementConfirmationPendingError(tx, "settlement");
+    });
+    await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toMatchObject({ txRef: tx });
+    const saved = vi.mocked(f.prepared).mock.calls[0][0];
+    ledger = new FileSpendLedger(join(dir, "spend.json"));
+    expect(await ledger.total(86400000)).toBe(0.1);
+    await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toThrow(/Unresolved purchase/);
+    expect(f.deps.settle).toHaveBeenCalledOnce();
+    expect(() => recoverAifp1Payment({ ...saved, serializedTransaction: "0x4321" }, f.deps)).toThrow();
+    expect(await recoverAifp1Payment(saved, f.deps)).toMatchObject({ chain: "bnb", asset: "USDC" });
+    expect(await recoverAifp1Payment(saved, f.deps)).toMatchObject({ chain: "bnb", asset: "USDC" });
+    expect(await ledger.total(86400000)).toBe(0.1);
+    expect(f.deps.settle).toHaveBeenCalledOnce();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 // ── Stablecoin purchase ──────────────────────────────────────────────────────
 // The same fixture, turned into the USDC quote the backend now signs: one
 // asset, no native amounts, settleStable with value 0 and an exact approval.
 const USDC = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
-function stableFixture(chain: "polygon" | "base" = "polygon") {
+function stableFixture(chain: PaymentChain = "polygon", asset = "USDC", micro = 100000n) {
   const f = fixture(chain);
-  const USDC = V14_DEPLOYMENTS[chain].splitter.assets.find((a) => a.symbol === "USDC")!.address;
+  const pin = paymentStableAsset(chain, asset)!;
+  const USDC = pin.address;
+  const gross = micro * 10n ** BigInt(pin.decimals - 6);
   const q = f.call.args.quote as { token: string; grossAmount: string };
   q.token = USDC;
-  q.grossAmount = "100000";
-  f.call.asset = "USDC";
+  q.grossAmount = String(gross);
+  f.call.asset = asset;
   f.call.function = "settleStable((address,address,address,uint256,address,uint256,bytes32,uint256,bytes32),bytes)";
   f.call.value_wei = "0";
-  f.call.approval = { token: USDC, spender: f.call.contract, amount: "100000" };
-  f.quote.accepted_assets = ["USDC"];
+  f.call.approval = { token: USDC, spender: f.call.contract, amount: String(gross) };
+  f.quote.accepted_assets = [asset];
   delete (f.quote as { native_settlement?: unknown }).native_settlement;
-  f.claims.asset = "USDC";
-  f.responseOverrides.asset = "USDC";
-  f.opts.v14 = { ...f.opts.v14!, asset: "USDC" };
+  // /v1/pay canonically uppercases receipt symbols; signed quote symbols stay exact.
+  f.claims.asset = asset.toUpperCase();
+  f.responseOverrides.asset = asset.toUpperCase();
+  f.opts.v14 = { ...f.opts.v14!, asset: asset };
   delete f.opts.nativeUsdPrice;
+  f.quote.amount = String(Number(micro) / 1e6);
+  f.claims.amount = f.responseOverrides.amount = f.quote.amount;
+  f.quote.settlement.total_units = String(micro);
+  f.quote.settlement.gross_units = f.quote.settlement.payer_total_units = String(micro);
+  f.quote.settlement.merchant_units = String(micro - micro / 100n);
+  f.quote.settlement.protocol_fee_units = String(micro / 100n);
+  f.quote.token_settlement = {
+    asset,
+    token: USDC,
+    decimals: pin.decimals,
+    total_units: String(gross),
+    merchant_units: String(gross - gross / 100n),
+    protocol_fee_units: String(gross / 100n),
+    creator_units: "0",
+    settlement_semantics: "gross-inclusive",
+  };
   return f;
 }
 
 describe("public v1.4 stablecoin purchase", () => {
+  it.each([
+    { chain: "polygon" as const, asset: "USDC.e", receiptAsset: "USDC.E" },
+    { chain: "robinhood" as const, asset: "USDe", receiptAsset: "USDE" },
+  ])(
+    "accepts backend uppercase $receiptAsset while quote/token symbols remain $asset",
+    async ({ chain, asset, receiptAsset }) => {
+      const f = stableFixture(chain, asset);
+      expect(f.call.asset).toBe(asset);
+      expect(f.quote.token_settlement!.asset).toBe(asset);
+      expect(f.claims.asset).toBe(receiptAsset);
+      expect((await aifp1Fetch(f.deps, url, {}, f.opts))?.status).toBe(200);
+      const saved = vi.mocked(f.prepared).mock.calls[0][0];
+      expect(saved.asset).toBe(asset);
+      expect(await recoverAifp1Payment(saved, f.deps)).toMatchObject({ chain, asset: receiptAsset });
+      expect(f.deps.settle).toHaveBeenCalledOnce();
+    }
+  );
+
+  it("keeps strict JWT/response consistency for an uppercase mixed-case asset receipt", async () => {
+    const f = stableFixture("robinhood", "USDe");
+    f.responseOverrides.asset = "USDe";
+    await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toMatchObject({ txRef: tx });
+    expect(f.deps.cache.size).toBe(0);
+    expect(f.deps.release).not.toHaveBeenCalled();
+  });
+
   it("asks for a USDC quote, settles the signed token call without any POL price, and verifies a USDC receipt", async () => {
     const f = stableFixture();
     expect((await aifp1Fetch(f.deps, url, {}, f.opts))?.status).toBe(200);
@@ -467,4 +599,90 @@ describe("Base v1.4 chain authorization", () => {
       expect(f.deps.signPaymentAuthorization).not.toHaveBeenCalled();
     }
   );
+});
+
+describe("nine EVM networks share the signed quote/receipt/recovery kernel", () => {
+  it.each(Object.keys(PAYMENT_CHAINS) as PaymentChain[])(
+    "native purchase and expired recovery on %s",
+    async (chain) => {
+      const f = fixture(chain);
+      expect((await aifp1Fetch(f.deps, url, {}, f.opts))?.status).toBe(200);
+      const saved = vi.mocked(f.prepared).mock.calls[0][0];
+      expect(saved).toMatchObject({ chain, asset: PAYMENT_CHAINS[chain].native });
+      const quoteCall = vi.mocked(f.deps.fetchImpl).mock.calls.find(([u]) => String(u).endsWith("/v1/quote"))!;
+      expect(JSON.parse(String(quoteCall[1]!.body)).settlement_chain).toBe(chain);
+      saved.quote.expires_at = new Date(1).toISOString();
+      expect(await recoverAifp1Payment(saved, f.deps)).toMatchObject({ chain });
+      expect(f.deps.settle).toHaveBeenCalledOnce();
+      vi.mocked(f.deps.signPaymentAuthorization).mockClear();
+      expect(() =>
+        recoverAifp1Payment({ ...saved, chain: chain === "polygon" ? "base" : "polygon" }, f.deps)
+      ).toThrow();
+      expect(f.deps.signPaymentAuthorization).not.toHaveBeenCalled();
+    }
+  );
+  const pairs = (Object.keys(PAYMENT_CHAINS) as PaymentChain[]).flatMap((chain) =>
+    V14_DEPLOYMENTS[chain].splitter.assets.map(({ symbol }) => ({ chain, asset: symbol }))
+  );
+  it.each(pairs)("exact stablecoin units on $chain/$asset, including rounding", async ({ chain, asset }) => {
+    const f = stableFixture(chain, asset, 100001n);
+    expect((await aifp1Fetch(f.deps, url, {}, f.opts))?.status).toBe(200);
+    expect(f.deps.settle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token: f.quote.token_settlement!.token,
+        grossWei: BigInt(f.quote.token_settlement!.total_units),
+        treasuryWei: BigInt(f.quote.token_settlement!.protocol_fee_units),
+      })
+    );
+    expect(f.price).not.toHaveBeenCalled();
+  });
+  it.each([
+    "asset",
+    "token",
+    "decimals",
+    "total_units",
+    "merchant_units",
+    "protocol_fee_units",
+    "creator_units",
+    "settlement_semantics",
+  ])("rejects modified token metadata %s for both6/18dp before reserve", async (field) => {
+    for (const chain of ["polygon", "bnb"] as const) {
+      const f = stableFixture(chain, "USDC", 100001n);
+      (f.quote.token_settlement as any)[field] = field === "decimals" ? 9 : "foreign";
+      await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toThrow();
+      expect(f.deps.reserveDaily).not.toHaveBeenCalled();
+      expect(f.deps.settle).not.toHaveBeenCalled();
+    }
+  });
+  it("rejects scaled rounded USD legs and missing18dp metadata, retains old6dp", async () => {
+    const incorrect = stableFixture("bnb", "USDC", 100001n);
+    incorrect.quote.token_settlement!.protocol_fee_units = String(1000n * 10n ** 12n);
+    incorrect.quote.token_settlement!.merchant_units = String(99001n * 10n ** 12n);
+    await expect(aifp1Fetch(incorrect.deps, url, {}, incorrect.opts)).rejects.toThrow(/token_settlement/);
+    expect(incorrect.deps.reserveDaily).not.toHaveBeenCalled();
+    const missing = stableFixture("bnb");
+    delete missing.quote.token_settlement;
+    await expect(aifp1Fetch(missing.deps, url, {}, missing.opts)).rejects.toThrow(/token_settlement/);
+    const legacy = stableFixture();
+    delete legacy.quote.token_settlement;
+    expect((await aifp1Fetch(legacy.deps, url, {}, legacy.opts))?.status).toBe(200);
+  });
+  it.each(["base", "optimism", "arbitrum", "avalanche", "bnb", "unichain", "xrplevm", "robinhood"] as PaymentChain[])(
+    "quote cannot select %s without explicit owner chain",
+    async (chain) => {
+      const f = fixture(chain);
+      delete f.opts.v14!.chain;
+      await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toThrow();
+      expect(f.deps.reserveDaily).not.toHaveBeenCalled();
+      expect(f.deps.settle).not.toHaveBeenCalled();
+    }
+  );
+});
+
+it("omitted chain keeps Polygon and omits the legacy quote selector", async () => {
+  const f = stableFixture();
+  delete f.opts.v14!.chain;
+  expect((await aifp1Fetch(f.deps, url, {}, f.opts))?.status).toBe(200);
+  const request = vi.mocked(f.deps.fetchImpl).mock.calls.find(([u]) => String(u).endsWith("/v1/quote"))!;
+  expect(JSON.parse(String(request[1]!.body))).not.toHaveProperty("settlement_chain");
 });

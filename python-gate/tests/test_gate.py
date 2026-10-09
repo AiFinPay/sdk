@@ -79,14 +79,17 @@ class RecordingStore(g.MemoryStore):
 
 
 def test_the_counter_is_keyed_by_receipt_and_dies_with_it():
+    # The receipt is accepted until exp + the 30 s clock tolerance, so that is
+    # when its counter may die — not earlier, or the batch would refill.
     store = RecordingStore()
     gate(store=store, key_prefix="tenant1:").decide(req(token(exp=NOW + 120)))
-    assert store.calls == [("tenant1:used:rcpt_1", 1, 120_000)]
+    assert store.calls == [("tenant1:used:rcpt_1", 1, 150_000)]
 
 
 def test_the_ttl_is_floored_at_one_second():
+    # 29.8 s past exp is still inside the tolerance: 0.2 s left, floored to 1 s.
     store = RecordingStore()
-    gate(store=store).decide(req(token(exp=NOW + 0.2)))
+    gate(store=store).decide(req(token(exp=NOW - 29.8)))
     assert store.calls[0][2] == 1000
 
 

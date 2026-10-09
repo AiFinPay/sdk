@@ -1,11 +1,18 @@
+import { AGENT_RECEIPT_FIELDS, AGENT_TRANSACTION_FIELDS } from "@aifinpay/agent";
 import type { ToolContext } from "../server.js";
 import { apiUrl } from "../api.js";
+import {
+  isSolanaPublicKey,
+  solanaHistorySelection,
+  assertSolanaReadContext,
+  solanaIndexingMetadata,
+} from "../payment-identity.js";
 
 export function agentHistoryTool() {
   return {
     name: "agent_history",
     description:
-      "Read an agent's payment history by EVM address, public passport identifier, or both. Defaults to the current wallet. Transactions are indexed AiFinPay Polygon settlements, not arbitrary wallet transfers. Receipts include retained prepaid batches and test payments. Never pass a seed, private key or API secret as a passport.",
+      "Read an agent's indexed AiFinPay payment history by wallet address, public passport identifier, or both. Defaults to the configured payment chain and its local wallet. Solana history requires the owner-selected cluster; arbitrary wallet transfers are excluded. Receipts include retained prepaid batches and test payments. Never pass a seed, private key or API secret as a passport.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -17,8 +24,8 @@ export function agentHistoryTool() {
         },
         network: {
           type: "string",
-          default: "polygon",
-          description: "Exact passport wallet network; indexed transactions currently support polygon only",
+          description:
+            "Exact wallet chain; defaults to the configured payment chain (Polygon when unset). Solana cluster comes from owner configuration.",
         },
         source: { type: "string", enum: ["transactions", "receipts"], default: "transactions" },
         limit: { type: "integer", minimum: 1, maximum: 100, default: 25 },
@@ -32,7 +39,8 @@ export function agentHistoryTool() {
 export async function runAgentHistory(ctx: ToolContext, args: Record<string, unknown>) {
   const base = ctx.config.baseUrl || "https://aifinpay.io";
   const source = args.source ?? "transactions",
-    network = args.network ?? "polygon";
+    network = args.network ?? ctx.config.payChain ?? "polygon";
+  const solana = network === "solana";
   const limit = args.limit ?? 25,
     offset = args.offset ?? 0;
   const failure = (message: string) => ({
@@ -60,6 +68,8 @@ export async function runAgentHistory(ctx: ToolContext, args: Record<string, unk
     return (await response.json()) as any;
   }
   try {
+    if (typeof network !== "string") throw new Error("History network must be an exact chain name");
+    const solanaSelection = solana ? solanaHistorySelection(ctx.config) : undefined;
     let address = args.address == null ? undefined : String(args.address);
     if (args.passport) {
       const identifier = String(args.passport).trim();
@@ -70,69 +80,68 @@ export async function runAgentHistory(ctx: ToolContext, args: Record<string, unk
       if (resolved?.agent?.status !== "active" || !Array.isArray(resolved.agent.wallets))
         throw new Error("Passport is not active or has no verified wallets");
       const wallets = resolved.agent.wallets.filter(
-        (w: any) => w.network === network && w.chain_family === "evm" && Number(w.verified_at) > 0
+        (w: any) => w.network === network && w.chain_family === (solana ? "solana" : "evm") && Number(w.verified_at) > 0
       );
       const wallet = wallets.find((w: any) => w.is_primary) || wallets[0];
       if (!wallet || typeof wallet.address !== "string")
-        throw new Error("Passport has no verified EVM wallet on the requested network");
-      if (address && address.toLowerCase() !== wallet.address.toLowerCase())
+        throw new Error("Passport has no verified wallet on the requested network");
+      if (address && (solana ? address !== wallet.address : address.toLowerCase() !== wallet.address.toLowerCase()))
         throw new Error("Address does not match passport wallet");
       address = wallet.address;
     }
-    address ??= ctx.agent.evmAddress;
-    if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return failure("Expected an EVM address");
+    address ??= solana ? ctx.agent.solanaAddress : ctx.agent.evmAddress;
+    if (solana ? !isSolanaPublicKey(address) : !/^0x[0-9a-fA-F]{40}$/.test(address))
+      return failure(solana ? "Expected a canonical 32-byte Solana address" : "Expected an EVM address");
+    const canonicalAddress = solana ? address : address.toLowerCase();
     const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
-    if (source === "transactions") query.set("chain", String(network));
-    const body = await get(`/v1/agents/${address.toLowerCase()}/${source}?${query}`);
+    if (source === "transactions" || solana) query.set("chain", String(network));
+    if (solanaSelection) {
+      query.set("network", solanaSelection.network);
+      query.set("program", solanaSelection.program);
+    }
+    const body = await get(`/v1/agents/${canonicalAddress}/${source}?${query}`);
     if (!Array.isArray(body?.[source])) throw new Error("Invalid history response");
-    const fields =
-      source === "receipts"
-        ? [
-            "receipt_id",
-            "merchant_id",
-            "resource",
-            "scope",
-            "tier",
-            "quota",
-            "used",
-            "remaining",
-            "amount",
-            "currency",
-            "exp",
-            "chain",
-            "tx_ref",
-            "payer",
-            "network_mode",
-            "settled_at",
-            "expires_at",
-            "unit_quota",
-            "metering_version",
-          ]
-        : [
-            "tx_hash",
-            "log_index",
-            "chain",
-            "payment_id",
-            "block_number",
-            "block_ts",
-            "agent_address",
-            "merchant_address",
-            "token_address",
-            "total_amount",
-            "merchant_amount",
-            "treasury_fee",
-            "ip_creator_fee",
-          ];
-    const items = body[source].map((row: any) =>
-      Object.fromEntries(fields.filter((f) => row?.[f] !== undefined).map((f) => [f, row[f]]))
-    );
+    if (solanaSelection) assertSolanaReadContext(body, canonicalAddress, solanaSelection, "address");
+    const fields = [
+      ...(source === "receipts" ? AGENT_RECEIPT_FIELDS : AGENT_TRANSACTION_FIELDS),
+      "program_id",
+      "idl_sha256",
+      "token_decimals",
+      "asset",
+      "cost_allocation",
+    ];
+    const items = body[source].map((row: any) => {
+      if (solanaSelection)
+        assertSolanaReadContext(
+          row,
+          canonicalAddress,
+          solanaSelection,
+          source === "receipts" ? "payer" : "agent_address"
+        );
+      if (
+        solanaSelection &&
+        fields.some(
+          (f) =>
+            row[f] !== undefined &&
+            row[f] !== null &&
+            (typeof row[f] === "object" ||
+              !["string", "number", "boolean"].includes(typeof row[f]) ||
+              (typeof row[f] === "number" && !Number.isFinite(row[f])))
+        )
+      )
+        throw new Error("Invalid structured Solana public metadata");
+      return Object.fromEntries(fields.filter((f) => row?.[f] !== undefined).map((f) => [f, row[f]]));
+    });
+    const indexing = solanaSelection && source === "transactions" ? solanaIndexingMetadata(body.indexing) : undefined;
     return {
       content: [
         {
           type: "text",
           text: JSON.stringify(
             {
-              address: address.toLowerCase(),
+              address: canonicalAddress,
+              ...(solanaSelection ? { chain: "solana", ...solanaSelection } : {}),
+              ...(indexing ? { indexing } : {}),
               source,
               items,
               limit,
@@ -141,7 +150,9 @@ export async function runAgentHistory(ctx: ToolContext, args: Record<string, unk
               coverage:
                 source === "receipts"
                   ? "Retained receipts only; externally metered quotas may lag"
-                  : "Indexed AiFinPay Polygon settlements only; excludes arbitrary wallet transfers and may lag the chain",
+                  : solanaSelection
+                    ? "Verified Solana settlements from retained RPC inventory only; partial history, no full archive or wallet coverage attestation; shared or unquoted transaction costs may be unavailable"
+                    : "Indexed AiFinPay settlements for the requested chain and cluster; excludes arbitrary wallet transfers and may lag the chain",
             },
             null,
             2

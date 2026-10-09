@@ -81,3 +81,6 @@ export type {
   SettlementRecord,
   Tier,
 } from "./types.js";
+
+export { createGateReporter } from "./reporter.js";
+export type { GateReporter, GateReporterOptions, GateReporterStats, GateReporterError } from "./reporter.js";

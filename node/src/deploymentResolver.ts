@@ -21,6 +21,8 @@
  */
 import { SPLITTER_DEPLOYMENTS, type SplitterChainName, type SplitterDeployment } from "./unifiedAgent.js";
 import { V14_DEPLOYMENTS, V14_DEV_NETWORKS, type V14Deployment } from "./generated/v14Deployments.generated.js";
+import { DeploymentResolverError } from "./deploymentErrors.js";
+export { DeploymentResolverError } from "./deploymentErrors.js";
 
 export type SdkEnvironment = "dev" | "prod";
 
@@ -61,13 +63,6 @@ export type ResolvedDeployment =
     };
 
 // ── Errors ──────────────────────────────────────────────────────────────────
-
-export class DeploymentResolverError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "DeploymentResolverError";
-  }
-}
 
 /** The development environment was asked for a network other than the ones it
  *  supports (Amoy only). */

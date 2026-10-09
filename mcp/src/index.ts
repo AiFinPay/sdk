@@ -4,7 +4,8 @@
  *
  * Tools: public addresses, history, quotas, passport resolution, non-signing
  * settlement invoices, local wallet reload, and opt-in dev batch quoting.
- * Signing tools are not registered in this RC.
+ * The one signing tool, payable_fetch, is registered only when the owner
+ * enables payments with every limit set.
  *
  * Quick start (stdio transport for Claude Desktop / MCP-aware runtimes):
  *

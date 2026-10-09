@@ -20,6 +20,12 @@
  * number with equal confidence.
  */
 import type { ToolContext } from "../server.js";
+import {
+  isSolanaPublicKey,
+  solanaHistorySelection,
+  assertSolanaReadContext,
+  assertSolanaQuota,
+} from "../payment-identity.js";
 
 const DEFAULT_BASE = "https://api.aifinpay.io";
 
@@ -27,10 +33,10 @@ export function agentQuotaTool() {
   return {
     name: "agent_quota",
     description:
-      "How many prepaid requests this agent has left, per service. Lists the " +
+      "Read this agent's prepaid quota, per service. Lists the " +
       "agent's active quota batches (merchant, resource, used, remaining, " +
       "expiry). Read-only; never spends, pays, or signs anything. Ask it " +
-      "things like: how many calls do I have left at mrch_x?",
+      "things like: how much prepaid quota do I have left at mrch_x?",
     inputSchema: {
       type: "object",
       properties: {
@@ -58,9 +64,10 @@ interface WireReceipt {
   scope?: string;
   tier?: string;
   quota?: number;
+  unit_quota?: number;
   used?: number;
   remaining?: number;
-  amount?: string;
+  amount?: string | number;
   currency?: string;
   exp?: number;
   chain?: string;
@@ -68,13 +75,21 @@ interface WireReceipt {
 
 export async function runAgentQuota(ctx: ToolContext, args: Record<string, unknown>) {
   const base = (ctx.config.baseUrl ?? DEFAULT_BASE).replace(/\/+$/, "");
-  const address = ctx.agent.evmAddress;
+  const solana = ctx.config.payChain === "solana";
+  const address = solana ? ctx.agent.solanaAddress : ctx.agent.evmAddress;
   const merchantFilter = typeof args.merchant_id === "string" && args.merchant_id ? args.merchant_id : null;
   const includeExhausted = args.include_exhausted === true;
 
   let resp: Response;
+  let solanaSelection: ReturnType<typeof solanaHistorySelection> | undefined;
   try {
-    resp = await ctx.agent.inner.fetchImpl(`${base}/v1/agents/${address}/receipts`, {
+    let query = "";
+    if (solana) {
+      if (!isSolanaPublicKey(address)) throw new Error("Expected a canonical 32-byte Solana address");
+      solanaSelection = solanaHistorySelection(ctx.config);
+      query = `?${new URLSearchParams({ chain: "solana", network: solanaSelection.network, program: solanaSelection.program })}`;
+    }
+    resp = await ctx.agent.inner.fetchImpl(`${base}/v1/agents/${address}/receipts${query}`, {
       method: "GET",
     });
   } catch (e) {
@@ -85,7 +100,21 @@ export async function runAgentQuota(ctx: ToolContext, args: Record<string, unkno
     return errorResult(`quota lookup failed: HTTP ${resp.status}`);
   }
 
-  const body = (await resp.json()) as { receipts?: WireReceipt[] };
+  let body: { receipts?: WireReceipt[] };
+  try {
+    body = (await resp.json()) as { receipts?: WireReceipt[] };
+    if (solanaSelection) {
+      assertSolanaReadContext(body, address, solanaSelection, "address");
+      if (!Array.isArray(body.receipts)) throw new Error("Invalid Solana quota response");
+      for (const row of body.receipts) {
+        assertSolanaReadContext(row, address, solanaSelection, "payer");
+        assertSolanaQuota(row);
+      }
+    }
+  } catch {
+    return errorResult("Quota metadata is unavailable or does not match the selected wallet/network/program");
+  }
+
   const now = Math.floor(Date.now() / 1000);
 
   let batches = (body.receipts ?? [])
@@ -99,7 +128,7 @@ export async function runAgentQuota(ctx: ToolContext, args: Record<string, unkno
       tier: r.tier,
       used: r.used ?? 0,
       remaining: r.remaining ?? 0,
-      quota: r.quota ?? 1,
+      quota: solanaSelection ? r.unit_quota! : (r.quota ?? 1),
       paid: r.amount != null ? `${r.amount} ${r.currency ?? "USD"}` : undefined,
       expires: r.exp != null ? new Date(r.exp * 1000).toISOString() : undefined,
       receipt_id: r.receipt_id,
@@ -115,17 +144,22 @@ export async function runAgentQuota(ctx: ToolContext, args: Record<string, unkno
     const key = b.merchant_id ?? "unknown";
     const cur = perMerchant.get(key) ?? { remaining: 0, batches: 0 };
     cur.remaining += b.remaining;
+    if (solanaSelection && !Number.isSafeInteger(cur.remaining))
+      return errorResult("Quota total exceeds safe integer range");
     cur.batches += 1;
     perMerchant.set(key, cur);
   }
 
   const payload = {
     agent: address,
+    ...(solanaSelection ? { chain: "solana", ...solanaSelection } : {}),
+    ...(solanaSelection ? { unit: "billing_units" } : {}),
     ...(merchantFilter ? { merchant_filter: merchantFilter } : {}),
     totals: Object.fromEntries(perMerchant),
     batches,
-    note:
-      batches.length === 0
+    note: solanaSelection
+      ? "Solana remaining/used/quota are billing units. The number of callable requests depends on each route's server-defined cost_units. Hosted gateway usage is durable; external merchant metering may lag. An empty result means no retained active quota in this selected wallet/network/program."
+      : batches.length === 0
         ? merchantFilter
           ? `no active quota at ${merchantFilter} — a new batch starts with that service's 402 (or agent_quote its URL first)`
           : "no active quota anywhere — pay a service's 402 to start a batch"

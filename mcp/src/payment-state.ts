@@ -14,11 +14,12 @@ import {
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
+import bs58 from "bs58";
 import type { Aifp1CachedReceipt, Aifp1PaymentRecovery } from "@aifinpay/agent";
 
 export interface PendingPayment {
   recovery: Aifp1PaymentRecovery;
-  serializedTransaction: `0x${string}`;
+  serializedTransaction?: `0x${string}`;
   site: string;
   amountUsd: number;
 }
@@ -27,10 +28,49 @@ export interface PaymentState {
   address: string;
   receipts: Aifp1CachedReceipt[];
   pending?: PendingPayment;
-  spend: { at: number; usd: number; tx: string }[];
+  spend: { at: number; usd: number; tx: string; failure?: true }[];
 }
 
 export class PaymentStateError extends Error {}
+
+function isSolanaSignature(value: unknown): boolean {
+  try {
+    return typeof value === "string" && bs58.decode(value).length === 64 && bs58.encode(bs58.decode(value)) === value;
+  } catch {
+    return false;
+  }
+}
+function isTransactionReference(value: unknown): boolean {
+  return typeof value === "string" && (/^0x[0-9a-fA-F]{64}$/.test(value) || isSolanaSignature(value));
+}
+function validPending(state: PendingPayment): boolean {
+  const r = state.recovery;
+  if (!r || !Number.isFinite(state.amountUsd) || state.amountUsd <= 0) return false;
+  if (r.family === "solana") {
+    const p = r.solana;
+    if (
+      state.serializedTransaction !== undefined ||
+      r.chain !== "solana" ||
+      !p ||
+      p.family !== "solana" ||
+      !isSolanaSignature(r.txRef) ||
+      p.hash !== r.txRef ||
+      !["mainnet", "devnet"].includes(p.network) ||
+      typeof p.serializedTransactionBase64 !== "string" ||
+      p.serializedTransactionBase64.length > 1644 ||
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(p.serializedTransactionBase64)
+    )
+      return false;
+    const bytes = Buffer.from(p.serializedTransactionBase64, "base64");
+    return bytes.length > 0 && bytes.toString("base64") === p.serializedTransactionBase64;
+  }
+  return (
+    (r.family === undefined || r.family === "evm") &&
+    /^0x[0-9a-fA-F]{64}$/.test(r.txRef) &&
+    typeof state.serializedTransaction === "string" &&
+    /^0x[0-9a-fA-F]+$/.test(state.serializedTransaction)
+  );
+}
 
 /** Per-wallet lock and crash-safe private journal. Never print its contents. */
 export class PaymentStateStore {
@@ -50,16 +90,18 @@ export class PaymentStateStore {
   }
   readonly address: string;
   private durableDirectory(path: string): void {
-    if (existsSync(path)) return;
     const parent = dirname(path);
-    this.durableDirectory(parent);
-    try {
-      mkdirSync(path, { mode: 0o700 });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    if (parent !== path) this.durableDirectory(parent);
+    if (!existsSync(path)) {
+      try {
+        mkdirSync(path, { mode: 0o700 });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      }
     }
     // A durable file inside a newly created directory is insufficient: persist
-    // every new ancestor entry before a prepared payment may be broadcast.
+    // every ancestor entry before a prepared payment may be broadcast. An
+    // existing entry may be left by a previous failed fsync or another creator.
     for (const directory of [path, parent]) {
       const fd = openSync(directory, constants.O_RDONLY);
       try {
@@ -106,19 +148,13 @@ export class PaymentStateStore {
       !Array.isArray(state.receipts) ||
       !Array.isArray(state.spend) ||
       state.spend.some(
-        (s) => !Number.isFinite(s.at) || !Number.isFinite(s.usd) || s.usd <= 0 || !/^0x[0-9a-fA-F]{64}$/.test(s.tx)
+        (s) => !Number.isFinite(s.at) || !Number.isFinite(s.usd) || s.usd < 0 ||
+          (s.usd === 0 && s.failure !== true) || (s.failure !== undefined && s.failure !== true) || !isTransactionReference(s.tx)
       )
     ) {
       throw new PaymentStateError("Invalid payment state; refusing to reset spent budget");
     }
-    if (
-      state.pending &&
-      (!state.pending.recovery ||
-        !/^0x[0-9a-fA-F]{64}$/.test(state.pending.recovery.txRef) ||
-        !/^0x[0-9a-fA-F]+$/.test(state.pending.serializedTransaction) ||
-        !Number.isFinite(state.pending.amountUsd) ||
-        state.pending.amountUsd <= 0)
-    ) {
+    if (state.pending && !validPending(state.pending)) {
       throw new PaymentStateError("Invalid pending payment; manual reconciliation required");
     }
     return state;

@@ -4,9 +4,9 @@ This guide reflects the current v2 package surfaces. It intentionally separates 
 
 ## Current package line
 
-- Python SDK: `aifinpay-agent 2.1.0`
-- Node / TypeScript SDK: `@aifinpay/agent 2.0.1`
-- MCP: `@aifinpay/mcp 2.1.0`
+- Python SDK: `aifinpay-agent 2.3.0`
+- Node / TypeScript SDK: `@aifinpay/agent 2.3.0`
+- MCP: `@aifinpay/mcp 2.4.1`
 
 ## Path 1 — MCP
 
@@ -29,18 +29,22 @@ Client config:
 }
 ```
 
-For a persistent local wallet, initialize once:
+For a persistent local wallet, initialize once. `init` creates an encrypted keystore and refuses to create one without a passphrase unless you ask for a plaintext test wallet:
 
 ```bash
-npx @aifinpay/mcp init
+AIFINPAY_WALLET_PASSPHRASE='<a long passphrase>' npx @aifinpay/mcp init
+# disposable test wallet only:
+npx @aifinpay/mcp init --plaintext
 ```
 
 Then ask the MCP client to call `agent_reload` and `agent_address`.
 
-### Current production MCP tools
+### Current MCP tools
 
 - `agent_address`
 - `agent_reload`
+- `agent_claim_self` — link the agent to its owner's dashboard; signs only an AiFinPay claim challenge for its own address
+- `payable_fetch` — registered only when the owner enables payments (see below)
 - `agent_quota`
 - `agent_history`
 - `agent_passport_resolve`
@@ -52,9 +56,9 @@ Then ask the MCP client to call `agent_reload` and `agent_address`.
 
 `dev_payment_quote` is available only when `AIFINPAY_MODE=dev`.
 
-The production MCP tools above do **not** sign or broadcast a payment. Settlement invoice tools prepare and validate non-signing instructions only.
+Without owner payment configuration no MCP tool signs or broadcasts a payment, and the settlement invoice tools only prepare and validate non-signing instructions. `payable_fetch` is registered, and pays AIFP-1 merchants on Polygon v1.4 by signing locally, only when the owner sets `AIFINPAY_PAYMENTS_ENABLED=1` with `AIFINPAY_MAX_USD`, `AIFINPAY_DAILY_USD`, `AIFINPAY_GATEWAY_ORIGINS` and `AIFINPAY_MAX_GAS_POL` ([mcp/README.md](./mcp/README.md)).
 
-Legacy `payable_fetch`, `agent_call`, `agent_quote`, `pay_with_split`, `quote_split` and `agent_claim_self` are not registered by the current production MCP server.
+Legacy `agent_call`, `agent_quote`, `pay_with_split` and `quote_split` are not registered by the current MCP server.
 
 Full client matrix: [MCP_CONFIG.md](./MCP_CONFIG.md)
 
@@ -82,7 +86,7 @@ console.log({
 
 `fromEnvironment()` is load-only. It does not create or overwrite a wallet.
 
-Paid AIFP-1 execution is available only through the reviewed Node `fetchPaid` path and remains gated by runtime checks including the reviewed Polygon v1.3 deployment/profile and a fresh trusted native/USD price.
+Paid AIFP-1 execution goes through `fetchPaid`, which settles on v1.4 — Polygon by default, Base when selected with `v14.chain: "base"` — in the native asset or a pinned stablecoin. Before signing it checks the selected chain, the pinned deployment and its runtime, signer and profile, the token and the RPC; native payments also need a fresh independent `nativeUsdPrice`, and every v1.4 payment needs an explicit `maxGasWei`. The legacy Polygon v1.3 route still requires its separately reviewed settlement pin.
 
 Read before using paid execution:
 
@@ -114,7 +118,7 @@ print({
 })
 ```
 
-The Python package does not currently expose the Node `fetchPaid` executor. Legacy paid `call()` settlement is disabled; do not present Python as a one-line production paid-settlement path.
+Python pays AIFP-1 merchants with `AiFinPayAgent.fetch_paid(url, allowed_origins=[...], max_amount_usd=..., daily_amount_usd=...)`: Polygon v1.4 by default, in POL or a pinned stablecoin (`asset="USDC"`), or Base with `chain="base"` and an explicit `max_gas_wei`. Legacy paid `call()` settlement stays disabled.
 
 See [python/README.md](./python/README.md).
 

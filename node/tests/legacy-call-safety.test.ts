@@ -41,7 +41,8 @@ describe("legacy call() fail-closed settlement", () => {
       registryUrl: "https://aifinpay.io/api/providers",
     });
     await expect(agent.call({ provider: "evil-provider" })).rejects.toThrow(/legacy call\(\).*disabled|not trusted/i);
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    // One request to the bridge (the registry lookup also goes through fetchImpl).
+    expect(fetchImpl.mock.calls.filter(([url]) => !String(url).includes("/api/providers"))).toHaveLength(1);
   });
 
   it("refuses a paid challenge when the provider price is missing", async () => {

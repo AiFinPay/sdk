@@ -18,12 +18,13 @@ export function agentAddressTool() {
         solana: { type: "string", description: "Solana base58 address" },
         evm: {
           type: "string",
-          description: "EVM address used across EVM networks (Polygon, Base, Arbitrum, Optimism, BNB, Unichain, Avalanche, Robinhood, etc.)",
+          description:
+            "EVM address used across EVM networks (Polygon, Base, Arbitrum, Optimism, BNB, Unichain, Avalanche, Robinhood, etc.)",
         },
         casper: {
           type: "string",
           description:
-            "Casper identity derived from the same seed. Read-only in this MCP RC; no payment signing tool is exposed.",
+            "Casper identity derived from the same seed. This tool is read-only; payments go only through payable_fetch, when the owner enables them.",
         },
         note: { type: "string" },
         dashboard: { type: "string" },

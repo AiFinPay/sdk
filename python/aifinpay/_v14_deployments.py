@@ -7,7 +7,7 @@ _TABLE = json.loads(
     r'''{
   "source": {
     "repo": "AiFinPay/evm-contract",
-    "commit": "a54a4c107de7bb42f54e411e621d3897938bfc31",
+    "commit": "470b328494492dcb8567fc80ed1f5cad54ada9e7",
     "path": "deployments/*-v14-*-latest.json",
     "branch": "dev"
   },

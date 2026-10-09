@@ -57,24 +57,20 @@ describe("derivation", () => {
   });
 });
 
-describe("backwards-compatible with @aifinpay/agent", () => {
-  let full: {
-    fromSeed: (s: string) => Promise<{ solanaAddress: string; evmAddress: string; casperAddress: string }>;
-  } | null = null;
-  it("loads the full SDK", async () => {
-    try {
-      const mod = await import("@aifinpay/agent");
-      full = mod.AiFinPayAgent as never;
-    } catch {
-      full = null;
-    }
-    expect(true).toBe(true);
-  });
+// @aifinpay/agent is not a dependency of this package, so in CI these report as
+// skipped rather than passing without checking anything. The pinned vectors in
+// cli-and-derivation.test.ts check the same addresses without the SDK.
+const full: {
+  fromSeed: (s: string) => Promise<{ solanaAddress: string; evmAddress: string; casperAddress: string }>;
+} | null = await import("@aifinpay/agent").then(
+  (mod) => mod.AiFinPayAgent as never,
+  () => null
+);
 
+describe("backwards-compatible with @aifinpay/agent", () => {
   for (const seed of SEEDS) {
-    it(`seed ${seed.slice(0, 6)}… preserves legacy funded addresses`, async () => {
-      if (!full) return;
-      const agent = await full.fromSeed(seed);
+    it.skipIf(!full)(`seed ${seed.slice(0, 6)}… preserves legacy funded addresses`, async () => {
+      const agent = await full!.fromSeed(seed);
       const w = deriveWallet(seed, { mode: "legacy-solana" });
       expect(w.solanaAddress).toBe(agent.solanaAddress);
       expect(w.evmAddress).toBe(agent.evmAddress);

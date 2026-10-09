@@ -57,9 +57,14 @@ from .facilitators import (
 # Lazy import so installs without the EVM/Solana extras keep working with
 # the legacy Agent class.
 def __getattr__(name: str):
+    if name in ("get_agent_history", "get_quota"):
+        from . import agent_history
+
+        return getattr(agent_history, name)
     if name in (
         "AiFinPayAgent",
         "NetworkAgent",
+        "ProviderEntry",
         "CHAIN_IDS",
         "NATIVE_ASSETS",
         "EXPECTED_BPS",
@@ -71,6 +76,16 @@ def __getattr__(name: str):
         from . import unified_agent
 
         return getattr(unified_agent, name)
+    # The errors fetch_paid raises, importable from the package as in the Node
+    # SDK (Aifp1Error, Aifp1QuoteError, Aifp1PayError, V14SettlementError).
+    if name in ("Aifp1Error", "Aifp1QuoteError", "Aifp1PayError", "Aifp1FinalizedFailureError"):
+        from . import aifp1
+
+        return getattr(aifp1, name)
+    if name == "V14SettlementError":
+        from . import settlement_v14
+
+        return settlement_v14.V14SettlementError
     raise AttributeError(name)
 
 
@@ -95,6 +110,7 @@ __all__ = [
     "Agent",
     "AiFinPayAgent",
     "NetworkAgent",
+    "ProviderEntry",
     "Invoice",
     "AiFinPayError",
     "FundingTimeoutError",
@@ -103,6 +119,13 @@ __all__ = [
     "UnsupportedFacilitatorError",
     "PaymentTooExpensiveError",
     "FacilitatorNotImplementedError",
+    "Aifp1Error",
+    "Aifp1QuoteError",
+    "Aifp1PayError",
+    "Aifp1FinalizedFailureError",
+    "get_agent_history",
+    "get_quota",
+    "V14SettlementError",
     "PayOptions",
     "Facilitator",
     "AiFinPayFacilitator",

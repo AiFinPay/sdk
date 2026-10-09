@@ -1,7 +1,7 @@
 name: aifinpay
 displayName: AiFinPay
-description: Stripe for AI agents. Pay for any HTTP API in stablecoins or native tokens across 8 EVM chains and Solana with one MCP call. Non-custodial, on-chain settlement.
-version: 2.0.0
+description: Payment infrastructure for AI agents. A persistent non-custodial agent wallet, Agent Passport resolution, route discovery and non-signing settlement invoices; with owner-set limits, payable_fetch buys prepaid access to AIFP-1 merchants on Polygon or Base, in POL/ETH or a pinned stablecoin.
+version: 2.5.0
 license: MIT
 homepage: https://aifinpay.io
 repository: https://github.com/AiFinPay/sdk
@@ -19,19 +19,11 @@ categories:
 tags:
   - payments
   - ai-agents
-  - x402
+  - payment-infrastructure
+  - aifp-1
   - polygon
-  - solana
-  - avalanche
-  - arbitrum
-  - bnb
-  - base
-  - unichain
-  - optimism
   - stablecoins
   - usdc
-  - usdt
-  - stripe-for-ai
   - non-custodial
   - agent-passport
   - settlement
@@ -63,17 +55,60 @@ configSchema:
     AIFINPAY_AGENT_SECRET:
       type: string
       title: Agent secret (base58)
-      description: Legacy Ed25519 secret for the agent identity. Both the Solana and the EVM address derive deterministically from it. Leave blank to generate a fresh keypair each session (testing only). Signing happens locally inside the MCP process; never transmitted to AiFinPay servers.
+      description: Legacy Ed25519 secret for the agent identity. The Solana, EVM and Casper addresses derive deterministically from it. With no wallet source the server uses an ephemeral identity that must not be funded. Signing happens locally inside the MCP process; the secret is never transmitted to AiFinPay servers.
+    AIFINPAY_HOME:
+      type: string
+      title: Wallet home directory
+      description: Directory of the agent.json keystore written by `npx @aifinpay/mcp init` (default ~/.aifinpay).
+    AIFINPAY_WALLET_PASSPHRASE:
+      type: string
+      title: Wallet passphrase
+      description: Passphrase for an encrypted agent.json keystore. Without it an encrypted keystore cannot be opened and the server does not start.
+    AIFINPAY_PAYMENTS_ENABLED:
+      type: string
+      title: Enable payments
+      description: Set to "1" to register payable_fetch. Requires a persistent wallet and AIFINPAY_MAX_USD, AIFINPAY_DAILY_USD, AIFINPAY_GATEWAY_ORIGINS and a gas cap (AIFINPAY_MAX_GAS, or AIFINPAY_MAX_GAS_POL on Polygon); the server refuses to start if any is missing. Unset or "0" keeps the server read-only.
     AIFINPAY_MAX_USD:
       type: string
-      title: Max USD per call
-      description: Hard cap per paid call. Refuses to settle anything above this. Does not enable signing.
-      default: "0.10"
+      title: Max USD per payment
+      description: Per-payment cap for payable_fetch. Required when payments are enabled; there is no default. A tool argument can lower it for one call, never raise it.
+    AIFINPAY_DAILY_USD:
+      type: string
+      title: Max USD per 24 hours
+      description: Rolling 24-hour spending cap for payable_fetch. Required when payments are enabled.
+    AIFINPAY_GATEWAY_ORIGINS:
+      type: string
+      title: Payable origins
+      description: Comma-separated exact HTTPS origins the agent may pay (no wildcards). Required when payments are enabled.
+    AIFINPAY_GATEWAY_PATH_MODE:
+      type: string
+      title: Gateway path mode
+      description: "Use gateway for merchant-slug identity or direct for full request-path identity."
+      default: gateway
+    AIFINPAY_PAY_CHAIN:
+      type: string
+      title: Payment chain
+      description: '"polygon" (default) or "base". Set by the owner; a quote for any other chain is refused.'
+    AIFINPAY_MAX_GAS:
+      type: string
+      title: Gas cap (native)
+      description: Gas cap per payment in the payment chain's native currency, for example "0.3" POL on Polygon or "0.0002" ETH on Base. Required when payments are enabled (or AIFINPAY_MAX_GAS_POL on Polygon).
+    AIFINPAY_MAX_GAS_POL:
+      type: string
+      title: Gas cap (POL, Polygon only)
+      description: The gas cap under its original name, in POL. Accepted on Polygon; refused on Base rather than read as ETH.
+    AIFINPAY_PAY_ASSET:
+      type: string
+      title: Payment asset
+      description: The chain's native currency (default; POL or ETH) or a stablecoin the SDK pins for that chain, such as "USDC". Gas is paid in the native currency either way.
+    AIFINPAY_RPC_URL:
+      type: string
+      title: RPC for the payment chain
+      description: Optional HTTPS RPC for the payment chain; defaults to its public RPC.
     AIFINPAY_BASE_URL:
       type: string
       title: API base URL
-      description: Override the AiFinPay backend endpoint.
-      default: https://aifinpay.io
+      description: Override the AiFinPay backend. Unset, read-only tools use https://aifinpay.io and payable_fetch quotes and receipts use https://api.aifinpay.io.
     AIFINPAY_TIMEOUT_MS:
       type: string
       title: Request timeout (ms)
@@ -82,28 +117,15 @@ configSchema:
     AIFINPAY_MODE:
       type: string
       title: Runtime mode
-      description: Set to "dev" to expose dev_payment_quote tool. Requires a separate dev backend URL.
-    AIFINPAY_HOME:
-      type: string
-      title: Wallet home directory
-      description: Directory of the legacy agent.json keystore.
-    AIFINPAY_WALLET_PASSPHRASE:
-      type: string
-      title: Wallet passphrase
-      description: Passphrase for encrypted legacy keystore files.
-    AIFINPAY_GATEWAY_ORIGINS:
-      type: string
-      title: Gateway origins
-      description: Comma-separated exact HTTPS origins trusted for AIFP-1 settlement.
-    AIFINPAY_GATEWAY_PATH_MODE:
-      type: string
-      title: Gateway path mode
-      description: "Use gateway for merchant-slug identity or direct for full request-path identity."
-      default: gateway
+      description: '"live" (default) or "dev". Dev exposes dev_payment_quote, needs a non-production AIFINPAY_BASE_URL and cannot be combined with payments.'
     AIFINPAY_TRUSTED_HOSTS:
       type: string
       title: Trusted hosts
-      description: Exact hosts allowed to bypass the DNS pre-check.
+      description: Exact hosts allowed to skip the DNS pre-check, for environments that resolve only through a proxy.
+    AIFINPAY_CLAIM_ORIGINS:
+      type: string
+      title: Claim origins
+      description: Comma-separated origins agent_claim_self may contact. Defaults to the aifinpay.io dashboard and API origins; override only for staging.
     AIFINPAY_ALLOW_PRIVATE_FETCH:
       type: string
       title: Allow private fetch
@@ -112,9 +134,13 @@ configSchema:
 
 tools:
   - name: agent_address
-    description: Return the agent's on-chain identities (Solana, EVM and Casper) derived from the configured secret. Used for funding the agent before its first paid call.
+    description: Return the agent's on-chain identities (Solana, EVM and Casper) derived from the configured wallet. Read-only.
   - name: agent_reload
     description: Reload the configured local wallet files after init or a file update, without starting a new conversation. Returns public addresses only.
+  - name: agent_claim_self
+    description: Link the agent to its owner's AiFinPay dashboard with a one-time URL from dash.aifinpay.io. Signs only an AiFinPay claim challenge for the agent's own address; moves no funds.
+  - name: payable_fetch
+    description: Registered only when the owner enables payments. Fetches a GET resource from an owner-approved AIFP-1 merchant, buys a prepaid batch through verified Polygon v1.4 within the owner's limits, and reuses its receipt. scope "merchant" buys one batch for the whole site.
   - name: agent_quota
     description: How many prepaid requests this agent has left, per service. Lists active quota batches (merchant, resource, used, remaining, expiry). Read-only.
   - name: agent_history
@@ -122,9 +148,15 @@ tools:
   - name: agent_passport_resolve
     description: Resolve an AiFinPay Agent Passport by @username, permanent AIFP number, or immutable agent id. Returns verified public wallet bindings only.
   - name: settlement_routes
-    description: Read AiFinPay's currently runtime-verified v1.3 settlement routes. AIFP-1 is merchant monetisation (99% merchant / 1% AiFinPay). AIFP-2/x402 is 100% provider.
+    description: Read AiFinPay's runtime-verified settlement routes. AIFP-1 is merchant monetisation (99% merchant / 1% AiFinPay / 0% creator). AIFP-2/x402 is 100% provider.
   - name: settlement_invoice
-    description: Build and validate a non-signing v1.3 settlement invoice. This tool never moves funds.
+    description: Build and validate a non-signing EVM settlement invoice. This tool never moves funds.
+  - name: settlement_solana
+    description: Build and validate a non-signing Solana settlement invoice. This tool never moves funds.
+  - name: settlement_casper
+    description: Build and validate a non-signing Casper settlement invoice. This tool never moves funds.
+  - name: deployment_info
+    description: AiFinPay deployment details across EVM, Solana and Casper — addresses, stablecoins, program IDs and settlement status. Read-only.
 
 live_evidence:
   - chain: polygon

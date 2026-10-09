@@ -32,8 +32,8 @@
   },
   "homepage": "https://aifinpay.io",
   "dependencies": {
-    "@aifinpay/agent": "^2.1.2",
-    "@aifinpay/mcp": "^2.2.1",
+    "@aifinpay/agent": "^2.5.1",
+    "@aifinpay/mcp": "^2.7.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "express": "^5.0.0",
     "express-rate-limit": "^7.4.0",
