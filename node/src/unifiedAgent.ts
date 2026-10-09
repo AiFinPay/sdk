@@ -1702,6 +1702,12 @@ export class AiFinPayAgent {
    * `budgetCaps.on_limit_exceeded` is "skip".
    */
   async fetchPaid(url: string, init: RequestInit = {}, opts: Aifp1FetchOptions = {}): Promise<Response | null> {
+    // Telemetry remains call-scoped. Invalid capabilities simply lose attribution;
+    // deps, signatures, budget bindings and recovery hooks never receive it.
+    const reportingToken =
+      typeof opts.reportingToken === "string" && /^[A-Za-z0-9_-]{43}$/.test(opts.reportingToken)
+        ? opts.reportingToken
+        : undefined;
     // Quote admission is durable even when the owner did not configure a daily cap.
     const ledger =
       opts.solanaV14 && !this.ledgerOverride ? (this._ledger = FileSpendLedger.forAgent(this.evmAddress)) : this.ledger;
@@ -1806,7 +1812,7 @@ export class AiFinPayAgent {
         }
       },
     };
-    return aifp1Fetch(deps, url, init, opts);
+    return aifp1Fetch(deps, url, init, { ...opts, reportingToken });
   }
 
   /** Recover receipt issuance for an existing payment; never sends a transaction. */

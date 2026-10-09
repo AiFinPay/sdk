@@ -58,6 +58,7 @@ import {
 } from "./settlementSolanaV14.js";
 import type { SolanaNetwork } from "./generated/solanaV14Deployments.generated.js";
 import type { SdkEnvironment } from "./deploymentResolver.js";
+import { reportingHeaders } from "./agent.js";
 import type { SolanaV14Deployment } from "./generated/solanaV14Deployments.generated.js";
 
 // ── Errors ────────────────────────────────────────────────────────────────
@@ -862,6 +863,9 @@ export class Aifp1ReceiptCache {
 export type Aifp1V14Chain = PaymentChain;
 
 export interface Aifp1FetchOptions {
+  /** Explicit reporting.v2 capability. Sent only to canonical first-party
+   * /v1/quote, in memory; never pay/auth/access/journal/recovery authority. */
+  reportingToken?: string;
   /** Solana is explicitly owner-authorized; cannot coexist with EVM v14.
    * maxFeeLamports includes transaction fees AND nonce/ATA account rent. */
   solanaV14?: {
@@ -1359,6 +1363,8 @@ export async function aifp1Fetch(
     // Headers instance or an array of pairs, and spreading either yields {} —
     // silently dropping every header the caller set, including their auth.
     const headers = new Headers(init.headers);
+    // Reporting capability cannot ride to a partner/gateway or a redirect.
+    headers.delete("AIFP-Reporting-Token");
     headers.set("AIFP-Agent-Id", deps.agentId);
     if (direct) headers.delete("AIFP-Receipt");
     if (receiptJwt) headers.set("AIFP-Receipt", receiptJwt);
@@ -1617,7 +1623,8 @@ export async function aifp1Fetch(
                 )
                   await deps.closeQuoteAdmission!(admission!.id, admissionBinding!, admissionContext!, "not-admitted");
               }
-            : undefined
+            : undefined,
+          opts.reportingToken
         );
     if (admission && !admission.quoteJson) {
       const quoteJson = JSON.stringify(quote);
@@ -2226,7 +2233,8 @@ async function requestQuote(
   apiBase: string,
   body: Record<string, unknown> | string,
   timeoutMs?: number,
-  onRefusal?: (status: number, detail: Record<string, unknown> | null) => Promise<void>
+  onRefusal?: (status: number, detail: Record<string, unknown> | null) => Promise<void>,
+  reportingToken?: string
 ): Promise<Aifp1Quote> {
   let r: Response;
   let text: string;
@@ -2236,7 +2244,11 @@ async function requestQuote(
       `${apiBase}/v1/quote`,
       {
         method: "POST",
-        headers: { "content-type": "application/json", "AIFP-Agent-Id": deps.agentId },
+        headers: {
+          "content-type": "application/json",
+          "AIFP-Agent-Id": deps.agentId,
+          ...reportingHeaders(reportingToken, `${apiBase}/v1/quote`),
+        },
         body: typeof body === "string" ? body : JSON.stringify(body),
       },
       timeoutMs

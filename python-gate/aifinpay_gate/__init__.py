@@ -19,18 +19,18 @@ from .core import (
     SimpleRequest,
 )
 from .discovery import build_discovery_document
-from .reporter import GateReporter
+from .reporter import GateReporter, GateReporterV2, ReportingFlow
 from .pricing import TIER_WEIGHTS, UNIT_PRICE_USD, min_requests_for_tier, unit_price_usd, weight_for_tier
 from .scope import pattern_covers, scope_covers
 from .stores import REDIS_INCRBY_SCRIPT, MemoryStore, RedisStore, StoreCapacityError
 from .verify import Verifier
 from .wsgi import AifpGateWSGI
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 __all__ = [
     "AI_AGENT_UA_MARKERS", "AifpGateMiddleware", "AifpGateWSGI", "DETAIL_QUOTA_EXHAUSTED", "DETAIL_RECEIPT_EXPIRED",
-    "DETAIL_VERIFY_FAILED", "Gate", "GateResult", "GateReporter", "HEADER_QUOTA_REMAINING", "MemoryStore", "REDIS_INCRBY_SCRIPT",
+    "DETAIL_VERIFY_FAILED", "Gate", "GateResult", "GateReporter", "GateReporterV2", "ReportingFlow", "HEADER_QUOTA_REMAINING", "MemoryStore", "REDIS_INCRBY_SCRIPT",
     "RedisStore", "Route", "SimpleRequest", "StoreCapacityError", "TIER_WEIGHTS", "UNIT_PRICE_USD", "Verifier",
     "build_challenge", "build_discovery_document", "known_ai_agent", "min_requests_for_tier", "pattern_covers",
     "scope_covers", "unit_price_usd", "weight_for_tier",

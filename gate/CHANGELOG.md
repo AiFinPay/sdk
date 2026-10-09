@@ -1,5 +1,14 @@
 # Changelog
 
+## @aifinpay/gate 0.4.0 — unreleased source candidate
+
+- Add separate explicit reporting.v2.20261009 producer with strict flow/event/
+  health wire types, scoped flow mint, bounded immutable retries and health.
+- Observe actual Express4/5 emitted402, admission and once-only terminal/
+  abort outcomes without changing receipt/quota policy. See REPORTING-V2.md.
+- Legacy v1 stays the default; no dual producer wiring, dependency changes,
+  activation or publication. Independent review and backend integration pending.
+
 ## @aifinpay/gate 0.3.6 — unreleased
 
 - Add explicit opt-in merchant request reporting through the existing gate event

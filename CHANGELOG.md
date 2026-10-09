@@ -1,3 +1,17 @@
+## Reporting v2 — Node gate 0.4.0 / Python gate 0.1.3 / Node agent 2.6.0 / Python agent 2.5.1 (unreleased source candidates)
+
+- Explicit opt-in producers use the separate v2 contract with bounded queues,
+  stable retry IDs and producer health. Actual terminal response observations
+  distinguish successful delivery, redirects, errors and disconnects; a 402
+  challenge is not a browser view. Legacy v1 remains separate and unchanged.
+- Optional memory-only observation capabilities accompany only canonical
+  first-party quote requests, never payment submission, authentication,
+  recovery journals or foreign requests. No inferred client identity, new
+  spending authority, probes or automatic payment retries.
+- Backend v2 delivery, independent QA/Security/review and partner adoption are
+  pending. Package versions describe local candidates, not registry publication
+  or production analytics coverage.
+
 ## @aifinpay/deployments 1.1.4 — Arc mainnet + testnet (evm-contract@470b328)
 
 - Add Arc mainnet (5042, prod, disabled, USDC/EURC) and Arc testnet (5042002,
