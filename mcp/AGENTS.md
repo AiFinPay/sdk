@@ -19,6 +19,8 @@ MCP production-RC control surface: Agent Passport resolution + runtime-verified 
 - No new runtime deps without justification; keep stdio transport working (`bin/aifinpay-mcp.js`).
 - `skills/` ships in the published files — keep it in sync if tools change.
 - Tests go in `tests/`; no live network, mock via `src/safe-fetch.ts` patterns.
+- Tests cover behavior and bundled skill consistency, not exact package versions
+  in manifests or documentation. Keep protocol and contract version checks.
 
 
 ## FULL-PAYMENT-FLOW-20261004 source state

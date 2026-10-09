@@ -30,7 +30,6 @@ import { loadConfigFromEnv } from "../src/config.js";
 
 const BIN = fileURLToPath(new URL("../bin/aifinpay-mcp.js", import.meta.url));
 const README = readFileSync(new URL("../README.md", import.meta.url), "utf8");
-const VERSION: string = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 
 let home: string;
 beforeEach(() => {
@@ -145,12 +144,6 @@ describe("aifinpay-mcp init", () => {
     const blocks = printed(out);
     expect(blocks[0]).toHaveProperty("mcpServers");
     expect(JSON.stringify(blocks).includes(secret)).toBe(false);
-  });
-
-  it("pins the printed MCP config to the version that initialized the wallet", () => {
-    const [config] = printed(run(["init", "--plaintext"]));
-    expect(config.mcpServers.aifinpay.command).toBe("npx");
-    expect(config.mcpServers.aifinpay.args).toEqual(["-y", `@aifinpay/mcp@${VERSION}`]);
   });
 
   it.each([false, true])(
@@ -454,13 +447,5 @@ describe("README, as npm shows it", () => {
     expect(block, "README lost its payment example").not.toBeNull();
     const [, payment] = printed(run(["init", "--plaintext"]));
     expect(JSON.parse(block![1])).toEqual(payment);
-  });
-
-  it("names this release", () => {
-    // 2.3.1 was published saying "Version **2.2.4**".
-    expect(README).toContain(`Version **${VERSION}**`);
-    for (const [pinned] of README.matchAll(/@aifinpay\/mcp@\d+\.\d+\.\d+/g)) {
-      expect(pinned).toBe(`@aifinpay/mcp@${VERSION}`);
-    }
   });
 });

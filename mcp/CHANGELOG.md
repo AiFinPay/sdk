@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.7.1 — release candidate
+
+- Align the README's prepared MCP version and Node SDK requirement with the
+  package manifest. Publication and standalone release validation remain required.
+
 ## 2.6.0 — release candidate
 
 - Reuse the signed EVM v1.4 kernel for nine explicitly owner-selected mainnets;

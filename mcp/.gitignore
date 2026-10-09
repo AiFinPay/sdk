@@ -1,5 +1,6 @@
 # Local build output (also covered at repo root)
 dist/
+.test-tmp/
 *.tsbuildinfo
 
 # Test / coverage artifacts
