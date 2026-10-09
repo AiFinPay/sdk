@@ -1,5 +1,13 @@
 # Changelog
 
+## @aifinpay/gate 0.3.6 — unreleased
+
+- Add explicit opt-in merchant request reporting through the existing gate event
+  callback. UUID-stable bounded batches/retries, HTTPS-only/no redirects, sanitized
+  drop/outage status and best-effort flush/shutdown; no payment/quota changes.
+- Report only registered canonical 402/gate-admission events, excluding exempt
+  humans and sensitive request fields. Document observation coverage and lifecycle.
+
 ## @aifinpay/gate 0.3.5 — unreleased
 
 Metering fixes found while raising coverage on the Python port
