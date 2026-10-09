@@ -16,7 +16,7 @@ test("source cohort distinguishes a real registry lock from stale or fabricated 
   const skill = { version: "2.8.0", integrity: "sha512-skill" };
   const packs = { "@aifinpay/agent": agent, "@aifinpay/skill": skill };
   const dependencies = {
-    "@aifinpay/agent": "^2.5.0",
+    "@aifinpay/agent": "^2.5.1",
     "@aifinpay/skill": "^2.8.0",
   };
   const manifest = { version: "2.7.0", dependencies };
