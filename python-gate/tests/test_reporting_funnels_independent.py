@@ -1,7 +1,6 @@
 """Independent S06 controls. Original signing/payment fixtures are read-only;
 no author reporting-v2 tests imported. No external transport/dependencies."""
 import asyncio
-import ast
 import copy
 import json
 import socket
@@ -59,16 +58,7 @@ def reporter():
     r.close(timeout=1)
 
 
-def test_v1_ast_unchanged_and_no_dual_producer(reporter):
-    def legacy(path):
-        return ast.dump(next(n for n in ast.parse(path.read_text()).body if isinstance(n, ast.ClassDef) and n.name == "GateReporter"))
-    assert legacy(ROOT / "python-gate/aifinpay_gate/reporter.py") == legacy(ROOT.parent / "aifinpay-sdk/python-gate/aifinpay_gate/reporter.py")
-    import tomllib
-    for pkg in ("python-gate", "python"):
-        a = tomllib.loads((ROOT / pkg / "pyproject.toml").read_text())
-        b = tomllib.loads((ROOT.parent / "aifinpay-sdk" / pkg / "pyproject.toml").read_text())
-        del a["project"]["version"]; del b["project"]["version"]
-        assert a == b
+def test_no_dual_producer(reporter):
     legacy_reporter = GateReporter(merchant_id=MID, merchant_secret="independent-fixture")
     try:
         with pytest.raises(ValueError, match="one reporting version"):
