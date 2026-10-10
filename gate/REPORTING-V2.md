@@ -64,7 +64,7 @@ Both `src/reporter.ts` and package root export:
 - Wire types: `UUID`, `UTC`, `Mode`, `Channel`, `Consent`, `ResponseOutcome`,
   `ServerObservation`, `BrowserObservation`, `ReportingReason`,
   `ReportingContext`, `FlowRequest`, `FlowResponse`, `ReportedEvent`, `Batch`,
-  `BrowserEvent`, `HealthError`, `HealthSample`, `Ack`, `ErrorResponse`.
+  `BrowserEvent`, `HealthError`, `HealthSample`, `HealthAck`, `Ack`, `ErrorResponse`.
 
 `GateOptions.reporting` contains `{version:2,reporter,context?}`; context is a
 synchronous `(request:GateRequest)=>ReportingContext`. It is copied once per

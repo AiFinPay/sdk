@@ -170,7 +170,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: AiFinPay/skill
-          ref: 4e54749bde52923bfa54936b607025ce30fc16f9
+          ref: b3fe28285befe0a1fb48a047fe5733bff975e854
           path: .ci/skill-source
 
       - name: Build same-commit agent producer
@@ -185,7 +185,7 @@ jobs:
         working-directory: .
         run: node --test scripts/check-mcp-source-cohort.test.mjs
 
-      - name: Build and test genuine packed Node 2.5 + skill 2.8 cohort
+      - name: Build and test genuine packed Node 2.6 + skill 2.9 cohort
         working-directory: .
         env:
           AIFP_COHORT_EVIDENCE: ${{ runner.temp }}/mcp-source-cohort.json
@@ -193,7 +193,7 @@ jobs:
 
   # Independent packed-package integration matrix also tests the same source
   # cohort. Neither matrix is standalone registry release evidence until
-  # agent2.5.0 and skill2.8.0 are published and the MCP dependency/lock is refreshed.
+  # agent2.6.0 and skill2.9.0 are published and the MCP dependency/lock is refreshed.
   mcp-against-source:
     name: mcp — built against the agent in this commit
     runs-on: ubuntu-latest
@@ -213,7 +213,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: AiFinPay/skill
-          ref: 4e54749bde52923bfa54936b607025ce30fc16f9
+          ref: b3fe28285befe0a1fb48a047fe5733bff975e854
           path: .ci/skill-source
 
       - name: Build same-commit agent producer
@@ -228,7 +228,7 @@ jobs:
         working-directory: .
         run: node --test scripts/check-mcp-source-cohort.test.mjs
 
-      - name: Build and test genuine packed Node 2.5 + skill 2.8 cohort
+      - name: Build and test genuine packed Node 2.6 + skill 2.9 cohort
         working-directory: .
         env:
           AIFP_COHORT_EVIDENCE: ${{ runner.temp }}/mcp-source-cohort.json

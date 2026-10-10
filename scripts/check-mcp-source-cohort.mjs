@@ -17,25 +17,59 @@ import { basename, dirname, join, resolve } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-export const BASE = "e4c0c67e8b8887e91f4293831df768cf61bcd851";
-export const SKILL_COMMIT = "4e54749bde52923bfa54936b607025ce30fc16f9";
+// Existing registry lock with MCP SDK 1.31.0 and proxy-addr 2.0.8 fixes
+// GHSA-6qxp-vccf-f47h / GHSA-jqcg-44mw-7w3h. Keep the bootstrap immutable.
+export const BASE = "94900c0a9a3e0330449d200dbcdb7bb82a787f32";
+export const COHORT = {
+  mcp: "2.8.0",
+  agent: "2.6.0",
+  python: "2.5.1",
+  skill: "2.9.0",
+};
+// Real CLI subprocess tests retain their default five-second limit. Serialize
+// the complete suite to avoid competing compiler/import workers starving them.
+export const MCP_TEST_ARGS = ["test", "--", "--maxWorkers=1"];
+// Parent-reviewed canonical reporting producer; no moving branch or registry
+// artifact stands in for its committed tree and actual source pack.
+export const SKILL_COMMIT = "b3fe28285befe0a1fb48a047fe5733bff975e854";
+export const SKILL_TREE = "45e976f453dff5052f0063a972c6b441b0255666";
 export const SKILL_SHA =
-  "0e5f740cce213a2a9bbc968744d4ab979a49fc7af35ca10747277cd50ba19692";
-const BASE_HASHES = {
+  "f3cc00429c126593622fd8f488080535fd83f7069d3224d6dcaefef0b217a8ee";
+export const SKILL_PACK = {
+  sha256: "91afabce5cecc5262a2a956a01b02e53ede151d7c8aaa8f248dc3122cc2375df",
+  integrity:
+    "sha512-BoesNrlmiDvhij+qOD8Apxji1BPjPFzgCo/hfT//msseGzsALYmDBckW6Ery+ky4yNARSGfMOntVYQCACrbLzA==",
+};
+export const BASE_HASHES = {
   "package.json":
-    "2e0dd893b538b5161c2413280e2d05972409cc4b725e0c7bdd58981ae6af9b96",
+    "21206d6ce0f34174417d649acb8c22c087744c918e44d0ece36ffc84fd7b64d4",
   "package-lock.json":
-    "85bb56935143876bac44706c92063becdfa06aeba59d2a1111ebd567292282cd",
+    "1f7b3290c98f6acfc574a577074d80d5e300669230b7e203de838224b31b9afe",
 };
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const json = (path) => JSON.parse(readFileSync(path, "utf8"));
+export function verifyCohortVersions(versions) {
+  assert.deepEqual(versions, COHORT, "wrong reporting source cohort versions");
+}
 export function verifySkill(bytes) {
   assert.equal(
     hash(bytes),
     SKILL_SHA,
     "canonical skill bytes differ from reviewed pinned producer",
   );
-  assert.match(bytes.toString(), /version:\s*2\.8\.0/);
+  assert.equal(
+    bytes.toString().match(/^version:\s*(\S+)$/m)?.[1],
+    COHORT.skill,
+    "canonical skill must match the reporting source target",
+  );
+}
+export function verifySkillPack(expected) {
+  assert.equal(expected.version, COHORT.skill, "wrong canonical pack version");
+  assert.deepEqual(
+    { sha256: expected.sha256, integrity: expected.integrity },
+    SKILL_PACK,
+    "canonical source pack differs from the reviewed producer",
+  );
 }
 export function verifyInstalled(directory, expected) {
   assert.equal(
@@ -50,6 +84,26 @@ export function verifyInstalled(directory, expected) {
       `installed package differs: ${path}`,
     );
   }
+}
+export function verifyRuntimeLockSeed(bytes, manifest) {
+  const lock = JSON.parse(bytes);
+  assert.equal(lock.lockfileVersion, 3, "unsupported source lock format");
+  assert.equal(
+    lock.name,
+    manifest.name,
+    "source lock belongs to another producer",
+  );
+  assert.equal(lock.version, manifest.version, "source lock version drift");
+  assert.equal(
+    lock.packages?.[""]?.version,
+    manifest.version,
+    "source lock root version drift",
+  );
+  assert.deepEqual(
+    lock.packages?.[""]?.dependencies,
+    manifest.dependencies,
+    "source lock dependencies differ from the producer",
+  );
 }
 export function verifyPinnedProducer(directory, expected, commit) {
   assert.match(
@@ -111,7 +165,11 @@ function run(command, args, cwd) {
 function git(args, cwd = root) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
-function pack(cwd, target, version) {
+export function pack(
+  cwd,
+  target,
+  version = json(join(cwd, "package.json")).version,
+) {
   const output = execFileSync(
     "npm",
     ["pack", "--ignore-scripts", "--json", "--pack-destination", target],
@@ -168,12 +226,24 @@ export async function checkSourceCohort(skillSource) {
     "skill producer must be fully pinned",
   );
   assert.equal(
+    git(["rev-parse", "HEAD^{tree}"], skillRoot),
+    SKILL_TREE,
+    "skill producer tree differs from the reviewed handoff",
+  );
+  assert.equal(
     git(["status", "--porcelain", "--untracked-files=no"], skillRoot),
     "",
     "skill producer has tracked changes",
   );
+  verifyCohortVersions({
+    mcp: json(join(root, "mcp/package.json")).version,
+    agent: json(join(root, "node/package.json")).version,
+    python: readFileSync(join(root, "python/pyproject.toml"), "utf8").match(
+      /^version = "([^"]+)"/m,
+    )?.[1],
+    skill: json(join(skillRoot, "package.json")).version,
+  });
   verifySkill(readFileSync(join(skillRoot, "agent/skills/aifinpay/SKILL.md")));
-  assert.equal(json(join(root, "mcp/package.json")).version, "2.7.0");
   const repoBytes = Object.fromEntries(
     ["package.json", "package-lock.json"].map((p) => [
       p,
@@ -204,8 +274,13 @@ export async function checkSourceCohort(skillSource) {
     "node_modules/@types/node"
   ].version;
   run("npm", ["test"], skillRoot);
-  const agentPack = pack(join(root, "node"), packs, "2.5.0");
-  const skillPack = pack(skillRoot, packs, "2.8.0");
+  const agentPack = pack(join(root, "node"), packs, COHORT.agent);
+  // npm excludes package-lock.json from tarballs even if files lists it.
+  // Retain the source lock as separate resolution evidence, never pack evidence.
+  const runtimeLockSeed = readFileSync(join(root, "node/package-lock.json"));
+  verifyRuntimeLockSeed(runtimeLockSeed, json(join(root, "node/package.json")));
+  const skillPack = pack(skillRoot, packs, COHORT.skill);
+  verifySkillPack(skillPack);
   verifyPinnedProducer(skillRoot, skillPack, SKILL_COMMIT);
   writeFileSync(
     join(runtime, "package.json"),
@@ -227,6 +302,10 @@ export async function checkSourceCohort(skillSource) {
       2,
     ),
   );
+  // Reuse the source agent's authoritative lock as npm's resolution seed.
+  // npm rewrites it for the genuine local pair, retaining reviewed transitive
+  // pins instead of floating to a different dependency graph on every run.
+  writeFileSync(join(runtime, "package-lock.json"), runtimeLockSeed);
   // npm 11 Arborist fails edgesOut when installing the pair over baseline dev
   // peers. A genuine isolated runtime install retains peer checks and its own
   // actual lock; no --legacy-peer-deps, registry-lock invention or waiver.
@@ -286,7 +365,7 @@ export async function checkSourceCohort(skillSource) {
   run("npm", ["run", "build"], mcp);
   verifySkill(readFileSync(join(mcp, "skills/SKILL.md")));
   run(process.execPath, ["--check", "bin/aifinpay-mcp.js"], mcp);
-  run("npm", ["test"], mcp);
+  run("npm", MCP_TEST_ARGS, mcp);
   run("npm", ["pack", "--dry-run", "--ignore-scripts"], mcp);
   const publication = spawnSync(
     process.execPath,
@@ -312,7 +391,7 @@ export async function checkSourceCohort(skillSource) {
     );
     assert.match(
       publication.stderr,
-      /must be published and installed with its real registry resolution/,
+      /must be published and installed with its real registry resolution|external source-cohort link is not a publishable registry installation/,
     );
   }
   for (const [name, bytes] of Object.entries(repoBytes))
@@ -325,11 +404,14 @@ export async function checkSourceCohort(skillSource) {
     source_only: true,
     sdk_commit: git(["rev-parse", "HEAD"]),
     skill_commit: SKILL_COMMIT,
+    skill_tree: SKILL_TREE,
     bootstrap_commit: BASE,
     npm: execFileSync("npm", ["--version"], { encoding: "utf8" }).trim(),
+    mcp_test_command: ["npm", ...MCP_TEST_ARGS],
     work,
     agent: agentPack,
     skill: skillPack,
+    runtime_lock_seed_sha256: hash(runtimeLockSeed),
     actual_runtime_lock_sha256: hash(
       readFileSync(join(runtime, "package-lock.json")),
     ),
