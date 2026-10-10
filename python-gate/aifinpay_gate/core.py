@@ -12,11 +12,13 @@ of truth for a rule the merchant edits in the dashboard.
 
 import math
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Protocol, Sequence
 
 from .challenge import build_challenge
 from .pricing import weight_for_tier
+from .reporter import GateReporter, GateReporterV2, _context, _utc_now
 from .scope import pattern_covers, scope_covers
 from .stores import MemoryStore
 from .verify import DEFAULT_ISSUER, DEFAULT_JWKS_URI, Verifier
@@ -129,12 +131,19 @@ class Gate:
         require_agent_match: bool = False,
         on_store_error: str = "closed",
         on_event: Optional[Callable[[Dict[str, Any]], None]] = None,
+        reporting: Any = None,
+        reporting_context: Optional[Callable[[GateRequest], Dict[str, Any]]] = None,
         allow: Optional[Callable[[Dict[str, Any]], bool]] = None,
         should_charge: Optional[Callable[[GateRequest], bool]] = None,
         now: Callable[[], float] = time.time,
     ):
         if not merchant_id:
             raise ValueError("Gate: merchant_id is required")
+        legacy_reporter = getattr(on_event, "__self__", on_event)
+        if reporting is not None and isinstance(legacy_reporter, GateReporter):
+            raise ValueError("Gate: choose one reporting version")
+        if isinstance(reporting, GateReporter) and not isinstance(reporting, GateReporterV2):
+            raise ValueError("Gate: reporting requires the explicit v2 producer")
         if resource is not None and routes is not None:
             raise ValueError("Gate: pass either resource (one mount) or routes (middleware), not both")
         if replay not in ("auto", "always", "off"):
@@ -156,6 +165,8 @@ class Gate:
         self.require_agent_match = require_agent_match
         self.on_store_error = on_store_error
         self.on_event = on_event
+        self.reporting = reporting
+        self.reporting_context = reporting_context
         self.allow = allow
         self.should_charge = should_charge
         self._now = now
@@ -180,6 +191,45 @@ class Gate:
         return [{"resource": r.pattern, "tier": r.tier} for r in self.routes if r.paywall]
 
     # ── helpers ─────────────────────────────────────────────────────────────
+
+    def reporting_for(self, req: GateRequest, result: GateResult):
+        """Snapshot only consented observational context for a covered decision.
+
+        Adapter owns response lifecycle; decide() never asserts emitted bytes.
+        Open/exempt/uncovered requests are not paid admissions. Caller UUIDs
+        are supplied by the integrator, never derived from agent/wallet/UA/IP.
+        """
+        if self.reporting is None or result is None:
+            return None
+        if result.ok and (not result.aifp or result.aifp.get("mode") != "paid"):
+            return None
+        if not result.ok and result.status != 402:
+            return None
+        resource = (result.aifp or result.body or {}).get("resource")
+        try:
+            if not GateReporterV2._valid_resource(resource):
+                return None
+            context = _context(self.reporting_context(req) if self.reporting_context else {})
+            token = req.header("AIFP-Reporting-Token")
+            if token and "reporting_token" not in context:
+                try:
+                    context = _context({**context, "reporting_token": token})
+                except (ValueError, TypeError):
+                    pass  # Invalid correlation leaves the ordinary observation.
+            return resource, context
+        except Exception:
+            return None
+
+    def report_observation(self, observation, name: str, **terminal):
+        """Non-load-bearing adapter hook; never copies a request or receipt."""
+        if observation is None:
+            return
+        resource, context = observation
+        try:
+            self.reporting.on_event({"id": str(uuid.uuid4()), "name": name, "resource": resource,
+                                     "at": _utc_now(), **context, **terminal})
+        except Exception:
+            pass
 
     def _emit(self, event: Dict[str, Any]) -> None:
         if self.on_event is None:

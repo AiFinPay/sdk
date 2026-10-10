@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.6.0 — reporting v2 source candidate
+
+- Add optional call-scoped reportingToken to AIFP-1 quote negotiation and
+  Agent.quoteSplit. Fixed canonical first-party quote endpoints only, header
+  transport with redirects stopped; malformed tokens lose attribution.
+- Preserve original payment/auth/access results, request counts and recovery
+  semantics. Tokens never enter payment authorization, budget or recovery
+  records. No dependency changes, network activation or publication.
+
+
 ## 2.5.1 — deployment registry provenance refresh
 
 - Refresh the v1.4 deployment source to the `@aifinpay/deployments` 1.1.4

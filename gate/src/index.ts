@@ -84,3 +84,29 @@ export type {
 
 export { createGateReporter } from "./reporter.js";
 export type { GateReporter, GateReporterOptions, GateReporterStats, GateReporterError } from "./reporter.js";
+export { createGateReporterV2, validReportedEvent, validReportingContext } from "./reporter.js";
+export type {
+  GateReporterV2,
+  GateReporterV2Options,
+  GateReporterV2Stats,
+  Ack,
+  HealthAck,
+  Batch,
+  BrowserEvent,
+  BrowserObservation,
+  Channel,
+  Consent,
+  ErrorResponse,
+  FlowRequest,
+  FlowResponse,
+  HealthError,
+  HealthSample,
+  Mode,
+  ReportedEvent,
+  ReportingContext,
+  ReportingReason,
+  ResponseOutcome,
+  ServerObservation,
+  UUID,
+  UTC,
+} from "./reporter.js";

@@ -67,21 +67,69 @@ class AifpGateMiddleware:
                                                     "detail": "payment gate unavailable — retry shortly"})
         if result is None:
             return await self.app(scope, receive, send)
+        observation = self.gate.reporting_for(req, result)
         if not result.ok:
-            return await _send_json(send, result.status, result.headers, result.body)
+            # _send_json returns only after its terminal body send succeeds.
+            # Failed headers/body or cancellation must not invent a challenge.
+            await _send_json(send, result.status, result.headers, result.body)
+            if result.status == 402:
+                self.gate.report_observation(observation, "access_challenged", reason=(
+                    "quota_exhausted" if (result.body or {}).get("detail") == "quota exhausted — prepay the next batch"
+                    else "receipt_rejected" if req.header("AIFP-Receipt") else "receipt_missing"))
+            return
 
         scope.setdefault("state", {})["aifp"] = result.aifp
         extra = [(k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in result.headers.items()]
         status_seen = {}
+        terminal = False
+        disconnected = False
+        self.gate.report_observation(observation, "access_admitted")
+
+        def finish(outcome, reason=None):
+            nonlocal terminal
+            if terminal:
+                return
+            terminal = True
+            self.gate.report_observation(observation, "resource_response_completed", outcome=outcome,
+                                         **({"status": status_seen["emitted_status"]} if "emitted_status" in status_seen else {}),
+                                         **({"reason": reason} if reason else {}))
+
+        async def receive_observed():
+            nonlocal disconnected
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                disconnected = True
+                finish("abort", "client_abort")
+            return message
 
         async def send_with_headers(message):
             if message["type"] == "http.response.start":
                 status_seen["status"] = message.get("status", 200)
                 message = {**message, "headers": list(message.get("headers") or []) + extra}
-            await send(message)
+            try:
+                await send(message)
+            except BaseException:
+                finish("abort", "client_abort")
+                raise
+            if message["type"] == "http.response.start":
+                status_seen["emitted_status"] = message.get("status", 200)
+                status_seen["trailers"] = message.get("trailers", False)
+            if (message["type"] == "http.response.body" and not message.get("more_body", False)
+                    and not status_seen.get("trailers")) or (
+                    message["type"] == "http.response.trailers" and not message.get("more_trailers", False)):
+                status = status_seen.get("emitted_status")
+                if status is None or disconnected:
+                    finish("abort", "client_abort")
+                else:
+                    finish("success" if 200 <= status < 300 else "redirect" if 300 <= status < 400 else "error")
 
         try:
-            await self.app(scope, receive, send_with_headers)
+            await self.app(scope, receive_observed if observation else receive, send_with_headers)
+        except BaseException:
+            finish("abort", "upstream_error")
+            raise
         finally:
+            if not terminal:
+                finish("abort", "client_abort")
             if self.refund_on_error and status_seen.get("status", 500) >= 500:
                 self.gate.refund(result.aifp)

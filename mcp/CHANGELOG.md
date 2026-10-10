@@ -5,6 +5,19 @@
 - Align the README's prepared MCP version and Node SDK requirement with the
   package manifest. Publication and standalone release validation remain required.
 
+## 2.8.0 — reporting cohort source candidate
+
+- Prepare the exact Node2.6.0 / Python2.5.1 / canonical skill2.9.0 cohort.
+  The SDK's optional reporting context does not grant payment authority; MCP
+  tool inventory, owner consent, budgets and disabled networks are unchanged.
+- Use the already patched immutable MCP bootstrap lock and the producer's
+  authoritative Node lock for genuine disposable source-pack integration.
+  High/critical audits, exact installed/bundled bytes and tests remain required.
+- Keep the real agent2.5.0 / skill2.8.0 registry entries until reviewed inputs
+  are actually published. The release-input guard requires2.6.0 /2.9.0 and
+  refuses this retained lock. Canonical immutable source pins, paired smoke,
+  independent review and standalone registry CI are still release gates.
+
 ## 2.6.0 — release candidate
 
 - Reuse the signed EVM v1.4 kernel for nine explicitly owner-selected mainnets;

@@ -893,6 +893,7 @@ class AiFinPayAgent:
         scope: str = "prefix",
         units: [int] = None,
         api_base: str = "https://api.aifinpay.io",
+        reporting_token: [str] = None,
     ) -> requests.Response:
         """
         GET an AIFP-1 paywalled URL, paying for one batch if it answers 402.
@@ -985,6 +986,7 @@ class AiFinPayAgent:
                 environment=environment,
                 max_fee_lamports=max_fee_lamports,
                 wallet_identity=self.evm_address.lower(),
+                reporting_token=reporting_token,
             )
         except aifp1.Aifp1PayError as e:
             path = os.path.join(journal, f"{e.tx_ref}.json")

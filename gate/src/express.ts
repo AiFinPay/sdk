@@ -2,6 +2,10 @@ import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { createGate, refundUnits, type GateOptions } from "./core.js";
 import { MemoryStore } from "./stores/memory.js";
 import type { AifpContext } from "./types.js";
+import { validReportingContext, type ReportingContext, type ReportedEvent } from "./reporter.js";
+
+// Several mounts sharing a response must never count its terminal event twice.
+const reportingResponses = new WeakSet<Response>();
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -41,6 +45,78 @@ export function aifpGate(options: GateOptions): RequestHandler {
           path: req.path,
           header: (name: string) => req.header(name) ?? undefined,
         });
+
+        if (options.reporting && result.reportingResource && !reportingResponses.has(res)) {
+          reportingResponses.add(res);
+          const reporting = options.reporting;
+          let context: ReportingContext = { channel: "unknown", consent: "unknown" };
+          try {
+            const claimed = reporting.context?.({ path: req.path, header: (name) => req.header(name) ?? undefined });
+            if (claimed && validReportingContext(claimed)) context = { ...claimed };
+            const token = req.header("AIFP-Reporting-Token");
+            if (!context.reporting_token && token && validReportingContext({ ...context, reporting_token: token })) {
+              context.reporting_token = token;
+            }
+          } catch {
+            /* optional observation context never changes access */
+          }
+          const resource = result.reportingResource;
+          const observe = (event: Omit<ReportedEvent, "id" | "at" | "channel" | "consent">) => {
+            try {
+              reporting.reporter.observe({ ...context, ...event });
+            } catch {
+              /* isolated telemetry */
+            }
+          };
+          let terminal = false;
+          const finish = () => {
+            if (terminal) return;
+            terminal = true;
+            if (!result.ok) {
+              if (result.status === 402 && res.statusCode === 402) {
+                const reason =
+                  result.body.detail === "quota exhausted — prepay the next batch"
+                    ? "quota_exhausted"
+                    : req.header("AIFP-Receipt")
+                      ? "receipt_rejected"
+                      : "receipt_missing";
+                observe({ name: "access_challenged", resource, reason });
+              }
+            } else {
+              const status = res.statusCode;
+              const outcome =
+                status >= 200 && status < 300 ? "success" : status >= 300 && status < 400 ? "redirect" : "error";
+              observe({
+                name: "resource_response_completed",
+                resource,
+                status,
+                outcome,
+                ...(outcome === "error" ? { reason: "upstream_error" } : {}),
+              });
+            }
+          };
+          res.once("finish", finish);
+          const close = () => {
+            if (res.writableFinished) {
+              finish();
+              return;
+            }
+            if (terminal) return;
+            terminal = true;
+            if (result.ok)
+              observe({
+                name: "resource_response_completed",
+                resource,
+                outcome: "abort",
+                reason: "client_abort",
+                ...(res.headersSent ? { status: res.statusCode } : {}),
+              });
+          };
+          res.once("close", close);
+          if (result.ok) observe({ name: "access_admitted", resource });
+          // Disconnect can happen while async verification/metering is running.
+          if (res.destroyed) close();
+        }
 
         res.set(result.headers);
         if (!result.ok) {
