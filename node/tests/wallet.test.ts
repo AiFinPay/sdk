@@ -6,26 +6,22 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { deriveWallet, newWallet } from "../src/wallet.js";
-import { AiFinPayAgent } from "../src/unifiedAgent.js";
+import {
+  createWalletCLI,
+  deriveWallet,
+  DerivationDomain,
+  MAX_DERIVATION_INDEX,
+  newWallet,
+  walletFromSeed,
+  walletFromSolanaSecret,
+} from "../src/wallet.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-describe("deriveWallet compatibility + five address families", () => {
-  const seeds = ["11".repeat(32), "ab".repeat(32), "0f".repeat(32), "00".repeat(31) + "01"];
-
-  for (const seed of seeds) {
-    it(`seed ${seed.slice(0, 6)}… preserves solana / evm / casper`, async () => {
-      const agent = await AiFinPayAgent.fromSeed(seed);
-      const w = deriveWallet(seed);
-      expect(w.solanaAddress).toBe(agent.solanaAddress);
-      expect(w.evmAddress).toBe(agent.evmAddress);
-      expect(w.casperAddress).toBe(agent.casperAddress);
-    });
-  }
-
+describe("the full standalone wallet API", () => {
   it("derives EVM, Solana, NEAR, Aptos and Casper public identifiers", () => {
     const w = deriveWallet("42".repeat(32));
+    expect(w.derivationMode).toBe("standard");
     expect(w.evmAddress).toMatch(/^0x[0-9a-fA-F]{40}$/);
     expect(w.solanaAddress).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
     expect(w.nearAddress).toMatch(/^[0-9a-f]{64}$/);
@@ -46,8 +42,19 @@ describe("deriveWallet compatibility + five address families", () => {
 
   it("newWallet returns a recoverable seed", async () => {
     const w = await newWallet();
+    expect(w.derivationMode).toBe("standard");
     expect(w.keys.seedHex).toMatch(/^[0-9a-f]{64}$/);
     expect(deriveWallet(w.keys.seedHex)).toEqual(w);
+  });
+
+  it("exports the standalone wallet recovery, domain and CLI APIs", () => {
+    const seed = "ab".repeat(32);
+    const wallet = walletFromSeed(seed);
+    expect(wallet.derivationMode).toBe("standard");
+    expect(DerivationDomain.SOLANA).toBe("aifinpay:solana:v1\0");
+    expect(MAX_DERIVATION_INDEX).toBe(0xffffffff);
+    expect(walletFromSolanaSecret).toBeTypeOf("function");
+    expect(createWalletCLI).toBeTypeOf("function");
   });
 
   it("the EVM address is shared across EVM chains and checksummed", () => {

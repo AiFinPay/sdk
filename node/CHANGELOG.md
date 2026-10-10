@@ -2,8 +2,8 @@
 
 ## 2.6.4 — use the standalone wallet package
 
-- Delegate wallet derivation to `@aifinpay/wallet` 1.5.0, selecting legacy
-  Solana mode to preserve existing SDK addresses.
+- Delegate wallet functionality to `@aifinpay/wallet` 1.5.0, including its
+  standard Solana derivation, recovery helpers, derivation options and CLI API.
 
 ## 2.6.3 — per-domain indexed wallet derivation
 
