@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.8.0 — unreleased
+
+- Support deterministic child wallet selection with `AIFINPAY_WALLET_INDEX`
+  for seed-based identities and indexed wallet keystores. Preserve existing
+  behavior when no index is configured; pass the recovery seed and index to
+  the SDK for per-domain key derivation.
+
 ## 2.7.2 — programmatic external EVM wallet
 
 - Allow an embedding host to inject a viem EVM `WalletClient` into

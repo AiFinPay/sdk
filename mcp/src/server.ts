@@ -61,6 +61,7 @@ export async function createServer(config: McpConfig = {}) {
       fetchImpl: safeFetch,
       baseUrl: config.baseUrl,
       timeoutMs: config.timeoutMs,
+      ...(identity.derivationIndex === undefined ? {} : { derivationIndex: identity.derivationIndex }),
       ...(config.payChain === "solana" && config.rpcUrl ? { solanaRpc: config.rpcUrl } : {}),
       ...(config.evmWalletClient ? { evmWalletClient: config.evmWalletClient } : {}),
       ...(rpc ? { evmRpcUrls: rpc, ...(rpc.polygon ? { polygonRpc: rpc.polygon } : {}) } : {}),

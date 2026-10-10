@@ -127,6 +127,11 @@ that separate key as well to recover the imported wallet. Loading a wallet
 does not by itself pay for anything; paid execution goes through `fetchPaid`
 and its checks.
 
+`AiFinPayAgent.fromSeed(seed, { derivationIndex })` deterministically selects a
+child wallet. Each chain uses its own versioned domain, followed by the
+decimal UTF-8 index after the domain's NUL separator and then the recovery
+seed. Omitting `derivationIndex` preserves existing addresses.
+
 `AiFinPayAgent.new()` and `Agent.new()` intentionally create a fresh ephemeral
 wallet each time. They do not load existing environment variables or keystores
 and do not persist their generated keys. Use them only when you deliberately

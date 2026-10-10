@@ -1,3 +1,10 @@
+## Node 2.6.3 / Wallet 1.5.0 / MCP 2.8.0 — indexed wallet derivation
+
+- Add deterministic wallet indices to the full Node SDK and wallet package.
+  Append each decimal index to its chain-specific domain after the NUL
+  separator. Preserve existing derivation when no index is set; the CLI stores
+  index metadata and MCP passes root seed plus index to the Node SDK.
+
 ## Wallet 1.3.0 — unreleased
 
 - Deprecate Casper API fields while preserving their derivation and values

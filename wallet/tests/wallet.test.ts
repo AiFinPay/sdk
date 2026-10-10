@@ -61,7 +61,10 @@ describe("derivation", () => {
 // skipped rather than passing without checking anything. The pinned vectors in
 // cli-and-derivation.test.ts check the same addresses without the SDK.
 const full: {
-  fromSeed: (s: string) => Promise<{ solanaAddress: string; evmAddress: string; casperAddress: string }>;
+  fromSeed: (
+    s: string,
+    options?: { derivationIndex?: number }
+  ) => Promise<{ solanaAddress: string; evmAddress: string; casperAddress: string }>;
 } | null = await import("@aifinpay/agent").then(
   (mod) => mod.AiFinPayAgent as never,
   () => null
@@ -75,6 +78,15 @@ describe("backwards-compatible with @aifinpay/agent", () => {
       expect(w.solanaAddress).toBe(agent.solanaAddress);
       expect(w.evmAddress).toBe(agent.evmAddress);
       expect(w.casperAddress).toBe(agent.casperAddress);
+    });
+
+    it.skipIf(!full)(`indexed seed ${seed.slice(0, 6)}… matches the full SDK`, async () => {
+      const index = 0;
+      const agent = await full!.fromSeed(seed, { derivationIndex: index });
+      const wallet = deriveWallet(seed, { index });
+      expect(wallet.solanaAddress).toBe(agent.solanaAddress);
+      expect(wallet.evmAddress).toBe(agent.evmAddress);
+      expect(wallet.casperAddress).toBe(agent.casperAddress);
     });
   }
 });
@@ -129,7 +141,11 @@ describe("the install stays light", () => {
 describe("the CLI writes an mcp-compatible keystore", () => {
   it("stores secretB58 that walletFromSolanaSecret round-trips", () => {
     const w = deriveWallet("77".repeat(32), { mode: "legacy-solana" });
-    const store = { secretB58: w.keys.solanaSecretKeyB58, seedHex: w.keys.seedHex, derivationMode: "legacy-solana" as DerivationMode };
+    const store = {
+      secretB58: w.keys.solanaSecretKeyB58,
+      seedHex: w.keys.seedHex,
+      derivationMode: "legacy-solana" as DerivationMode,
+    };
     expect(walletFromSolanaSecret(store.secretB58, { mode: "legacy-solana" })).toEqual(w);
   });
 });
@@ -167,10 +183,9 @@ describe("encrypted keystore", () => {
     });
     const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(encrypted.iv, "base64"));
     decipher.setAuthTag(Buffer.from(encrypted.tag, "base64"));
-    const decrypted = Buffer.concat([
-      decipher.update(Buffer.from(encrypted.ct, "base64")),
-      decipher.final(),
-    ]).toString("utf8");
+    const decrypted = Buffer.concat([decipher.update(Buffer.from(encrypted.ct, "base64")), decipher.final()]).toString(
+      "utf8"
+    );
     expect(decrypted).toBe(w.keys.solanaSecretKeyB58);
     expect(walletFromSolanaSecret(decrypted, { mode: "legacy-solana" })).toEqual(w);
   });
@@ -187,10 +202,7 @@ describe("encrypted keystore", () => {
     expect(() => {
       const decipher = createDecipheriv("aes-256-gcm", wrongKey, Buffer.from(encrypted.iv, "base64"));
       decipher.setAuthTag(Buffer.from(encrypted.tag, "base64"));
-      Buffer.concat([
-        decipher.update(Buffer.from(encrypted.ct, "base64")),
-        decipher.final(),
-      ]);
+      Buffer.concat([decipher.update(Buffer.from(encrypted.ct, "base64")), decipher.final()]);
     }).toThrow();
   });
 });
@@ -277,7 +289,7 @@ describe("passphrase validation", () => {
     if (!hasLower || !hasUpper || !hasDigit || !hasSpecial) {
       throw new Error(
         "AIFINPAY_WALLET_PASSPHRASE must contain: lowercase (a-z), uppercase (A-Z), digits (0-9), and special characters (!@$.^*_+=-). " +
-        "No # or other special characters allowed."
+          "No # or other special characters allowed."
       );
     }
     return passphrase;
@@ -315,11 +327,15 @@ describe("passphrase validation", () => {
   });
 
   it("rejects passphrase without digit", () => {
-    expect(() => validatePassphrase("StrongPass!@$.^*")).toThrow("must contain: lowercase (a-z), uppercase (A-Z), digits (0-9)");
+    expect(() => validatePassphrase("StrongPass!@$.^*")).toThrow(
+      "must contain: lowercase (a-z), uppercase (A-Z), digits (0-9)"
+    );
   });
 
   it("rejects passphrase without special character", () => {
-    expect(() => validatePassphrase("StrongPass123456")).toThrow("must contain: lowercase (a-z), uppercase (A-Z), digits (0-9), and special characters");
+    expect(() => validatePassphrase("StrongPass123456")).toThrow(
+      "must contain: lowercase (a-z), uppercase (A-Z), digits (0-9), and special characters"
+    );
   });
 
   it("accepts valid strong passphrase", () => {
@@ -400,7 +416,10 @@ describe("encrypted keystore keeps key material encrypted", () => {
     await cli.run!("export", ["node", "wallet"]);
     restore();
 
-    const exported = logs.filter((l) => /^[0-9a-f]{64}\n$/.test(l)).join("").trim();
+    const exported = logs
+      .filter((l) => /^[0-9a-f]{64}\n$/.test(l))
+      .join("")
+      .trim();
     expect(exported).toMatch(/^[0-9a-f]{64}$/);
     const w = deriveWallet(exported);
     const showOutput = logs.join("");
@@ -414,7 +433,13 @@ describe("encrypted keystore keeps key material encrypted", () => {
     writeFileSync(
       join(tmpDir, "agent.json"),
       JSON.stringify(
-        { enc: "scrypt-aes-256-gcm", ...enc, created: new Date().toISOString(), derivationMode: "standard", seedHex: w.keys.seedHex },
+        {
+          enc: "scrypt-aes-256-gcm",
+          ...enc,
+          created: new Date().toISOString(),
+          derivationMode: "standard",
+          seedHex: w.keys.seedHex,
+        },
         null,
         2
       ),
@@ -426,6 +451,11 @@ describe("encrypted keystore keeps key material encrypted", () => {
     await cli.run!("export", ["node", "wallet"]);
     restore();
     expect(logs.join("")).toContain(w.evmAddress);
-    expect(logs.filter((l) => /^[0-9a-f]{64}\n$/.test(l)).join("").trim()).toBe(w.keys.seedHex);
+    expect(
+      logs
+        .filter((l) => /^[0-9a-f]{64}\n$/.test(l))
+        .join("")
+        .trim()
+    ).toBe(w.keys.seedHex);
   });
 });

@@ -1,16 +1,31 @@
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
-import { scryptSync, createDecipheriv } from "node:crypto";
+import { createDecipheriv, scryptSync } from "node:crypto";
 import type { McpConfig } from "./config.js";
 
-export type WalletIdentity = { source: string; seedHash?: string; secretB58?: string };
+export type WalletIdentity = { source: string; seedHash?: string; secretB58?: string; derivationIndex?: number };
 
 function seed(value: unknown): string {
   if (typeof value !== "string" || !/^(0x)?[0-9a-fA-F]{64}$/.test(value)) {
     throw new Error("SEED_HASH must contain a 32-byte hex seed (64 hex characters); no mnemonic or double hashing");
   }
   return value.replace(/^0x/, "");
+}
+
+function validIndex(index: number): number {
+  if (!Number.isInteger(index) || index < 0 || index > 0xffffffff) {
+    throw new Error("Wallet derivation index must be an integer from 0 to 4294967295");
+  }
+  return index;
+}
+
+function indexedIdentity(source: string, seedHex: string, index: number | undefined): WalletIdentity {
+  return {
+    source,
+    seedHash: seedHex,
+    ...(index === undefined ? {} : { derivationIndex: validIndex(index) }),
+  };
 }
 
 function readJson(path: string): any {
@@ -23,7 +38,7 @@ function readJson(path: string): any {
 
 /** Local inputs only. Never put the returned secrets in an MCP response/log. */
 export function loadWalletIdentity(config: McpConfig): WalletIdentity | null {
-  if (config.seedHash !== undefined) return { source: "SEED_HASH", seedHash: seed(config.seedHash) };
+  if (config.seedHash !== undefined) return indexedIdentity("SEED_HASH", seed(config.seedHash), config.walletIndex);
   const path = resolve(config.agentsFile || "./aifinpay/agents.json");
   if (existsSync(path)) {
     const document = readJson(path);
@@ -32,13 +47,27 @@ export function loadWalletIdentity(config: McpConfig): WalletIdentity | null {
     const matches = config.agentId ? agents.filter((a: any) => a?.id === config.agentId) : agents;
     if (matches.length !== 1)
       throw new Error("Select exactly one agents.json record with AIFINPAY_AGENT_ID; refusing an ambiguous wallet");
-    return { source: "agents.json", seedHash: seed(matches[0]?.seed_hash) };
+    return indexedIdentity("agents.json", seed(matches[0]?.seed_hash), config.walletIndex);
   }
   if (config.agentsFile) throw new Error("Configured AIFINPAY_AGENTS_FILE does not exist");
-  if (config.agentSecretB58) return { source: "AIFINPAY_AGENT_SECRET", secretB58: config.agentSecretB58 };
+  if (config.agentSecretB58) {
+    if (config.walletIndex !== undefined)
+      throw new Error("AIFINPAY_WALLET_INDEX requires a 32-byte seed, not a Solana secret");
+    return { source: "AIFINPAY_AGENT_SECRET", secretB58: config.agentSecretB58 };
+  }
   const legacyPath = join(config.walletHome || join(homedir(), ".aifinpay"), "agent.json");
-  if (!existsSync(legacyPath)) return null;
+  if (!existsSync(legacyPath)) {
+    if (config.walletIndex !== undefined) {
+      throw new Error("AIFINPAY_WALLET_INDEX requires a configured seed or an indexed wallet keystore");
+    }
+    return null;
+  }
   const legacy = readJson(legacyPath);
+  const storedIndex = legacy.derivationIndex;
+  if (storedIndex !== undefined && (!Number.isInteger(storedIndex) || storedIndex < 0 || storedIndex > 0xffffffff)) {
+    throw new Error("Invalid wallet derivationIndex in legacy keystore");
+  }
+  const index = config.walletIndex ?? storedIndex;
   try {
     const mode = statSync(legacyPath).mode & 0o777;
     if (mode & 0o077) {
@@ -54,6 +83,26 @@ export function loadWalletIdentity(config: McpConfig): WalletIdentity | null {
       throw new Error("Encrypted keystore requires AIFINPAY_WALLET_PASSPHRASE and the supported encryption format");
     }
     try {
+      if (index !== undefined && legacy.seedEnc) {
+        const seedKey = scryptSync(config.walletPassphrase, Buffer.from(legacy.seedEnc.salt, "base64"), 32, {
+          N: 1 << 15,
+          r: 8,
+          p: 1,
+          maxmem: 64 * 1024 * 1024,
+        });
+        const seedDecipher = createDecipheriv("aes-256-gcm", seedKey, Buffer.from(legacy.seedEnc.iv, "base64"));
+        seedDecipher.setAuthTag(Buffer.from(legacy.seedEnc.tag, "base64"));
+        const seedHex = Buffer.concat([
+          seedDecipher.update(Buffer.from(legacy.seedEnc.ct, "base64")),
+          seedDecipher.final(),
+        ]).toString("utf8");
+        return indexedIdentity("legacy-keystore", seed(seedHex), index);
+      }
+      if (index !== undefined && typeof legacy.seedHex === "string") {
+        return indexedIdentity("legacy-keystore", seed(legacy.seedHex), index);
+      }
+      if (index !== undefined)
+        throw new Error("Indexed encrypted keystore requires an encrypted seedEnc recovery seed");
       const key = scryptSync(config.walletPassphrase, Buffer.from(legacy.salt, "base64"), 32, {
         N: 1 << 15,
         r: 8,
@@ -71,6 +120,11 @@ export function loadWalletIdentity(config: McpConfig): WalletIdentity | null {
     } catch {
       throw new Error("Cannot decrypt keystore; refusing to generate a replacement wallet");
     }
+  }
+  if (index !== undefined) {
+    if (typeof legacy.seedHex !== "string")
+      throw new Error("Indexed wallet keystore requires a 32-byte seedHex recovery seed");
+    return indexedIdentity("legacy-keystore", seed(legacy.seedHex), index);
   }
   if (typeof legacy.secretB58 !== "string" || !legacy.secretB58) throw new Error("Invalid legacy keystore");
   return { source: "legacy-keystore", secretB58: legacy.secretB58 };

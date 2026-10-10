@@ -76,7 +76,11 @@ Run init once. It writes ${KEYSTORE} with mode 600 and the server picks
 it up automatically — you do not have to put the secret in a config file.
 
 Env (all optional):
-  SEED_HASH              32-byte hex seed; highest priority\n  AIFINPAY_AGENTS_FILE    default ./aifinpay/agents.json; second priority\n  AIFINPAY_AGENT_ID       select one record when the file has multiple agents\n  AIFINPAY_AGENT_SECRET   legacy base58 secret; after project wallet sources
+  SEED_HASH              32-byte hex seed; highest priority
+  AIFINPAY_AGENTS_FILE   project agents file (default ./aifinpay/agents.json)
+  AIFINPAY_AGENT_ID      select one record when the file has multiple agents
+  AIFINPAY_AGENT_SECRET  legacy base58 secret; after project wallet sources
+  AIFINPAY_WALLET_INDEX  child index derived from the selected seed
   AIFINPAY_WALLET_PASSPHRASE  opens an encrypted keystore; the server needs it too
   AIFINPAY_BASE_URL       default https://aifinpay.io
   AIFINPAY_TIMEOUT_MS     default 30000
@@ -174,13 +178,14 @@ if (arg === "init") {
 
   const { loadConfigFromEnv } = await import("../dist/config.js");
   const { loadWalletIdentity } = await import("../dist/identity.js");
-  const selected = loadWalletIdentity(loadConfigFromEnv());
+  const config = loadConfigFromEnv();
+  const selected = loadWalletIdentity(config);
   if (selected && selected.source !== "legacy-keystore") {
     const agent = selected.seedHash
-      ? await AiFinPayAgent.fromSeed(selected.seedHash)
+      ? await AiFinPayAgent.fromSeed(selected.seedHash, { derivationIndex: selected.derivationIndex })
       : await AiFinPayAgent.fromSolanaSecret(selected.secretB58);
     process.stdout.write(
-      `Using ${selected.source}; no replacement wallet created.\n` +
+      `Using ${selected.source}${selected.derivationIndex === undefined ? "" : ` (index ${selected.derivationIndex})`}; no replacement wallet created.\n` +
         `EVM ${agent.evmAddress}\nSolana ${agent.solanaAddress}\nCasper ${agent.casperAddress}\n` +
         `Keep your configured seed backed up privately. Call agent_reload in an already connected MCP server.\n`
     );
@@ -265,13 +270,15 @@ if (arg === "init") {
     );
   }
 
-  const agent = await AiFinPayAgent.fromSolanaSecret(store.secretB58);
+  const agent = selected?.seedHash
+    ? await AiFinPayAgent.fromSeed(selected.seedHash, { derivationIndex: selected.derivationIndex })
+    : await AiFinPayAgent.fromSolanaSecret(store.secretB58);
   // The server cannot open an encrypted keystore without the passphrase, so a
   // config block without it does not start.
   const encrypted = freshlyCreated ? Boolean(PASSPHRASE) : Boolean(store.encrypted);
 
   process.stdout.write(
-    `Your agent's addresses — the EVM one is the same on every EVM chain:\n\n` +
+    `Your agent's addresses${selected?.derivationIndex === undefined ? "" : ` (index ${selected.derivationIndex})`} — the EVM one is the same on every EVM chain:\n\n` +
       `  EVM     ${agent.evmAddress}\n` +
       `  Solana  ${agent.solanaAddress}\n` +
       `  Casper  ${agent.casperAddress}\n\n` +
@@ -284,7 +291,12 @@ if (arg === "init") {
             aifinpay: {
               command: "npx",
               args: ["-y", `@aifinpay/mcp@${VERSION}`],
-              env: encrypted ? { AIFINPAY_WALLET_PASSPHRASE: "<the passphrase you used for init>" } : {},
+              env: {
+                ...(encrypted ? { AIFINPAY_WALLET_PASSPHRASE: "<the passphrase you used for init>" } : {}),
+                ...(selected?.derivationIndex === undefined
+                  ? {}
+                  : { AIFINPAY_WALLET_INDEX: String(selected.derivationIndex) }),
+              },
             },
           },
         },

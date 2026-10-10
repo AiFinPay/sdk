@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/wallet",
-  "version": "1.3.0",
+  "version": "1.5.0",
   "description": "Derive an AiFinPay agent wallet (Solana + EVM + NEAR + Aptos) with four tiny crypto deps — no viem, no @solana/web3.js, ~4.5 MB. The light way to give an agent a wallet where the full SDK will not install.",
   "type": "module",
   "main": "dist/index.js",

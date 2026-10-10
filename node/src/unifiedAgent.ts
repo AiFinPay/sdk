@@ -196,6 +196,8 @@ export interface SessionReceipt {
 }
 
 export interface AiFinPayAgentOptions extends AgentOptions {
+  /** Derive each chain key from its own versioned domain and this child index. */
+  derivationIndex?: number;
   registryUrl?: string; // default: ${baseUrl}/api/providers,
   // falling back to /providers
   evmPrivateKey?: `0x${string}`; // optional override; otherwise derived/generated
@@ -693,15 +695,22 @@ export class AiFinPayAgent {
   private _polygonPublic?: PublicClient;
   private _polygonWallet?: WalletClient;
   private readonly injectedEvmWalletClient?: WalletClient;
+  private readonly derivationIndex?: number;
   // Multi-chain client cache for cross-chain orchestration (bridge flows).
   // Keyed by EVM chain name (see crossChain.ts EVM_CHAINS).
   private _evmClients: Map<AnyEvmChainName, { publicClient: PublicClient; walletClient: WalletClient }> = new Map();
   private evmRpcUrls: Partial<Record<AnyEvmChainName, string>> = {};
 
-  private constructor(inner: Agent, evmAccount: AgentWallet, opts: AiFinPayAgentOptions = {}) {
+  private constructor(
+    inner: Agent,
+    evmAccount: AgentWallet,
+    opts: AiFinPayAgentOptions = {},
+    private readonly rootSeed: Uint8Array = inner.secretKey.subarray(0, 32)
+  ) {
     this.inner = inner;
     this.evmAccount = evmAccount;
     this.injectedEvmWalletClient = opts.evmWalletClient;
+    this.derivationIndex = opts.derivationIndex;
     this.registryUrl = opts.registryUrl ?? `${inner.baseUrl}${DEFAULT_REGISTRY_PATH}`;
     this.registryCandidates = opts.registryUrl
       ? [opts.registryUrl]
@@ -898,8 +907,9 @@ export class AiFinPayAgent {
    * TODO(phase-1): replace with BIP-39/BIP-44 derivation
    *   m/44'/501'/0'/0' (Solana) + m/44'/60'/0'/0/0 (EVM) once the
    *   wallet-import audit recommendation lands.
-   * An explicit opts.evmPrivateKey imports an existing EVM wallet instead;
-   * keep that key as well as the seed to restore the same EVM address.
+   * With derivationIndex, each chain hashes its own domain, NUL, decimal
+   * index, then the recovery seed. An explicit opts.evmPrivateKey imports an
+   * existing EVM wallet instead; keep that key as well as the seed.
    */
   static async fromSeed(seedHex: string, opts: AiFinPayAgentOptions = {}): Promise<AiFinPayAgent> {
     const resolved = withEvmWalletClient(opts);
@@ -908,7 +918,15 @@ export class AiFinPayAgent {
       throw new AiFinPayError(`fromSeed: seed must be 32 bytes (64 hex chars)`);
     }
     const seed = hexToBytes(normalizedSeed);
-    const kp = nacl.sign.keyPair.fromSeed(seed);
+    const derivationIndex = opts.derivationIndex;
+    if (
+      derivationIndex !== undefined &&
+      (!Number.isInteger(derivationIndex) || derivationIndex < 0 || derivationIndex > 0xffffffff)
+    ) {
+      throw new AiFinPayError("derivationIndex must be an integer from 0 to 4294967295");
+    }
+    const solanaSeed = derivationIndex === undefined ? seed : domainSeed("aifinpay:solana:v1\0", seed, derivationIndex);
+    const kp = nacl.sign.keyPair.fromSeed(solanaSeed);
     const inner =
       (Agent as unknown as { _ofKeyPair(kp: nacl.SignKeyPair, opts?: AgentOptions): Agent })._ofKeyPair?.(
         kp,
@@ -916,9 +934,9 @@ export class AiFinPayAgent {
       ) ?? Agent.fromSecretB58(bs58.encode(kp.secretKey), resolved);
 
     // Derive EVM key from seed (independent, not BIP-44 — see TODO above)
-    const evmHex = resolved.evmPrivateKey ?? (("0x" + bytesToHex(crypto32(seed))) as `0x${string}`);
+    const evmHex = resolved.evmPrivateKey ?? (("0x" + bytesToHex(crypto32(seed, derivationIndex))) as `0x${string}`);
     const evmAccount = resolved.evmWallet ?? privateKeyToAccount(evmHex);
-    return new AiFinPayAgent(inner, evmAccount, resolved);
+    return new AiFinPayAgent(inner, evmAccount, resolved, seed);
   }
 
   /**
@@ -967,7 +985,7 @@ export class AiFinPayAgent {
    * account hash. Verified against mainnet — see casperIdentityFromSeed.
    */
   get casper(): { publicKey: string; accountHash: string } {
-    return casperIdentityFromSeed(this.inner.secretKey.subarray(0, 32));
+    return casperIdentityFromSeed(this.rootSeed, this.derivationIndex);
   }
 
   /** Convenience: the account hash, which is what a Casper explorer wants. */
@@ -2312,11 +2330,19 @@ function bytesToHex(b: Uint8Array): string {
  * Domain-separated like the EVM path rather than reusing the Solana key: the
  * two chains stay independent, so a compromise on one does not carry.
  */
-function casperSeed(seed: Uint8Array): Uint8Array {
+function domainSeed(domain: string, seed: Uint8Array, index?: number): Uint8Array {
+  if (index !== undefined && (!Number.isInteger(index) || index < 0 || index > 0xffffffff)) {
+    throw new AiFinPayError("derivationIndex must be an integer from 0 to 4294967295");
+  }
   const h = createHash("sha256");
-  h.update("aifinpay:casper:v1\0");
+  h.update(domain);
+  if (index !== undefined) h.update(String(index));
   h.update(seed);
   return new Uint8Array(h.digest());
+}
+
+function casperSeed(seed: Uint8Array, index?: number): Uint8Array {
+  return domainSeed("aifinpay:casper:v1\0", seed, index);
 }
 
 /** Casper account hash: blake2b256(algorithm-name || 0x00 || public key). */
@@ -2330,11 +2356,14 @@ function casperAccountHash(publicKey: Uint8Array): string {
 }
 
 /** The pair Casper tooling expects: tagged public key and account hash. */
-export function casperIdentityFromSeed(seed: Uint8Array): {
+export function casperIdentityFromSeed(
+  seed: Uint8Array,
+  index?: number
+): {
   publicKey: string;
   accountHash: string;
 } {
-  const kp = nacl.sign.keyPair.fromSeed(casperSeed(seed));
+  const kp = nacl.sign.keyPair.fromSeed(casperSeed(seed, index));
   return {
     // 01 tags ed25519; 02 would be secp256k1. Casper rejects an untagged key.
     publicKey: "01" + bytesToHex(kp.publicKey),
@@ -2342,12 +2371,6 @@ export function casperIdentityFromSeed(seed: Uint8Array): {
   };
 }
 
-function crypto32(seed: Uint8Array): Uint8Array {
-  // Must stay sync (constructors call it). Uses the createHash imported at
-  // the top of this file — a bare `require()` is a ReferenceError here
-  // because this package ships as ESM ("type": "module").
-  const h = createHash("sha256");
-  h.update("aifinpay:evm:v1\0");
-  h.update(seed);
-  return new Uint8Array(h.digest());
+function crypto32(seed: Uint8Array, index?: number): Uint8Array {
+  return domainSeed("aifinpay:evm:v1\0", seed, index);
 }

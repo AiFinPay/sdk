@@ -1,5 +1,21 @@
 # @aifinpay/wallet — changelog
 
+## 1.5.0 — unreleased
+
+- Derive optional indexed child wallets from a 32-byte recovery seed without
+  changing derivation for existing callers. Append the decimal index after
+  each chain's domain NUL separator. Persist the seed and index as
+  backward-compatible keystore metadata; CLI `show --index` and MCP
+  `AIFINPAY_WALLET_INDEX` select sibling wallets.
+- Complete the AiFinPay/sdk#96 fixes the tests pinned: refuse to overwrite an
+  unreadable `agent.json`, reject unknown keystore schemes with "is not a
+  keystore this version can read", generate only passphrases the CLI itself
+  accepts (no `$`), stop duplicating existing `.env` lines when saving a
+  generated passphrase, verify a 1.1.0 keystore's plaintext seed against its
+  sealed key before trusting it, require the passphrase to `export` it, read
+  bare `mcp init` keystores as legacy-solana, and never exit a host process
+  that imports the library with `--help` in its argv.
+
 ## 1.3.0 — unreleased
 
 - Deprecate Casper without removing or changing its domain, address, public

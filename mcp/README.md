@@ -4,7 +4,7 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Version **2.7.1** is prepared in this checkout, requiring agent2.5.1 and canonical skill2.8.0.
+Version **2.8.0** is prepared in this checkout, requiring agent2.6.3 and canonical skill2.8.0.
 The published baseline checked2026-10-04 was MCP2.5.0. Package publication and
 real registry dependency/lock refresh remain release gates; a source-cohort
 build does not prove those steps. Owner-enabled v1.4 purchases with `payable_fetch` are
@@ -34,6 +34,23 @@ own POL cap. Origins are exact HTTPS origins authorized by the
 owner. `direct` uses the full path for self-hosted sites; `gateway` uses the
 merchant slug on the hosted gateway. Restart/reconnect the MCP process after
 changing its environment.
+
+## Indexed wallet derivation
+
+The wallet CLI and MCP can use deterministic child wallets from one recovery
+seed. Create an MCP-compatible wallet with
+`npx @aifinpay/wallet new --index 0`; the keystore retains the
+root seed and adds the index as optional metadata without changing existing
+fields. MCP uses that stored index automatically. To select another child in a different MCP
+process, set `AIFINPAY_WALLET_INDEX` to its decimal index; the same variable
+also applies when `SEED_HASH` or an `agents.json` record supplies the seed.
+
+Each chain derives its own indexed key; for example,
+`EVM = SHA-256("aifinpay:evm:v1\0" || decimalIndex || recoverySeed)` and
+`Solana = Ed25519(SHA-256("aifinpay:solana:v1\0" || decimalIndex || recoverySeed))`.
+The decimal UTF-8 index follows that chain's domain NUL separator. Index 0 is
+the first wallet. Indices must be between 0 and 4294967295. With no selected
+index, existing identities retain their current derivation.
 
 `AIFINPAY_MAX_GAS_POL` caps the worst case, not the fee you expect to pay.
 Before signing, the client prices the estimated gas plus 20% at the maximum fee

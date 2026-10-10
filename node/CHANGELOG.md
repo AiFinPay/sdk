@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.6.3 — per-domain indexed wallet derivation
+
+- Add optional `derivationIndex` to `AiFinPayAgent.fromSeed`. Indexed Solana,
+  EVM and Casper keys append the decimal index after their respective domain
+  NUL separator before hashing; calls without an index keep their existing keys.
+
 ## 2.6.2 — programmatic external EVM transaction signer
 
 - Accept a viem `WalletClient` in `AiFinPayAgent` and route EVM transaction
