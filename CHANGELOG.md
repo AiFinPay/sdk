@@ -1,3 +1,9 @@
+## Wallet 1.3.0 — unreleased
+
+- Deprecate Casper API fields while preserving their derivation and values
+  for legacy compatibility. Remove Casper from wallet CLI output and
+  supported-chain descriptions; existing keystores need no migration.
+
 ## Node 2.6.2 / MCP 2.7.2 — programmatic external EVM wallet
 
 - Reuse an embedding host's viem `WalletClient` for EVM signatures and

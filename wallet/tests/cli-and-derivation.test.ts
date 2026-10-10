@@ -16,7 +16,7 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import bs58 from "bs58";
-import { deriveWallet, newWallet, walletFromSeed, walletFromSolanaSecret } from "../src/index.js";
+import { DerivationDomain, deriveWallet, newWallet, walletFromSeed, walletFromSolanaSecret } from "../src/index.js";
 import { generateStrongPassphrase, run } from "../src/cli.js";
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
@@ -67,6 +67,15 @@ describe("derivation agrees with @aifinpay/agent", () => {
     it(`EVM and Casper do not depend on the Solana mode, for seed ${seed.slice(0, 4)}…`, () => {
       const w = deriveWallet(seed);
       expect([w.evmAddress, w.casperAddress]).toEqual([sdk.evm, sdk.casper]);
+    });
+
+    it(`preserves deprecated Casper material in both modes, for seed ${seed.slice(0, 4)}…`, () => {
+      const standard = deriveWallet(seed);
+      const legacy = deriveWallet(seed, { mode: "legacy-solana" });
+      expect(DerivationDomain.CASPER).toBe("aifinpay:casper:v1\0");
+      expect(standard.casperAddress).toBe(sdk.casper);
+      expect(standard.casperPublicKey).toBe(legacy.casperPublicKey);
+      expect(standard.keys.casperSecretSeedHex).toBe(legacy.keys.casperSecretSeedHex);
     });
   }
 
@@ -192,7 +201,7 @@ describe("wallet new --plain", () => {
     await run("show", []);
     expect(printed("EVM")).toBe(expected.evmAddress);
     expect(printed("Solana")).toBe(expected.solanaAddress);
-    expect(printed("Casper")).toBe(expected.casperAddress);
+    expect(out.join("")).not.toMatch(/casper/i);
     out = [];
     await run("export", []);
     expect(out.join("")).toBe(`${store.seedHex}\n`);
@@ -203,6 +212,26 @@ describe("wallet new --plain", () => {
     const store = keystore();
     expect(store.derivationMode).toBe("legacy-solana");
     expect(evmMcpWouldUse(store.secretB58)).toBe(printed("EVM"));
+  });
+});
+
+describe("deprecated Casper is not advertised by the CLI", () => {
+  it.each([
+    ["standard", true],
+    ["standard", false],
+    ["legacy-solana", true],
+    ["legacy-solana", false],
+  ] as const)("new and show omit Casper (%s, plain=%s)", async (derivationMode, plain) => {
+    process.env.AIFINPAY_WALLET_PASSPHRASE = STRONG;
+    const argv = plain ? ["node", "wallet", "--plain"] : ["node", "wallet"];
+    await run("new", argv, { mode: derivationMode });
+    expect(out.join("")).not.toMatch(/casper/i);
+    const created = [printed("EVM"), printed("Solana")];
+    expect(created.every(Boolean)).toBe(true);
+    out = [];
+    await run("show", []);
+    expect(out.join("")).not.toMatch(/casper/i);
+    expect([printed("EVM"), printed("Solana")]).toEqual(created);
   });
 });
 

@@ -1,7 +1,7 @@
 # @aifinpay/wallet
 
-Derive an AiFinPay agent wallet — Solana, EVM and Casper addresses (plus NEAR
-and Aptos) from one seed — with four tiny crypto dependencies and nothing else.
+Derive an AiFinPay agent wallet — Solana, EVM, NEAR and Aptos addresses from
+one seed — with four tiny crypto dependencies and nothing else.
 
 ```
 npx @aifinpay/wallet new
@@ -14,7 +14,6 @@ Your agent's addresses — the EVM one is the same on every EVM chain:
 
   EVM     0x…
   Solana  …
-  Casper  account-hash-…
 ```
 
 With `--plain` the first line reads `Created ~/.aifinpay/agent.json (mode 600).`
@@ -24,8 +23,8 @@ instead.
 > `--legacy-solana`.** In the default (`standard`) mode this package derives
 > the Solana key from a domain-separated hash of the seed and stores that key
 > in `agent.json`. `@aifinpay/mcp` and `AiFinPayAgent.fromSolanaSecret` read
-> only that stored key and derive the EVM and Casper keys from it, so they run
-> the agent at **different EVM and Casper addresses** from the ones this CLI
+> only that stored key and derive the EVM key from it, so they run
+> the agent at a **different EVM address** from the one this CLI
 > prints. Only `legacy-solana` wallets derive the same addresses as the full
 > SDK. Do not fund a default-mode wallet for use with MCP.
 
@@ -37,8 +36,8 @@ constrained agent sandbox that install does not merely bloat, it **fails**.
 
 Making a wallet needs none of that. This package has **four dependencies
 (~4.5 MB)** — `@noble/curves`, `@noble/hashes`, `bs58`, `tweetnacl` — and
-installs in seconds. In `legacy-solana` mode it derives the same Solana, EVM
-and Casper addresses as `@aifinpay/agent`'s `fromSeed`. The division of labour:
+installs in seconds. In `legacy-solana` mode it derives the same Solana and EVM
+addresses as `@aifinpay/agent`'s `fromSeed`. The division of labour:
 
 |                                     | install  | use for                                          |
 | ----------------------------------- | -------- | ------------------------------------------------ |
@@ -117,7 +116,6 @@ import { deriveWallet, newWallet, walletFromSeed } from "@aifinpay/wallet";
 const w = await newWallet();
 w.evmAddress; // 0x… (same on every EVM chain)
 w.solanaAddress; // base58
-w.casperAddress; // account-hash-…
 w.nearAddress; // hex Ed25519 public key
 w.aptosAddress; // 0x… authentication key
 w.keys.seedHex; // 32-byte seed — THE thing to back up
@@ -127,12 +125,20 @@ w.keys.solanaSecretKeyB58; // tweetnacl 64-byte secret, base58
 deriveWallet(w.keys.seedHex); // same seed → same wallet, deterministic
 ```
 
+### Deprecated Casper compatibility
+
+Casper is no longer supported and is not printed by `new` or `show`.
+`DerivationDomain.CASPER`, `casperAddress`, `casperPublicKey` and
+`keys.casperSecretSeedHex` remain available with `@deprecated` annotations.
+Their values and derivation are unchanged in both modes, so existing consumers
+and legacy key recovery continue to work. No keystore migration is required.
+
 ### Derivation modes
 
 `standard` (the default) derives the Solana key from
 `SHA-256("aifinpay:solana:v1\0" || seed)`. `legacy-solana` derives it from the
-raw seed, as `@aifinpay/agent` and `@aifinpay/mcp` do. EVM, Casper, NEAR and
-Aptos are the same in both modes.
+raw seed, as `@aifinpay/agent` and `@aifinpay/mcp` do. EVM, NEAR and Aptos
+are the same in both modes, as is the deprecated Casper material.
 
 ```ts
 import { newWallet, walletFromSeed } from "@aifinpay/wallet";

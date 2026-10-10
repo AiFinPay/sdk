@@ -119,8 +119,7 @@ function print(w: DerivedWallet, created: boolean, isEncrypted: boolean = false)
   process.stdout.write(
     `Your agent's addresses — the EVM one is the same on every EVM chain:\n\n` +
       `  EVM     ${w.evmAddress}\n` +
-      `  Solana  ${w.solanaAddress}\n` +
-      `  Casper  ${w.casperAddress}\n\n` +
+      `  Solana  ${w.solanaAddress}\n\n` +
       `Point any AiFinPay client at this wallet — the keystore is the one\n` +
       `@aifinpay/mcp reads, so \`npx @aifinpay/mcp\` uses it with no config.\n\n` +
       `Back up ${KEYSTORE}. It is the only copy, and the derivation is not\n` +

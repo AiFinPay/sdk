@@ -2,8 +2,8 @@
  * Lightweight AiFinPay wallet derivation — addresses + key material only.
  *
  * No chain client is imported here. One 32-byte AiFinPay seed deterministically
- * derives all five address families needed by the 13-network product:
- * EVM, Solana, NEAR, Aptos and Casper.
+ * derives EVM, Solana, NEAR and Aptos addresses. Deprecated Casper material
+ * is retained solely for backwards compatibility.
  */
 
 import nacl from "tweetnacl";
@@ -22,6 +22,7 @@ export enum DerivationDomain {
   SOLANA = "aifinpay:solana:v1\0",
   NEAR = "aifinpay:near:v1\0",
   APTOS = "aifinpay:aptos:v1\0",
+  /** @deprecated Casper is no longer supported; retained for legacy derivation compatibility. */
   CASPER = "aifinpay:casper:v1\0",
 }
 
@@ -73,9 +74,9 @@ export interface DerivedWallet {
   nearAddress: string;
   /** Aptos authentication-key account address. */
   aptosAddress: `0x${string}`;
-  /** Casper account hash retained for balance/display compatibility. */
+  /** @deprecated Casper is no longer supported; retained for legacy address compatibility. */
   casperAddress: string;
-  /** Casper algorithmic-tagged Ed25519 public key used by AIFP-3 ownership proof. */
+  /** @deprecated Casper is no longer supported; retained for legacy public-key compatibility. */
   casperPublicKey: string;
   /** Derivation mode used for this wallet. */
   derivationMode: DerivationMode;
@@ -89,6 +90,7 @@ export interface DerivedWallet {
     /** Domain-separated Ed25519 seeds for non-EVM local signers. */
     nearSecretSeedHex: string;
     aptosSecretSeedHex: string;
+    /** @deprecated Casper is no longer supported; retained for legacy key recovery. */
     casperSecretSeedHex: string;
   };
 }
@@ -101,7 +103,7 @@ export type DerivationMode = "standard" | "legacy-solana";
  *   EVM    = secp256k1(SHA-256("aifinpay:evm:v1\\0" || seed))
  *   NEAR   = Ed25519(SHA-256("aifinpay:near:v1\\0" || seed))
  *   Aptos  = Ed25519(SHA-256("aifinpay:aptos:v1\\0" || seed)), auth-key address
- *   Casper = Ed25519(SHA-256("aifinpay:casper:v1\\0" || seed))
+ *   Casper (deprecated) = Ed25519(SHA-256("aifinpay:casper:v1\\0" || seed))
  *
  * This seed wallet is not BIP-39/BIP-44. Existing EVM/Solana/Casper addresses
  * therefore remain byte-identical to earlier @aifinpay/wallet releases. AIFP-3

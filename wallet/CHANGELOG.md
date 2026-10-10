@@ -1,5 +1,12 @@
 # @aifinpay/wallet — changelog
 
+## 1.3.0 — unreleased
+
+- Deprecate Casper without removing or changing its domain, address, public
+  key or secret seed. Preserve the existing derivation and keystore format.
+- Remove Casper from `new`/`show` output and supported-chain descriptions.
+  Keep the current architecture; this is a compatibility-preserving change.
+
 ## 1.2.0 — unreleased
 
 Fixes for bugs found by the coverage pass (AiFinPay/sdk#96).
