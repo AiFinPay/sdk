@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.8.0 — unreleased
+
+- Support deterministic child wallet selection with `AIFINPAY_WALLET_INDEX`
+  for seed-based identities and indexed wallet keystores. Preserve existing
+  behavior when no index is configured; pass the recovery seed and index to
+  the SDK for per-domain key derivation.
+
+## 2.7.2 — programmatic external EVM wallet
+
+- Allow an embedding host to inject a viem EVM `WalletClient` into
+  `createServer`; preserve local identity for Solana and read-only identity
+  surfaces. Bind the journal and payment identity to the external account and
+  owner-selected EVM chain; refuse mismatched clients.
+- Keep stdio CLI and environment-based local wallet loading unchanged.
+
 ## 2.7.1 — release candidate
 
 - Align the README's prepared MCP version and Node SDK requirement with the
@@ -49,6 +64,5 @@
   The existing registry lock is retained until those actual inputs exist. Source-cohort
   checks build against the exact same Node commit, not an invented npm release.
   Hosted MCP CI is pending the real skill lock; never publish from the old lock.
-
 
 See the repository [CHANGELOG](../CHANGELOG.md).

@@ -37,6 +37,23 @@ owner. `direct` uses the full path for self-hosted sites; `gateway` uses the
 merchant slug on the hosted gateway. Restart/reconnect the MCP process after
 changing its environment.
 
+## Indexed wallet derivation
+
+The wallet CLI and MCP can use deterministic child wallets from one recovery
+seed. Create an MCP-compatible wallet with
+`npx @aifinpay/wallet new --index 0`; the keystore retains the
+root seed and adds the index as optional metadata without changing existing
+fields. MCP uses that stored index automatically. To select another child in a different MCP
+process, set `AIFINPAY_WALLET_INDEX` to its decimal index; the same variable
+also applies when `SEED_HASH` or an `agents.json` record supplies the seed.
+
+Each chain derives its own indexed key; for example,
+`EVM = SHA-256("aifinpay:evm:v1\0" || decimalIndex || recoverySeed)` and
+`Solana = Ed25519(SHA-256("aifinpay:solana:v1\0" || decimalIndex || recoverySeed))`.
+The decimal UTF-8 index follows that chain's domain NUL separator. Index 0 is
+the first wallet. Indices must be between 0 and 4294967295. With no selected
+index, existing identities retain their current derivation.
+
 `AIFINPAY_MAX_GAS_POL` caps the worst case, not the fee you expect to pay.
 Before signing, the client prices the estimated gas plus 20% at the maximum fee
 per gas the Polygon RPC quotes, and refuses with `V14_GAS_BUDGET_EXCEEDED` if
@@ -171,6 +188,41 @@ Keep seeds and wallet files private and out of chat, source control and logs.
 Invalid or ambiguous configured inputs fail; they never generate a replacement
 wallet. With no configured wallet at all the server has an ephemeral identity:
 **do not fund it**.
+
+### Embed an external EVM wallet
+
+An embedding host can pass a viem `WalletClient` directly to `createServer`.
+This is programmatic-only; `npx @aifinpay/mcp` and environment variables cannot
+carry a wallet client. Keep the existing local identity configured for Solana
+and other identity surfaces. When supplied, the client account becomes the EVM
+payment identity and the payment journal is keyed to that address. Its chain
+must match the owner-selected `AIFINPAY_PAY_CHAIN` (Polygon by default); the
+SDK refuses a mismatch rather than switching providers or falling back to the
+local EVM key.
+
+```ts
+import { createServer, loadConfigFromEnv } from "@aifinpay/mcp";
+import type { EvmWalletClient } from "@aifinpay/agent";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+
+// Constructed by the host from its chosen external signer/provider.
+declare const walletClient: EvmWalletClient;
+
+const { server } = await createServer({
+  ...loadConfigFromEnv(),
+  evmWalletClient: walletClient,
+});
+await server.connect(new StdioServerTransport());
+```
+
+The host must provide a viem `LocalAccount` with `signTransaction`, bound to
+the selected chain. v1.4 persists exact signed transaction bytes before the
+SDK broadcasts them through its verified RPC; JSON-RPC/send-only and smart
+account clients are refused rather than bypassing durable recovery. MCP still
+applies its configured spending limits, runtime and route checks, receipt
+verification, and recovery. Changing the injected account while payment
+recovery is pending requires reconciliation and reconnecting; it is not a
+tool-level wallet switch.
 
 ## Initialize and connect
 

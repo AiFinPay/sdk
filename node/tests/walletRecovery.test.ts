@@ -8,6 +8,8 @@ import { describe, it, expect } from "vitest";
 import { AiFinPayAgent } from "../src/unifiedAgent.js";
 import { privateKeyToAccount } from "viem/accounts";
 import { verifyMessage } from "viem";
+import { createHash } from "node:crypto";
+import { Keypair } from "@solana/web3.js";
 
 describe("wallet recovery", () => {
   it("new() produces an agent recoverable from its Solana secret alone", async () => {
@@ -27,6 +29,32 @@ describe("wallet recovery", () => {
     const b = await AiFinPayAgent.fromSeed(seed);
     expect(b.solanaAddress).toBe(a.solanaAddress);
     expect(b.evmAddress).toBe(a.evmAddress);
+  });
+
+  it("derives indexed keys from each chain domain and preserves the unindexed path", async () => {
+    const seed = Buffer.from("23".repeat(32), "hex");
+    const index = 12;
+    const indexedDomainSeed = (domain: string) =>
+      createHash("sha256").update(`${domain}${index}`, "utf8").update(seed).digest();
+
+    const indexed = await AiFinPayAgent.fromSeed(seed.toString("hex"), { derivationIndex: index });
+    const indexedAgain = await AiFinPayAgent.fromSeed(seed.toString("hex"), { derivationIndex: index });
+    const ordinary = await AiFinPayAgent.fromSeed(seed.toString("hex"));
+    expect(indexed.solanaAddress).toBe(
+      Keypair.fromSeed(indexedDomainSeed("aifinpay:solana:v1\0")).publicKey.toBase58()
+    );
+    expect(indexed.evmAddress).toBe(
+      privateKeyToAccount(`0x${indexedDomainSeed("aifinpay:evm:v1\0").toString("hex")}`).address
+    );
+    expect(indexed.casperAddress).toBe(indexedAgain.casperAddress);
+    expect(indexed.solanaAddress).toBe(indexedAgain.solanaAddress);
+    expect(indexed.evmAddress).toBe(indexedAgain.evmAddress);
+    expect(indexed.solanaAddress).not.toBe(ordinary.solanaAddress);
+    expect(indexed.evmAddress).not.toBe(ordinary.evmAddress);
+  });
+
+  it.each([-1, 1.5, 0x100000000])("rejects invalid derivationIndex %s", async (derivationIndex) => {
+    await expect(AiFinPayAgent.fromSeed("22".repeat(32), { derivationIndex })).rejects.toThrow(/derivationIndex/);
   });
 
   it("matches the Python SDK for a fixed seed (cross-SDK parity)", async () => {

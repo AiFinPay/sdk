@@ -52,6 +52,15 @@ existing Polygon/Base defaults remain compatible. See
 [ADR 0003](docs/adr/0003-full-evm-payment-flow.md). This proposal is not a claim of
 production activation or paid acceptance on every network.
 
+An embedding MCP host may inject a programmatic viem EVM wallet client. The
+client's local account signs message/typed-data and raw transactions; the
+existing v1.4 flow persists those signed bytes before broadcasting on the
+independently selected RPC. JSON-RPC/send-only and smart-account clients are
+refused. Its account and chain must match the selected EVM payment identity.
+Local identity remains responsible for Solana and read-only identity surfaces;
+the stdio CLI and `@aifinpay/wallet` local-keystore flow are unchanged. See
+[ADR 0006](docs/adr/0006-programmatic-evm-wallet-client.md).
+
 No contract ABI, role, receipt format, or merchant discovery ownership change is
 required. The existing trust boundaries remain in place; enablement is conditional
 on verified supported deployment metadata and an explicit operator spending cap.

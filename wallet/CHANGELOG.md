@@ -1,5 +1,28 @@
 # @aifinpay/wallet — changelog
 
+## 1.5.0 — unreleased
+
+- Derive optional indexed child wallets from a 32-byte recovery seed without
+  changing derivation for existing callers. Append the decimal index after
+  each chain's domain NUL separator. Persist the seed and index as
+  backward-compatible keystore metadata; CLI `show --index` and MCP
+  `AIFINPAY_WALLET_INDEX` select sibling wallets.
+- Complete the AiFinPay/sdk#96 fixes the tests pinned: refuse to overwrite an
+  unreadable `agent.json`, reject unknown keystore schemes with "is not a
+  keystore this version can read", generate only passphrases the CLI itself
+  accepts (no `$`), stop duplicating existing `.env` lines when saving a
+  generated passphrase, verify a 1.1.0 keystore's plaintext seed against its
+  sealed key before trusting it, require the passphrase to `export` it, read
+  bare `mcp init` keystores as legacy-solana, and never exit a host process
+  that imports the library with `--help` in its argv.
+
+## 1.3.0 — unreleased
+
+- Deprecate Casper without removing or changing its domain, address, public
+  key or secret seed. Preserve the existing derivation and keystore format.
+- Remove Casper from `new`/`show` output and supported-chain descriptions.
+  Keep the current architecture; this is a compatibility-preserving change.
+
 ## 1.2.0 — unreleased
 
 Fixes for bugs found by the coverage pass (AiFinPay/sdk#96).
@@ -30,6 +53,15 @@ Fixes for bugs found by the coverage pass (AiFinPay/sdk#96).
   uses it with no config. MCP would run it at different EVM and Casper
   addresses; the output says to create the wallet with `--legacy-solana` for
   MCP. The derivation itself is unchanged.
+
+## 1.1.1
+
+- Security: encrypted keystores no longer store `seedHex` in plaintext. The
+  seed is stored AES-GCM-encrypted (`seedEnc`); the Solana-secret ciphertext
+  (`ct`) format is unchanged, so `@aifinpay/mcp` reads new keystores without
+  an update. Pre-1.1.1 encrypted keystores and `--plain` keystores keep
+  working unchanged — rotate old ones with a fresh `npx @aifinpay/wallet new`
+  to drop the plaintext copy.
 
 ## 1.1.0
 

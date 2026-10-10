@@ -17,6 +17,45 @@
   Existing MCP registry dependencies remain real2.5.0 /2.8.0 inputs until
   actual publication and refresh; the publication guard refuses that old lock.
 
+## Node 2.6.3 / Wallet 1.5.0 / MCP 2.8.0 — indexed wallet derivation
+
+- Add deterministic wallet indices to the full Node SDK and wallet package.
+  Append each decimal index to its chain-specific domain after the NUL
+  separator. Preserve existing derivation when no index is set; the CLI stores
+  index metadata and MCP passes root seed plus index to the Node SDK.
+
+## Wallet 1.3.0 — unreleased
+
+- Deprecate Casper API fields while preserving their derivation and values
+  for legacy compatibility. Remove Casper from wallet CLI output and
+  supported-chain descriptions; existing keystores need no migration.
+
+## Node 2.6.2 / MCP 2.7.2 — programmatic external EVM wallet
+
+- Reuse an embedding host's viem `WalletClient` for EVM signatures and
+  raw-transaction signing in the SDK and MCP server. Bind payment identity and
+  journal to the external account and selected chain; local Solana identity
+  and standard wallet CLI behavior remain unchanged.
+- Source integration requires publishing Node 2.6.2, then refreshing the MCP
+  dependency lock against that version before standalone release.
+
+## Node 2.6.1 — unreleased
+
+- Zero-dependency external wallet adapters: `eip1193Wallet` (MetaMask and any
+  generic EVM browser wallet) and `viemWalletClientWallet` (Privy, Crossmint,
+  ZeroDev, Coinbase Smart Wallet, custom transports) — both injectable via
+  `evmWallet`. Stacks on the unreleased 2.3.1 below. See
+  `docs/reviews/agent-wallet-ecosystem-review.md`.
+
+## Node 2.6.0 — unreleased
+
+- External EVM signer injection via the `evmWallet` option (`Agent` and
+  `AiFinPayAgent`): the exported `AgentWallet` interface pins `address`,
+  `signMessage` and `signTypedData` with no balance or send surface — any
+  viem `LocalAccount` satisfies it structurally. Stacks on the unreleased
+  2.3.0 Base support below. See
+  `docs/reviews/agent-wallet-ecosystem-review.md`.
+
 ## @aifinpay/deployments 1.1.4 — Arc mainnet + testnet (evm-contract@470b328)
 
 - Add Arc mainnet (5042, prod, disabled, USDC/EURC) and Arc testnet (5042002,

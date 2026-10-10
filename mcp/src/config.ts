@@ -1,4 +1,5 @@
 import { paymentStableAsset, solanaStableMint } from "@aifinpay/agent";
+import type { EvmWalletClient } from "@aifinpay/agent";
 import { payChain } from "./pay-chains.js";
 
 /** Runtime configuration loaded from env. */
@@ -11,6 +12,10 @@ export interface McpConfig {
   agentId?: string;
   walletHome?: string;
   walletPassphrase?: string;
+  /** Child wallet number from a seed or indexed wallet keystore. */
+  walletIndex?: number;
+  /** Programmatic external EVM signer supplied by an embedding MCP host. */
+  evmWalletClient?: EvmWalletClient;
   /** Dev environment. EVM payments stay live-only; Solana requires explicit devnet. */
   devMode?: boolean;
 
@@ -99,6 +104,7 @@ export function loadConfigFromEnv(): McpConfig {
     agentId: process.env.AIFINPAY_AGENT_ID || undefined,
     walletHome: process.env.AIFINPAY_HOME || undefined,
     walletPassphrase: process.env.AIFINPAY_WALLET_PASSPHRASE || undefined,
+    walletIndex: parseWalletIndex(process.env.AIFINPAY_WALLET_INDEX),
     agentSecretB58: process.env.AIFINPAY_AGENT_SECRET || undefined,
     baseUrl: process.env.AIFINPAY_BASE_URL || undefined,
     timeoutMs: process.env.AIFINPAY_TIMEOUT_MS ? Number(process.env.AIFINPAY_TIMEOUT_MS) : undefined,
@@ -107,6 +113,18 @@ export function loadConfigFromEnv(): McpConfig {
     gatewayPathMode: parseGatewayPathMode(process.env.AIFINPAY_GATEWAY_PATH_MODE),
     trustedHosts: splitList(process.env.AIFINPAY_TRUSTED_HOSTS),
   };
+}
+
+function parseWalletIndex(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined;
+  if (!/^(0|[1-9][0-9]*)$/.test(raw)) {
+    throw new Error("AIFINPAY_WALLET_INDEX must be a non-negative integer");
+  }
+  const index = Number(raw);
+  if (!Number.isSafeInteger(index) || index > 0xffffffff) {
+    throw new Error("AIFINPAY_WALLET_INDEX must be between 0 and 4294967295");
+  }
+  return index;
 }
 
 function parseSolanaNetwork(raw: string | undefined): "mainnet" | "devnet" | undefined {

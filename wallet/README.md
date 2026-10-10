@@ -1,7 +1,7 @@
 # @aifinpay/wallet
 
-Derive an AiFinPay agent wallet — Solana, EVM and Casper addresses (plus NEAR
-and Aptos) from one seed — with four tiny crypto dependencies and nothing else.
+Derive an AiFinPay agent wallet — Solana, EVM, NEAR and Aptos addresses from
+one seed — with four tiny crypto dependencies and nothing else.
 
 ```
 npx @aifinpay/wallet new
@@ -14,20 +14,20 @@ Your agent's addresses — the EVM one is the same on every EVM chain:
 
   EVM     0x…
   Solana  …
-  Casper  account-hash-…
 ```
 
 With `--plain` the first line reads `Created ~/.aifinpay/agent.json (mode 600).`
 instead.
 
-> **Using this wallet with `@aifinpay/mcp` or `@aifinpay/agent`? Create it with
-> `--legacy-solana`.** In the default (`standard`) mode this package derives
-> the Solana key from a domain-separated hash of the seed and stores that key
-> in `agent.json`. `@aifinpay/mcp` and `AiFinPayAgent.fromSolanaSecret` read
-> only that stored key and derive the EVM and Casper keys from it, so they run
-> the agent at **different EVM and Casper addresses** from the ones this CLI
-> prints. Only `legacy-solana` wallets derive the same addresses as the full
-> SDK. Do not fund a default-mode wallet for use with MCP.
+> **Using an unindexed wallet with `@aifinpay/mcp` or `@aifinpay/agent`?** In
+> the default (`standard`) mode this package derives the Solana key from a
+> domain-separated hash of the seed and stores that key in `agent.json`.
+> `@aifinpay/mcp` and `AiFinPayAgent.fromSolanaSecret` read only that stored
+> key and derive the EVM key from it, so they use a **different EVM address**
+> from the one this CLI prints. For an unindexed wallet, use
+> `--legacy-solana` for matching addresses. Indexed wallets retain the
+> recovery seed and index, so the wallet CLI, MCP and full SDK derive the same
+> addresses regardless of derivation mode.
 
 ## Why this exists
 
@@ -37,13 +37,14 @@ constrained agent sandbox that install does not merely bloat, it **fails**.
 
 Making a wallet needs none of that. This package has **four dependencies
 (~4.5 MB)** — `@noble/curves`, `@noble/hashes`, `bs58`, `tweetnacl` — and
-installs in seconds. In `legacy-solana` mode it derives the same Solana, EVM
-and Casper addresses as `@aifinpay/agent`'s `fromSeed`. The division of labour:
+installs in seconds. For an unindexed wallet, `legacy-solana` mode derives the
+same Solana and EVM addresses as `@aifinpay/agent`'s `fromSeed`; indexed
+wallets match the full SDK in either mode. The division of labour:
 
-|                                     | install  | use for                                          |
-| ----------------------------------- | -------- | ------------------------------------------------ |
-| `@aifinpay/wallet`                  | ~4.5 MB  | **create** a wallet, anywhere                    |
-| `@aifinpay/agent` / `@aifinpay/mcp` | ~157 MB  | **pay** — only when you actually settle on-chain |
+|                                     | install | use for                                          |
+| ----------------------------------- | ------- | ------------------------------------------------ |
+| `@aifinpay/wallet`                  | ~4.5 MB | **create** a wallet, anywhere                    |
+| `@aifinpay/agent` / `@aifinpay/mcp` | ~157 MB | **pay** — only when you actually settle on-chain |
 
 The keystore this writes is `~/.aifinpay/agent.json` (or
 `$AIFINPAY_HOME/agent.json`), the file `@aifinpay/mcp` reads. See the note
@@ -55,7 +56,9 @@ above about which derivation mode MCP can use.
 npx @aifinpay/wallet new                    create an encrypted keystore (refuses to overwrite an existing one)
 npx @aifinpay/wallet new --plain            create an unencrypted keystore (not recommended)
 npx @aifinpay/wallet new --legacy-solana    derive Solana from the raw seed (the full SDK's and MCP's derivation)
+npx @aifinpay/wallet new --index 0         create indexed wallet 0
 npx @aifinpay/wallet show                   print the addresses
+npx @aifinpay/wallet show --index 1         show child wallet 1 without changing the keystore
 npx @aifinpay/wallet export                 print the seed to back up
 npx @aifinpay/wallet --help                 usage
 ```
@@ -63,8 +66,34 @@ npx @aifinpay/wallet --help                 usage
 A command is required: `npx @aifinpay/wallet` on its own exits with
 "command required".
 
+### Indexed wallets
+
+Pass the same 32-byte recovery seed with an index to derive deterministic
+siblings. Index `0` is the first wallet; `1`, `2`, and so on derive distinct
+children. Each chain derives from its own versioned domain: for example,
+`EVM = SHA-256("aifinpay:evm:v1\0" || decimalIndex || recoverySeed)` and
+`Solana = Ed25519(SHA-256("aifinpay:solana:v1\0" || decimalIndex || recoverySeed))`.
+The index is decimal UTF-8 text immediately after the domain's NUL separator.
+Indices are integers from 0 through 4294967295. Omitting the index preserves
+the existing derivation exactly.
+
+```ts
+import { walletFromSeed } from "@aifinpay/wallet";
+
+const wallet0 = walletFromSeed(recoverySeed, { index: 0 });
+const wallet1 = walletFromSeed(recoverySeed, { index: 1 });
+```
+
+The CLI stores the recovery seed, derivation mode, and selected index as
+optional keystore metadata. `show --index N` derives another child from that
+same stored recovery seed without changing the keystore. MCP reads the stored
+index by default, or `AIFINPAY_WALLET_INDEX` can select another child from the
+same seed. Back up both the recovery seed and its index; `export` prints the
+seed only.
+
 **Encrypted keystore (default).** New wallets are encrypted with
 scrypt-aes-256-gcm.
+
 - If `AIFINPAY_WALLET_PASSPHRASE` is set, it is the passphrase. It must be at
   least 16 characters and contain a lower-case letter, an upper-case letter, a
   digit and one of `!@$.^*_+=-`.
@@ -73,15 +102,14 @@ scrypt-aes-256-gcm.
   does not prompt.
 - `show` needs `AIFINPAY_WALLET_PASSPHRASE` in the environment to open an
   encrypted keystore; the CLI does not read `.env` itself. `@aifinpay/mcp`
-  needs the same variable in its `env`.
+  needs the same variable in its `env`. The seed itself is stored encrypted (`seedEnc`) — no plaintext key material is written to the keystore.
 
-> **Known issues** (recorded as failing tests in AiFinPay/sdk#96):
-> - The encrypted keystore currently also stores the seed (`seedHex`) in
->   plaintext next to the ciphertext, and `export` prints it without the
->   passphrase. Treat `agent.json` as a plaintext secret until this is fixed.
-> - About 3–4% of generated passphrases do not meet the rule above, and `show`
->   then refuses them. Setting your own `AIFINPAY_WALLET_PASSPHRASE` avoids it.
-> - `show` cannot read a keystore written by `npx @aifinpay/mcp init`.
+> The bugs from the coverage pass (AiFinPay/sdk#96) are fixed and pinned by
+> tests: the seed is stored only encrypted, `export` of an encrypted keystore
+> requires the passphrase, generated passphrases always pass validation, and
+> `show`/`export` read a keystore written by `npx @aifinpay/mcp init`. One
+> intentional difference remains: an unindexed default-mode wallet's addresses
+> are not the ones MCP would derive (see the note at the top).
 
 **Plain keystore.** `--plain` writes an unencrypted keystore, protected only by
 file mode 600.
@@ -117,7 +145,6 @@ import { deriveWallet, newWallet, walletFromSeed } from "@aifinpay/wallet";
 const w = await newWallet();
 w.evmAddress; // 0x… (same on every EVM chain)
 w.solanaAddress; // base58
-w.casperAddress; // account-hash-…
 w.nearAddress; // hex Ed25519 public key
 w.aptosAddress; // 0x… authentication key
 w.keys.seedHex; // 32-byte seed — THE thing to back up
@@ -127,12 +154,22 @@ w.keys.solanaSecretKeyB58; // tweetnacl 64-byte secret, base58
 deriveWallet(w.keys.seedHex); // same seed → same wallet, deterministic
 ```
 
+### Deprecated Casper compatibility
+
+Casper is no longer supported and is not printed by `new` or `show`.
+`DerivationDomain.CASPER`, `casperAddress`, `casperPublicKey` and
+`keys.casperSecretSeedHex` remain available with `@deprecated` annotations.
+Their values and derivation are unchanged in both modes, so existing consumers
+and legacy key recovery continue to work. No keystore migration is required.
+
 ### Derivation modes
 
 `standard` (the default) derives the Solana key from
 `SHA-256("aifinpay:solana:v1\0" || seed)`. `legacy-solana` derives it from the
-raw seed, as `@aifinpay/agent` and `@aifinpay/mcp` do. EVM, Casper, NEAR and
-Aptos are the same in both modes.
+raw seed for unindexed wallets. Indexed wallets derive each chain key from its
+own domain, index and recovery seed in either mode, matching
+`@aifinpay/agent` and `@aifinpay/mcp`. EVM, NEAR and Aptos are the same in
+both modes, as is the deprecated Casper material.
 
 ```ts
 import { newWallet, walletFromSeed } from "@aifinpay/wallet";

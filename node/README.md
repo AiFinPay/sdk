@@ -1,6 +1,6 @@
 # @aifinpay/agent (Node / TypeScript)
 
-Version **2.5.0** (source candidate) extends the existing signed AIFP-1 `fetchPaid`
+Version **2.5.2** (source candidate) extends the existing signed AIFP-1 `fetchPaid`
 flow to Polygon, Base, Optimism, Arbitrum, Avalanche, BNB, Unichain, XRPL EVM and
 Robinhood. Polygon remains the default; select another network explicitly with
 `v14.chain`. A descriptor is client capability, not production readiness: the
@@ -127,6 +127,11 @@ that separate key as well to recover the imported wallet. Loading a wallet
 does not by itself pay for anything; paid execution goes through `fetchPaid`
 and its checks.
 
+`AiFinPayAgent.fromSeed(seed, { derivationIndex })` deterministically selects a
+child wallet. Each chain uses its own versioned domain, followed by the
+decimal UTF-8 index after the domain's NUL separator and then the recovery
+seed. Omitting `derivationIndex` preserves existing addresses.
+
 `AiFinPayAgent.new()` and `Agent.new()` intentionally create a fresh ephemeral
 wallet each time. They do not load existing environment variables or keystores
 and do not persist their generated keys. Use them only when you deliberately
@@ -144,6 +149,50 @@ const agent = await Agent.fromKeypairFile("./agent-wallet.json");
 // from base58 secret string (works in browser too)
 const agent2 = Agent.fromSecretB58("3RvZm7Gw...");
 ```
+
+## Inject an external EVM signer
+
+`Agent.new()` and `AiFinPayAgent.fromSeed()` derive the EVM identity from the
+agent seed. To keep the key outside the SDK — an in-house signer, a
+hardware-backed key, or a future vendor adapter — inject any wallet matching
+the `AgentWallet` interface via `evmWallet` (any viem `LocalAccount`
+qualifies structurally):
+
+```ts
+import { Agent, evmPrivateKeyWallet } from "@aifinpay/agent";
+
+// self-custodial default: the same key `evmPrivateKey` builds internally
+const agent = Agent.new({ evmWallet: evmPrivateKeyWallet("0x…") });
+```
+
+Two zero-dependency adapters cover the rest of the wallet market through the
+same interface:
+
+```ts
+import { eip1193Wallet, viemWalletClientWallet } from "@aifinpay/agent";
+
+// MetaMask and any generic EVM browser wallet (async: reads the address
+// via eth_requestAccounts)
+const injected = Agent.new({ evmWallet: await eip1193Wallet(window.ethereum) });
+
+// Privy, Crossmint, ZeroDev, Coinbase Smart Wallet, custom transports —
+// anything that hands out a viem WalletClient with an account
+const embedded = Agent.new({ evmWallet: viemWalletClientWallet(walletClient) });
+```
+
+Server-side vendor SDKs (Coinbase CDP server wallets, Circle) are out of
+scope: they need vendor API credentials, which the SDK must not hold.
+
+`AgentWallet` is `address` plus `signMessage`/`signTypedData`; it is sufficient
+for message-based x402 authorization. `AiFinPayAgent` also accepts
+`evmWalletClient` for EVM on-chain flows, using that exact viem client for
+signing. Its account must be a viem `LocalAccount` with `signTransaction`:
+v1.4 signs and journals exact raw bytes before the SDK broadcasts them through
+the independently selected chain RPC for recovery. JSON-RPC/send-only and
+smart-account clients are refused for this flow. The client must be configured
+for the selected chain. This option cannot be combined with `evmWallet` or
+`evmPrivateKey`. The MCP programmatic integration uses the same option; its
+local identity continues to provide Solana identity and signing.
 
 ## How x402 auth works under the hood
 

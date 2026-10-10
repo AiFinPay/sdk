@@ -1,6 +1,6 @@
 # @aifinpay/wallet — agent guide
 
-Light agent wallet (Solana + EVM + Casper) with 4 tiny crypto deps — no viem, no @solana/web3.js. Keystore: `~/.aifinpay/agent.json` (mode 600), shared with `@aifinpay/mcp`.
+Light agent wallet (Solana + EVM + NEAR + Aptos) with 4 tiny crypto deps — no viem, no @solana/web3.js. Casper is deprecated: preserve its derivation and API fields for legacy compatibility, but do not advertise it or print it in the CLI. Keystore: `~/.aifinpay/agent.json` (mode 600), shared with `@aifinpay/mcp`.
 
 ## Scope
 

@@ -1,7 +1,32 @@
 # Changelog
 
-## 2.6.0 — reporting v2 source candidate
+## 2.6.3 — per-domain indexed wallet derivation
 
+- Add optional `derivationIndex` to `AiFinPayAgent.fromSeed`. Indexed Solana,
+  EVM and Casper keys append the decimal index after their respective domain
+  NUL separator before hashing; calls without an index keep their existing keys.
+
+## 2.6.2 — programmatic external EVM transaction signer
+
+- Accept a viem `WalletClient` in `AiFinPayAgent` and route EVM transaction
+  signing through its `LocalAccount`; v1.4 persists signed bytes and broadcasts
+  them through the selected RPC. JSON-RPC/send-only accounts are refused.
+- Require a valid account, signing/transaction actions, and a chain matching
+  the active payment rail.
+- Export the `EvmWalletClient` host type. No provider-specific dependency or
+  browser runtime is added.
+
+## 2.6.1
+
+- External wallet adapters with no new dependencies: `eip1193Wallet` wraps
+  any EIP-1193 provider (MetaMask, Coinbase Wallet, Rabby, WalletConnect —
+  address via `eth_requestAccounts`, messages via `personal_sign`, typed
+  data via `eth_signTypedData_v4`), and `viemWalletClientWallet` wraps any
+  viem `WalletClient` with an account (Privy, Crossmint, ZeroDev, Coinbase
+  Smart Wallet, custom transports). Both satisfy the `AgentWallet` interface
+  and inject via `evmWallet`. Server-side vendor SDKs (CDP server wallets,
+  Circle) stay out of scope: they need vendor credentials the SDK must not
+  hold. Stacks on the unreleased 2.3.1 below.
 - Add optional call-scoped reportingToken to AIFP-1 quote negotiation and
   Agent.quoteSplit. Fixed canonical first-party quote endpoints only, header
   transport with redirects stopped; malformed tokens lose attribution.
@@ -9,6 +34,16 @@
   semantics. Tokens never enter payment authorization, budget or recovery
   records. No dependency changes, network activation or publication.
 
+
+## 2.6.0
+
+- Inject an external EVM signer with the `evmWallet` option (`Agent` and
+  `AiFinPayAgent`): the `AgentWallet` interface pins `address`, `signMessage`
+  and `signTypedData` with no balance or send surface, so any viem
+  `LocalAccount` satisfies it structurally and the SDK never has to hold the
+  key. `evmPrivateKeyWallet` is the self-custodial EVM adapter, identical to
+  the key `evmPrivateKey` already built internally. Stacks on the unreleased
+  2.3.0 Base support below.
 
 ## 2.5.1 — deployment registry provenance refresh
 

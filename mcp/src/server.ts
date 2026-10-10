@@ -1,4 +1,4 @@
-import { AiFinPayAgent } from "@aifinpay/agent";
+import { AiFinPayAgent, PAYMENT_CHAINS } from "@aifinpay/agent";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
@@ -31,6 +31,7 @@ import {
   runSettlementCasper,
 } from "./tools/production-control.js";
 import { deploymentInfoTool, runDeploymentInfo } from "./tools/supported-chains.js";
+import { payChain } from "./pay-chains.js";
 
 // Every backend/public request made by this server goes through safeFetch.
 // Public deployments never lift private-network protection; local development
@@ -46,6 +47,7 @@ const safeFetch = makeSafeFetch({
  * family-specific v1.4 payable_fetch path; legacy signing tools stay retired. */
 export async function createServer(config: McpConfig = {}) {
   const log = config.logFn ?? defaultLog;
+  assertInjectedWalletChain(config);
 
   let identitySource = "ephemeral";
   async function configuredAgent() {
@@ -59,7 +61,9 @@ export async function createServer(config: McpConfig = {}) {
       fetchImpl: safeFetch,
       baseUrl: config.baseUrl,
       timeoutMs: config.timeoutMs,
+      ...(identity.derivationIndex === undefined ? {} : { derivationIndex: identity.derivationIndex }),
       ...(config.payChain === "solana" && config.rpcUrl ? { solanaRpc: config.rpcUrl } : {}),
+      ...(config.evmWalletClient ? { evmWalletClient: config.evmWalletClient } : {}),
       ...(rpc ? { evmRpcUrls: rpc, ...(rpc.polygon ? { polygonRpc: rpc.polygon } : {}) } : {}),
     };
     const loaded = identity.seedHash
@@ -231,6 +235,31 @@ export async function createServer(config: McpConfig = {}) {
       return agent;
     },
   };
+}
+
+function assertInjectedWalletChain(config: McpConfig): void {
+  if (!config.evmWalletClient || !config.paymentsEnabled) return;
+  const selected = payChain(config.payChain);
+  if (selected.name === "solana") {
+    throw new Error("An injected EVM wallet client cannot be used with AIFINPAY_PAY_CHAIN=solana");
+  }
+  const wallet = config.evmWalletClient;
+  if (!wallet.account || wallet.account.type !== "local" || typeof wallet.account.signTransaction !== "function") {
+    throw new Error(
+      "The injected EVM wallet client must contain a local account that can sign raw transactions; JSON-RPC send-only accounts are unsupported."
+    );
+  }
+  if (
+    typeof wallet.getChainId !== "function" ||
+    typeof wallet.writeContract !== "function" ||
+    typeof wallet.sendTransaction !== "function"
+  ) {
+    throw new Error("The injected EVM wallet client must support on-chain transaction submission");
+  }
+  const expectedChainId = PAYMENT_CHAINS[selected.name].chainId;
+  if (!wallet.chain || wallet.chain.id !== expectedChainId) {
+    throw new Error(`The injected EVM wallet client must be configured for ${selected.name} (${expectedChainId})`);
+  }
 }
 
 export interface ToolContext {
