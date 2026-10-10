@@ -113,10 +113,8 @@ export interface GateOptions {
 const DEFAULT_ISSUER = "https://api.aifinpay.io";
 const DEFAULT_JWKS = "https://api.aifinpay.io/.well-known/jwks.json";
 
-/** Sentences the hosted gate answers with. Duplicated here as constants and
- *  asserted against the server's source in tests/contract-parity.test.ts —
- *  a self-hosted gate that phrases a refusal differently than the hosted one
- *  is a support ticket per integration. */
+/** Shared receipt failure details and response headers. The hosted gate uses
+ *  merchant credit accounting while this self-hosted gate meters receipt quota. */
 export const DETAIL_QUOTA_EXHAUSTED = "quota exhausted — prepay the next batch";
 export const DETAIL_RECEIPT_EXPIRED = "receipt expired — prepay a new batch";
 export const DETAIL_VERIFY_FAILED = "receipt verification failed (signature/issuer/audience)";

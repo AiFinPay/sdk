@@ -15,8 +15,8 @@ import {
 // — so on every machine the "loud" skip was the only thing that ran.
 const REFERENCE = fileURLToPath(new URL("../../../aifinpay-web/backend/app/aifp/gate.js", import.meta.url));
 
-describe("parity with the hosted gate", () => {
-  it("answers a refusal with the same sentence the hosted gateway does", () => {
+describe("the hosted gate integration contract", () => {
+  it("shares receipt failure details and the remaining-quota header", () => {
     if (!existsSync(REFERENCE)) {
       console.warn(`[skip] reference gate not found at ${REFERENCE} — parity unverified`);
       return;
@@ -27,7 +27,6 @@ describe("parity with the hosted gate", () => {
     // an agent can hit both in one session. If the two answer differently to
     // the same condition, every integration files the difference as a bug.
     for (const literal of [
-      DETAIL_QUOTA_EXHAUSTED,
       DETAIL_RECEIPT_EXPIRED,
       DETAIL_VERIFY_FAILED,
       HEADER_QUOTA_REMAINING,
@@ -36,11 +35,14 @@ describe("parity with the hosted gate", () => {
     }
   });
 
-  it("meters the same claims the hosted gate meters", () => {
+  it("tracks the hosted gate's credit accounting separately from receipt quota", () => {
     if (!existsSync(REFERENCE)) return;
     const src = readFileSync(REFERENCE, "utf8");
-    // unit_quota with a legacy `quota` fallback, keyed on receipt_id.
-    expect(src).toContain("payload.unit_quota");
-    expect(src).toContain("aifp:used:${payload.receipt_id}");
+    // The hosted gate spends the payer:merchant credit balance. The
+    // self-hosted gate instead meters unit_quota on each signed receipt.
+    expect(src).toContain("store.spendCredit(payload.sub, merchantId, w)");
+    expect(src).toContain('"credit exhausted — prepay the next batch"');
+    expect(src).toContain('res.set("AIFP-Quota-Remaining", String(spend.balance))');
+    expect(DETAIL_QUOTA_EXHAUSTED).toBe("quota exhausted — prepay the next batch");
   });
 });

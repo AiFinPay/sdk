@@ -2,11 +2,11 @@
 // Python one (docs/sdk-parity.md). None of them touches amounts, signing or
 // key derivation.
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
 import { AiFinPayAgent, SettlementClient, SettlementHttpError } from "../src/index.js";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -90,6 +90,7 @@ describe("type export: AuthRequestContext", () => {
     const dir = mkdtempSync(join(tmpdir(), "aifp-dts-"));
     try {
       const file = join(dir, "consumer.ts");
+      const config = join(dir, "tsconfig.json");
       writeFileSync(
         file,
         `import type { AuthRequestContext, Facilitator } from ${JSON.stringify(dist)};
@@ -101,20 +102,26 @@ export const custom: Facilitator = {
 };
 `
       );
-      const program = ts.createProgram([file], {
-        noEmit: true,
-        strict: true,
-        skipLibCheck: true,
-        target: ts.ScriptTarget.ES2022,
-        module: ts.ModuleKind.NodeNext,
-        moduleResolution: ts.ModuleResolutionKind.NodeNext,
-        types: [],
-      });
-      const diagnostics = ts
-        .getPreEmitDiagnostics(program)
-        .filter((d) => d.file?.fileName === file)
-        .map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
-      expect(diagnostics).toEqual([]);
+      writeFileSync(
+        config,
+        JSON.stringify({
+          files: [file],
+          compilerOptions: {
+            noEmit: true,
+            strict: true,
+            skipLibCheck: true,
+            target: "ES2022",
+            module: "NodeNext",
+            moduleResolution: "NodeNext",
+            types: [],
+          },
+        })
+      );
+      execFileSync(
+        process.execPath,
+        [fileURLToPath(new URL("../node_modules/typescript/bin/tsc", import.meta.url)), "--project", config],
+        { encoding: "utf8" }
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
