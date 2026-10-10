@@ -132,8 +132,14 @@ export interface GateErrorBody {
 }
 
 export type GateResult =
-  | { ok: true; status: 200; headers: Record<string, string>; aifp: AifpContext }
-  | { ok: false; status: 402 | 403 | 503; headers: Record<string, string>; body: GateErrorBody };
+  | { ok: true; status: 200; headers: Record<string, string>; aifp: AifpContext; reportingResource?: string }
+  | {
+      ok: false;
+      status: 402 | 403 | 503;
+      headers: Record<string, string>;
+      body: GateErrorBody;
+      reportingResource?: string;
+    };
 
 /** What the core needs from a request. Deliberately two fields: it is the whole
  *  reason the decision logic can be unit-tested without a server, and the whole
@@ -176,3 +182,71 @@ export interface MerchantStats {
 export interface SettlementRecord {
   [k: string]: unknown;
 }
+
+/** Frozen reporting.v2.20261009 wire types. Observations confer no authority. */
+export type UUID = string;
+export type UTC = string;
+export type Mode = "live" | "test" | "internal";
+export type Channel = "browser" | "api" | "unknown";
+export type Consent = "granted" | "denied" | "unknown";
+export type ResponseOutcome = "success" | "redirect" | "error" | "abort";
+export type ServerObservation = "access_challenged" | "access_admitted" | "resource_response_completed";
+export type BrowserObservation = "paywall_viewed" | "payment_link_opened" | "merchant_onboarding_opened";
+export type ReportingReason =
+  "receipt_missing" | "receipt_rejected" | "quota_exhausted" | "upstream_error" | "client_abort" | "unknown";
+export type ReportingContext = { channel: Channel; consent: Consent; client_id?: string; reporting_token?: string };
+export type FlowRequest = {
+  version: 2;
+  request_id: string;
+  resource: string;
+  channel: Channel;
+  consent: Consent;
+  client_id?: string;
+};
+export type FlowResponse = {
+  version: 2;
+  flow_id: string;
+  reporting_token: string;
+  expires_at: string;
+  mode: Mode;
+  resource: string | null;
+};
+export type ReportedEvent = ReportingContext & {
+  id: string;
+  name: ServerObservation;
+  resource: string;
+  at: string;
+  outcome?: ResponseOutcome;
+  status?: number;
+  reason?: ReportingReason;
+};
+export type Batch = { version: 2; events: ReportedEvent[] };
+export type BrowserEvent = { version: 2; id: string; name: BrowserObservation; at: string };
+export type HealthError =
+  "none" | "network" | "timeout" | "auth" | "rejected" | "storage" | "queue_full" | "retry_exhausted";
+export type HealthSample = {
+  version: 2;
+  producer_id: string;
+  sequence: string;
+  at: string;
+  supported: ServerObservation[];
+  pending: number;
+  dropped: string;
+  retries: string;
+  last_error: HealthError;
+};
+export type Ack = { version: 2; accepted: number; duplicates: number; received_at: string };
+/** Success body of the health endpoint; `duplicate` is true when the sample was already stored. */
+export type HealthAck = { version: 2; duplicate: boolean };
+export type ErrorResponse = {
+  version: 2;
+  error:
+    | "invalid_request"
+    | "invalid_reporting_token"
+    | "event_conflict"
+    | "rate_limited"
+    | "reporting_unavailable"
+    | "snapshot_expired"
+    | "report_too_large";
+  retryable: boolean;
+};

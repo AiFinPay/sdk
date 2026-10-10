@@ -45,6 +45,7 @@ from eth_account.messages import encode_defunct
 from eth_utils import keccak
 
 from ._v14_deployments import V14_DEPLOYMENTS
+from .client import _reporting_headers
 from .payment_chains import PAYMENT_CHAINS, pinned_token_decimals
 from .settlement_v14 import (
     SettlementConfirmationPending,
@@ -1313,6 +1314,7 @@ def aifp1_fetch(
     environment: _OptionalStr = None,
     max_fee_lamports: _OptionalInt = None,
     wallet_identity: _OptionalStr = None,
+    reporting_token: _OptionalStr = None,
 ) -> requests.Response:
     """GET ``url``; on an AIFP-1 402 buy one batch and retry with its receipt.
 
@@ -1469,13 +1471,17 @@ def aifp1_fetch(
     if admission and "quote_json" in admission:
         quote = json.loads(admission["quote_json"])
     else:
+        quote_url = f"{api_base.rstrip('/')}/v1/quote"
+        quote_headers = {**({"content-type": "application/json"} if admission else {}),
+                         **_reporting_headers(reporting_token, quote_url, api_base.rstrip('/'))}
         r = session.post(
-            f"{api_base.rstrip('/')}/v1/quote",
+            quote_url,
             **(
-                {"data": admission["request_body"], "headers": {"content-type": "application/json"}}
+                {"data": admission["request_body"]}
                 if admission
                 else {"json": quote_body}
             ),
+            **({"headers": quote_headers} if quote_headers else {}),
             timeout=15,
             allow_redirects=False,
         )

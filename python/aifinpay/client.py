@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -26,6 +27,19 @@ from .facilitators.base import canonical_origin
 # 301 may re-send a POST as a GET and lose the body.
 DEFAULT_BASE_URL = "https://aifinpay.io"
 DEFAULT_TIMEOUT = 30  # seconds
+
+
+def _reporting_headers(token: Any, url: str, api_base: str) -> dict[str, str]:
+    """Optional correlation only to the intended canonical first-party quote.
+
+    Malformed/foreign options lose attribution without changing a financial
+    decision. Never put the token in session defaults, auth, or recovery data.
+    """
+    if (isinstance(token, str) and re.fullmatch(r"[A-Za-z0-9_-]{43}", token)
+            and api_base in ("https://api.aifinpay.io", "https://aifinpay.io")
+            and url in (api_base + "/v1/quote", api_base + "/api/b2b/quote-split")):
+        return {"AIFP-Reporting-Token": token}
+    return {}
 
 
 def _native_body_digest(body: Any) -> str:
@@ -189,7 +203,7 @@ class Agent:
 
     # ── Fee-on-top split (b2b_pay_with_split / AiFinPaySplitter) ──────────
 
-    def quote_split(self, *, chain: str, merchant_amount: int) -> dict[str, Any]:
+    def quote_split(self, *, chain: str, merchant_amount: int, reporting_token: [str] = None) -> dict[str, Any]:
         """Pure-view fee-on-top breakdown — no payment, no auth.
 
         Returns merchant amount, treasury fee, IP creator fee, and total —
@@ -198,10 +212,13 @@ class Agent:
         if chain not in ("solana", "polygon"):
             raise AiFinPayError(f"chain must be 'solana' or 'polygon', got {chain!r}")
         param = "merchant_amount_lamports" if chain == "solana" else "merchant_amount_wei"
+        endpoint = f"{self.base_url}/api/b2b/quote-split"
+        correlation = _reporting_headers(reporting_token, endpoint, self.base_url)
         r = self._session.get(
-            f"{self.base_url}/api/b2b/quote-split",
+            endpoint,
             params={param: str(merchant_amount)},
             timeout=self.timeout,
+            **({"headers": correlation, "allow_redirects": False} if correlation else {}),
         )
         r.raise_for_status()
         return r.json()
@@ -269,6 +286,7 @@ class Agent:
         method: str = "GET",
         max_retries: int = 1,
         options: [PayOptions] = None,
+        reporting_token: [str] = None,
         **request_kwargs,
     ) -> requests.Response:
         """HTTP request that auto-handles x402 across multiple facilitators.
@@ -291,7 +309,10 @@ class Agent:
             X402Error: still 402 after ``max_retries`` retries.
         """
         opts = options or PayOptions()
-        base_headers = request_kwargs.pop("headers", {}) or {}
+        base_headers = {k: v for k, v in (request_kwargs.pop("headers", {}) or {}).items()
+                        if k.lower() != "aifp-reporting-token"}
+        extra_headers = {k: v for k, v in opts.extra_headers.items() if k.lower() != "aifp-reporting-token"}
+        reporting_headers = _reporting_headers(reporting_token, url, self.base_url) if method.upper() == "POST" else {}
         try:
             target = urlsplit(url)
             if not target.scheme or not target.netloc:
@@ -308,7 +329,7 @@ class Agent:
         resp = self._session.request(
             method,
             url,
-            headers={**base_headers, **opts.extra_headers},
+            headers={**base_headers, **extra_headers, **reporting_headers},
             timeout=self.timeout,
             allow_redirects=False,
             **request_kwargs,
@@ -341,7 +362,7 @@ class Agent:
             merged_headers = {
                 **base_headers,
                 **auth.get("headers", {}),
-                **opts.extra_headers,
+                **extra_headers,
             }
             resp = self._session.request(
                 method,

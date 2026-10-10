@@ -21,6 +21,7 @@ import { buildChallenge } from "./challenge.js";
 import { scopeCovers } from "./scope.js";
 import { TIER_WEIGHTS, weightForTier } from "./pricing.js";
 import type { ResourceRegistry } from "./registry.js";
+import type { GateReporterV2, ReportingContext } from "./reporter.js";
 
 export interface GateOptions {
   /** "mrch_…" — must equal the receipt's `aud`, which is what stops a receipt
@@ -65,6 +66,14 @@ export interface GateOptions {
   onStoreError?: "closed" | "open";
   /** Observability hook. Never allowed to throw into the request. */
   onEvent?: (e: GateEvent) => void;
+  /** Explicit v2 adapter observations; core decisions do not claim delivery.
+   * Choose either the legacy producer hook or this v2 producer. */
+  reporting?: {
+    version: 2;
+    reporter: GateReporterV2;
+    /** Explicit unverified caller/consent context; never inferred from identity headers. */
+    context?: (req: GateRequest) => ReportingContext;
+  };
   /** Last-word veto, evaluated after the receipt is verified and before any
    *  unit is metered — so a refused call costs the agent nothing. Use it for
    *  your own business rules (an abuse list, a maintenance window). Returning
@@ -116,6 +125,12 @@ export const HEADER_QUOTA_REMAINING = "AIFP-Quota-Remaining";
 export function createGate(options: GateOptions): (req: GateRequest) => Promise<GateResult> {
   const merchantId = options.merchantId;
   if (!merchantId) throw new Error("createGate: merchantId is required");
+  if (options.reporting && (options.reporting.version !== 2 || options.reporting.reporter.version !== 2)) {
+    throw new Error("createGate: reporting requires explicit version2 producer");
+  }
+  if (options.reporting && options.onEvent) {
+    throw new Error("createGate: select reporting v2 or onEvent; producer dual-send is not supported");
+  }
 
   const tier: Tier = options.tier ?? "standard";
   // A typo such as "Premium" would otherwise price the mount as standard: a
@@ -182,7 +197,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     };
   };
 
-  return async function gate(req: GateRequest): Promise<GateResult> {
+  const decide = async function gate(req: GateRequest, resolved?: (resource: string) => void): Promise<GateResult> {
     const path = req.path;
 
     // ── 1. What is this path, and what does it cost? ──────────────────────
@@ -215,6 +230,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     }
 
     const resource = matched ? matched.route_pattern : (options.resource ?? path);
+    if (matched || options.resource) resolved?.(resource);
     // One source of truth for "what does this call cost": the tier the weight
     // is derived from is the tier the 402 advertises.
     const effectiveTier: Tier = matched ? ((matched.tier as Tier) ?? tier) : tier;
@@ -506,6 +522,29 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
         body: { error: "AIFP-503-METER", detail: "quota store unavailable — retry shortly" },
       };
     }
+  };
+  return async (req) => {
+    let registeredResource: string | undefined;
+    const result = await decide(
+      req,
+      options.reporting
+        ? (resource) => {
+            registeredResource = resource;
+          }
+        : undefined
+    );
+    // Only explicitly registered patterns participate; a fallback request path
+    // can contain caller identifiers. The adapter observes actual HTTP events.
+    if (options.reporting && registeredResource) {
+      const resource = result.ok ? result.aifp.resource : result.body.resource;
+      if (
+        resource === registeredResource &&
+        ((result.ok && result.aifp.mode === "paid") || (!result.ok && result.status === 402))
+      ) {
+        return { ...result, reportingResource: resource };
+      }
+    }
+    return result;
   };
 }
 

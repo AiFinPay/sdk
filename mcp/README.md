@@ -4,7 +4,9 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Version **2.7.0** is prepared in this checkout, requiring agent2.5.0 and canonical skill2.8.0.
+Version **2.8.0** is prepared in this checkout, targeting agent2.6.0, Python2.5.1
+and canonical skill2.9.0. The separate canonical producer's final immutable
+source pin is a required handoff, not a moving-branch substitution.
 The published baseline checked2026-10-04 was MCP2.5.0. Package publication and
 real registry dependency/lock refresh remain release gates; a source-cohort
 build does not prove those steps. Owner-enabled v1.4 purchases with `payable_fetch` are
@@ -247,7 +249,7 @@ snapshot. Verify `agent_address` against the wallet you intend to use.
 | `AIFINPAY_MAX_USD`           | —                     | Per-payment USD cap for `payable_fetch`; required when payments are enabled.          |
 | `AIFINPAY_GATEWAY_ORIGINS`   | —                     | Comma-separated exact HTTPS origins the agent may pay; required with payments.        |
 | `AIFINPAY_GATEWAY_PATH_MODE` | `gateway`             | Use `gateway` for merchant-slug identity or `direct` for full request-path identity.  |
-| `AIFINPAY_PAY_CHAIN`         | `polygon`             | Owner-selected payment chain; see the2.7.0 source capability list.                    |
+| `AIFINPAY_PAY_CHAIN`         | `polygon`             | Owner-selected payment chain; see the2.8.0 source capability list.                    |
 | `AIFINPAY_MAX_GAS`           | —                     | Gas cap per payment in the pay chain's native currency (POL, ETH, AVAX, BNB, XRP).    |
 | `AIFINPAY_RPC_URL`           | chain's public RPC    | HTTPS RPC for the pay chain.                                                          |
 | `AIFINPAY_CLAIM_ORIGINS`     | AiFinPay dashboards   | Exact origins `agent_claim_self` may link the agent to.                               |
@@ -297,14 +299,14 @@ executor; this MCP does not expose Amoy paid receipt purchases.
 
 MIT.
 
-## Additional EVM networks in the 2.7.0 source candidate
+## Additional EVM networks in the 2.8.0 source candidate
 
 Owner `AIFINPAY_PAY_CHAIN` accepts polygon, base, optimism, arbitrum, avalanche,
 bnb, unichain, xrplevm and robinhood. `AIFINPAY_MAX_GAS` is in the selected native
 POL/ETH/AVAX/BNB/XRP currency; the legacy POL cap applies only on Polygon. Assets
 must be pinned for that chain, including BNB 18-decimal USDC/USDT and Robinhood
 18-decimal USDe/6-decimal USDG. XRPL EVM has native XRP only. Metadata comes from
-agent 2.5.0; the backend must still authorize and serve that merchant/network.
+agent 2.6.0; the backend must still authorize and serve that merchant/network.
 Source support does not activate networks in production. Pending journals retain
 the original chain and are recovered without another settlement. A legacy
 missing-chain journal is adopted only when the owner-configured chain and the
@@ -312,13 +314,14 @@ actual signed transaction's chain ID, payer, pinned target and exact call agree.
 Insufficient evidence requires manual receipt reconciliation. A later quote
 expiry does not invalidate receipt recovery for an existing payment.
 
-Release order: publish reviewed canonical skill2.8.0 and agent2.5.0, refresh MCP
+Release order after final release gates: publish reviewed canonical skill2.9.0 and agent2.6.0, refresh MCP
 dependencies and lock from those real registry releases, pass standalone MCP
-CI, then publish MCP2.7.0. This candidate is tested against fresh source-packed
-agent2.5.0 and skill2.8.0. The existing registry entries remain until publication;
+CI, then publish MCP2.8.0. This candidate requires fresh source-packed
+agent2.6.0 and skill2.9.0, plus the exact Python2.5.1 release target. The existing
+registry agent2.5.0 / skill2.8.0 entries remain until publication;
 no npm integrity/resolution is fabricated. An old2.3.x agent cannot build the
 new descriptor/helper imports, and old skill2.6.0 cannot satisfy the exact
-release-target guard. Hosted source CI uses `scripts/check-mcp-source-cohort.mjs`: a byte-preserving fixed registry bootstrap and genuine same-commit Node plus fully pinned canonical skill packages in disposable directories. Exact package bytes, versions, bundled skill and full tests must pass; the registry publication guard must still refuse this source cohort. Standalone release CI requires the refreshed real registry lock. Never publish the candidate with the old registry dependency lock.
+release-target guard. Hosted source CI uses `scripts/check-mcp-source-cohort.mjs`: a byte-preserving patched registry bootstrap and genuine same-commit Node plus fully pinned canonical skill packages in disposable directories. The Node producer's authoritative source lock seeds the genuine runtime; it is separate resolution evidence, since npm excludes it from the tarball. Exact package bytes, versions, bundled skill, high/critical audits and full tests must pass; the registry publication guard must still refuse a source cohort lacking a matching real registry lock. Standalone release CI requires the refreshed real registry lock. Never publish the candidate with the old registry dependency lock.
 
 Use one shared local filesystem for a wallet's ledger/journal and reconcile
 pending transactions before downgrading. Node 2.4 reservations never expire for

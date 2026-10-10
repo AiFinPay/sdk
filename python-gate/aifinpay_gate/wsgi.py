@@ -8,6 +8,7 @@ Paid calls reach the app with the metering context in ``environ["aifp"]``
 """
 
 import json
+import threading
 from typing import Any, Dict, Optional
 
 from .core import Gate
@@ -37,6 +38,48 @@ def _json(start_response, status: int, headers: Dict[str, str], body: Any):
     return [raw]
 
 
+class _ReportingIterable:
+    """Observe exhaustion, early close and iteration exceptions exactly once.
+
+    WSGI exposes delivery only through iteration/write/close, not socket ACK.
+    Keep underlying close available even if the server closes before first next.
+    """
+    def __init__(self, iterable, emitted, finish):
+        self._iterable, self._iterator = iterable, iter(iterable)
+        self._emitted, self._finish = emitted, finish
+        self._closed = False
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._closed:
+            raise StopIteration
+        try:
+            chunk = next(self._iterator)
+            if chunk:
+                self._emitted()
+            return chunk
+        except StopIteration:
+            self._emitted()
+            self._finish(False, None)
+            self.close()
+            raise
+        except BaseException:
+            self._finish(True, "upstream_error")
+            self.close()
+            raise
+
+    def close(self):
+        if self._closed:
+            return
+        self._closed = True
+        self._finish(True, "client_abort")
+        close = getattr(self._iterable, "close", None)
+        if close:
+            close()
+
+
 class AifpGateWSGI:
     def __init__(self, app, gate: Gate, serve_discovery: bool = True, refund_on_error: bool = False):
         self.app = app
@@ -59,6 +102,9 @@ class AifpGateWSGI:
                                                    "detail": "payment gate unavailable — retry shortly"})
         if result is None:
             return self.app(environ, start_response)
+        observation = self.gate.reporting_for(req, result)
+        if observation is not None:
+            return self._reported(environ, start_response, req, result, observation)
         if not result.ok:
             return _json(start_response, result.status, result.headers, result.body)
 
@@ -72,3 +118,55 @@ class AifpGateWSGI:
                 start_response(status, list(headers) + extra)
 
         return self.app(environ, start_with_headers)
+
+    def _reported(self, environ, start_response, req, result, observation):
+        state = {"status": None, "sent": False, "terminal": False, "challenged": False}
+        lock = threading.Lock()
+        extra = list(result.headers.items()) if result.ok else []
+
+        def emitted():
+            with lock:
+                state["sent"] = state["status"] is not None
+                if result.status == 402 and state["sent"] and not state["challenged"]:
+                    state["challenged"] = True
+                    self.gate.report_observation(observation, "access_challenged", reason=(
+                        "quota_exhausted" if (result.body or {}).get("detail") == "quota exhausted — prepay the next batch"
+                        else "receipt_rejected" if req.header("AIFP-Receipt") else "receipt_missing"))
+
+        def finish(abort, reason):
+            with lock:
+                if state["terminal"] or not result.ok:
+                    return
+                state["terminal"] = True
+                status = state["status"] if state["sent"] else None
+                outcome = "abort" if abort or status is None else (
+                    "success" if 200 <= status < 300 else "redirect" if 300 <= status < 400 else "error")
+                self.gate.report_observation(observation, "resource_response_completed", outcome=outcome,
+                                             **({"status": status} if status is not None else {}),
+                                             **({"reason": reason} if reason else {}))
+
+        def start_observed(status, headers, exc_info=None):
+            write = start_response(status, list(headers) + extra, exc_info) if exc_info else start_response(status, list(headers) + extra)
+            state["status"] = int(str(status).split(" ", 1)[0])
+            if self.refund_on_error and result.ok and str(status)[:1] == "5":
+                self.gate.refund(result.aifp)
+            if write is None:
+                return None
+            def write_observed(data):
+                try:
+                    write(data)
+                except BaseException:
+                    finish(True, "client_abort")
+                    raise
+                emitted()
+            return write_observed
+
+        if not result.ok:
+            return _ReportingIterable(_json(start_observed, result.status, result.headers, result.body), emitted, finish)
+        environ["aifp"] = result.aifp
+        self.gate.report_observation(observation, "access_admitted")
+        try:
+            return _ReportingIterable(self.app(environ, start_observed), emitted, finish)
+        except BaseException:
+            finish(True, "upstream_error")
+            raise

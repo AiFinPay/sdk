@@ -13,6 +13,28 @@ const DEFAULT_BASE_URL = "https://aifinpay.io";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const SDK_UA = "aifinpay-agent-node/0.3.0";
 
+/** Optional observation capability, scoped to fixed first-party quote endpoints.
+ * Invalid input loses attribution, never payment/access. No state is retained. */
+export function reportingHeaders(reportingToken: unknown, endpoint: string): Record<string, string> {
+  try {
+    const url = new URL(endpoint);
+    if (
+      typeof reportingToken !== "string" ||
+      !/^[A-Za-z0-9_-]{43}$/.test(reportingToken) ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      !["https://api.aifinpay.io", "https://aifinpay.io"].includes(url.origin) ||
+      !["/v1/quote", "/api/b2b/quote-split"].includes(url.pathname)
+    )
+      return {};
+    return { "AIFP-Reporting-Token": reportingToken };
+  } catch {
+    return {};
+  }
+}
+
 export interface Invoice {
   amountUsd: number;
   treasuryVault: string;
@@ -234,12 +256,16 @@ export class Agent {
     /** @deprecated "botchain" is deprecated. Use "robinhood" instead. */
     chain: "solana" | "polygon" | "base" | "optimism" | "unichain" | "botchain" | "xrplevm";
     merchantAmount: bigint | number | string;
+    /** Explicit, memory-only reporting.v2 observation; never payment authorization. */
+    reportingToken?: string;
   }): Promise<Record<string, unknown>> {
     const param = args.chain === "solana" ? "merchant_amount_lamports" : "merchant_amount_wei";
     const url = new URL(`${this.baseUrl}/api/b2b/quote-split`);
+    const reporting = reportingHeaders(args.reportingToken, url.toString());
     url.searchParams.set(param, String(args.merchantAmount));
     const r = await this.fetchImpl(url.toString(), {
-      headers: { accept: "application/json", "user-agent": SDK_UA },
+      headers: { accept: "application/json", "user-agent": SDK_UA, ...reporting },
+      ...(reporting["AIFP-Reporting-Token"] ? { redirect: "manual" as const } : {}),
     });
     if (!r.ok) {
       throw new AiFinPayError(`GET /api/b2b/quote-split → ${r.status}`);

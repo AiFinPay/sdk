@@ -1,3 +1,10 @@
+## 0.1.3 — unreleased
+
+- Add explicit reporting-v2 producer, bounded flow mint/event/health transport,
+  stable retries and consented observational context. V1 remains unchanged.
+- Observe ASGI/WSGI streaming completion, aborts and terminal statuses once;
+  admission and emitted402 remain distinct from successful resource delivery.
+
 ## 0.1.2 — unreleased
 
 - Add explicit opt-in merchant request reporting through the existing gate event

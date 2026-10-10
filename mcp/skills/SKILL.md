@@ -6,7 +6,7 @@ description: Pay for x402-gated APIs and sites as an agent (AIFP-1 on an owner-s
   wallet, payment history, prepaid quotas and Agent Passport records through
   the AiFinPay MCP server or SDK.
 license: MIT
-version: 2.8.0
+version: 2.9.0
 author: AiFinPay Support
 metadata:
   hermes:
@@ -61,7 +61,7 @@ your language. There is no "install together" scenario.
 
 ## Version and release status
 
-Release target: MCP **2.7.0**, Node SDK **2.5.0**, Python **2.5.0**.
+Release target: MCP **2.8.0**, Node SDK **2.6.0**, Python **2.5.1**.
 This skill describes that coordinated package cohort. Check the installed
 versions before using its additional-network instructions; a release target
 does not establish npm/PyPI publication or production network activation.
@@ -71,8 +71,8 @@ Published packages remain usable within their documented capabilities.
 
 | Surface | Can it pay? |
 |---|---|
-| MCP `@aifinpay/mcp` 2.7.x | `payable_fetch`, only with a persistent wallet and every owner limit set. Polygon is the default; other networks require explicit `AIFINPAY_PAY_CHAIN`. The merchant and backend must authorize and serve that network. `scope: "merchant"` buys a site-wide batch. |
-| Node `@aifinpay/agent` 2.5.x | `fetchPaid` with a v14 journal, gas cap and owner budgets. Select another network with `v14.chain`; select a pinned stablecoin with `v14.asset`. Native payments require an independent native/USD rate. |
+| MCP `@aifinpay/mcp` 2.8.x | `payable_fetch`, only with a persistent wallet and every owner limit set. Polygon is the default; other networks require explicit `AIFINPAY_PAY_CHAIN`. The merchant and backend must authorize and serve that network. `scope: "merchant"` buys a site-wide batch. |
+| Node `@aifinpay/agent` 2.6.x | `fetchPaid` with a v14 journal, gas cap and owner budgets. Select another network with `v14.chain`; select a pinned stablecoin with `v14.asset`. Native payments require an independent native/USD rate. |
 | Python `aifinpay-agent` 2.5.x | `agent.fetch_paid(url, allowed_origins=…, max_amount_usd=…, daily_amount_usd=…)`; use explicit `chain` and the chain's native gas cap for another network, or a pinned stablecoin `asset`. `agent.recover_paid(journal_path)` recovers the original transaction. |
 
 The client descriptors below are shared by the target cohort. They do not
@@ -166,7 +166,7 @@ or event log alone does not prove a valid paid request.
 
 # AiFinPay agent workflow
 
-Use the tools actually returned by MCP tools/list. MCP 2.7.0 exposes
+Use the tools actually returned by MCP tools/list. MCP 2.8.0 exposes
 agent_address, agent_reload, agent_claim_self, agent_history, agent_quota,
 agent_passport_resolve, settlement_routes, settlement_invoice and
 deployment_info; `payable_fetch` appears when the owner has enabled payments.
