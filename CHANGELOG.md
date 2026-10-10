@@ -1,3 +1,8 @@
+## Node 2.6.4 — standalone wallet dependency
+
+- Replace the Node SDK's duplicated wallet derivation with `@aifinpay/wallet`
+  1.5.0. Legacy Solana mode preserves existing SDK wallet addresses.
+
 ## Reporting v2 — Node gate 0.4.0 / Python gate 0.1.3 / Node agent 2.6.0 / Python agent 2.5.1 / MCP 2.8.0 / canonical skill 2.9.0 (unreleased source targets)
 
 - Explicit opt-in producers use the separate v2 contract with bounded queues,

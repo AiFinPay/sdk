@@ -93,6 +93,6 @@ describe("the wallet module's import graph is free of the transaction stack", ()
     const pkgs = graphPackages(dist);
     expect([...pkgs].sort()).not.toContain("viem");
     expect([...pkgs].sort()).not.toContain("@solana/web3.js");
-    expect([...pkgs]).toEqual(expect.arrayContaining(["tweetnacl", "bs58", "@noble/hashes", "@noble/curves"]));
+    expect([...pkgs]).toEqual(["@aifinpay/wallet"]);
   });
 });
