@@ -6,6 +6,7 @@
  * is retained solely for backwards compatibility.
  */
 
+import { randomFillSync } from "node:crypto";
 import nacl from "tweetnacl";
 import bs58 from "bs58";
 import { blake2b } from "@noble/hashes/blake2b";
@@ -167,7 +168,6 @@ export async function newWallet(options?: { mode?: DerivationMode }): Promise<De
   if (typeof globalThis.crypto?.getRandomValues === "function") {
     globalThis.crypto.getRandomValues(seed);
   } else {
-    const { randomFillSync } = await import("node:crypto");
     randomFillSync(seed);
   }
   return deriveWallet(hex(seed), options);
