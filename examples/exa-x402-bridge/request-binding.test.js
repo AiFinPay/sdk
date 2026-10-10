@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import { canonicalRequestHash, requestMatchesOrder } from "./request-binding.js";
 
 const quoted = { method: "POST", path: "/search", body: { query: "weather" } };
+const boundOrderCall = /putOrder\(orderId, query, req \? requestHashOf\(req\) : undefined, totalWei\)/;
 
 test("a different body is a different request", () => {
   const cheap = canonicalRequestHash(quoted);
@@ -105,6 +106,22 @@ test("every order-bearing payment path checks the binding first", () => {
   assert.ok(evmGate < src.indexOf("claimTxLease(txHash)"), "EVM: binding checked after the claim is burned");
   assert.ok(evmGate < src.lastIndexOf("await fetch(EXA_API_URL"), "EVM: binding checked after the upstream call");
 
-  // And the order must be recorded with a hash in the first place.
-  assert.match(src, /putOrder\(orderId, query, req \? requestHashOf\(req\) : undefined\)/);
+  // The existing fourth argument freezes the quoted amount. Require BOTH
+  // the request hash and that amount; do not accept an unbound order call.
+  assert.match(src, boundOrderCall);
+});
+
+test("the order source guard refuses missing request binding or quoted amount", () => {
+  const src = readFileSync(new URL("./server.js", import.meta.url), "utf8");
+  const call = "putOrder(orderId, query, req ? requestHashOf(req) : undefined, totalWei)";
+  assert.equal(src.split(call).length, 2, "control must mutate exactly one real call");
+  for (const replacement of [
+    "putOrder(orderId, query, undefined, totalWei)",
+    "putOrder(orderId, query, req ? requestHashOf(req) : undefined)",
+    "putOrder(orderId, query, req ? requestHashOf(req) : undefined, 0n)",
+  ]) {
+    assert.throws(() => assert.match(src.replace(call, replacement), boundOrderCall), {
+      code: "ERR_ASSERTION",
+    });
+  }
 });
