@@ -19,8 +19,9 @@ One standalone, zero-dependency package owns the contract. Consumers only call
    `https://telemetry.aifinpay.io/v1/agent`. HTTPS only (loopback HTTP for
    development); an unusable override disables sending. Timeout 1.5 s, at most
    one retry (network error, timeout, 429, 5xx only), redirects refused.
-   Bounded queue of 256, drop on overflow, batches of at most 64 (the
-   gateway's limit), fire-and-forget; consumers never `await` `emit`.
+   Bounded queue of 256, drop on overflow, batches of at most 64 events and
+   ~90 KB (the gateway's event and body limits), fire-and-forget; consumers
+   never `await` `emit`.
 2. **Install id.** Random UUID at `~/.aifinpay/.telemetry-id`, file 600,
    directory 700, created exclusively on first opt-in. Wiping the file resets
    it. A malformed file is left untouched.

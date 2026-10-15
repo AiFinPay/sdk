@@ -51,7 +51,8 @@ over 4 KB is dropped.
 ## Behaviour
 
 - `emit()` is synchronous for the caller and never throws. Sending happens on
-  a microtask, in batches of at most 64 events.
+  a microtask, in batches of at most 64 events and about 90 KB (the
+  gateway's body limit is 100 KB).
 - Bounded queue of 256 events; when full, new events are dropped.
 - Each POST waits at most 1.5 s and is retried at most once, only after a
   network error, timeout, 429 or 5xx. Redirects are refused.

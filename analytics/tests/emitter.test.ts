@@ -73,6 +73,18 @@ describe("emitter", () => {
     expect(sizes.reduce((x, y) => x + y, 0)).toBe(256);
   });
 
+  it("keeps each POST under the gateway's body limit", async () => {
+    const a = await load({ AIFINPAY_TELEMETRY: "on" });
+    // ~3.3 KB each after sanitization (strings are capped at 256 characters).
+    const sizable = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`k${i}`, "x".repeat(250)]));
+    for (let i = 0; i < 64; i++) a.emit("unified_call_succeeded", sizable);
+    await a.shutdown();
+    const bodies = fetchMock.mock.calls.map(([, init]) => (init as RequestInit).body as string);
+    expect(bodies.length).toBeGreaterThan(1);
+    for (const body of bodies) expect(Buffer.byteLength(body)).toBeLessThan(100_000);
+    expect(sentBatches().reduce((n, b) => n + b.events.length, 0)).toBe(64);
+  });
+
   it("drops an event larger than 4 KB", async () => {
     const a = await load({ AIFINPAY_TELEMETRY: "on" });
     const big = Object.fromEntries(Array.from({ length: 32 }, (_, i) => [`k${i}`, "x".repeat(250)]));

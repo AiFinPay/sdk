@@ -36,10 +36,12 @@ export interface TelemetryConfig {
 export const MAX_BATCH = 64;
 /** The gateway refuses a serialized event over 4 KB with 413. */
 export const MAX_EVENT_BYTES = 4096;
+/** The gateway's JSON body limit is 100 KB; 64 large events would exceed it. */
+export const MAX_BATCH_BYTES = 90_000;
 const INSTALL_EVENT = "agent_sdk_install_completed";
 
 let config: TelemetryConfig | null = null;
-let queue: Array<{ event: WireEvent; schemaVersion: number }> = [];
+let queue: Array<{ event: WireEvent; schemaVersion: number; bytes: number }> = [];
 let scheduled = false;
 let inflight: Promise<void> = Promise.resolve();
 let installId: string | null = null;
@@ -95,8 +97,9 @@ export function emit(name: EventName, payload: EventPayload = {}, opts: EmitOpti
         ? payload
         : sanitizePayload(payload);
     const event: WireEvent = { name, ts: Math.floor(Date.now() / 1000), payload: safe };
-    if (Buffer.byteLength(JSON.stringify(event)) > MAX_EVENT_BYTES) return;
-    queue.push({ event, schemaVersion: opts.schemaVersion ?? cfg.schemaVersion });
+    const bytes = Buffer.byteLength(JSON.stringify(event));
+    if (bytes > MAX_EVENT_BYTES) return;
+    queue.push({ event, schemaVersion: opts.schemaVersion ?? cfg.schemaVersion, bytes });
     if (!scheduled) {
       scheduled = true;
       queueMicrotask(() => {
@@ -119,7 +122,12 @@ async function flush(): Promise<void> {
     // One schema version per POST: the header and the body must agree.
     const version = queue[0].schemaVersion;
     let take = 0;
-    while (take < queue.length && take < MAX_BATCH && queue[take].schemaVersion === version) take++;
+    let bytes = 0;
+    while (take < queue.length && take < MAX_BATCH && queue[take].schemaVersion === version) {
+      bytes += queue[take].bytes;
+      if (take > 0 && bytes > MAX_BATCH_BYTES) break;
+      take++;
+    }
     const events = queue.splice(0, take).map((item) => item.event);
     try {
       installId ??= resolveInstallId({ persist: cfg.mode !== "read-only" });
