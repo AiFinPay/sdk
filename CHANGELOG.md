@@ -1,3 +1,12 @@
+## Node 2.6.5 / MCP CI — TypeScript 7 rebuild and red main CI
+
+- `@aifinpay/agent` 2.6.5: rebuilt with TypeScript 7 (published declarations
+  and dev dependencies changed after 2.6.4). No API change.
+- CI: the Node 22 lockfile now records the nested optional `utf-8-validate` 5
+  that npm 10 requires; MCP compiles with Node types under TypeScript 7; the
+  source-cohort and release-input guards follow the published registry
+  cohort (agent 2.6.4, skill 2.9.0) instead of the superseded 2.6.0 / 2.6.1.
+
 ## Node 2.6.4 — standalone wallet dependency
 
 - Replace the Node SDK's duplicated wallet derivation with the full
