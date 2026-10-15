@@ -30,7 +30,9 @@ if (process.env.REDIS_URL) {
     redis.on("error", () => {});
     await redis.connect();
     useRedis = true;
-    console.log("[store] Redis connected:", process.env.REDIS_URL);
+    // REDIS_URL carries the password; name the target from the parsed options.
+    const { host, port, db, path } = redis.options;
+    console.log("[store] Redis connected:", path || `${host}:${port}/${db}`);
   } catch (e) {
     if (!ALLOW_MEMORY) {
       throw new Error(
