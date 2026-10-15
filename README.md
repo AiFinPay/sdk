@@ -20,6 +20,7 @@ Canonical domain: **https://aifinpay.io**
 | `@aifinpay/skill`                      | `2.8.0` coordinated target; existing registry lock pending refresh ([AiFinPay/skill](https://github.com/AiFinPay/skill); bundled by `@aifinpay/mcp`) | `npm install @aifinpay/skill`  |
 | `@aifinpay/gate`                       |                                                                                                                                              `0.3.5` | `npm install @aifinpay/gate`   |
 | `@aifinpay/wallet`                     |                                                                                                                                              `1.2.0` | `npm install @aifinpay/wallet` |
+| `@aifinpay/analytics`                  |                                                                                                                                   `0.1.0` unreleased | opt-in SDK telemetry          |
 | `@aifinpay/deployments`                |                                                                                                                                              `1.1.3` | deployment registry package    |
 
 These are local source versions, not publication claims. The Solana integration

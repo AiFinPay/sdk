@@ -35,6 +35,18 @@ const baseRef = process.argv[2] || process.env.BASE_REF || "origin/main";
  */
 const PACKAGES = [
   {
+    name: "@aifinpay/analytics",
+    dir: "analytics",
+    version: () => JSON.parse(readFileSync("analytics/package.json", "utf8")).version,
+    versionAt: (ref) => JSON.parse(gitShow(ref, "analytics/package.json")).version,
+    published: [
+      /^analytics\/src\//,
+      /^analytics\/scripts\/postinstall\.js$/,
+      /^analytics\/package\.json$/,
+      /^analytics\/README\.md$/,
+    ],
+  },
+  {
     name: "@aifinpay/agent",
     dir: "node",
     version: () => JSON.parse(readFileSync("node/package.json", "utf8")).version,
