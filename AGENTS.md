@@ -12,6 +12,7 @@ Monorepo of independent packages. Each package owns its own `AGENTS.md`; respect
 - `mcp/` — `@aifinpay/mcp` (MCP server). Depends on the **published** `@aifinpay/agent` from npm, _not_ `../node`.
 - `wallet/` — `@aifinpay/wallet` (light wallet + CLI). Keystore: `~/.aifinpay/agent.json`.
 - `gate/` — `@aifinpay/gate` (merchant AIFP-1 paywall, optional Express peer dep).
+- `analytics/` — `@aifinpay/analytics` (opt-in SDK telemetry, off by default; zero runtime deps). Consumers wire `emit()` in their own changes.
 - `mcp-http/` — transport shim for `https://mcp.aifinpay.io/mcp`.
 - `deployments/` — `@aifinpay/deployments` (canonical registry grabber, private).
 - `python/` — `aifinpay-agent` (Python SDK).
@@ -23,7 +24,7 @@ Monorepo of independent packages. Each package owns its own `AGENTS.md`; respect
 
 - Node ≥22, Python 3.13. Install Node packages with `npm ci --no-audit --no-fund` in each package directory; never run `npm install` at root or in a package.
 - Each package is built/tested independently from its own directory:
-  - `npm run build` then `npm test` in `node/`, `wallet/`, `mcp/`, `gate/`, `deployments/`.
+  - `npm run build` then `npm test` in `node/`, `wallet/`, `mcp/`, `gate/`, `analytics/`, `deployments/`.
   - `python -m pip install -e . pytest` then `python -m pytest tests -q` in `python/`.
 - `node/`: run `npm run registry:check` **before** `npm run build`. It verifies `src/*.generated.ts` against the `@aifinpay/deployments` package installed as a local dependency. Never hand-edit generated files; change the `@aifinpay/deployments` inputs or `scripts/generate-*.mjs`, then run `registry:sync`.
 - `node/`: `npm run registry:sync` regenerates both `src/splitterRoutes.generated.ts` and `src/v14Deployments.generated.ts`/`src/solanaV14Deployments.generated.ts` from `@aifinpay/deployments`. `npm run registry:check` verifies them in CI.
@@ -43,7 +44,7 @@ Monorepo of independent packages. Each package owns its own `AGENTS.md`; respect
 ## Workflow conventions
 
 - No workspace build orchestrator (no Turbo/Nx/Just). CI runs each package independently.
-- Per-package lockfiles are authoritative (`package-lock.json` in `node/`, `wallet/`, `mcp/`, `gate/`, `deployments/`, `mcp-http/`). Root `pnpm-lock.yaml` only tracks `@daochild/agents-config`.
+- Per-package lockfiles are authoritative (`package-lock.json` in `node/`, `wallet/`, `mcp/`, `gate/`, `analytics/`, `deployments/`, `mcp-http/`). Root `pnpm-lock.yaml` only tracks `@daochild/agents-config`.
 - Root `opencode.json` loads this file plus shared agent config and skills; edit it only for agent/config changes, not for application code.
 - Default repo-local skills live in `.agents/skills/`; the canonical sibling `agent/skills/` is the published skill content, not the skills workshop.
 - Principal skill: **yagni-principle** (`.agents/skills/yagni-principle/SKILL.md`) — smallest change that satisfies the request; no speculative abstractions, no new deps/frameworks, no "while I'm here" refactors. A new helper needs 2+ call sites; a new dep needs a no-stdlib-feasible justification.
