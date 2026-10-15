@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.6.5 — rebuild with TypeScript 7
+
+- No API change. Built with TypeScript 7; the published type declarations and
+  development dependencies differ from 2.6.4, so the version moves with them.
+
 ## 2.6.4 — use the standalone wallet package
 
 - Delegate wallet functionality to `@aifinpay/wallet` 1.5.0, including its
