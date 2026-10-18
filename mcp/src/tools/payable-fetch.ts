@@ -1,6 +1,8 @@
 import {
   Aifp1SettlementUnsupportedError,
   Aifp1FinalizedFailureError,
+  Aifp1GatewayRetiredError,
+  Aifp1MerchantChangedError,
   assertPreparedV14Recovery,
   parseGatewayUrl,
   type Aifp1CachedReceipt,
@@ -17,6 +19,9 @@ import { payChain, type PayChain } from "../pay-chains.js";
 // owner's two real requests are "this endpoint" and "this site".
 const SCOPES = ["exact", "merchant"] as const;
 type PayableScope = (typeof SCOPES)[number];
+// Real ids are "mrch_" plus hex. A 402's merchant id is unauthenticated, so
+// only an id this plain is ever repeated to the model.
+const MERCHANT_ID = /^[A-Za-z0-9_.:-]{1,64}$/;
 
 export function payableFetchTool() {
   return {
@@ -37,6 +42,12 @@ export function payableFetchTool() {
           enum: [...SCOPES],
           description:
             'What a new batch covers. "exact" (default): this one resource. "merchant": every path on this site — use it when the owner asked for access to the site; each request still costs its own listed price. Does not change the price or the owner limits.',
+        },
+        expected_merchant_id: {
+          type: "string",
+          pattern: MERCHANT_ID.source,
+          description:
+            "Optional merchant id (e.g. mrch_…) this call may pay; a site answering as any other merchant is refused before quoting. Paying re-pins the site to it. Set it only to a merchant the owner confirmed, e.g. after this tool reported that a site changed merchant.",
         },
       },
       required: ["url"],
@@ -61,12 +72,20 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
     const store = ctx.paymentState;
     if (!store || store.address !== ctx.agent.evmAddress.toLowerCase())
       return errorResult("A persistent matching wallet is required for payments.");
-    if (Object.keys(args).some((k) => !["url", "max_amount_usd", "scope"].includes(k)))
-      return errorResult("Only url, max_amount_usd and scope are supported; no facilitator fallback.");
+    if (Object.keys(args).some((k) => !["url", "max_amount_usd", "scope", "expected_merchant_id"].includes(k)))
+      return errorResult(
+        "Only url, max_amount_usd, scope and expected_merchant_id are supported; no facilitator fallback."
+      );
     if (typeof args.url !== "string") return errorResult("url must be an HTTPS resource URL.");
     if (args.scope !== undefined && !SCOPES.includes(args.scope as PayableScope))
       return errorResult('scope must be "exact" or "merchant".');
     const scope: PayableScope = (args.scope as PayableScope | undefined) ?? "exact";
+    const expectedMerchantId = args.expected_merchant_id;
+    if (
+      expectedMerchantId !== undefined &&
+      (typeof expectedMerchantId !== "string" || !MERCHANT_ID.test(expectedMerchantId))
+    )
+      return errorResult("expected_merchant_id must be a merchant id such as mrch_0123abcd.");
     const url = new URL(args.url);
     if (url.protocol !== "https:" || url.username || url.password || url.hash)
       return errorResult("The URL must use an owner-approved exact HTTPS origin without credentials or fragment.");
@@ -240,6 +259,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
             gatewayOrigins: ctx.config.gatewayOrigins,
             resourcePathMode: ctx.config.gatewayPathMode,
             scope,
+            ...(expectedMerchantId !== undefined ? { expectedMerchantId } : {}),
             // A pending Solana quote pins this owner limit across restarts and
             // rollover. Fresh daily allowance is checked again in persistPrepared
             // under the operation lock, before any broadcast.
@@ -379,6 +399,23 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
     // inside validation itself, which returns above.
     const on = chain ?? payChain(undefined);
     const label = on.label;
+    if (!state?.pending && error instanceof Aifp1MerchantChangedError) {
+      const shown = (id: string) => (MERCHANT_ID.test(id) ? id : "an unrecognized merchant id");
+      const now = shown(error.merchantId);
+      return errorResult(
+        args.expected_merchant_id !== undefined
+          ? `${error.site} answers as merchant ${now}, not the expected merchant ${shown(error.expectedMerchantId)}. Nothing was quoted or paid. Check the merchant id with the owner.`
+          : `${error.site} now answers as merchant ${now}, but this wallet first paid it as ${shown(error.expectedMerchantId)}. Nothing was quoted or paid. The site may have changed hands; the agent cannot approve a new merchant itself. Ask the owner to confirm it` +
+              (MERCHANT_ID.test(error.merchantId)
+                ? `, and only then retry with expected_merchant_id "${error.merchantId}".`
+                : ". This merchant id cannot be confirmed through this tool.")
+      );
+    }
+    if (!state?.pending && error instanceof Aifp1GatewayRetiredError) {
+      return errorResult(
+        `${error.site} is retired: the gateway no longer serves this site (410 gateway_retired). Nothing was quoted or paid. Do not retry this request or pay for it again; tell the owner.`
+      );
+    }
     if (!state?.pending && error instanceof Aifp1SettlementUnsupportedError) {
       return errorResult(
         `The merchant must offer a signed native ${label} v1.4 quote (the chain set in AIFINPAY_PAY_CHAIN). Its current settlement route is unsupported; no legacy, other-chain or alternate-protocol payment was attempted.`
