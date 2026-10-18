@@ -233,6 +233,29 @@ MIT.
 
 AIFP-1 receipts use the paying wallet signature. See [authorize and recover payment receipts](PAYMENT_RECEIPTS.md) for retries and recovery without a second transfer.
 
+### A gateway site keeps its merchant
+
+`fetchPaid` pins each gateway site (`https://gateway.aifinpay.io/<slug>`) to the
+merchant it was first paid as, before any money moves. A later 402 that names
+another merchant for the same site throws `Aifp1MerchantChangedError`
+(`code: "AIFP1_MERCHANT_CHANGED"`) before anything is quoted. If the change is
+legitimate, say so for that call; paying re-pins the site:
+
+```ts
+await agent.fetchPaid(url, {}, { allowMerchantChange: true });
+// or name the merchant you trust; any other one is refused:
+await agent.fetchPaid(url, {}, { expectedMerchantId: "mrch_…" });
+```
+
+Pins are one file per site under `~/.aifinpay/merchant-pins` (or
+`AIFINPAY_STATE_DIR`), so they survive restarts; pass `merchantPins` to the
+agent to keep them elsewhere. An unreadable pin refuses payment rather than
+pinning afresh. `resourcePathMode: "direct"` is not pinned, because its cache
+key already names the merchant. A slug the gateway retired answers
+`410 gateway_retired`, which throws `Aifp1GatewayRetiredError`
+(`code: "AIFP1_GATEWAY_RETIRED"`) after one request; do not retry it. Batches
+already held are kept.
+
 ### Payment history
 
 ```ts

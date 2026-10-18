@@ -71,6 +71,8 @@ import {
   type Aifp1PayResult,
   Aifp1ReceiptCache,
   Aifp1QuoteError,
+  FileMerchantPinStore,
+  type Aifp1MerchantPinStore,
   type Aifp1CachedReceipt,
   type Aifp1Deps,
   type Aifp1FetchOptions,
@@ -215,6 +217,13 @@ export interface AiFinPayAgentOptions extends AgentOptions {
    * runs on more than one host — a lock file cannot answer for a fleet.
    */
   spendLedger?: SpendLedger;
+  /**
+   * Where fetchPaid remembers the merchant each gateway site was first paid
+   * as. Omit it for a file per site under ~/.aifinpay/merchant-pins (or
+   * AIFINPAY_STATE_DIR), which outlives the process. A store that forgets on
+   * restart lets the next 402 choose the merchant again.
+   */
+  merchantPins?: Aifp1MerchantPinStore;
   solanaRpc?: string; // default: env AIFINPAY_SOLANA_RPC or mainnet-beta
   /** RPC overrides for non-Polygon EVM chains — both bridge-flow chains
    *  and splitter-settlement chains (base, optimism, unichain, botchain (deprecated),
@@ -723,6 +732,7 @@ export class AiFinPayAgent {
     // a shared ledger silently got a per-host one instead, which is exactly
     // the failure the option exists to prevent.
     if (opts.spendLedger) this.ledgerOverride = opts.spendLedger;
+    this._aifp1Cache = new Aifp1ReceiptCache(opts.merchantPins ?? FileMerchantPinStore.default());
     this.telemetry = opts.telemetry !== false;
     this.polygonRpc = opts.polygonRpc ?? opts.evmRpcUrls?.polygon ?? "https://polygon.drpc.org";
     this.solanaRpc = opts.solanaRpc ?? process.env.AIFINPAY_SOLANA_RPC ?? "https://api.mainnet-beta.solana.com";
@@ -1692,7 +1702,7 @@ export class AiFinPayAgent {
   // agent can supply: the on-chain settlement above, and the budget caps —
   // aifp1Fetch owns neither, exactly as call() owns them for the bridge flow.
 
-  private readonly _aifp1Cache = new Aifp1ReceiptCache();
+  private readonly _aifp1Cache: Aifp1ReceiptCache;
 
   /**
    * The prepaid batches this agent is holding.

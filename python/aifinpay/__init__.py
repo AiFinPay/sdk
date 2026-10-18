@@ -78,7 +78,14 @@ def __getattr__(name: str):
         return getattr(unified_agent, name)
     # The errors fetch_paid raises, importable from the package as in the Node
     # SDK (Aifp1Error, Aifp1QuoteError, Aifp1PayError, V14SettlementError).
-    if name in ("Aifp1Error", "Aifp1QuoteError", "Aifp1PayError", "Aifp1FinalizedFailureError"):
+    if name in (
+        "Aifp1Error",
+        "Aifp1QuoteError",
+        "Aifp1PayError",
+        "Aifp1FinalizedFailureError",
+        "Aifp1MerchantChangedError",
+        "Aifp1GatewayRetiredError",
+    ):
         from . import aifp1
 
         return getattr(aifp1, name)
@@ -123,6 +130,8 @@ __all__ = [
     "Aifp1QuoteError",
     "Aifp1PayError",
     "Aifp1FinalizedFailureError",
+    "Aifp1MerchantChangedError",
+    "Aifp1GatewayRetiredError",
     "get_agent_history",
     "get_quota",
     "V14SettlementError",
