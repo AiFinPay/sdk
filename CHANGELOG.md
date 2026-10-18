@@ -1,3 +1,12 @@
+## MCP 2.9.0 — merchant pins in payable_fetch
+
+- `@aifinpay/mcp` 2.9.0 depends on the published `@aifinpay/agent` 2.7.0.
+  `payable_fetch` takes an optional `expected_merchant_id`, with no blanket
+  merchant-change switch. A changed merchant or a retired gateway site comes
+  back as a clear tool error; nothing is quoted or paid.
+- The source-cohort and release-input guards follow MCP 2.9.0 and the
+  registry lock for agent 2.7.0.
+
 ## Node 2.7.0 / Python 2.6.0 — gateway merchant pins and retired slugs
 
 - Both SDKs pin each gateway site (origin + slug) to the merchant it was first

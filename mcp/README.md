@@ -4,8 +4,8 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Version **2.8.1** is prepared in this checkout, targeting agent2.6.0, Python2.5.1
-and canonical skill2.9.0. The separate canonical producer's final immutable
+Version **2.9.0** is prepared in this checkout, on the published agent 2.7.0
+and canonical skill 2.9.0. The separate canonical producer's final immutable
 source pin is a required handoff, not a moving-branch substitution.
 The published baseline checked2026-10-04 was MCP2.5.0. Package publication and
 real registry dependency/lock refresh remain release gates; a source-cohort
@@ -162,8 +162,18 @@ state file in chat. Unconfirmed payments consume the budget conservatively.
 `payable_fetch` is registered when the owner sets `AIFINPAY_PAYMENTS_ENABLED=1`
 with a persistent wallet. With payments enabled and any owner limit missing or
 invalid, the server refuses to start rather than hiding the tool. It accepts
-only `url`, `max_amount_usd` and `scope`; `max_amount_usd` can lower the owner's
-per-payment cap for one call, never raise it. `dev_payment_quote` is registered
+only `url`, `max_amount_usd`, `scope` and `expected_merchant_id`; `max_amount_usd`
+can lower the owner's per-payment cap for one call, never raise it.
+
+Each gateway site (origin + slug) is pinned to the merchant this wallet first
+paid it as. The agent SDK keeps these pins under `~/.aifinpay/merchant-pins`, or
+`AIFINPAY_STATE_DIR/merchant-pins`; `AIFINPAY_HOME` does not move them. When a
+site answers as another merchant, `payable_fetch` stops before any quote and
+names both merchant ids. Nothing is paid, and the agent cannot approve the change
+itself. Once the owner confirms the new merchant, a call with
+`expected_merchant_id` set to it pays and re-pins the site. There is no blanket
+"allow any merchant change" argument. A `410 gateway_retired` site is terminal:
+the tool says not to retry. `dev_payment_quote` is registered
 only with `AIFINPAY_MODE=dev`. Legacy `agent_call`, `agent_quote`,
 `pay_with_split` and `quote_split` remain unregistered.
 
