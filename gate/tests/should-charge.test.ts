@@ -88,6 +88,34 @@ describe("shouldCharge — who pays on a content site", () => {
     expect(headed.ok).toBe(true);
   });
 
+  it("our own Python client is charged by either of its declarations", async () => {
+    // aifinpay-agent (py) 2.6.1 sends both on the first request: a User-Agent
+    // that names the client and AIFP-Agent-Id with the agent's address. Each
+    // alone must be enough — the UA matches the "aifinpay-agent" marker that
+    // already covers the Node client, and the header is the protocol-level
+    // declaration — so no change to AI_AGENT_UA_MARKERS is needed for it.
+    // Before 2.6.1 the first GET was a bare python-requests UA with neither,
+    // which is the human case below and was served free.
+    const { gate } = await contentGate();
+    const agentAddress = "0x" + "ab".repeat(20);
+
+    const byUserAgent = await gate(req("/articles", { "User-Agent": "aifinpay-agent-py/2.6.1" }));
+    expect(byUserAgent.ok, "User-Agent alone must be charged").toBe(false);
+    if (!byUserAgent.ok) expect(byUserAgent.status).toBe(402);
+
+    const byHeader = await gate(
+      req("/articles", { "User-Agent": "python-requests/2.32.3", "AIFP-Agent-Id": agentAddress })
+    );
+    expect(byHeader.ok, "AIFP-Agent-Id alone must be charged").toBe(false);
+    if (!byHeader.ok) expect(byHeader.status).toBe(402);
+
+    // The pre-2.6.1 Python request, for the record: a library default UA and
+    // no AIFP header is indistinguishable from a script a human runs.
+    const before = await gate(req("/articles", { "User-Agent": "python-requests/2.32.3" }));
+    expect(before.ok).toBe(true);
+    if (before.ok) expect(before.aifp.mode).toBe("exempt");
+  });
+
   it("a crawler WITH a receipt is served and metered", async () => {
     const { gate, iss } = await contentGate();
     const token = await iss.sign({ resource: "/articles", unit_quota: 3 });

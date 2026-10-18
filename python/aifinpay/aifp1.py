@@ -45,7 +45,7 @@ from eth_account.messages import encode_defunct
 from eth_utils import keccak
 
 from ._v14_deployments import V14_DEPLOYMENTS
-from .client import _reporting_headers
+from .client import _reporting_headers, _user_agent
 from .payment_chains import PAYMENT_CHAINS, pinned_token_decimals
 from .settlement_v14 import (
     SettlementConfirmationPending,
@@ -1443,7 +1443,15 @@ def aifp1_fetch(
     if not url.startswith("https://") or _origin(url) not in allowed_origins:
         raise Aifp1QuoteError("the URL must use an owner-approved exact HTTPS origin")
     site = _gateway_site(url)
-    response = session.get(url, timeout=30, allow_redirects=False)
+    # Every request to the merchant says who is asking, first and paid alike —
+    # what Node's aifp1Fetch does with AIFP-Agent-Id. A content site's gate
+    # (gate/src/agents.ts knownAiAgent) decides from exactly these headers
+    # whether to answer 402 at all: until 2.6.1 the first GET went out with
+    # python-requests' default User-Agent and no AIFP-Agent-Id, so such a gate
+    # took the agent for a human reader, served the page free, and the agent
+    # never met the paywall it was built to pay.
+    agent_headers = {"User-Agent": _user_agent(), **({"AIFP-Agent-Id": agent_id} if agent_id else {})}
+    response = session.get(url, headers=agent_headers, timeout=30, allow_redirects=False)
     if response.status_code == 410:
         try:
             retired = response.json().get("error") == "gateway_retired"
@@ -1471,7 +1479,9 @@ def aifp1_fetch(
     for cached in list(held):
         if not scope_covers(cached["scope"], cached["resource"], resource):
             continue
-        retry = session.get(url, headers={"AIFP-Receipt": cached["jwt"]}, timeout=30, allow_redirects=False)
+        retry = session.get(
+            url, headers={**agent_headers, "AIFP-Receipt": cached["jwt"]}, timeout=30, allow_redirects=False
+        )
         if retry.status_code != 402:
             return retry
         held.remove(cached)  # spent or revoked; buy a new batch
@@ -1821,4 +1831,4 @@ def aifp1_fetch(
             "unit_quota": paid["unit_quota"],
         }
     )
-    return session.get(url, headers={"AIFP-Receipt": paid["receipt"]}, timeout=30, allow_redirects=False)
+    return session.get(url, headers={**agent_headers, "AIFP-Receipt": paid["receipt"]}, timeout=30, allow_redirects=False)

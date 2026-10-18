@@ -1,3 +1,12 @@
+## Python 2.6.1 — `fetch_paid` declares the agent on every request
+
+- `aifinpay-agent` sends `User-Agent: aifinpay-agent-py/<version>` and
+  `AIFP-Agent-Id` on the first request to a merchant and on every paid retry,
+  matching the Node client. The first GET used to be a bare
+  `python-requests/x.y`, which a content site's `knownAiAgent` gate exempts as
+  a human reader: the Python agent read the page free and never paid. The MCP
+  source-cohort guard follows Python 2.6.1. Nothing is published.
+
 ## MCP 2.9.0 — merchant pins in payable_fetch
 
 - `@aifinpay/mcp` 2.9.0 depends on the published `@aifinpay/agent` 2.7.0.
