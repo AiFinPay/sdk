@@ -1,3 +1,15 @@
+## 2.6.1 — every request from `fetch_paid` declares the agent
+
+- `fetch_paid` sends `User-Agent: aifinpay-agent-py/<version>` and
+  `AIFP-Agent-Id: <agent address>` on the first request and on every paid
+  retry, as the Node client does with `AIFP-Agent-Id`. Until now the first GET
+  carried `python-requests/x.y` and no `AIFP-Agent-Id`, so a content site
+  deciding with `@aifinpay/gate`'s `knownAiAgent` took the agent for a human
+  reader and served the page free; the agent never met the 402 it was built to
+  pay. No protocol, receipt or gate change.
+- The User-Agent version is read from the installed package; the legacy
+  `Agent` session used to send a literal `aifinpay-agent-py/1.0.0`.
+
 ## 2.6.0 — gateway sites keep the merchant they were first paid as
 
 - `fetch_paid` pins each `https://gateway.aifinpay.io/<slug>` site to the

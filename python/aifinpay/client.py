@@ -29,6 +29,18 @@ DEFAULT_BASE_URL = "https://aifinpay.io"
 DEFAULT_TIMEOUT = 30  # seconds
 
 
+def _user_agent() -> str:
+    """``aifinpay-agent-py/<version>`` — the User-Agent every request from this package sends.
+
+    The version is the installed package's (``aifinpay.__version__``), never a
+    literal here: the literal this replaced still said 1.0.0 at release 2.6.0.
+    Resolved at call time because ``aifinpay/__init__`` imports this module.
+    """
+    from . import __version__
+
+    return f"aifinpay-agent-py/{__version__}"
+
+
 def _reporting_headers(token: Any, url: str, api_base: str) -> dict[str, str]:
     """Optional correlation only to the intended canonical first-party quote.
 
@@ -88,7 +100,7 @@ class Agent:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self._session = requests.Session()
-        self._session.headers["User-Agent"] = "aifinpay-agent-py/1.0.0"
+        self._session.headers["User-Agent"] = _user_agent()
 
     # ── Constructors ────────────────────────────────────────────────────────
 
