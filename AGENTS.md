@@ -40,6 +40,25 @@ Monorepo of independent packages. Each package owns its own `AGENTS.md`; respect
 - Tests must not use live network/RPC; mock at `settlementHttp.ts`, `safe-fetch.ts`, `client.py`, or facilitator boundaries. SSRF coverage in `mcp/tests/` must keep passing.
 - Economics are consensus-critical: AIFP-1 = 1% inside gross (merchant 99%, AiFinPay 1%, creator/referral 0%). Do not touch fee splits, payout addresses, or settlement flags without a pinned deployment and paid end-to-end evidence.
 
+## Linked surfaces
+
+This repository is the SDK, MCP and gate surface.
+
+AiFinPay information lives in five places that must agree: the backend API (AiFinPay/aifinpay-web `backend/`), the public site (aifinpay-web `frontend/products/marketing-app`, `/llms.txt`, `/manifesto.json`, `/.well-known/x402.json`), the merchant dashboard (AiFinPay/paywall-dashboard), the SDK, MCP and gate packages (AiFinPay/sdk) and the public docs (AiFinPay/docs). A change in one silently makes the others wrong, so check them in the same piece of work, not later.
+
+| If you change | Also check |
+|---|---|
+| networks, contract addresses, `@aifinpay/deployments`, served chains | backend health, manifesto and x402.json · SDK supported networks (Node, Python, MCP) · dashboard network pickers, Fund and wallets · site `llms.txt` and network pages · docs |
+| an API route, field or error code | `backend/openapi.yaml` · dashboard `app/src/lib/api.ts` and `scripts/backend-compatibility.test.mjs` · SDK clients and types · docs API reference |
+| prices, fees, plans, quotas | backend fee maths · site pricing · dashboard billing copy · SDK quote and fee handling · docs |
+| auth, step-up, sessions, password reset | dashboard Settings and sign-in · docs merchant guide |
+| webhooks, receipts, signatures, JWKS | SDK verify helpers · dashboard webhook editor · docs |
+| gateway, paywall, DNS, domains, slugs | dashboard Sites, Gateway and DNS queue · SDK gate packages (Node, Python) · docs onboarding |
+| MCP tools or the skill | docs MCP page · site developer entry · `llms.txt` |
+| dashboard UI text or components | docs screenshots and the names of buttons and sections |
+
+In the PR description, add a section **Linked surfaces** with one line per surface: `updated (link)`, `not affected — why`, or `follow-up: <PR link>`. "Not affected" without a reason means not checked. A surface in another repository gets its own PR there, linked from this one. Contracts (`aifinpay-polygon`, `aifinpay-protocol`) belong to the Contracts owner: write a proposal, do not edit.
+
 ## Workflow conventions
 
 - No workspace build orchestrator (no Turbo/Nx/Just). CI runs each package independently.
