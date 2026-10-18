@@ -37,5 +37,11 @@
       "Skill(grill-me)",
       "Bash(git revert *)"
     ]
-  }
+  },
+  "attribution": {
+    "commit": "",
+    "pr": "",
+    "sessionUrl": false
+  },
+  "includeCoAuthoredBy": false
 }
