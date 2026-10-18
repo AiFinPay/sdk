@@ -1,6 +1,6 @@
 # aifinpay-agent (Python)
 
-Version `2.5.0` (source candidate): agent identity (EVM and Solana addresses from one seed), native
+Version `2.6.0` (source candidate): agent identity (EVM and Solana addresses from one seed), native
 request authentication, linking an agent to its owner's dashboard, and paying
 AiFinPay merchants (`fetch_paid`, AIFP-1 on Polygon v1.4 in POL or USDC,
 or explicitly selected EVM v1.4 networks).
@@ -172,6 +172,25 @@ mode 600) before it is sent. If the outcome is unknown, `Aifp1PayError` carries
 New journals preserve the explicitly selected chain; older journals without
 it remain Polygon-only. Recovery can fetch a receipt after the original quote
 expires when the existing transaction settled in time.
+
+A hosted-gateway site (`https://gateway.aifinpay.io/<slug>`) is pinned to the
+merchant it was first paid as, in `journal_dir/merchant-pins`, before any money
+moves. A later `402` that names another merchant for the same site raises
+`Aifp1MerchantChangedError` (`code = "AIFP1_MERCHANT_CHANGED"`) before anything
+is quoted. If the change is legitimate, say so for that call; paying re-pins
+the site:
+
+```python
+agent.fetch_paid(url, ..., allow_merchant_change=True)
+# or name the merchant you trust; any other one is refused, on any origin:
+agent.fetch_paid(url, ..., expected_merchant_id="mrch_...")
+```
+
+An unreadable pin refuses payment rather than pinning afresh. Other origins are
+not pinned by their first path segment, because a merchant's own origin may
+serve several merchants under one prefix. A slug the gateway retired answers
+`410 gateway_retired`, which raises `Aifp1GatewayRetiredError`
+(`code = "AIFP1_GATEWAY_RETIRED"`) after one request; do not retry it.
 
 Processes using the same local journal directory share one atomic USD budget.
 The SDK reserves the validated debit under an operating-system file lock before

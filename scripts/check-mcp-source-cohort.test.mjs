@@ -54,14 +54,14 @@ test("canonical mirror and both CI refs bind the reviewed reporting producer; wr
 test("reporting source target refuses every stale package version without claiming registry availability", () => {
   verifyCohortVersions({
     mcp: "2.8.2",
-    agent: "2.6.5",
-    python: "2.5.1",
+    agent: "2.7.0",
+    python: "2.6.0",
     skill: "2.9.0",
   });
   for (const [name, oldVersion] of Object.entries({
     mcp: "2.8.0",
-    agent: "2.6.4",
-    python: "2.5.0",
+    agent: "2.6.5",
+    python: "2.5.1",
     skill: "2.8.0",
   })) {
     assert.throws(

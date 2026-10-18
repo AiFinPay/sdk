@@ -120,3 +120,18 @@ def test_base_cannot_reuse_the_legacy_pol_gas_default(agent, tmp_path, monkeypat
                          max_amount_usd=1, daily_amount_usd=1, journal_dir=str(tmp_path),
                          chain="base", max_gas_wei=gas)
     assert list(tmp_path.iterdir()) == []
+
+
+def test_fetch_paid_keeps_merchant_pins_beside_its_journal(agent, tmp_path, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(a, "aifp1_fetch", lambda url, **kw: seen.update(kw) or "ok")
+    agent.fetch_paid("https://gateway.aifinpay.io/acme/x", allowed_origins=["https://gateway.aifinpay.io"],
+                     max_amount_usd=1, daily_amount_usd=1, journal_dir=str(tmp_path),
+                     expected_merchant_id="mrch_acme", allow_merchant_change=True)
+    assert isinstance(seen["merchant_pins"], a.MerchantPins)
+    assert seen["merchant_pins"].directory == str(tmp_path / "merchant-pins")
+    assert seen["expected_merchant_id"] == "mrch_acme" and seen["allow_merchant_change"] is True
+
+    agent.fetch_paid("https://gateway.aifinpay.io/acme/x", allowed_origins=["https://gateway.aifinpay.io"],
+                     max_amount_usd=1, daily_amount_usd=1, journal_dir=str(tmp_path))
+    assert seen["expected_merchant_id"] is None and seen["allow_merchant_change"] is False

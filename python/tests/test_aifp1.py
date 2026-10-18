@@ -28,6 +28,7 @@ from aifinpay._v14_deployments import V14_DEPLOYMENTS
 from aifinpay.payment_chains import PAYMENT_CHAINS, pinned_token_decimals
 
 SHOP = "https://shop.example"
+GATEWAY = "https://gateway.aifinpay.io"
 API = "https://api.aifinpay.io"
 RPC = "https://polygon-rpc.example"
 ISSUER_KEY = nacl.signing.SigningKey(b"\x07" * 32)
@@ -92,6 +93,8 @@ class Server:
         self.chainlink_age_s = 60
         self.prices_down = False
         self.merchant_hits = []
+        self.slugs = {"acme": "mrch_acme", "other": "mrch_other"}  # gateway slug → merchant_id
+        self.retired = set()  # slugs answered 410 gateway_retired
         self.call = None
         self.last_quote = None
 
@@ -106,6 +109,20 @@ class Server:
             return Resp(200, {"data": {"base": self.native_asset, "currency": "USD", "amount": str(self.native_usd)}})
         if url.startswith("https://api.coingecko.com/"):
             return Resp(500, {})
+        if url.startswith(GATEWAY + "/"):
+            receipt = headers.get("AIFP-Receipt")
+            self.merchant_hits.append(receipt)
+            slug, _, rest = url[len(GATEWAY) + 1:].partition("/")
+            if slug in self.retired:
+                return Resp(410, {"error": "gateway_retired", "detail": "the selected gateway is not available"})
+            merchant, path = self.slugs[slug], "/" + rest
+            if receipt:
+                claims = json.loads(base64.urlsafe_b64decode(receipt.split(".")[1] + "=="))
+                if (claims["receipt_id"] in self.receipt_ids and claims["aud"] == merchant
+                        and a.scope_covers(claims["scope"], claims["resource"], path)):
+                    return Resp(200, {"data": "paid content", "path": path})
+            return Resp(402, {"protocol": "AIFP-1", "merchant_id": merchant, "resource": path,
+                              "base_unit_price_usd": "0.0005"})
         if url.startswith(SHOP):
             receipt = headers.get("AIFP-Receipt")
             self.merchant_hits.append(receipt)
@@ -270,6 +287,107 @@ def test_default_units_buy_a_ten_cent_batch():
     assert a.default_units_for({"base_unit_price_usd": "0.0005"}) == 200
     assert a.default_units_for({"base_unit_price_usd": "0.03"}) == 4
     assert a.default_units_for({}) == a.FALLBACK_UNITS
+
+
+# ── A gateway site keeps the merchant it was first paid as ──────────────────
+#
+# slug → merchant is a lookup on the gateway, and the client used to pay
+# whatever merchant the 402 named. The pin is the client's own second line.
+
+
+def gateway(h, pins, **over):
+    return h.fetch(over.pop("url", f"{GATEWAY}/acme/data"), allowed_origins=[GATEWAY], merchant_pins=pins, **over)
+
+
+def test_the_first_payment_pins_each_gateway_site(pinned, tmp_path):
+    h, pins = Harness(pinned), a.MerchantPins(str(tmp_path))
+    assert gateway(h, pins).status_code == 200
+    assert gateway(h, pins, url=f"{GATEWAY}/other/data").status_code == 200
+    assert pins.get(f"{GATEWAY}/acme") == "mrch_acme" and pins.get(f"{GATEWAY}/other") == "mrch_other"
+    assert all(stat.S_IMODE(os.stat(p).st_mode) == 0o600 for p in tmp_path.iterdir())
+
+
+def test_another_merchant_for_a_pinned_site_is_refused_before_any_quote(pinned, tmp_path):
+    h = Harness(pinned)
+    gateway(h, a.MerchantPins(str(tmp_path)))
+    h.server.slugs["acme"] = "mrch_squatter"
+    hits = len(h.server.merchant_hits)
+    restarted = Harness(pinned)
+    restarted.server = h.server
+    with pytest.raises(a.Aifp1MerchantChangedError) as e:
+        gateway(restarted, a.MerchantPins(str(tmp_path)))
+    assert (e.value.site, e.value.expected_merchant_id, e.value.merchant_id) == (
+        f"{GATEWAY}/acme", "mrch_acme", "mrch_squatter")
+    assert e.value.code == "AIFP1_MERCHANT_CHANGED"
+    assert h.server.quotes == 1 and len(h.server.merchant_hits) - hits == 1
+    assert restarted.chain is None and not restarted.journal and len(h.server.pays) == 1
+
+
+def test_allowing_the_change_pays_the_new_merchant_and_re_pins(pinned, tmp_path):
+    h, pins = Harness(pinned), a.MerchantPins(str(tmp_path))
+    gateway(h, pins)
+    h.server.slugs["acme"] = "mrch_new"
+    assert gateway(h, pins, allow_merchant_change=True).status_code == 200
+    assert h.server.quotes == 2 and pins.get(f"{GATEWAY}/acme") == "mrch_new"
+    h.server.slugs["acme"] = "mrch_acme"
+    with pytest.raises(a.Aifp1MerchantChangedError):
+        gateway(h, pins)
+
+
+def test_expected_merchant_id_refuses_any_other_merchant_pinned_or_not(pinned, tmp_path):
+    h = Harness(pinned)
+    with pytest.raises(a.Aifp1MerchantChangedError) as e:
+        gateway(h, a.MerchantPins(str(tmp_path)), expected_merchant_id="mrch_other")
+    assert (e.value.expected_merchant_id, e.value.merchant_id) == ("mrch_other", "mrch_acme")
+    assert h.server.quotes == 0
+    assert_nothing_paid(h)
+
+
+def test_expected_merchant_id_naming_the_new_merchant_pays_and_re_pins(pinned, tmp_path):
+    h, pins = Harness(pinned), a.MerchantPins(str(tmp_path))
+    gateway(h, pins)
+    h.server.slugs["acme"] = "mrch_new"
+    assert gateway(h, pins, expected_merchant_id="mrch_new").status_code == 200
+    assert pins.get(f"{GATEWAY}/acme") == "mrch_new"
+
+
+def test_the_pin_is_written_before_money_moves(pinned, tmp_path):
+    class ReadOnlyPins(a.MerchantPins):
+        def set(self, site, merchant_id):
+            raise OSError("read-only file system")
+
+    h = Harness(pinned)
+    with pytest.raises(OSError, match="read-only"):
+        gateway(h, ReadOnlyPins(str(tmp_path)))
+    assert_nothing_paid(h)
+
+
+def test_an_unreadable_pin_refuses_rather_than_pinning_afresh(pinned, tmp_path):
+    h, pins = Harness(pinned), a.MerchantPins(str(tmp_path))
+    gateway(h, pins)
+    for p in tmp_path.iterdir():
+        p.write_text("{not json")
+    with pytest.raises(a.Aifp1Error, match="merchant pin"):
+        gateway(h, pins, url=f"{GATEWAY}/acme/other-section/x")
+    assert h.server.quotes == 1
+
+
+def test_a_merchant_origin_is_not_pinned_by_its_first_path_segment(pinned, tmp_path):
+    # A direct origin may serve several merchants under one path prefix; only
+    # the hosted gateway maps its first segment to one merchant.
+    h, pins = Harness(pinned), a.MerchantPins(str(tmp_path))
+    assert h.fetch(merchant_pins=pins).status_code == 200
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_retired_gateway_slug_is_terminal_after_one_request(pinned, tmp_path):
+    h = Harness(pinned)
+    h.server.retired.add("acme")
+    with pytest.raises(a.Aifp1GatewayRetiredError) as e:
+        gateway(h, a.MerchantPins(str(tmp_path)))
+    assert e.value.code == "AIFP1_GATEWAY_RETIRED" and e.value.site == f"{GATEWAY}/acme"
+    assert len(h.server.merchant_hits) == 1 and h.server.quotes == 0
+    assert_nothing_paid(h)
 
 
 # ── Happy paths ─────────────────────────────────────────────────────────────

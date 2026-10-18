@@ -100,6 +100,37 @@ class Aifp1FinalizedFailureError(Aifp1PayError):
         self.fee_amount_usd, self.actual_fee_lamports = fee_amount_usd, actual_fee_lamports
 
 
+class Aifp1MerchantChangedError(Aifp1Error):
+    """A gateway site answered as another merchant than the one it may be paid as.
+
+    That is the merchant this agent first paid there, or the caller's
+    ``expected_merchant_id``. Nothing was quoted or paid.
+    """
+
+    code = "AIFP1_MERCHANT_CHANGED"
+
+    def __init__(self, site: str, expected_merchant_id: str, merchant_id: str):
+        super().__init__(
+            f"{site} now answers as merchant {merchant_id}, not {expected_merchant_id} — refusing to quote or pay. "
+            "If the change is legitimate, pass allow_merchant_change=True or expected_merchant_id for this call."
+        )
+        self.site, self.expected_merchant_id, self.merchant_id = site, expected_merchant_id, merchant_id
+
+
+class Aifp1GatewayRetiredError(Aifp1Error):
+    """410 gateway_retired: the site that published this slug no longer serves it.
+
+    The gateway never hands the slug to another site, so retrying or buying a
+    batch cannot succeed. Nothing was quoted or paid.
+    """
+
+    code = "AIFP1_GATEWAY_RETIRED"
+
+    def __init__(self, site: str):
+        super().__init__(f"{site} is retired (410 gateway_retired); do not retry")
+        self.site = site
+
+
 def _iso_to_unix(value: str) -> int:
     return timegm(time.strptime(str(value)[:19], "%Y-%m-%dT%H:%M:%S"))
 
@@ -741,7 +772,7 @@ def _durable_directory(path: str) -> None:
 
 
 def _write_private_json(path: str, data: Dict[str, Any]) -> None:
-    """Durably replace an owner-only JSON file; callers hold the budget lock."""
+    """Durably replace an owner-only JSON file; ledger callers hold the budget lock."""
     directory = os.path.dirname(os.path.abspath(path))
     fd, temporary = tempfile.mkstemp(prefix=f".{os.path.basename(path)}.", suffix=".tmp", dir=directory)
     try:
@@ -1291,6 +1322,62 @@ def _origin(url: str) -> str:
     return f"{p.scheme}://{p.netloc}"
 
 
+# ── Merchant pins ───────────────────────────────────────────────────────────
+#
+# The hosted gateway resolves slug → merchant on every request, so a slug that
+# changes hands makes the 402 name the new merchant, and a client that quotes
+# whatever the 402 names pays them. A gateway site (origin + slug) is pinned to
+# the merchant it was first paid as, and a 402 naming another one is refused
+# before anything is quoted. Only the hosted gateway maps its first path
+# segment to one merchant — a merchant's own origin may serve several under
+# one prefix — so other origins are not pinned; expected_merchant_id works
+# everywhere.
+
+GATEWAY_ORIGINS = ("https://gateway.aifinpay.io",)
+
+
+def _gateway_site(url: str) -> Optional[str]:
+    """origin + slug of a hosted-gateway URL, as Node's parseGatewayUrl computes it."""
+    slug = next((segment for segment in urlsplit(url).path.split("/") if segment), None)
+    return f"{_origin(url)}/{slug}" if _origin(url) in GATEWAY_ORIGINS and slug else None
+
+
+class MerchantPins:
+    """The merchant each gateway site was first paid as: one owner-only file per site.
+
+    A file per site makes every pin one atomic replace: no lock, and two
+    processes pinning different sites cannot lose each other's write.
+    """
+
+    def __init__(self, directory: str):
+        self.directory = directory
+
+    def _path(self, site: str) -> str:
+        return os.path.join(self.directory, hashlib.sha256(site.encode()).hexdigest() + ".json")
+
+    def get(self, site: str) -> Optional[str]:
+        path = self._path(site)
+        try:
+            with open(path) as f:
+                pin = json.load(f)
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError):
+            pin = None
+        # Unreadable is not "never paid": treating it so would pin whoever answers next.
+        if not isinstance(pin, dict) or pin.get("site") != site or not isinstance(pin.get("merchant_id"), str) \
+                or not pin["merchant_id"]:
+            raise Aifp1Error(
+                f"merchant pin {path} for {site} is unreadable — refusing to pay. "
+                "Pass allow_merchant_change=True or expected_merchant_id to pin the merchant the site names now."
+            )
+        return pin["merchant_id"]
+
+    def set(self, site: str, merchant_id: str) -> None:
+        _durable_directory(self.directory)
+        _write_private_json(self._path(site), {"site": site, "merchant_id": merchant_id})
+
+
 def aifp1_fetch(
     url: str,
     *,
@@ -1315,6 +1402,9 @@ def aifp1_fetch(
     max_fee_lamports: _OptionalInt = None,
     wallet_identity: _OptionalStr = None,
     reporting_token: _OptionalStr = None,
+    merchant_pins: Optional[MerchantPins] = None,
+    expected_merchant_id: _OptionalStr = None,
+    allow_merchant_change: bool = False,
 ) -> requests.Response:
     """GET ``url``; on an AIFP-1 402 buy one batch and retry with its receipt.
 
@@ -1322,6 +1412,12 @@ def aifp1_fetch(
     challenged resource is tried before anything new is bought. ``scope`` is
     "prefix" by default for the same reason as in Node: an "exact" batch per URL
     costs the $0.10 floor and a transaction for every distinct page.
+
+    With ``merchant_pins`` a hosted-gateway site is pinned to the merchant it
+    was first paid as; a 402 naming another raises
+    :class:`Aifp1MerchantChangedError` unless ``allow_merchant_change`` or
+    ``expected_merchant_id`` names the change. 410 gateway_retired raises
+    :class:`Aifp1GatewayRetiredError`.
     """
     requested_chain = chain
     chain = "polygon" if chain is None else chain
@@ -1342,9 +1438,19 @@ def aifp1_fetch(
         _pinned_stable(asset, chain)
     if scope not in ("exact", "prefix", "merchant"):
         raise Aifp1QuoteError(f"unknown scope {scope!r}")
+    if expected_merchant_id is not None and (not isinstance(expected_merchant_id, str) or not expected_merchant_id):
+        raise Aifp1QuoteError("expected_merchant_id must be a non-empty merchant id")
     if not url.startswith("https://") or _origin(url) not in allowed_origins:
         raise Aifp1QuoteError("the URL must use an owner-approved exact HTTPS origin")
+    site = _gateway_site(url)
     response = session.get(url, timeout=30, allow_redirects=False)
+    if response.status_code == 410:
+        try:
+            retired = response.json().get("error") == "gateway_retired"
+        except (ValueError, AttributeError):
+            retired = False
+        if retired:
+            raise Aifp1GatewayRetiredError(site or _origin(url))
     if response.status_code != 402:
         return response
     try:
@@ -1354,6 +1460,12 @@ def aifp1_fetch(
     merchant_id, resource = challenge.get("merchant_id"), challenge.get("resource")
     if challenge.get("protocol") != "AIFP-1" or not merchant_id or not resource:
         return response  # not an AIFP-1 challenge; never fall through to another protocol
+    pinned = None
+    if site and merchant_pins is not None and not allow_merchant_change and expected_merchant_id is None:
+        pinned = merchant_pins.get(site)
+    expected = pinned if expected_merchant_id is None else expected_merchant_id
+    if expected is not None and expected != merchant_id:
+        raise Aifp1MerchantChangedError(site or _origin(url), expected, merchant_id)
     held = receipts.setdefault(merchant_id, [])
     held[:] = [e for e in held if e["expires_at"] > time.time()]
     for cached in list(held):
@@ -1630,6 +1742,9 @@ def aifp1_fetch(
         prepared = True
 
     try:
+        # Pin before money moves: a pin that cannot be written stops the payment.
+        if site and merchant_pins is not None and pinned != merchant_id:
+            merchant_pins.set(site, merchant_id)
         if sol:
             from .settlement_solana_v14 import execute_settlement
 

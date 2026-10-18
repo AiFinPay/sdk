@@ -34,6 +34,9 @@
 // the whole protocol without an RPC endpoint.
 // ──────────────────────────────────────────────────────────────────────────
 import { createHash, createPublicKey, randomBytes, verify as verifySignature } from "node:crypto";
+import { mkdir, open, readFile, rename, unlink } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import bs58 from "bs58";
 import { keccak256, parseUnits, stringToHex } from "viem";
 import { paymentChain, paymentStableAsset, type PaymentChain } from "./paymentChains.js";
@@ -346,6 +349,37 @@ export function recoverAifp1Payment(
 /** The gateway rejected a receipt we believed covered the request. */
 export class Aifp1ReceiptRejectedError extends Aifp1Error {}
 
+/**
+ * A gateway site answered as a different merchant than the one it may be paid
+ * as: the merchant this agent first paid there, or the caller's
+ * `expectedMerchantId`. Nothing was quoted or paid.
+ */
+export class Aifp1MerchantChangedError extends Aifp1Error {
+  readonly code = "AIFP1_MERCHANT_CHANGED";
+  constructor(
+    public readonly site: string,
+    public readonly expectedMerchantId: string,
+    public readonly merchantId: string
+  ) {
+    super(
+      `${site} now answers as merchant ${merchantId}, not ${expectedMerchantId} — refusing to quote or pay. ` +
+        "If the change is legitimate, pass allowMerchantChange: true or expectedMerchantId for this call."
+    );
+  }
+}
+
+/**
+ * 410 gateway_retired: the site that published this slug no longer serves it,
+ * and the gateway never hands it to another site. Terminal — retrying or
+ * buying a batch cannot succeed. Nothing was quoted or paid.
+ */
+export class Aifp1GatewayRetiredError extends Aifp1Error {
+  readonly code = "AIFP1_GATEWAY_RETIRED";
+  constructor(public readonly site: string) {
+    super(`${site} is retired (410 gateway_retired); do not retry`);
+  }
+}
+
 // ── Wire shapes (mirrors of the server; do not invent fields) ─────────────
 
 export type Aifp1Scope = "exact" | "prefix" | "merchant";
@@ -622,8 +656,10 @@ export function prefixHint(path: string): string {
  * query string is not part of either.
  *
  * `site` (origin + slug) is the cache key. It is the only merchant identity
- * available before the first 402 answers with a merchant_id, and slug →
- * merchant is a 1:1 lookup server-side (gw.resolveSlug).
+ * available before the first 402 answers with a merchant_id. The gateway
+ * repeats the slug → merchant lookup on every request and a slug can change
+ * hands, so a site is pinned to the merchant it was first paid as (see Merchant
+ * pins).
  */
 /**
  * Gateway origins this client will settle against.
@@ -743,6 +779,97 @@ export interface Aifp1CachedReceipt {
   amountUsd: number;
 }
 
+// ── Merchant pins ─────────────────────────────────────────────────────────
+//
+// The gateway resolves slug → merchant on every request, so a slug that
+// changes hands makes the 402 name the new merchant — and a client that quotes
+// whatever the 402 names pays them. The gateway keeps a slug with the site
+// that published it; the pin is the client's own line, in depth. The merchant
+// a site was first paid as is remembered, and a 402 naming another one is
+// refused before anything is quoted.
+
+/** Where the merchant each gateway site was first paid as is remembered. */
+export interface Aifp1MerchantPinStore {
+  /** The merchant `site` is pinned to, or undefined if it never was. */
+  get(site: string): Promise<string | undefined>;
+  /** Pin `site` to `merchantId`, replacing any earlier pin. Durable once it resolves. */
+  set(site: string, merchantId: string): Promise<void>;
+}
+
+/** Pins that last as long as the process. */
+export class MemoryMerchantPinStore implements Aifp1MerchantPinStore {
+  private readonly pins = new Map<string, string>();
+  async get(site: string): Promise<string | undefined> {
+    return this.pins.get(site);
+  }
+  async set(site: string, merchantId: string): Promise<void> {
+    this.pins.set(site, merchantId);
+  }
+}
+
+/**
+ * One owner-only JSON file per site under `directory`, named by the SHA-256 of
+ * the site. A file per site makes every pin one atomic rename: no lock, and
+ * two processes pinning different sites cannot lose each other's write.
+ */
+export class FileMerchantPinStore implements Aifp1MerchantPinStore {
+  constructor(readonly directory: string) {}
+
+  /** `merchant-pins` beside the spend ledger: AIFINPAY_STATE_DIR, or ~/.aifinpay. */
+  static default(): FileMerchantPinStore {
+    const base = process.env.AIFINPAY_STATE_DIR || join(homedir(), ".aifinpay");
+    return new FileMerchantPinStore(join(base, "merchant-pins"));
+  }
+
+  private path(site: string): string {
+    return join(this.directory, `${createHash("sha256").update(site).digest("hex")}.json`);
+  }
+
+  async get(site: string): Promise<string | undefined> {
+    const path = this.path(site);
+    let pin: { site?: unknown; merchant_id?: unknown } | null = null;
+    try {
+      pin = JSON.parse(await readFile(path, "utf8"));
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    }
+    // Unreadable is not "never paid": treating it so would pin whoever answers next.
+    if (!pin || pin.site !== site || typeof pin.merchant_id !== "string" || !pin.merchant_id) {
+      throw new Aifp1Error(
+        `merchant pin ${path} for ${site} is unreadable — refusing to pay. ` +
+          "Pass allowMerchantChange: true or expectedMerchantId to pin the merchant the site names now."
+      );
+    }
+    return pin.merchant_id;
+  }
+
+  async set(site: string, merchantId: string): Promise<void> {
+    await mkdir(this.directory, { recursive: true, mode: 0o700 });
+    const path = this.path(site);
+    const temporary = `${path}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`;
+    try {
+      const file = await open(temporary, "wx", 0o600);
+      try {
+        await file.writeFile(JSON.stringify({ site, merchant_id: merchantId }), "utf8");
+        await file.sync();
+      } finally {
+        await file.close();
+      }
+      await rename(temporary, path);
+    } finally {
+      await unlink(temporary).catch((e: NodeJS.ErrnoException) => {
+        if (e.code !== "ENOENT") throw e;
+      });
+    }
+    const directory = await open(this.directory, "r");
+    try {
+      await directory.sync();
+    } finally {
+      await directory.close();
+    }
+  }
+}
+
 /**
  * How close to expiry a receipt is still worth sending.
  *
@@ -760,9 +887,14 @@ const EXPIRY_MARGIN_MS = 10_000;
  * writing one to disk by default would be a bigger decision than a cache
  * deserves. An agent that wants batches to survive a restart can hold the
  * entries itself (they are plain data) and re-seed a cache.
+ *
+ * `merchantPins` is not a credential, and a pin a restart forgets protects
+ * nothing, so AiFinPayAgent backs it with files; a bare cache keeps it in memory.
  */
 export class Aifp1ReceiptCache {
   private readonly entries: Aifp1CachedReceipt[] = [];
+
+  constructor(readonly merchantPins: Aifp1MerchantPinStore = new MemoryMerchantPinStore()) {}
 
   /**
    * Batch purchases in flight, keyed by site.
@@ -933,6 +1065,17 @@ export interface Aifp1FetchOptions {
    * Direct origins must still be explicitly trusted through gatewayOrigins.
    */
   resourcePathMode?: "gateway" | "direct";
+  /**
+   * The merchant_id this call may pay. A 402 naming any other is refused
+   * before quoting, whatever the site's pin says; paying re-pins the site.
+   */
+  expectedMerchantId?: string;
+  /**
+   * Pay a gateway site's current merchant although the site was first paid as
+   * another one; paying re-pins the site. Off by default, because the 402 that
+   * names the merchant is unauthenticated.
+   */
+  allowMerchantChange?: boolean;
   /** Value for the AIFP-Agent-Id header; defaults to the agent's EVM address. */
   agentId?: string;
   /** How long to keep retrying /v1/pay while the chain catches up (AIFP-425). */
@@ -1329,6 +1472,11 @@ export async function aifp1Fetch(
     throw new Aifp1QuoteError("maxAmountUsd must be nonnegative and finite");
   }
   if (opts.v14 && opts.solanaV14) throw new Aifp1QuoteError("Only one payment family may be authorized");
+  if (
+    opts.expectedMerchantId !== undefined &&
+    (typeof opts.expectedMerchantId !== "string" || !opts.expectedMerchantId)
+  )
+    throw new Aifp1QuoteError("expectedMerchantId must be a non-empty merchant id");
   const sol = opts.solanaV14;
   const evmChain = authorizedV14Chain(opts.v14?.chain);
   const chain: Aifp1SettlementChain = sol ? "solana" : evmChain;
@@ -1412,6 +1560,16 @@ export async function aifp1Fetch(
   }
 
   if (resp.status !== 402) {
+    if (resp.status === 410) {
+      // gateway-routing.js: a slug its site published and no longer serves.
+      // It is never handed to another site, so no retry or purchase can
+      // succeed. A held batch stays — the site may take its slug back.
+      const detail = await resp
+        .clone()
+        .json()
+        .catch(() => null);
+      if (detail?.error === "gateway_retired") throw new Aifp1GatewayRetiredError(site);
+    }
     // Not a paywall refusal. That includes a 403, which for a receipt we sent
     // means the gateway disagreed with our coverage or our receipt is not
     // valid for this merchant. Drop it rather than keep re-sending a token the
@@ -1471,6 +1629,16 @@ export async function aifp1Fetch(
   // spend it, and if it does not they buy their own, which is a different
   // batch rather than a duplicate.
   const buyBatch = async (): Promise<Response | null> => {
+    // The merchant this site may be paid as: the caller's, else the one it was
+    // first paid as. A direct site key already names its merchant.
+    const pinned =
+      direct || opts.allowMerchantChange || opts.expectedMerchantId !== undefined
+        ? undefined
+        : await deps.cache.merchantPins.get(site);
+    const expected = opts.expectedMerchantId ?? pinned;
+    if (expected !== undefined && expected !== challenge.merchant_id) {
+      throw new Aifp1MerchantChangedError(site, expected, challenge.merchant_id);
+    }
     if (opts.maxAmountUsd === 0)
       throw new Aifp1QuoteError("No payment budget remains; cached access can still be used");
     let validPayer = /^0x[0-9a-fA-F]{40}$/.test(deps.payerAddress || "");
@@ -1858,6 +2026,8 @@ export async function aifp1Fetch(
       ...(preparedTx?.hash === txRef ? { serializedTransaction: preparedTx.serializedTransaction } : {}),
     });
     try {
+      // Pin before money moves: a pin that cannot be written stops the payment.
+      if (!direct && pinned !== challenge.merchant_id) await deps.cache.merchantPins.set(site, challenge.merchant_id);
       if (sol) {
         return await settleSolanaBatch(
           deps,
