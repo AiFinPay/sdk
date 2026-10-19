@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -53,13 +59,13 @@ test("canonical mirror and both CI refs bind the reviewed reporting producer; wr
 });
 test("reporting source target refuses every stale package version without claiming registry availability", () => {
   verifyCohortVersions({
-    mcp: "2.10.0",
+    mcp: "2.11.0",
     agent: "2.8.0",
     python: "2.7.0",
     skill: "2.9.0",
   });
   for (const [name, oldVersion] of Object.entries({
-    mcp: "2.9.0",
+    mcp: "2.10.0",
     agent: "2.7.0",
     python: "2.6.1",
     skill: "2.8.0",
@@ -114,7 +120,13 @@ test("MCP candidate metadata preserves the real registry lock of the published c
   );
   assert.deepEqual(agentEdges, baselineEdges);
   // With agent 2.8.0 published and installed from the registry, the release
-  // metadata check must accept the lock.
+  // metadata check must accept the lock. The check also verifies the installed
+  // package, so it needs `npm ci` in mcp/; CI runs this file before any mcp
+  // install (it then installs the cohort in a disposable directory and runs
+  // the same guard there, in checkSourceCohort). Without an installation the
+  // metadata assertions above are the whole test.
+  if (!existsSync(join(root, "mcp/node_modules/@aifinpay/agent/package.json")))
+    return;
   const guard = spawnSync(
     process.execPath,
     ["scripts/verify-release-inputs.mjs"],

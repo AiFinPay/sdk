@@ -4,16 +4,60 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Version **2.10.0** is prepared in this checkout, on the source agent 2.8.0
-(unpublished; 2.10.0 cannot be released until agent 2.8.0 is published and the
-lock refreshed) and canonical skill 2.9.0. The separate canonical producer's final immutable
+Version **2.11.0** is prepared in this checkout, on the published agent 2.8.0
+and canonical skill 2.9.0. The separate canonical producer's final immutable
 source pin is a required handoff, not a moving-branch substitution.
 The published baseline checked2026-10-04 was MCP2.5.0. Package publication and
 real registry dependency/lock refresh remain release gates; a source-cohort
 build does not prove those steps. Owner-enabled v1.4 purchases with `payable_fetch` are
 released: on Polygon since 2.2.0, on Base (ETH or USDC) since 2.5.0; site-wide
-batches with `scope: "merchant"` since 2.4.1. Without payment configuration the server keeps
-its inspection-only tool inventory.
+batches with `scope: "merchant"` since 2.4.1. Without payment configuration the server
+lists every tool, including `payable_fetch`, but signs nothing: `payable_fetch`
+and `payment_setup_status` answer with the setup checklist instead.
+
+## First payment in five steps
+
+Each step is one command or one tool call. Signing happens only in step 5,
+and only once the owner has set every limit in step 4.
+
+1. **Read the price.** `GET` the resource. The `402` names the merchant
+   (`merchant_id`), the price per request and the smallest batch (`$0.10` for
+   200 standard requests).
+2. **Check the setup.** Call `payment_setup_status`. It returns the wallet
+   (persistent or ephemeral), whether payments are enabled, which owner limits
+   are set, the balance when the RPC answers, and `next_step`: the first thing
+   still missing.
+3. **Persistent wallet.** If `wallet.persistent` is false, run
+   `npx @aifinpay/mcp init`. Without a terminal it prints one JSON document;
+   copy its `env` (the passphrase is only there) into the `aifinpay` server
+   entry of the MCP client config, reconnect the server, then call
+   `agent_reload`. Never fund an ephemeral address.
+4. **Fund and enable.** Tell the owner `addresses.evm` and the amount: the
+   batch price in POL plus the gas cap, so about `0.5 POL` for one `$0.10`
+   batch at `$0.20`/POL plus up to `0.3 POL` gas (the SDK refuses before
+   signing if the worst-case fee exceeds the cap). When the owner confirms
+   funding, they add the payment settings to the same `env` and reconnect:
+
+   ```json
+   {
+     "AIFINPAY_PAYMENTS_ENABLED": "1",
+     "AIFINPAY_GATEWAY_ORIGINS": "https://dev.ratersapp.com",
+     "AIFINPAY_GATEWAY_PATH_MODE": "direct",
+     "AIFINPAY_MAX_USD": "0.15",
+     "AIFINPAY_DAILY_USD": "1.00",
+     "AIFINPAY_MAX_GAS_POL": "0.3"
+   }
+   ```
+
+   `payment_setup_status` then reports `ready: true`.
+
+5. **Pay.** `payable_fetch({"url": "https://dev.ratersapp.com/api/agent/genres/list"})`
+   buys the batch on Polygon (splitter v1.4) and returns the content and the
+   receipt summary. Later requests reuse the batch.
+
+Polygon and Base are served on v1.4 today; `settlement_routes` lists them
+first, with `live: true`. Its `legacy_v13` section describes the older
+splitter v1.3 routes, which `payable_fetch` does not use.
 
 ## Enable native paid GET requests
 
@@ -171,16 +215,19 @@ state file in chat. Unconfirmed payments consume the budget conservatively.
 | `agent_reload`           | Reload local wallet files in the current MCP connection. |
 | `agent_quota`            | Read the agent's quota.                                  |
 | `agent_passport_resolve` | Resolve the global Agent Passport identity.              |
-| `settlement_routes`      | Read the available verified settlement routes.           |
+| `payment_setup_status`   | Read-only setup checklist with the one `next_step`.      |
+| `settlement_routes`      | Splitter v1.4 routes (live now) first, then legacy v1.3. |
 | `settlement_invoice`     | Prepare a non-signing settlement invoice.                |
 | `agent_history`          | Read indexed settlements or retained receipt batches.    |
 | `settlement_solana`      | Build a non-signing Solana settlement invoice.           |
 | `settlement_casper`      | Build a non-signing Casper settlement invoice.           |
 | `deployment_info`        | Read deployments: addresses, assets, settlement status.  |
 
-`payable_fetch` is registered when the owner sets `AIFINPAY_PAYMENTS_ENABLED=1`
-with a persistent wallet. With payments enabled and any owner limit missing or
-invalid, the server refuses to start rather than hiding the tool. It accepts
+`payable_fetch` is always listed. It signs only with a persistent wallet,
+`AIFINPAY_PAYMENTS_ENABLED=1` and every owner limit; before that it returns the
+`payment_setup_status` checklist as a tool error and contacts nothing. With
+payments enabled and any owner limit missing or invalid, the server refuses to
+start rather than hiding the tool. It accepts
 only `url`, `max_amount_usd`, `scope` and `expected_merchant_id`; `max_amount_usd`
 can lower the owner's per-payment cap for one call, never raise it.
 
@@ -267,7 +314,33 @@ AIFINPAY_WALLET_PASSPHRASE='<a long passphrase>' npx @aifinpay/mcp init
 The keystore is encrypted at rest and the MCP server needs the same
 `AIFINPAY_WALLET_PASSPHRASE` to load it. For a disposable test wallet only,
 `npx @aifinpay/mcp init --plaintext` writes it unencrypted (mode 600); without
-either, `init` refuses rather than create an unencrypted wallet you might fund.
+either, `init` on a terminal refuses rather than create an unencrypted wallet
+you might fund.
+
+Without a terminal on stdin (an agent's subprocess), or with
+`AIFINPAY_NONINTERACTIVE=1`, `init` never prompts. It generates a 192-bit
+passphrase, encrypts the keystore and prints one JSON document:
+
+```json
+{
+  "keystore": "/home/me/.aifinpay/agent.json",
+  "created": true,
+  "encrypted": true,
+  "source": "legacy-keystore",
+  "addresses": { "evm": "0x…", "solana": "…", "casper": "account-hash-…" },
+  "env": { "AIFINPAY_WALLET_PASSPHRASE": "<generated>" },
+  "passphrase_note": "…",
+  "payment_env_example": { "AIFINPAY_PAYMENTS_ENABLED": "1", "…": "…" },
+  "next_step": "Put \"env\" into the aifinpay server entry of the MCP client config …"
+}
+```
+
+The passphrase appears only inside `env`, because the caller must put it in
+the client config and there is no other channel; a process that captures that
+output captures the passphrase, so treat the output as a secret. A second run
+keeps the wallet and prints a placeholder instead of the passphrase. If the
+keystore exists and `AIFINPAY_WALLET_PASSPHRASE` is unset, `init` prints one
+line naming the variable and exits with status 2.
 
 Select the wallet in this order: `SEED_HASH` → `./aifinpay/agents.json` →
 legacy `AIFINPAY_AGENT_SECRET` → `~/.aifinpay/agent.json`.

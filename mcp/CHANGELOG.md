@@ -1,5 +1,38 @@
 # Changelog
 
+## 2.11.0 — a fresh agent reaches its first payment in five steps
+
+A realistic test on 2026-10-19 (a fresh agent with MCP 2.10.0, told it could
+pay $0.10 for one resource) ended after ten minutes with no payment. The tool
+journal showed four causes; each is addressed here.
+
+- `settlement_routes` now answers with splitter v1.4 first: one AIFP-1 entry per
+  chain, with `chain_id`, `assets`, `quote_endpoint`, `pay_endpoint` and
+  `live` (payable now through `payable_fetch`), served chains read from the
+  issuer's `/api/health` and `/.well-known/x402.json` and pinned against the
+  SDK's deployment registry. The splitter v1.3 answer from
+  `GET /v1/settlement/routes` follows unchanged under `legacy_v13`. Before, the
+  tool showed only v1.3, every route disabled, and agents concluded Polygon
+  was off.
+- New read-only `payment_setup_status`: wallet (persistent or ephemeral, source,
+  EVM address), `payments_enabled`, each owner limit with `set`, the native
+  balance on the pay chain when the RPC answers, and `next_step` — exactly one
+  instruction for the first unmet item (the init command, the env block to add,
+  the address and amount to fund, or the `payable_fetch` call).
+- `payable_fetch` is always in `tools/list`. Until the owner's setup is
+  complete (persistent wallet, `AIFINPAY_PAYMENTS_ENABLED=1`, every limit) it
+  signs nothing and returns that same checklist as a tool error. The signing
+  conditions are unchanged.
+- `npx @aifinpay/mcp init` without a terminal on stdin, or with
+  `AIFINPAY_NONINTERACTIVE=1`, never prompts: it generates a 192-bit
+  passphrase, writes the encrypted keystore (mode 600) and prints one JSON
+  document with the keystore path, the public addresses, the exact `env` block
+  for the MCP client config and `next_step`. The passphrase appears only inside
+  that `env` block. Existing keystores are kept; an encrypted keystore with
+  `AIFINPAY_WALLET_PASSPHRASE` unset is reported in one line naming the
+  variable. On a terminal the behaviour is unchanged.
+- README: "First payment in five steps".
+
 ## 2.10.0 — name the AI client that pays
 
 - `payable_fetch` maps the MCP client's `clientInfo.name` from initialize to

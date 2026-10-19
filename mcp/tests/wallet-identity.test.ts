@@ -324,7 +324,9 @@ describe("persistent wallet identity", () => {
       expect(tools).toContain("agent_reload");
       expect(tools).toContain("agent_passport_resolve");
       expect(tools).toContain("settlement_invoice");
-      expect(tools).not.toContain("payable_fetch");
+      // Always listed; without owner limits it only reports the setup status.
+      expect(tools).toContain("payable_fetch");
+      expect(tools).toContain("payment_setup_status");
       const resources = await client.listResources();
       expect(resources.resources.map((resource) => resource.uri)).toContain("aifinpay://skill");
       const skill = await client.readResource({ uri: "aifinpay://skill" });

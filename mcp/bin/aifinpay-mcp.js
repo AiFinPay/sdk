@@ -75,6 +75,11 @@ if (arg === "--help" || arg === "-h" || arg === "help") {
 Run init once. It writes ${KEYSTORE} with mode 600 and the server picks
 it up automatically — you do not have to put the secret in a config file.
 
+Without a terminal on stdin (an agent's subprocess), or with
+AIFINPAY_NONINTERACTIVE=1, init never prompts: it generates the passphrase
+itself, encrypts the keystore and prints one JSON document with the keystore
+path, the public addresses and the exact "env" block for the MCP client config.
+
 Env (all optional):
   SEED_HASH              32-byte hex seed; highest priority
   AIFINPAY_AGENTS_FILE   project agents file (default ./aifinpay/agents.json)
@@ -86,9 +91,10 @@ Env (all optional):
   AIFINPAY_TIMEOUT_MS     default 30000
   AIFINPAY_HOME           default ~/.aifinpay
 
-Payments (payable_fetch) are off until the owner sets all of
+Payments (payable_fetch) sign nothing until the owner sets all of
 AIFINPAY_PAYMENTS_ENABLED=1, AIFINPAY_GATEWAY_ORIGINS, AIFINPAY_MAX_USD,
-AIFINPAY_DAILY_USD and AIFINPAY_MAX_GAS_POL. init prints an example block.
+AIFINPAY_DAILY_USD and AIFINPAY_MAX_GAS_POL. init prints an example block;
+the payment_setup_status tool says which of them is still missing.
 `);
   process.exit(0);
 }
@@ -100,7 +106,14 @@ if (arg === "--version" || arg === "-v" || arg === "version") {
 
 // ── init ──────────────────────────────────────────────────────────────────
 
-const PASSPHRASE = process.env.AIFINPAY_WALLET_PASSPHRASE || null;
+const PASSPHRASE_ENV = "AIFINPAY_WALLET_PASSPHRASE";
+let PASSPHRASE = process.env[PASSPHRASE_ENV] || null;
+// An agent's subprocess has no terminal on stdin. Nothing here may wait for a
+// human then: a 2026-10-19 agent run hung 167 s on a passphrase it could not
+// type and invented its own key handling instead. In this mode init generates
+// the passphrase itself and prints JSON the agent can act on.
+const NONINTERACTIVE = process.env.AIFINPAY_NONINTERACTIVE === "1" || !process.stdin.isTTY;
+let GENERATED_PASSPHRASE = false;
 
 // Optional at-rest encryption. Mode 600 keeps the keystore from OTHER users; it
 // does nothing against malware running as YOU — the threat the OSINT write-up of
@@ -130,7 +143,7 @@ function encryptSecret(secretB58) {
   };
 }
 function decryptSecret(store) {
-  if (!PASSPHRASE) throw new Error(`${KEYSTORE} is encrypted but AIFINPAY_WALLET_PASSPHRASE is not set.`);
+  if (!PASSPHRASE) throw new Error(`${KEYSTORE} is encrypted but ${PASSPHRASE_ENV} is not set.`);
   const key = scryptSync(PASSPHRASE, Buffer.from(store.salt, "base64"), 32, {
     N: 1 << 15,
     r: 8,
@@ -160,31 +173,59 @@ function readKeystore() {
   return typeof parsed?.secretB58 === "string" ? parsed : null;
 }
 
-// The owner settings that register payable_fetch, as init prints them. README
-// "Enable native paid GET requests" shows the same block; a test keeps the two
-// equal and starts a server with it. The gas cap is a worst case at the current
-// Polygon gas price, not the fee: 0.05 POL refused every payment at ~280 gwei.
-const PAYMENT_ENV = {
-  AIFINPAY_PAYMENTS_ENABLED: "1",
-  AIFINPAY_GATEWAY_ORIGINS: "https://merchant.example",
-  AIFINPAY_GATEWAY_PATH_MODE: "direct",
-  AIFINPAY_MAX_USD: "0.15",
-  AIFINPAY_DAILY_USD: "1.00",
-  AIFINPAY_MAX_GAS_POL: "0.3",
-};
-
 if (arg === "init") {
   const { Agent, AiFinPayAgent } = await import("@aifinpay/agent");
 
   const { loadConfigFromEnv } = await import("../dist/config.js");
   const { loadWalletIdentity } = await import("../dist/identity.js");
+  const { PAYMENT_ENV } = await import("../dist/tools/payment-setup-status.js");
   const config = loadConfigFromEnv();
-  const selected = loadWalletIdentity(config);
+  // A keystore that cannot be opened is reported in one line that names the
+  // variable, never as a stack trace — and never replaced.
+  const failKeystore = (error) => {
+    const line =
+      !PASSPHRASE && existsSync(KEYSTORE)
+        ? `${KEYSTORE} exists and is encrypted; set ${PASSPHRASE_ENV} to the passphrase used at init (it is not set in this environment).`
+        : error.message;
+    if (NONINTERACTIVE)
+      process.stdout.write(
+        JSON.stringify({ error: line, keystore: KEYSTORE, ...(PASSPHRASE ? {} : { missing_env: PASSPHRASE_ENV }) }) +
+          "\n"
+      );
+    else process.stderr.write(line + "\n");
+    process.exit(2);
+  };
+  let selected;
+  try {
+    selected = loadWalletIdentity(config);
+  } catch (error) {
+    failKeystore(error);
+  }
+  const plaintext = process.argv.includes("--plaintext");
+  const addressesOf = (agent) => ({ evm: agent.evmAddress, solana: agent.solanaAddress, casper: agent.casperAddress });
+  const indexEnv =
+    selected?.derivationIndex === undefined ? {} : { AIFINPAY_WALLET_INDEX: String(selected.derivationIndex) };
+  // Non-interactive stdout is one JSON document and nothing else, so the
+  // caller can parse it. The same facts, as prose, go to a terminal.
+  const emit = (json, text) => process.stdout.write(NONINTERACTIVE ? JSON.stringify(json, null, 2) + "\n" : text);
+  const nextStep =
+    'Put "env" into the aifinpay server entry of the MCP client config and reconnect the server (or call agent_reload in an already connected one), then call payment_setup_status: it names the next step up to the first payment.';
+
   if (selected && selected.source !== "legacy-keystore") {
     const agent = selected.seedHash
       ? await AiFinPayAgent.fromSeed(selected.seedHash, { derivationIndex: selected.derivationIndex })
       : await AiFinPayAgent.fromSolanaSecret(selected.secretB58);
-    process.stdout.write(
+    emit(
+      {
+        keystore: null,
+        created: false,
+        encrypted: null,
+        source: selected.source,
+        addresses: addressesOf(agent),
+        env: indexEnv,
+        payment_env_example: PAYMENT_ENV,
+        next_step: nextStep,
+      },
       `Using ${selected.source}${selected.derivationIndex === undefined ? "" : ` (index ${selected.derivationIndex})`}; no replacement wallet created.\n` +
         `EVM ${agent.evmAddress}\nSolana ${agent.solanaAddress}\nCasper ${agent.casperAddress}\n` +
         `Keep your configured seed backed up privately. Call agent_reload in an already connected MCP server.\n`
@@ -192,21 +233,37 @@ if (arg === "init") {
     process.exit(0);
   }
 
-  let store = readKeystore();
+  const openExistingKeystore = () => {
+    try {
+      return readKeystore();
+    } catch (error) {
+      failKeystore(error);
+    }
+  };
+  let store = openExistingKeystore();
   let freshlyCreated = false;
   // A new wallet is encrypted at rest unless the owner asks otherwise, by name.
   // It used to be written in plaintext whenever AIFINPAY_WALLET_PASSPHRASE was
   // unset — which is the default — so the documented one-liner produced an
   // unencrypted key for a wallet people then funded. Existing keystores are
   // untouched; only creating a new plaintext one needs the flag.
-  if (!store && !PASSPHRASE && !process.argv.includes("--plaintext")) {
-    process.stderr.write(
-      `No wallet at ${KEYSTORE}, and none will be created unencrypted by default.\n\n` +
-        `  Encrypted (recommended):  AIFINPAY_WALLET_PASSPHRASE='<a long passphrase>' npx @aifinpay/mcp init\n` +
-        `  Disposable test wallet:   npx @aifinpay/mcp init --plaintext\n\n` +
-        `Keep the passphrase: an encrypted wallet cannot be recovered without it.\n`
-    );
-    process.exit(2);
+  if (!store && !PASSPHRASE && !plaintext) {
+    if (NONINTERACTIVE) {
+      // 192 random bits. The passphrase is printed once, inside the env block
+      // below, because the caller has to put it in the client config and there
+      // is no other channel; this is the trade-off of a wallet created by a
+      // process that cannot be asked anything.
+      PASSPHRASE = randomBytes(24).toString("base64url");
+      GENERATED_PASSPHRASE = true;
+    } else {
+      process.stderr.write(
+        `No wallet at ${KEYSTORE}, and none will be created unencrypted by default.\n\n` +
+          `  Encrypted (recommended):  AIFINPAY_WALLET_PASSPHRASE='<a long passphrase>' npx @aifinpay/mcp init\n` +
+          `  Disposable test wallet:   npx @aifinpay/mcp init --plaintext\n\n` +
+          `Keep the passphrase: an encrypted wallet cannot be recovered without it.\n`
+      );
+      process.exit(2);
+    }
   }
   if (!store) {
     mkdirSync(HOME, { recursive: true, mode: 0o700 });
@@ -233,7 +290,9 @@ if (arg === "init") {
         freshlyCreated = true;
       } catch (error) {
         if (error.code !== "EEXIST") throw error;
-        store = readKeystore();
+        // The other process won; a passphrase generated here opens nothing.
+        if (GENERATED_PASSPHRASE) PASSPHRASE = null;
+        store = openExistingKeystore();
         if (!store) throw new Error(`Existing ${KEYSTORE} is unreadable; refusing to replace it.`);
       }
     } finally {
@@ -241,6 +300,44 @@ if (arg === "init") {
       if (ownsTemporary) unlinkSync(temporary);
     }
   }
+  const agent = selected?.seedHash
+    ? await AiFinPayAgent.fromSeed(selected.seedHash, { derivationIndex: selected.derivationIndex })
+    : await AiFinPayAgent.fromSolanaSecret(store.secretB58);
+  // The server cannot open an encrypted keystore without the passphrase, so a
+  // config block without it does not start.
+  const encrypted = freshlyCreated ? Boolean(PASSPHRASE) : Boolean(store.encrypted);
+
+  if (NONINTERACTIVE) {
+    emit(
+      {
+        keystore: KEYSTORE,
+        created: freshlyCreated,
+        encrypted,
+        source: "legacy-keystore",
+        addresses: addressesOf(agent),
+        env: {
+          ...(encrypted
+            ? {
+                [PASSPHRASE_ENV]: GENERATED_PASSPHRASE
+                  ? PASSPHRASE
+                  : `<the ${PASSPHRASE_ENV} already set in this environment>`,
+              }
+            : {}),
+          ...indexEnv,
+        },
+        ...(GENERATED_PASSPHRASE
+          ? {
+              passphrase_note: `${PASSPHRASE_ENV} was generated for this wallet and appears only here, inside env. The wallet cannot be opened or recovered without it.`,
+            }
+          : {}),
+        payment_env_example: PAYMENT_ENV,
+        next_step: nextStep,
+      },
+      ""
+    );
+    process.exit(0);
+  }
+
   if (freshlyCreated) {
     process.stdout.write(
       PASSPHRASE
@@ -270,21 +367,15 @@ if (arg === "init") {
     );
   }
 
-  const agent = selected?.seedHash
-    ? await AiFinPayAgent.fromSeed(selected.seedHash, { derivationIndex: selected.derivationIndex })
-    : await AiFinPayAgent.fromSolanaSecret(store.secretB58);
-  // The server cannot open an encrypted keystore without the passphrase, so a
-  // config block without it does not start.
-  const encrypted = freshlyCreated ? Boolean(PASSPHRASE) : Boolean(store.encrypted);
-
   process.stdout.write(
     `Your agent's addresses${selected?.derivationIndex === undefined ? "" : ` (index ${selected.derivationIndex})`} — the EVM one is the same on every EVM chain:\n\n` +
       `  EVM     ${agent.evmAddress}\n` +
       `  Solana  ${agent.solanaAddress}\n` +
       `  Casper  ${agent.casperAddress}\n\n` +
       `Add this to your MCP client config and connect/reconnect this MCP server.\n` +
-      `As printed it cannot pay; payable_fetch appears once you add the payment\n` +
-      `settings further down:\n\n` +
+      `As printed it cannot pay: payable_fetch is listed but signs nothing until\n` +
+      `you add the payment settings further down (payment_setup_status says what\n` +
+      `is still missing):\n\n` +
       JSON.stringify(
         {
           mcpServers: {
@@ -293,9 +384,7 @@ if (arg === "init") {
               args: ["-y", `@aifinpay/mcp@${VERSION}`],
               env: {
                 ...(encrypted ? { AIFINPAY_WALLET_PASSPHRASE: "<the passphrase you used for init>" } : {}),
-                ...(selected?.derivationIndex === undefined
-                  ? {}
-                  : { AIFINPAY_WALLET_INDEX: String(selected.derivationIndex) }),
+                ...indexEnv,
               },
             },
           },
