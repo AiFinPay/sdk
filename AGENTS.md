@@ -8,6 +8,23 @@ Optional observational context grants no payment authority. Canonical domain is
 
 ## Evidence, not status snapshots
 
+- This rule applies repository-wide, including README, AGENTS, architecture,
+  onboarding and other agent-facing documentation. Do not add hardcoded real
+  transaction hashes, deployment addresses, program IDs, runtime/source hashes,
+  current version tables, activation/publication statuses, test totals or
+  "passed/ready/live" claims as documentation evidence.
+- Link to the authoritative machine-readable artifact, implementation or CI run
+  and explain how to verify it instead. Do not replace a removed snapshot with
+  the same claim in another document. Keep exact run-specific evidence in CI
+  artifacts, not persistent agent instructions.
+- Preserve protocol invariants, API contracts and security requirements.
+  Examples must use clearly synthetic placeholders or values read from code.
+  Changelogs may identify the version and change they record, but must not
+  present historical observations as current operational readiness.
+- Before finishing documentation edits, review the diff for copied identifiers
+  and mutable status assertions; replace them with source links. Never remove
+  executable trust pins, registry provenance, safety gates or test vectors to
+  satisfy this documentation rule.
 - Read source versions from package manifests and installed dependencies from
   per-package lockfiles. Verify publication with npm/PyPI; a manifest is not
   publication evidence.
