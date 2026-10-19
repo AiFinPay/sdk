@@ -857,6 +857,8 @@ export class AiFinPayAgent {
    * Missing, invalid or ambiguous configuration throws before any network call.
    */
   static async fromEnvironment(opts: AiFinPayAgentOptions = {}): Promise<AiFinPayAgent> {
+    // Before the catch below, which would report a bad option as a bad wallet.
+    agentFramework(opts.framework);
     const identity = loadLocalWalletIdentity();
     try {
       return identity.seedHash !== undefined

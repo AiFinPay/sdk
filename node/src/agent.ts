@@ -17,7 +17,7 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const SDK_UA = "aifinpay-agent-node/0.3.0";
 
 /** The AI clients the AiFinPay backend records for AIFP-Agent-Framework. */
-export const AGENT_FRAMEWORKS = [
+export const AGENT_FRAMEWORKS = Object.freeze([
   "chatgpt",
   "claude",
   "perplexity",
@@ -26,7 +26,7 @@ export const AGENT_FRAMEWORKS = [
   "openai-agents",
   "windsurf",
   "custom",
-] as const;
+] as const);
 export type AgentFramework = (typeof AGENT_FRAMEWORKS)[number];
 
 /** `undefined` stays unset; any value outside AGENT_FRAMEWORKS throws. Never guessed. */
@@ -405,7 +405,7 @@ export class Agent {
         redirect: "error",
       });
 
-    let resp = await send(method, { ...baseHeaders, ...this.sdkHeaders() });
+    let resp = await send(method, this.sdkHeaders(baseHeaders));
     let attempt = 0;
 
     while (resp.status === 402 && attempt < maxRetries) {
@@ -418,7 +418,7 @@ export class Agent {
         trustedOrigin,
         bodyDigest,
       });
-      const merged = { ...mergeHeaders(baseHeaders, auth.headers), ...this.sdkHeaders() };
+      const merged = this.sdkHeaders(mergeHeaders(baseHeaders, auth.headers));
       resp = await send(auth.method ?? method, merged, auth.body);
     }
 
@@ -450,9 +450,14 @@ export class Agent {
 
   // ── Internal helpers ──────────────────────────────────────────────────
 
-  private sdkHeaders(): Record<string, string> {
-    // Lower-case keys, so they replace a caller's lower-cased copy rather than join it.
-    return { "user-agent": SDK_UA, ...(this.framework ? { "aifp-agent-framework": this.framework } : {}) };
+  /** `headers` plus the SDK's own, which replace a caller's copy in any letter case. */
+  private sdkHeaders(headers: Record<string, string> = {}): Record<string, string> {
+    const sdk: Record<string, string> = {
+      "user-agent": SDK_UA,
+      ...(this.framework ? { "aifp-agent-framework": this.framework } : {}),
+    };
+    const rest = Object.entries(headers).filter(([name]) => !Object.keys(sdk).includes(name.toLowerCase()));
+    return { ...Object.fromEntries(rest), ...sdk };
   }
 
   private async json(method: string, path: string, body?: unknown): Promise<unknown> {

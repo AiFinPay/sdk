@@ -1940,6 +1940,24 @@ describe("AIFP-Agent-Framework", () => {
     expect(seen).toEqual([{ url: `${API}/v1/pay`, receipt: false, framework: "windsurf" }]);
   });
 
+  it("is set per call on recovery too, and a bad per-call value sends nothing", async () => {
+    const server = mockServer();
+    server.payUnavailableTimes = 1;
+    const { seen, fetchImpl } = recording(server);
+    const { agent } = await agentFor(server, { fetchImpl });
+    const failure = (await agent
+      .fetchPaid(`${GATEWAY}/acme/paid`, {}, { settlementConfirmMs: 0 })
+      .catch((e: Aifp1PayError) => e)) as Aifp1PayError;
+    const saved = JSON.parse(JSON.stringify(failure.recovery));
+    seen.length = 0;
+    await expect(agent.recoverPaidPayment(saved, { framework: "openai" as unknown as "claude" })).rejects.toThrow(
+      /framework must be one of/
+    );
+    expect(seen).toEqual([]);
+    await agent.recoverPaidPayment(saved, { framework: "cursor" });
+    expect(seen).toEqual([{ url: `${API}/v1/pay`, receipt: false, framework: "cursor" }]);
+  });
+
   it.each(["Claude", "openai", "unknown", "", 42, null])(
     "refuses %j at construction and per call, before any request",
     async (value) => {

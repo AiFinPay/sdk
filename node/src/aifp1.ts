@@ -1086,6 +1086,8 @@ export interface Aifp1FetchOptions {
   /**
    * AIFP-Agent-Framework for this call, replacing the agent's `framework`
    * option — for a host that learns its AI client after constructing the agent.
+   * Read by AiFinPayAgent.fetchPaid/recoverPaidPayment; the low-level
+   * aifp1Fetch/recoverAifp1Payment send `deps.framework`/`signer.framework`.
    */
   framework?: AgentFramework;
   /** How long to keep retrying /v1/pay while the chain catches up (AIFP-425). */

@@ -11,6 +11,10 @@
   `windsurf`, `custom`. Anything else throws `AiFinPayError` at construction.
 - `fetchPaid` and `recoverPaidPayment` take a per-call `framework` that replaces
   the agent's own, validated the same way, before any request.
+- `Agent.pay()` now replaces a caller's own `User-Agent` / `AIFP-Agent-Framework`
+  header in any letter case instead of sending both values.
+- `fromEnvironment` reports an invalid `framework` as such, not as an invalid
+  wallet.
 - No payment, fee, receipt or settlement change.
 
 ## 2.7.0 — gateway sites keep the merchant they were first paid as

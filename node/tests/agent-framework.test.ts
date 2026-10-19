@@ -2,7 +2,7 @@
 // SDK user-agent also names the configured AI client, and nothing is guessed
 // when none is configured. The fetchPaid (AIFP-1) flow is covered in aifp1.test.ts.
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Agent, AiFinPayAgent, AiFinPayError, AGENT_FRAMEWORKS } from "../src/index.js";
 
 const challenge = {
@@ -38,7 +38,8 @@ async function everyRequest(agent: Agent) {
 }
 
 describe("Agent framework option", () => {
-  it("accepts exactly the values the backend records", () => {
+  it("accepts exactly the values the backend records, which cannot be widened at runtime", () => {
+    expect(Object.isFrozen(AGENT_FRAMEWORKS)).toBe(true);
     expect([...AGENT_FRAMEWORKS]).toEqual([
       "chatgpt",
       "claude",
@@ -65,9 +66,13 @@ describe("Agent framework option", () => {
     expect(seen.every((r) => r.framework === "openai-agents")).toBe(true);
   });
 
-  it("replaces a caller's own copy instead of sending two values", async () => {
+  it.each([
+    ["Headers", new Headers({ "AIFP-Agent-Framework": "custom" })],
+    ["object", { "AIFP-Agent-Framework": "custom" }],
+    ["pairs", [["Aifp-Agent-Framework", "custom"]]],
+  ])("replaces a caller's own copy (%s) instead of sending two values", async (_kind, headers) => {
     const { agent, seen } = recordingAgent({ framework: "gemini" });
-    await agent.pay("https://aifinpay.io/v1/data", { headers: new Headers({ "AIFP-Agent-Framework": "custom" }) });
+    await agent.pay("https://aifinpay.io/v1/data", { headers: headers as HeadersInit });
     expect(seen.map((r) => r.framework)).toEqual(["gemini", "gemini"]);
   });
 
@@ -98,5 +103,17 @@ describe("Agent framework option", () => {
     expect((await AiFinPayAgent.fromSeed("11".repeat(32), { framework: "perplexity" })).inner.framework).toBe(
       "perplexity"
     );
+  });
+
+  describe("fromEnvironment", () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    it("reports a bad framework as such, not as a bad wallet", async () => {
+      vi.stubEnv("SEED_HASH", "11".repeat(32));
+      await expect(AiFinPayAgent.fromEnvironment({ framework: "Claude" as unknown as "claude" })).rejects.toThrow(
+        /framework must be one of/
+      );
+      expect((await AiFinPayAgent.fromEnvironment({ framework: "claude" })).inner.framework).toBe("claude");
+    });
   });
 });
