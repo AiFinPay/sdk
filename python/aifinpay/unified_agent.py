@@ -30,7 +30,7 @@ import nacl.encoding
 import nacl.signing
 import requests
 
-from .client import Agent  # legacy Solana-only agent (we wrap it)
+from .client import Agent, _agent_framework  # legacy Solana-only agent (we wrap it)
 from .cross_chain import (
     USDC_NATIVE,
     BridgeQuote,
@@ -535,7 +535,10 @@ class AiFinPayAgent:
         evm_rpc_urls: [dict[str, str]] = None,
         solana_rpc: [str] = None,
         base_url: [str] = None,
+        framework: [str] = None,
     ):
+        # The AI client, sent as AIFP-Agent-Framework by fetch_paid/recover_paid.
+        self.framework = _agent_framework(framework)
         self.inner = inner
         self.evm_account = EvmAccount.from_key(evm_private_key_hex)
         self.sol_keypair = SolKeypair.from_seed(
@@ -993,6 +996,7 @@ class AiFinPayAgent:
                 issuer=api_base,
                 units=units,
                 agent_id=self.solana_address if sol else self.evm_address,
+                framework=self.framework,
                 solana_network=solana_network,
                 environment=environment,
                 max_fee_lamports=max_fee_lamports,
@@ -1113,7 +1117,9 @@ class AiFinPayAgent:
                             recovery,
                         ) from error
                     raise aifp1.Aifp1FinalizedFailureError(recovery, fee_usd, fee)
-        paid = aifp1.submit_payment(requests.Session(), account, recovery, agent_id=account.address)
+        paid = aifp1.submit_payment(
+            requests.Session(), account, recovery, agent_id=account.address, framework=self.framework
+        )
         if ledger is not None:
             ledger.confirm(reservation_id, recovery["tx_ref"], binding, complete=True)
         if not hasattr(self, "_aifp1_receipts"):

@@ -1,6 +1,6 @@
 # aifinpay-agent (Python)
 
-Version `2.6.1` (source candidate): agent identity (EVM and Solana addresses from one seed), native
+Version `2.7.0` (source candidate): agent identity (EVM and Solana addresses from one seed), native
 request authentication, linking an agent to its owner's dashboard, and paying
 AiFinPay merchants (`fetch_paid`, AIFP-1 on Polygon v1.4 in POL or USDC,
 or explicitly selected EVM v1.4 networks).
@@ -213,6 +213,24 @@ Malformed/unknown ledgers and unavailable OS file locking refuse payment; no emp
 budget fallback is used. These locks cover processes on one local filesystem;
 they do not establish a budget shared across separate hosts. The in-memory ledger
 used by lower-level callers is shared only within that ledger instance.
+
+## Name the AI client that pays
+
+Pass `framework` with the AI client the agent runs in, and `fetch_paid` sends
+`AIFP-Agent-Framework: <value>` on every request of the payment flow: the first
+request that may answer 402, `/v1/quote`, `/v1/pay` and the paid retry
+(`recover_paid` sends it on `/v1/pay` too). The merchant dashboard then shows
+which AI client paid.
+
+```python
+agent = AiFinPayAgent.from_seed(seed_hex, framework="claude")
+```
+
+Accepted values (`aifinpay.AGENT_FRAMEWORKS`): `chatgpt`, `claude`,
+`perplexity`, `gemini`, `cursor`, `openai-agents`, `windsurf`, `custom`.
+Anything else raises `AiFinPayError` when the agent is constructed. Leave it
+unset and no header is sent; the SDK never guesses. The legacy `Agent` takes the
+same `framework` and sends it on every request of its session.
 
 ## Link the agent to its owner's dashboard
 

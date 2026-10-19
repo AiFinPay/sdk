@@ -61,7 +61,7 @@ import {
 } from "./settlementSolanaV14.js";
 import type { SolanaNetwork } from "./generated/solanaV14Deployments.generated.js";
 import type { SdkEnvironment } from "./deploymentResolver.js";
-import { reportingHeaders } from "./agent.js";
+import { reportingHeaders, type AgentFramework } from "./agent.js";
 import type { SolanaV14Deployment } from "./generated/solanaV14Deployments.generated.js";
 
 // ── Errors ────────────────────────────────────────────────────────────────
@@ -154,12 +154,17 @@ export interface Aifp1PaymentSigner {
   payerAddress: string;
   signPaymentAuthorization(message: string): Promise<string>;
   fetchImpl?: typeof fetch;
+  /** Sent as AIFP-Agent-Framework on /v1/pay; unset sends no header. */
+  framework?: AgentFramework;
   assertReservation?(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void>;
   completeReservation?(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void>;
   finalizeFailedReservation?(id: string, txRef: string, binding: SpendLedgerBinding, feeUsd: number): Promise<void>;
   solanaRpc?: SolanaV14Rpc;
 }
-export type Aifp1RecoveryOptions = Pick<Aifp1FetchOptions, "settlementConfirmMs" | "apiTimeoutMs" | "paymentIssuer"> & {
+export type Aifp1RecoveryOptions = Pick<
+  Aifp1FetchOptions,
+  "settlementConfirmMs" | "apiTimeoutMs" | "paymentIssuer" | "framework"
+> & {
   solanaNetwork?: SolanaNetwork;
   solanaEnvironment?: SdkEnvironment;
 };
@@ -1078,6 +1083,13 @@ export interface Aifp1FetchOptions {
   allowMerchantChange?: boolean;
   /** Value for the AIFP-Agent-Id header; defaults to the agent's EVM address. */
   agentId?: string;
+  /**
+   * AIFP-Agent-Framework for this call, replacing the agent's `framework`
+   * option — for a host that learns its AI client after constructing the agent.
+   * Read by AiFinPayAgent.fetchPaid/recoverPaidPayment; the low-level
+   * aifp1Fetch/recoverAifp1Payment send `deps.framework`/`signer.framework`.
+   */
+  framework?: AgentFramework;
   /** How long to keep retrying /v1/pay while the chain catches up (AIFP-425). */
   settlementConfirmMs?: number;
 }
@@ -1188,6 +1200,8 @@ export interface Aifp1Deps {
   cache: Aifp1ReceiptCache;
   /** AIFP-Agent-Id / agent_id — a 0x address, or agent policies cannot key on it. */
   agentId: string;
+  /** AIFP-Agent-Framework on every request of the flow; unset sends no header. */
+  framework?: AgentFramework;
   /** Actual settlement wallet, independent of any display/agent identifier. */
   payerAddress: string;
   signPaymentAuthorization(message: string): Promise<string>;
@@ -1514,6 +1528,7 @@ export async function aifp1Fetch(
     // Reporting capability cannot ride to a partner/gateway or a redirect.
     headers.delete("AIFP-Reporting-Token");
     headers.set("AIFP-Agent-Id", deps.agentId);
+    if (deps.framework) headers.set("AIFP-Agent-Framework", deps.framework);
     if (direct) headers.delete("AIFP-Receipt");
     if (receiptJwt) headers.set("AIFP-Receipt", receiptJwt);
     return deps.fetchImpl(url, {
@@ -2417,6 +2432,7 @@ async function requestQuote(
         headers: {
           "content-type": "application/json",
           "AIFP-Agent-Id": deps.agentId,
+          ...(deps.framework ? { "AIFP-Agent-Framework": deps.framework } : {}),
           ...reportingHeaders(reportingToken, `${apiBase}/v1/quote`),
         },
         body: typeof body === "string" ? body : JSON.stringify(body),
@@ -2497,7 +2513,7 @@ export function solanaQuoteAuthorizationMessage(
  * minting a second receipt.
  */
 async function submitPayment(
-  deps: Pick<Aifp1Deps, "fetchImpl" | "agentId" | "payerAddress" | "signPaymentAuthorization">,
+  deps: Pick<Aifp1Deps, "fetchImpl" | "agentId" | "framework" | "payerAddress" | "signPaymentAuthorization">,
   apiBase: string,
   quote: Aifp1Quote,
   txRef: string,
@@ -2554,6 +2570,7 @@ async function submitPayment(
             "content-type": "application/json",
             "Idempotency-Key": idempotencyKey,
             "AIFP-Agent-Id": deps.agentId,
+            ...(deps.framework ? { "AIFP-Agent-Framework": deps.framework } : {}),
           },
           body: JSON.stringify({
             quote_id: quote.quote_id,

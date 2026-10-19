@@ -1,3 +1,21 @@
+## MCP 2.10.0 — payable_fetch names the connected AI client
+
+- `@aifinpay/mcp` maps the MCP client's `clientInfo.name` from initialize to
+  `AIFP-Agent-Framework` through an explicit, exact-name table and passes it to
+  the agent's purchase and pending-payment recovery. Unknown clients send no
+  header. Requires `@aifinpay/agent` 2.8.0; the release-input guard refuses MCP
+  publication until 2.8.0 is published and the lock refreshed.
+
+## Node 2.8.0 / Python 2.7.0 — AIFP-Agent-Framework names the AI client that pays
+
+- `@aifinpay/agent` and `aifinpay-agent` take an optional `framework`
+  (`chatgpt`, `claude`, `perplexity`, `gemini`, `cursor`, `openai-agents`,
+  `windsurf`, `custom`) and send it as `AIFP-Agent-Framework` on every request
+  of the payment flow, so the merchant dashboard can attribute revenue to the
+  AI client instead of "unknown". Any other value is refused at construction;
+  unset sends nothing. The MCP source-cohort guard follows both versions.
+  Nothing is published.
+
 ## Analytics 0.1.0 — new opt-in telemetry package (unreleased)
 
 - Add `@aifinpay/analytics`: opt-in SDK telemetry, off by default, zero runtime

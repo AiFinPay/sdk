@@ -457,3 +457,22 @@ describe("payable_fetch merchant pins", () => {
     expect(text).not.toMatch(/Check owner configuration/);
   });
 });
+
+describe("payable_fetch names the connected AI client", () => {
+  it("passes the client's framework to the purchase and to pending recovery", async () => {
+    const f = fixture();
+    f.ctx.framework = "claude";
+    const state = f.store.read();
+    state.pending = { recovery: prepared, serializedTransaction: "0xdeadbeef", site, amountUsd: 0.1 };
+    state.spend = [{ at: Date.now(), usd: 0.1, tx }];
+    f.store.save(state);
+    expect((await runPayableFetch(f.ctx, args)).isError).not.toBe(true);
+    expect(f.recoverPaidPayment.mock.calls[0][1]).toMatchObject({ framework: "claude" });
+    expect(f.fetchPaid.mock.calls[0][2]).toMatchObject({ framework: "claude" });
+  });
+  it("passes no framework for a client it does not know", async () => {
+    const f = fixture();
+    expect((await runPayableFetch(f.ctx, args)).isError).not.toBe(true);
+    expect(f.fetchPaid.mock.calls[0][2]).not.toHaveProperty("framework");
+  });
+});

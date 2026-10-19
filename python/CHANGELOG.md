@@ -1,3 +1,16 @@
+## 2.7.0 — name the AI client that pays
+
+- New `framework` option on `AiFinPayAgent` (all constructors) and the legacy
+  `Agent`. When set, `fetch_paid` sends `AIFP-Agent-Framework: <value>` on the
+  first request that may answer 402, `/v1/quote`, `/v1/pay` and the paid retry;
+  `recover_paid` sends it on `/v1/pay`; `Agent` sends it on every request of its
+  session. Price sources, RPCs and the issuer's JWKS are not sent it. Unset
+  sends no header.
+- Accepted values are exported as `aifinpay.AGENT_FRAMEWORKS`: `chatgpt`,
+  `claude`, `perplexity`, `gemini`, `cursor`, `openai-agents`, `windsurf`,
+  `custom`. Anything else raises `AiFinPayError` at construction.
+- No payment, fee, receipt or settlement change.
+
 ## 2.6.1 — every request from `fetch_paid` declares the agent
 
 - `fetch_paid` sends `User-Agent: aifinpay-agent-py/<version>` and

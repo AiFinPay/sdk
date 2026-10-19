@@ -53,15 +53,15 @@ test("canonical mirror and both CI refs bind the reviewed reporting producer; wr
 });
 test("reporting source target refuses every stale package version without claiming registry availability", () => {
   verifyCohortVersions({
-    mcp: "2.9.0",
-    agent: "2.7.0",
-    python: "2.6.1",
+    mcp: "2.10.0",
+    agent: "2.8.0",
+    python: "2.7.0",
     skill: "2.9.0",
   });
   for (const [name, oldVersion] of Object.entries({
-    mcp: "2.8.2",
-    agent: "2.6.5",
-    python: "2.6.0",
+    mcp: "2.9.0",
+    agent: "2.7.0",
+    python: "2.6.1",
     skill: "2.8.0",
   })) {
     assert.throws(
@@ -93,7 +93,10 @@ test("MCP candidate metadata preserves the real registry lock of the published c
   );
   // The lock follows the published agent 2.7.0 (2026-10-18). Its registry
   // identity is the only change: 2.7.0 depends on exactly what 2.6.4 did.
-  assert.equal(manifest.dependencies["@aifinpay/agent"], `^${COHORT.agent}`);
+  // The source cohort's agent 2.8.0 is unpublished; the lock stays on 2.7.0
+  // until the owner publishes it and refreshes the lock.
+  const registryAgent = "2.7.0";
+  assert.equal(manifest.dependencies["@aifinpay/agent"], `^${registryAgent}`);
   const { version, resolved, integrity, ...agentEdges } =
     lock.packages["node_modules/@aifinpay/agent"];
   const {
@@ -105,17 +108,16 @@ test("MCP candidate metadata preserves the real registry lock of the published c
   assert.deepEqual(
     { version, resolved, integrity },
     {
-      version: COHORT.agent,
-      resolved: `https://registry.npmjs.org/@aifinpay/agent/-/agent-${COHORT.agent}.tgz`,
+      version: registryAgent,
+      resolved: `https://registry.npmjs.org/@aifinpay/agent/-/agent-${registryAgent}.tgz`,
       integrity:
         "sha512-BKV3mz0CH9cjX423TBTDbK6fTTv+LebjQqmv+BSQpACfjTp2rxHKGgQe8pODNrROKZAYMABqvG7B/8g85AUxFA==",
     },
   );
   assert.deepEqual(agentEdges, baselineEdges);
-  // agent 2.7.0 and skill 2.9.0 are published and the lock pins their real
-  // registry resolution, so the release metadata check must pass. This test
-  // runs before any MCP install, so the guard may still stop at the
-  // installed-package check; it must never refuse the lock itself.
+  // MCP 2.10.0 needs agent 2.8.0, which is not published: the release
+  // metadata check must refuse the 2.7.0 lock for the agent, never for the
+  // MCP metadata itself, until 2.8.0 is published and the lock refreshed.
   const guard = spawnSync(
     process.execPath,
     ["scripts/verify-release-inputs.mjs"],
@@ -124,9 +126,14 @@ test("MCP candidate metadata preserves the real registry lock of the published c
       encoding: "utf8",
     },
   );
+  assert.notEqual(guard.status, 0);
+  assert.match(
+    guard.stderr,
+    /@aifinpay\/agent 2\.8\.0 must be published and installed with its real registry resolution/,
+  );
   assert.doesNotMatch(
     guard.stderr,
-    /must be published and installed with its real registry resolution|release metadata and real registry lock disagree/,
+    /release metadata and real registry lock disagree/,
   );
 });
 test("immutable bootstrap uses the existing patched registry lock without source tarball resolutions", () => {

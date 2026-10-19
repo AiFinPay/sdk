@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.10.0 — name the AI client that pays
+
+- `payable_fetch` maps the MCP client's `clientInfo.name` from initialize to
+  `AIFP-Agent-Framework` and passes it to the SDK's purchase and pending-payment
+  recovery, so the merchant dashboard shows which AI client paid. Exact names:
+  `claude-ai` and `claude-code` → `claude`, `cursor` and `cursor-vscode` →
+  `cursor`, `windsurf` → `windsurf`, `chatgpt` and `openai` → `chatgpt`,
+  `gemini` → `gemini`, `perplexity` → `perplexity`. Any other client sends no
+  header.
+- Requires `@aifinpay/agent` 2.8.0 (the `framework` option). The release-input
+  guard now requires its real registry installation, so 2.10.0 cannot be
+  published before agent 2.8.0 is published and the lock refreshed.
+
 ## 2.9.0 — gateway merchant pins
 
 - Require the published `@aifinpay/agent` 2.7.0, which pins each gateway site

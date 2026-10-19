@@ -196,8 +196,8 @@ export {
 export type { BridgeQuote, BridgeReceipt, BridgeQuoteOptions, EvmChainName } from "./crossChain.js";
 
 // ── Legacy chain-aware public API (back-compat only) ─────────────────────
-export { Agent } from "./agent.js";
-export type { AgentOptions, Invoice, PayInit } from "./agent.js";
+export { Agent, AGENT_FRAMEWORKS } from "./agent.js";
+export type { AgentFramework, AgentOptions, Invoice, PayInit } from "./agent.js";
 export {
   AiFinPayError,
   FacilitatorNotImplementedError,

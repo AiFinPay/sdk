@@ -19,7 +19,7 @@ Quick start:
     resp = agent.get("https://aifinpay.io/api/stats")
 """
 
-from .client import Agent, Invoice
+from .client import AGENT_FRAMEWORKS, Agent, Invoice
 
 # Cross-chain orchestration (Phase 1.5a — EVM↔EVM via LiFi).
 # Standalone primitives — also exposed as methods on AiFinPayAgent.
@@ -114,6 +114,7 @@ try:  # pragma: no cover - trivial
 except (ImportError, PackageNotFoundError):  # pragma: no cover - trivial
     __version__ = "0+unknown"
 __all__ = [
+    "AGENT_FRAMEWORKS",
     "Agent",
     "AiFinPayAgent",
     "NetworkAgent",
