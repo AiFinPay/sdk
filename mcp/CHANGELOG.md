@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.11.1 — init and payment_setup_status agree on where the wallet is
+
+Preparing the retest of 2.11.0 showed two machines on which the first payment
+still had no way forward.
+
+- `payment_setup_status` (and `payable_fetch`'s setup refusal) now gives
+  `AIFINPAY_HOME=<path> npx @aifinpay/mcp init`, with the path absolute and
+  shell-quoted, when the server runs with `AIFINPAY_HOME`. An agent's shell does
+  not have that variable, so the bare command wrote `~/.aifinpay/agent.json`
+  while the server read another directory. The server's ephemeral-wallet
+  warning names the same command.
+- `init` puts `AIFINPAY_HOME` (absolute) into the printed `env`, in the JSON
+  and in the terminal's config block, when it ran with one, so the server reads
+  the keystore init wrote.
+- An existing encrypted keystore without `AIFINPAY_WALLET_PASSPHRASE` is still
+  never touched, and non-interactive `init` still exits 2, but its JSON now has
+  a `next_step`: set the passphrase if it is known, otherwise run init in a new,
+  empty `AIFINPAY_HOME` (`~/.aifinpay/agent-<yyyymmdd>`, made absolute) and put
+  the `env` it prints, `AIFINPAY_HOME` included, into the client config.
+  `payment_setup_status` gives the same advice when the server's keystore is
+  encrypted and it has no passphrase for it.
+
+Signing conditions and owner limits are unchanged: `payable_fetch` still signs
+nothing without a persistent wallet and every owner limit.
+
 ## 2.11.0 — a fresh agent reaches its first payment in five steps
 
 A realistic test on 2026-10-19 (a fresh agent with MCP 2.10.0, told it could

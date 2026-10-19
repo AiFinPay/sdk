@@ -338,9 +338,15 @@ passphrase, encrypts the keystore and prints one JSON document:
 The passphrase appears only inside `env`, because the caller must put it in
 the client config and there is no other channel; a process that captures that
 output captures the passphrase, so treat the output as a secret. A second run
-keeps the wallet and prints a placeholder instead of the passphrase. If the
-keystore exists and `AIFINPAY_WALLET_PASSPHRASE` is unset, `init` prints one
-line naming the variable and exits with status 2.
+keeps the wallet and prints a placeholder instead of the passphrase. When
+`AIFINPAY_HOME` is set, `env` also carries it (absolute), so the server reads the
+keystore init wrote; `payment_setup_status` gives the init command with the
+server's `AIFINPAY_HOME` for the same reason. If the keystore exists, is
+encrypted and `AIFINPAY_WALLET_PASSPHRASE` is unset, `init` leaves it untouched,
+prints one JSON line naming the variable and exits with status 2; its
+`next_step` is to run init in a new, empty `AIFINPAY_HOME`
+(`~/.aifinpay/agent-<yyyymmdd>`) and put the `env` it prints into the client
+config.
 
 Select the wallet in this order: `SEED_HASH` → `./aifinpay/agents.json` →
 legacy `AIFINPAY_AGENT_SECRET` → `~/.aifinpay/agent.json`.

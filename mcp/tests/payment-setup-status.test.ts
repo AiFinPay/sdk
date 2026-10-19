@@ -6,8 +6,8 @@
 // is one of those states and the single next_step the tool must give for it.
 
 import { describe, expect, it, vi } from "vitest";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { paymentSetupStatus, runPaymentSetupStatus, PAYMENT_ENV } from "../src/tools/payment-setup-status.js";
 import { PaymentStateStore } from "../src/payment-state.js";
@@ -64,6 +64,44 @@ describe("payment_setup_status", () => {
     expect(status.next_step).toContain("npx @aifinpay/mcp init");
     expect(status.next_step).toContain(`do not fund ${address}`);
     expect(f).not.toHaveBeenCalled();
+  });
+
+  // The agent runs init in its own shell, which does not have the server's
+  // AIFINPAY_HOME: a bare command wrote ~/.aifinpay/agent.json and the server
+  // never saw it.
+  it("with AIFINPAY_HOME set: the init command carries it, shell-quoted", async () => {
+    const home = join(mkdtempSync(join(tmpdir(), "aifp-mcp-status-")), "it's here");
+    const status = await paymentSetupStatus(ctx({ walletHome: home }, "ephemeral"), { readBalance: true });
+    expect(status.next_step).toContain(`Run \`AIFINPAY_HOME='${home.replace("'", "'\\''")}' npx @aifinpay/mcp init\``);
+  });
+
+  it("without AIFINPAY_HOME: the init command is the bare one", async () => {
+    const status = await paymentSetupStatus(ctx({ walletHome: undefined }, "ephemeral"), { readBalance: true });
+    expect(status.next_step).toContain("Run `npx @aifinpay/mcp init`");
+    expect(status.next_step).not.toContain("AIFINPAY_HOME");
+  });
+
+  it("with an encrypted keystore it cannot open: never touch it, init a new, empty AIFINPAY_HOME", async () => {
+    const c = ctx({}, "ephemeral");
+    const keystore = join(c.config.walletHome!, "agent.json");
+    writeFileSync(keystore, JSON.stringify({ enc: "scrypt-aes-256-gcm", salt: "", iv: "", tag: "", ct: "" }));
+    const status = await paymentSetupStatus(c, { readBalance: true });
+    expect(status.ready).toBe(false);
+    expect(status.next_step).toContain(`${keystore} is an encrypted wallet that cannot be opened here`);
+    expect(status.next_step).toMatch(/Do not delete, move or overwrite it/);
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    expect(status.next_step).toContain(
+      `\`AIFINPAY_HOME='${join(homedir(), ".aifinpay", `agent-${today}`)}' npx @aifinpay/mcp init\``
+    );
+    expect(status.next_step).toContain("it includes AIFINPAY_HOME");
+    // With the passphrase configured the server could open it; the advice is init's.
+    const open = await paymentSetupStatus(
+      { ...c, config: { ...c.config, walletPassphrase: "set" } },
+      {
+        readBalance: true,
+      }
+    );
+    expect(open.next_step).not.toContain("cannot be opened");
   });
 
   it("with a persistent wallet and payments off: gives the owner the exact env block, keeping their origin", async () => {
