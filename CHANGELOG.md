@@ -5,6 +5,8 @@
   `AIFINPAY_HOME` into the printed `env`. An existing encrypted keystore without
   its passphrase is still never touched; init's exit-2 JSON and
   `payment_setup_status` now both point at a new, empty `AIFINPAY_HOME`.
+  `agent_reload` reports `payments_enabled` and says that owner limits need a
+  server restart, not a reload.
   Signing conditions are unchanged.
 
 ## MCP 2.11.0 — a fresh agent reaches its first payment in five steps

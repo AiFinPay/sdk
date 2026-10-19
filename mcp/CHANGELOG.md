@@ -21,6 +21,13 @@ still had no way forward.
   the `env` it prints, `AIFINPAY_HOME` included, into the client config.
   `payment_setup_status` gives the same advice when the server's keystore is
   encrypted and it has no passphrase for it.
+- `agent_reload` reports `payments_enabled` and, while it is false, an
+  `env_note`: owner limits and `AIFINPAY_PAYMENTS_ENABLED` are read only when
+  the server starts, so settings saved since need the client to restart the
+  aifinpay MCP server. `payment_setup_status` says the same while payments are
+  off. A second agent run on 2026-10-19 saved the payment settings, called
+  `agent_reload`, saw payments still off and stopped. The tool description now
+  says env changes need a server restart.
 
 Signing conditions and owner limits are unchanged: `payable_fetch` still signs
 nothing without a persistent wallet and every owner limit.
