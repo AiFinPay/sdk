@@ -59,14 +59,14 @@ test("canonical mirror and both CI refs bind the reviewed reporting producer; wr
 });
 test("reporting source target refuses every stale package version without claiming registry availability", () => {
   verifyCohortVersions({
-    mcp: "2.11.2",
-    agent: "2.8.0",
+    mcp: "2.11.3",
+    agent: "2.9.0",
     python: "2.7.0",
     skill: "2.10.1",
   });
   for (const [name, oldVersion] of Object.entries({
-    mcp: "2.11.1",
-    agent: "2.7.0",
+    mcp: "2.11.2",
+    agent: "2.8.0",
     python: "2.6.1",
     skill: "2.10.0",
   })) {
@@ -113,8 +113,10 @@ test("MCP candidate metadata preserves the real registry lock of the published c
     );
     assert.deepEqual(skillEdges, baselineSkillEdges);
   }
-  // The lock follows the published agent 2.8.0 (2026-10-19). Its registry
-  // identity is the only change: 2.8.0 depends on exactly what 2.7.0 did.
+  // The lock still follows the published agent 2.8.0 (2026-10-19); the source
+  // agent is 2.9.0 (adds "codex" to AGENT_FRAMEWORKS) and the lock moves to it
+  // once it is published, as #116 did for 2.8.0. Its registry identity is the
+  // only change: 2.8.0 depends on exactly what 2.7.0 did.
   const registryAgent = "2.8.0";
   assert.equal(manifest.dependencies["@aifinpay/agent"], `^${registryAgent}`);
   const { version, resolved, integrity, ...agentEdges } =
@@ -135,12 +137,13 @@ test("MCP candidate metadata preserves the real registry lock of the published c
     },
   );
   assert.deepEqual(agentEdges, baselineEdges);
-  // With agent 2.8.0 published and installed from the registry, the release
-  // metadata check must accept the lock. The check also verifies the installed
-  // package, so it needs `npm ci` in mcp/; CI runs this file before any mcp
-  // install (it then installs the cohort in a disposable directory and runs
-  // the same guard there, in checkSourceCohort). Without an installation the
-  // metadata assertions above are the whole test.
+  // Until agent 2.9.0 is published and the lock refreshed, the release
+  // metadata check must refuse MCP publication: the mapped "codex" framework
+  // needs that agent. The check also verifies the installed package, so it
+  // needs `npm ci` in mcp/; CI runs this file before any mcp install (it then
+  // installs the cohort in a disposable directory and runs the same guard
+  // there, in checkSourceCohort). Without an installation the metadata
+  // assertions above are the whole test.
   if (!existsSync(join(root, "mcp/node_modules/@aifinpay/agent/package.json")))
     return;
   const guard = spawnSync(
@@ -151,8 +154,11 @@ test("MCP candidate metadata preserves the real registry lock of the published c
       encoding: "utf8",
     },
   );
-  assert.equal(guard.status, 0, guard.stderr);
-  assert.match(guard.stdout, /Coordinated registry release inputs verified\./);
+  assert.notEqual(guard.status, 0, "the guard must refuse until agent 2.9.0 is published and locked");
+  assert.match(
+    guard.stderr,
+    /@aifinpay\/agent 2\.9\.0 must be published and installed with its real registry resolution\/integrity/,
+  );
 });
 test("immutable bootstrap uses the existing patched registry lock without source tarball resolutions", () => {
   const root = fileURLToPath(new URL("../", import.meta.url));

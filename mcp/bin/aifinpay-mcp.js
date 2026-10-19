@@ -427,20 +427,24 @@ if (arg === "init") {
       `                              replace the example. No wildcards.\n` +
       `  AIFINPAY_GATEWAY_PATH_MODE  "direct" for a site that runs its own AiFinPay\n` +
       `                              paywall, "gateway" for gateway.aifinpay.io.\n` +
-      `  AIFINPAY_MAX_USD            per payment. The smallest batch is $0.10, so\n` +
-      `                              keep it a little above the batch you expect.\n` +
-      `  AIFINPAY_DAILY_USD          total over any 24 hours.\n` +
+      `  AIFINPAY_MAX_USD            per payment, a ceiling set once (the smallest\n` +
+      `                              batch is $0.10; the example is not a budget).\n` +
+      `  AIFINPAY_DAILY_USD          total over any 24 hours, the same kind of ceiling.\n` +
+      `                              Day-to-day limits: dashboard Controls, once the\n` +
+      `                              agent is claimed (see below).\n` +
       `  AIFINPAY_MAX_GAS_POL        worst-case network fee of one payment, checked\n` +
       `                              before signing. It follows Polygon's gas price:\n` +
       `                              at ~280 gwei it is ~0.10 POL paying in POL and\n` +
       `                              ~0.21 POL paying in USDC. A lower cap refuses\n` +
       `                              the payment; raise it when gas is higher.\n\n` +
-      `Fund the EVM address on Polygon with the batch price plus the gas cap, in POL.\n` +
+      `Fund the EVM address on Polygon with the batch price at today's rate plus the\n` +
+      `gas cap, in POL; payment_setup_status prices it.\n` +
       `To pay in USDC, also set "AIFINPAY_PAY_ASSET": "USDC" and hold USDC for the\n` +
       `batch plus POL up to the gas cap. Check the balance before funding or paying.\n\n` +
       `See its balance, payments and receipts in your dashboard:\n` +
       `  https://dash.aifinpay.io → My Agents → Claim via MCP, then give the\n` +
-      `  one-time URL to the agent (tool agent_claim_self).\n`
+      `  one-time URL to the agent (tool agent_claim_self). Controls there set the\n` +
+      `  working limits; the env values above stay as the ceiling.\n`
   );
   process.exit(0);
 }

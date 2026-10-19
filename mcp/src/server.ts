@@ -33,7 +33,7 @@ import {
 } from "./tools/production-control.js";
 import { deploymentInfoTool, runDeploymentInfo } from "./tools/supported-chains.js";
 import { payChain } from "./pay-chains.js";
-import { frameworkForClient } from "./client-framework.js";
+import { clientFrameworkLine, frameworkForClient } from "./client-framework.js";
 
 // Every backend/public request made by this server goes through safeFetch.
 // Public deployments never lift private-network protection; local development
@@ -113,6 +113,10 @@ export async function createServer(config: McpConfig = {}) {
     },
     { capabilities: { tools: {}, resources: {} } }
   );
+  // The client names itself at initialize. Logging it is how an unlisted name
+  // gets found: the 2026-10-19 Codex payment showed as "Independent" because
+  // "codex-mcp-client" was not in the table and nothing said what was sent.
+  server.oninitialized = () => log("info", clientFrameworkLine(server.getClientVersion()?.name));
 
   server.setRequestHandler(ListResourcesRequestSchema, async () => ({
     resources: [
