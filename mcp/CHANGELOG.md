@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.8.3 — documentation refresh
+
+- Remove transient release-cohort and payment-availability snapshots from the
+  README; point to installed capabilities and release evidence.
+
 ## 2.8.0 — unreleased
 
 - Support deterministic child wallet selection with `AIFINPAY_WALLET_INDEX`

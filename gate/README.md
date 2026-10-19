@@ -344,7 +344,7 @@ settlement profile and must not reduce the provider amount.
 > for something else. Merchants registered before `settlement_version` existed
 > still read as the legacy v1.2 splitter, whose immutable split is
 > 98.99/1.00/0.01 and whose quotes the backend grosses up so the merchant is
-> made whole. The released clients (MCP `payable_fetch`, Node `fetchPaid`,
+> made whole. The MCP `payable_fetch`, Node `fetchPaid`,
 > Python `fetch_paid`) refuse v1.2 quotes, so such a merchant needs to move to
 > v1.4 before those agents can pay it. v1.4 profile fees and treasury can be
 > changed by the contract administrators; clients verify the current values
@@ -414,9 +414,9 @@ for an agent buying access, or the
 for a site owner integrating the gate. Skills are instructions; they do not
 install or enable a payment executor.
 
-Starting with 0.3.3, both `buildDiscoveryDocument` and HTTP 402 challenges
-include `instructions_url`, `merchant_instructions_url` and `documentation_url`.
-A partner on an older package must update and redeploy to expose these fields.
+`buildDiscoveryDocument` and HTTP 402 challenges include `instructions_url`,
+`merchant_instructions_url` and `documentation_url`. A deployed integration
+must use a package version that exposes these fields.
 The skill at a stable linked URL can then be updated independently; installed
 skill copies need updating in the agent client.
 
@@ -432,7 +432,7 @@ The discovery file lists resource prices and scopes. A fresh quote supplies
 settlement terms; discovery is neither a receipt nor proof that a particular
 client can execute the offered route.
 
-## Opt-in dashboard request reporting (0.3.6)
+## Opt-in dashboard request reporting
 
 The reporter sends `402` challenges and gate-admitted `serve` events to the
 merchant analytics API. A `serve` is emitted before your route handler runs;

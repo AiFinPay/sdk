@@ -18,7 +18,7 @@ deployments/
 ├── tests/                 # offline unit tests
 └── registry/              # shipped deployment artifacts
     ├── splitter/                  # versioned registry with governance metadata
-    │   ├── INDEX.md               # registry index with lookup tables
+    │   ├── INDEX.md               # registry links and verification checklist
     │   ├── evm/                   # EVM deployments
     │   │   ├── v1.4/deployments.json  # EVM v1.4 full contract suite
     │   │   ├── v1.3/deployments.json  # EVM v1.3 route table
@@ -54,17 +54,24 @@ deployments/
 
 ### `registry/splitter/`
 
-Versioned deployment registry with governance metadata. Each version directory contains `deployments.json` following a consistent schema:
+Versioned deployment registry with governance metadata. Consult the
+[registry index](registry/splitter/INDEX.md) for links to each JSON and the
+verification checklist; this layout is not an availability report.
 
 - `evm/v1.4/deployments.json` — EVM v1.4 full contract suite with governance Safe info
 - `evm/v1.3/deployments.json` — EVM v1.3 route table (merchant-aifp1 + agent-x402 routes)
 - `evm/v1.2/deployments.json` — EVM v1.2 legacy with `paymentId` replay guard
 - `evm/v1.1/deployments.json` — EVM v1.1 initial production release
 - `solana/deployments.json` — Solana v1.4 program deployments
-- `casper/deployments.json` — Casper deployments (testnet live, mainnet historical)
-- `INDEX.md` — registry index with lookup tables by version and chain
+- `casper/deployments.json` — Casper deployment records
+- `INDEX.md` — registry links and verification checklist
 
-Each `deployments.json` includes `$schema`, `version`, `description`, `schemaVersion`, `generatedAt`, `ecosystem`, `protocolVersion`, `source`, `governance` (EVM only), `deployments` array, and `sourceArtifact` metadata.
+Common metadata fields include `version`, `schemaVersion`, `generatedAt`,
+`ecosystem`, `protocolVersion`, `source`, `deployments` and `sourceArtifact`.
+Field layout varies by ecosystem/version; read the selected JSON and
+[registry types](src/types.ts). Treat status, settlement flags and reason fields
+as recorded metadata requiring fresh runtime/backend evidence, not proof of
+activation.
 
 ### `registry/abi/`
 
@@ -84,7 +91,8 @@ registry/idl/
 ├── aptos/
 │   └── .gitkeep
 ├── casper/
-│   └── .gitkeep
+│   ├── .gitkeep
+│   └── aifinpay-casper-schema.json
 └── solana/
     └── splitter-v14/
         ├── splitter.devnet.json
@@ -128,6 +136,7 @@ registry/splitter/solana/deployments.json
 registry/splitter/solana/README.md
 registry/idl/aptos/.gitkeep
 registry/idl/casper/.gitkeep
+registry/idl/casper/aifinpay-casper-schema.json
 registry/idl/solana/splitter-v14/splitter.devnet.json
 registry/idl/solana/splitter-v14/splitter.mainnet.json
 src/build.ts

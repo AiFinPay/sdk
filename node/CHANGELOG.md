@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.6.5 — documentation refresh
+
+- Remove transient release and deployment snapshots from package documentation;
+  direct readers to registry, capability and runtime evidence.
+
 ## 2.6.4 — use the standalone wallet package
 
 - Delegate wallet functionality to `@aifinpay/wallet` 1.5.0, including its

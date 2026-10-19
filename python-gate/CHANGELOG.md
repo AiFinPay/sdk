@@ -1,3 +1,8 @@
+## 0.1.4 — documentation refresh
+
+- Remove versioned release snapshots from the README and reporting guide;
+  clarify that source test fixtures do not establish live integration.
+
 ## 0.1.3 — unreleased
 
 - Add explicit reporting-v2 producer, bounded flow mint/event/health transport,

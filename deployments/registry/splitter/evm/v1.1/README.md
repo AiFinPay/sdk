@@ -2,31 +2,26 @@
 
 ## Overview
 
-v1.1 was the initial production version with immutable 1% protocol fee (100 bps) and 1 bps IP creator fee.
+Legacy contract records are retained for reference and migration audits.
+Read [deployments.json](deployments.json) for chain/address, owner/treasury,
+runtime hash, fee and settlement/status fields. Inspect its provenance metadata
+instead of relying on copied verification dates.
 
-**Status:** Superseded. Settlement disabled. Kept for historical reference and migration audits.
-
-## Chains
-
-| Chain | Splitter Address | Owner/Treasury | Verified |
-|-------|-----------------|----------------|----------|
-| Base | `0x8Ad9830D16b1f10333866a3f38C949CbB19f4BAD` | `0x1D5eF769A024B3157c76884fbd10302d8d83fAB9` | 2026-08-07 |
-| Unichain | `0xeE92807decAa3A02F1e165dd7Efcd92ab9aA83CB` | `0x1D5eF769A024B3157c76884fbd10302d8d83fAB9` | 2026-08-07 |
-
-## Runtime Code Hash
-
-```
-0x545b3a4ba195edc6b728df8cc64f28da528c9e7805c15f1aa61ef58c3c562197
-```
-
-## Fee Structure
+## Legacy fee structure
 
 - `treasuryBps`: 100 (1%)
 - `ipCreatorBps`: 1
 - Merchant receives: 99% minus IP creator fee
 
-## Source
+These describe the legacy interface, not authorization to use it for a new
+payment or a replacement for the selected record's economics.
 
-Data sourced from `deployments/registry/reference/splitter-table.json` routes:
-- `base:legacy`
-- `unichain:legacy`
+## Verification
+
+Compare the selected chain/version record with live runtime code and mutable
+owner/treasury state. Check actual registry gates and backend receipt-verification
+behavior; a historical record does not prove current availability. Disabled
+records must not settle.
+
+See the [registry verification checklist](../../INDEX.md) and
+[route selection guards](../../../../../node/src/splitterRoutes.ts).

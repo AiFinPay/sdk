@@ -1,19 +1,26 @@
 # REPORTING-FUNNELS-20261009 — independent S05/S06 security slice
 
-## Current finding disposition — independently CLOSED, 2026-10-09
+This is a historical review, not current security clearance, pass/readiness or
+release approval. Reproduce against the [Node regression](../../gate/tests/reporting-funnels-independent.test.ts),
+[Python regression](../../python-gate/tests/test_reporting_funnels_independent.py),
+[reporter](../../gate/src/reporter.ts), [ASGI adapter](../../python-gate/aifinpay_gate/asgi.py)
+and [candidate CI](../../.github/workflows/ci.yml). Source identity belongs in
+version control/CI artifacts, not duplicated digest tables in prose.
 
-Both original Medium findings are closed on fresh, stable author source pins.
-This is incremental SDK QA/security-slice acceptance, not author self-review,
+## Historical repair disposition — independently closed in the 2026-10-09 review
+
+Both original Medium findings were closed on the reviewed repaired source.
+This was incremental SDK QA/security-slice acceptance, not author self-review,
 full security certification, backend/HTTP17AC or release acceptance.
 
-| Finding | Original severity | Repaired location | Retained independent repro/result |
+| Finding | Historical disposition | Repaired location | Retained independent repro / historical result |
 |---|---|---|---|
-| SEC-SDK-01 | Medium, CLOSED | gate/src/reporter.ts:808,846 | gate/tests/reporting-funnels-independent.test.ts:145; complete-minute503attempt cap and >=5s spacing now PASS |
-| SEC-SDK-02 | Medium, CLOSED | python-gate/aifinpay_gate/asgi.py:74,76 | python-gate/tests/test_reporting_funnels_independent.py:253; actual402headers then body ConnectionError now0challenge/0access, PASS |
+| SEC-SDK-01 | Medium, closed at repair review | gate/src/reporter.ts:808,846 | gate/tests/reporting-funnels-independent.test.ts:145; complete-minute503attempt cap and >=5s spacing passed at replay |
+| SEC-SDK-02 | Medium, closed at repair review | python-gate/aifinpay_gate/asgi.py:74,76 | python-gate/tests/test_reporting_funnels_independent.py:253; actual402headers then body ConnectionError observed0challenge/0access at replay |
 
-Node reporter SHA256 d65d3c4cd08317a5cf8f85d80f1e3ec262c06fc9c0997e8bfdf3cd138fd2ad17.
-Python ASGI SHA256 b04371e123653ce30d62e7f3a4480c1ee791273e045e2f61121d828b71c031a5.
-Python reporter remains f6629df2736668e40a7ca2d9036e7f921bbfbb687f49a511fe71e253f1501505.
+Repair locations: [Node reporter](../../gate/src/reporter.ts),
+[ASGI adapter](../../python-gate/aifinpay_gate/asgi.py) and
+[Python reporter](../../python-gate/aifinpay_gate/reporter.py).
 
 Manual repair review confirms the Node attempt guard applies to pending samples
 and health retries use max(5000,backoff), preserving event backoff and max5.
@@ -21,19 +28,18 @@ ASGI observation follows successful terminal body send, not response.start;
 failed send/cancellation propagates without inventing a completed challenge.
 No guard weakened, no header-only semantic waiver, no reviewer product change.
 
-Actually replayed unchanged independent49Node+43Python=92PASS/0FAIL/0SKIP.
-Expanded combined suites259gate+337Python-gate+734Node-payer+435Python-payer
-=1765PASS/0FAIL/0SKIP, with92as a subset. Seven new author controls were executed,
+The dated review replayed the unchanged independent and expanded author suites;
+these are historical observations, not current test totals. Added author controls were executed,
 including health success/outage full-minute sequences and ASGI send/cancellation/
 telemetry outcomes. No new finding within this bounded repaired slice.
 No claim of global absence of Critical/High/Medium issues.
 
-Read both complete remediation/pin artifacts before replay. Fresh17Node author
-and15Python author pins match, plus four unchanged reviewer artifact pins.
-All39published/document/root pins and all247package files match start/end before
-closure report edits. Retained test hashes unchanged. Authors remained stopped;
-no repair during replay. Only the two reviewer reports are updated for handoff.
-The QA artifact has the exact37non-report manifest and replay commands.
+Read both complete remediation artifacts before replay. The reviewer reported
+matching source/test/document identities and no package drift at start/end,
+before the historical closure edits. Authors remained stopped; no repair
+occurred during replay. Only reviewer reports changed for that handoff.
+The [QA artifact](../stories/reporting-funnels-sdk-independent-tests.md) describes
+the replay and links to executable controls; fresh CI must bind candidate bytes.
 Fresh replay0harness errors; historicalEPERM/fixture failures are not waived
 product reds. Two existing Python deprecation warnings, zero skips.
 
@@ -50,8 +56,8 @@ native browser, human Security+Engineering and release gates remain pending.
 
 ## Historical original review (superseded by repair closure above)
 
-Reviewer is independent of Node/Python authors. Original start pins: all27 published
-hashes match; full34-pin manifest is in the independent QA report. Writes are
+Reviewer was independent of Node/Python authors. Original source-identity checks
+were recorded during replay; current identity requires fresh CI provenance. Writes were
 confined to the four dispatched new files. Product repairs belong to authors.
 
 ## Historical original findings for MAIN (retained, source-stable original replay)
@@ -69,7 +75,7 @@ Retained expected behavior is red; no skip/xfail or product modification.
 Remediation: apply minimum5s spacing to health retries as well as new samples.
 Complete-minute retained control executed: injected503 and a public health
 call at each integer second over [0,60) gives15attempts, expected<=12.
-Source SHA256 fc91257c3180d98dec1e17da9cfcb758e436d9705b5d3e95d6a6aefad04e1c1d.
+Executable repro: [SEC-SDK-01](../../gate/tests/reporting-funnels-independent.test.ts).
 
 **SEC-SDK-02 — Medium — ASGI challenge counted before402 body completion.**
 Source `python-gate/aifinpay_gate/asgi.py:74` reports access_challenged as
@@ -81,7 +87,7 @@ access occurs. This breaks the requested finished402 criterion and Node finish
 parity, inflating challenge cohort observations after aborted delivery. It
 does not imply paywall_viewed or a receipt/access bypass. Remediation belongs
 to Python author: count only a successful terminal challenge body emission.
-Source SHA256451031f992a0f229dac4c4e6138b9c6b1dba496a69f26a64970d1deb1124075c.
+Executable repro: [SEC-SDK-02](../../python-gate/tests/test_reporting_funnels_independent.py).
 
 SEC-SDK-02 is scoped to the dispatched **finished402** requirement and
 cross-language completion parity. Backend architecture says "actual emitted402";
@@ -95,9 +101,9 @@ tests cover successful header-stage observation, missing this aborted body.
 |SEC-SDK-02|Medium|python-gate/aifinpay_gate/asgi.py:74|python-gate/tests/test_reporting_funnels_independent.py:253;402headers/body abort gives1challenge vs0|
 
 Critical0/High0/Medium2 within this bounded review, not a global absence claim.
-Independent controls90PASS/2FAIL/0SKIP; expected assertions retained red,
-no waiver/product fix/xfail. Author suites208/734/289/435 all PASS0SKIP in the
-final combined replay. Exact commands/hashes/counts are in
+The original replay retained both failing expected-behavior assertions,
+with no waiver/product fix/xfail. Original author suites did not catch them.
+Reproduction and control descriptions are in
 [the QA artifact](../stories/reporting-funnels-sdk-independent-tests.md).
 
 ## Working decisions / scope
@@ -120,9 +126,8 @@ independent ASGI product red. No dependency installation or source change.
 End verification:34/34published and metadata/document pins match start, plus
 245/245pre-existing package file hashes unchanged. New package paths are
 exactly the two dispatched independent tests. No author repair during replay.
-Node reporter fc91257c3180d98dec1e17da9cfcb758e436d9705b5d3e95d6a6aefad04e1c1d;
-Python reporter f6629df2736668e40a7ca2d9036e7f921bbfbb687f49a511fe71e253f1501505;
-ASGI451031f992a0f229dac4c4e6138b9c6b1dba496a69f26a64970d1deb1124075c.
+These were historical drift checks, not identities for today's source.
+Use the linked source/test paths and fresh version-control/CI provenance.
 
 ## Local security checks / practical limits
 
@@ -173,4 +178,4 @@ applicability unknown, no certification. No release/merge/deploy authorization.
 
 HISTORICAL HANDOFF: MAIN | original incremental SDK QA/security FAIL | two Medium findings | source-stable original replay
 
-CURRENT HANDOFF: MAIN | incremental repaired SDK QA/security slice PASS | SEC-SDK-01/02 independently CLOSED | 92/92 independent;1765/1765 combined | slot CLOSED | fresh source-stable | no waiver | backend/human/release gates pending
+HISTORICAL REPAIR HANDOFF: MAIN | bounded SEC-SDK-01/02 closure recorded at review time | no waiver | not current pass/readiness evidence; backend/human/release acceptance requires fresh evidence

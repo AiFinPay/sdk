@@ -1,7 +1,7 @@
 ## @aifinpay/mcp-http
 
 Streamable HTTP transport wrapper for [`@aifinpay/mcp`](../mcp). Public
-endpoint at **`https://mcp.aifinpay.io/mcp`** so catalogs that
+URL when deployed: **`https://mcp.aifinpay.io/mcp`**, for catalogs that
 require an HTTP URL (Smithery, mcp.so, LobeHub MCP) can list us.
 
 For local Claude Desktop / Cursor / Windsurf use, stick with the stdio
@@ -68,9 +68,8 @@ Real production agent traffic should go through the stdio version with
 a funded identity. HTTP is for discoverability + occasional one-off
 calls from web-only MCP clients.
 
-### Production
+### Deployment
 
-Deployed on the operator VPS at port 3010, fronted by nginx vhost
-`mcp.aifinpay.io`. systemd unit at
-`/etc/systemd/system/mcp-http.service` (see
-`docs/mcp-http-deploy.md` in the oracle repo for the runbook).
+Deployment configuration and operational status are maintained by the service
+operator. This package's local-run instructions do not establish that a hosted
+endpoint is currently deployed or available.

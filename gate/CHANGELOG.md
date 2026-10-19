@@ -1,5 +1,10 @@
 # Changelog
 
+## @aifinpay/gate 0.4.1 — documentation refresh
+
+- Remove versioned release snapshots from the README and reporting guide;
+  clarify that source interface documentation is not deployment evidence.
+
 ## @aifinpay/gate 0.4.0 — unreleased source candidate
 
 - Add separate explicit reporting.v2.20261009 producer with strict flow/event/

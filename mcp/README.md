@@ -4,15 +4,13 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Version **2.8.1** is prepared in this checkout, targeting agent2.6.0, Python2.5.1
-and canonical skill2.9.0. The separate canonical producer's final immutable
-source pin is a required handoff, not a moving-branch substitution.
-The published baseline checked2026-10-04 was MCP2.5.0. Package publication and
-real registry dependency/lock refresh remain release gates; a source-cohort
-build does not prove those steps. Owner-enabled v1.4 purchases with `payable_fetch` are
-released: on Polygon since 2.2.0, on Base (ETH or USDC) since 2.5.0; site-wide
-batches with `scope: "merchant"` since 2.4.1. Without payment configuration the server keeps
-its inspection-only tool inventory.
+Payment tools require explicit owner configuration and a persistent wallet.
+Availability is checked against the installed deployment registry, runtime
+verification and backend/merchant capabilities; source builds and tests do not
+establish publication or live payment acceptance. Without payment configuration
+the server keeps its inspection-only tool inventory. Use package manifests and
+lockfiles, registry inputs, capability APIs, executor tests and CI for current
+release evidence.
 
 ## Enable native paid GET requests
 
@@ -101,9 +99,9 @@ Call `payable_fetch({"url":"https://merchant.example/api/data"})`. The tool
 uses the original signed v1.4 quote, independent fresh native/USD pricing, SDK
 runtime/signer verification and owner limits. It persists the prepared transaction
 before sending, verifies the receipt, and reuses the purchased batch. No special
-merchant script, alternate contract or facilitator fallback is used. GET on the configured chain; EVM receipt payments use live
-mode only, in its native currency or the configured
-stablecoin; Amoy payment receipts are not supported. The smallest batch is $0.10 plus gas, so keep `AIFINPAY_MAX_USD`
+merchant script, alternate contract or facilitator fallback is used. GET on the
+configured chain; EVM receipt payments use live mode and its native currency or
+the configured stablecoin. The smallest batch is $0.10 plus gas, so keep `AIFINPAY_MAX_USD`
 a little above the batch you expect to buy.
 
 To buy access to a whole site rather than one endpoint, call
@@ -301,15 +299,15 @@ snapshot. Verify `agent_address` against the wallet you intend to use.
 | `AIFINPAY_MAX_USD`           | —                     | Per-payment USD cap for `payable_fetch`; required when payments are enabled.          |
 | `AIFINPAY_GATEWAY_ORIGINS`   | —                     | Comma-separated exact HTTPS origins the agent may pay; required with payments.        |
 | `AIFINPAY_GATEWAY_PATH_MODE` | `gateway`             | Use `gateway` for merchant-slug identity or `direct` for full request-path identity.  |
-| `AIFINPAY_PAY_CHAIN`         | `polygon`             | Owner-selected payment chain; see the2.8.1 source capability list.                    |
+| `AIFINPAY_PAY_CHAIN`         | `polygon`             | Owner-selected payment chain; inspect SDK capabilities and `deployment_info`.         |
 | `AIFINPAY_MAX_GAS`           | —                     | Gas cap per payment in the pay chain's native currency (POL, ETH, AVAX, BNB, XRP).    |
 | `AIFINPAY_RPC_URL`           | chain's public RPC    | HTTPS RPC for the pay chain.                                                          |
 | `AIFINPAY_CLAIM_ORIGINS`     | AiFinPay dashboards   | Exact origins `agent_claim_self` may link the agent to.                               |
 
 `agent_history({address, source:"transactions", network:"polygon"})` reads
 indexed settlements for that network when the backend's durable indexer serves
-it. The dated production baseline has Polygon indexing; another client chain
-descriptor alone does not prove history coverage. `source:"receipts"` reads retained batches, including test-mode
+it. A client chain descriptor alone does not prove history coverage.
+`source:"receipts"` reads retained batches, including test-mode
 payments. Pass `passport` instead of, or alongside, `address` to resolve a
 public passport first. A backend without the passport resolver cannot satisfy
 passport-only queries. No secret API key is needed for public metadata.
@@ -317,7 +315,8 @@ passport-only queries. No secret API key is needed for public metadata.
 Responses do not include bearer receipts. Limits are 1..100; follow
 `next_offset`. History source/coverage is explicit: it is not a full wallet
 explorer. Test-mode indexing depends on backend capabilities; retained receipt
-history is a separate source and does not establish mainnet activation.
+history is separate from transaction-index coverage and does not establish
+payment availability.
 
 ```
 const { server } = await createServer(loadConfigFromEnv());
@@ -341,7 +340,7 @@ For a self-hosted AIFP-1 gateway, set `AIFINPAY_GATEWAY_ORIGINS` to exact HTTPS
 origins. `AIFINPAY_GATEWAY_PATH_MODE=direct` makes the process use each request's
 full pathname as its AIFP-1 resource identity; `gateway` uses the merchant slug.
 The mode is process-wide, does not broaden the trusted-origin allowlist, and
-does not enable the retired signing tools in the production RC.
+does not ungate signing tools.
 
 Dev quoting does not bypass wallet signatures, issuer verification or
 receipt metering. See the bundled skill for backend prerequisites. The low-level SDK has an Amoy
@@ -351,43 +350,35 @@ executor; this MCP does not expose Amoy paid receipt purchases.
 
 MIT.
 
-## Additional EVM networks in the 2.8.1 source candidate
+## EVM payment capabilities
 
-Owner `AIFINPAY_PAY_CHAIN` accepts polygon, base, optimism, arbitrum, avalanche,
-bnb, unichain, xrplevm and robinhood. `AIFINPAY_MAX_GAS` is in the selected native
-POL/ETH/AVAX/BNB/XRP currency; the legacy POL cap applies only on Polygon. Assets
-must be pinned for that chain, including BNB 18-decimal USDC/USDT and Robinhood
-18-decimal USDe/6-decimal USDG. XRPL EVM has native XRP only. Metadata comes from
-agent 2.6.1; the backend must still authorize and serve that merchant/network.
-Source support does not activate networks in production. Pending journals retain
-the original chain and are recovered without another settlement. A legacy
-missing-chain journal is adopted only when the owner-configured chain and the
-actual signed transaction's chain ID, payer, pinned target and exact call agree.
-Insufficient evidence requires manual receipt reconciliation. A later quote
-expiry does not invalidate receipt recovery for an existing payment.
+`AIFINPAY_PAY_CHAIN` is an explicit owner choice; quotes cannot select another
+chain. Use the SDK's `PAYMENT_CHAINS`, `paymentChain` and `paymentStableAsset`
+APIs, the installed deployment registry and `deployment_info` to inspect
+current chain and asset options. The backend must still authorize and serve the
+merchant/network. Native gas caps use the selected chain's native currency;
+stablecoin assets and decimals are chain/address-pinned. Client support alone
+does not establish payment availability.
 
-Release order after final release gates: publish reviewed canonical skill2.9.0 and agent2.6.1, refresh MCP
-dependencies and lock from those real registry releases, pass standalone MCP
-CI, then publish MCP2.8.0. This candidate requires fresh source-packed
-agent2.6.0 and skill2.9.0, plus the exact Python2.5.1 release target. The existing
-registry agent2.5.0 / skill2.8.0 entries remain until publication;
-no npm integrity/resolution is fabricated. An old2.3.x agent cannot build the
-new descriptor/helper imports, and old skill2.6.0 cannot satisfy the exact
-release-target guard. Hosted source CI uses `scripts/check-mcp-source-cohort.mjs`: a byte-preserving patched registry bootstrap and genuine same-commit Node plus fully pinned canonical skill packages in disposable directories. The Node producer's authoritative source lock seeds the genuine runtime; it is separate resolution evidence, since npm excludes it from the tarball. Exact package bytes, versions, bundled skill, high/critical audits and full tests must pass; the registry publication guard must still refuse a source cohort lacking a matching real registry lock. Standalone release CI requires the refreshed real registry lock. Never publish the candidate with the old registry dependency lock.
+Pending journals retain the original chain and are recovered without another
+settlement. A legacy missing-chain journal is adopted only when the
+owner-configured chain and the actual signed transaction's chain ID, payer,
+pinned target and exact call agree. Insufficient evidence requires manual
+receipt reconciliation. A later quote expiry does not invalidate receipt
+recovery for an existing payment.
 
 Use one shared local filesystem for a wallet's ledger/journal and reconcile
-pending transactions before downgrading. Node 2.4 reservations never expire for
-an unknown outcome; receipt failures never refund confirmed spend. Older SDK
-versions can expire or reset this state. Custom capped v1.4 ledger adapters need
-the new bound preparation/recovery/completion hooks; absence refuses payment.
+pending transactions before downgrading. Unknown outcomes retain their
+reservations; receipt failures never refund confirmed spend. Older SDK versions
+can expire or reset this state. Custom capped v1.4 ledger adapters require the
+bound preparation/recovery/completion hooks; absence refuses payment.
 
-## Solana source candidate
+## Solana paid access
 
-Version2.7 targets NodeSDK2.5 and canonical skill2.8. These are coordinated
-release targets; source integration does not establish npm publication or
-activate a network. The published deployments1.1.3 Solana entries remain
-disabled. `payable_fetch` retains the SDK availability check and cannot
-override it.
+Solana availability is checked against the installed deployment registry,
+runtime verification and backend/merchant capabilities. Owner configuration
+does not bypass those checks. Source tests do not establish live payment
+acceptance.
 
 For a separately accepted and served Solana route, the owner sets
 `AIFINPAY_PAY_CHAIN=solana`, explicit `AIFINPAY_SOLANA_NETWORK=mainnet` with
@@ -398,15 +389,15 @@ network-pinned classic SPL assets are selected with `AIFINPAY_PAY_ASSET`.
 Existing payments opt-in, approved origins and per-payment/daily USD caps
 remain required.
 
-Before a Solana quote request, SDK2.5 saves the exact signed authorization,
+Before a Solana quote request, the SDK saves the exact signed authorization,
 nonce and owner context in its shared private ledger. After a timeout or
 restart it replays that admission instead of generating a new nonce. The
 per-payment limit stays fixed for that admission across daily rollover;
 MCP still checks the current daily allowance before submission. An exact
 authenticated non-admission response can close only an unreserved local
-intent. It never refunds an issued backend quote reservation. Keep pending
-2.5 ledger state when upgrading; reconcile it before downgrade and never
-delete state to retry a payment.
+intent. It never refunds an issued backend quote reservation. Preserve pending
+ledger state when upgrading; reconcile it before downgrade and never delete
+state to retry a payment.
 
 The private durable journal keeps the full signed Solana transaction and
 base58 signature before submission, including fee/rent in the admission
@@ -421,10 +412,6 @@ ledger, MCP atomically retains the actual fee debit and clears its pending
 purchase guard. Its private journal keeps the original signature and failed
 status. Missing or mismatched evidence retains the full reservation; expiry
 alone cannot release it. A persistence failure can be retried without resending.
-
-Before publication, install the actual published coordinated Node/skill
-versions and refresh the real registry lock; a locally packed source cohort
-is test evidence only. Do not publish with the previous dependency lock.
 
 Solana `agent_history` and `agent_quota` use the exact case-sensitive local
 Solana address and owner-configured cluster plus independently pinned program.

@@ -1,8 +1,10 @@
 # Node reporting v2 — explicit producer opt-in
 
 Contract `reporting.v2.20261009`, requirement `REPORTING-FUNNELS-20261009/S05`.
-Source candidate gate0.4.0 / agent2.6.0. Independent QA/Security/engineering,
-backend S03 integration, publication and partner rollout remain separate.
+This document specifies the producer interface, not evidence of publication,
+deployed backend acceptance or partner coverage. Use package manifests and
+lockfiles, registry inputs, matching CI and backend capability evidence to
+verify a release.
 
 ## Wiring a merchant gate
 
@@ -183,10 +185,10 @@ Remote report queue/drop metrics are unknown until a sample is acknowledged;
 are local producer counts, not a durable/complete traffic claim. A health gap
 after5min and overlapping process lifetimes are handled by backend coverage;
 never sum superseding lifetime counters. Uninstrumented browser/payment/ledger
-stages remain unsupported. Raters rollout and integration verification are not
-established by installing this source candidate.
+stages remain unsupported. Deployed reporting coverage and integration
+verification are independent of package installation.
 
-Author verification runs only local synthetic endpoints, actual Express4/5,
-strict producer transports and actual SDK receipt/auth/recovery adapters.
-Backend PG/Redis dedupe, conflicts, token cryptographic scope, retention and
-reports require the later S03/S04 integration and independent acceptance.
+Source tests use local synthetic endpoints, Express adapters, producer
+transports and SDK receipt/auth/recovery adapters; they do not establish live
+backend acceptance. Verify database deduplication, capability scope, retention
+and deployed integration against the relevant backend contract and CI.

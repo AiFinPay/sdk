@@ -3,6 +3,14 @@
 Date: 2026-10-10. Traceability: `reporting-dependency-remediation`, SDK PR106.
 Role: SDK-only sdlc-dev/security remediation author, **not an independent reviewer**.
 
+Historical remediation handoff only. Advisory snapshots, local scans and test
+results below describe the dated candidate, not current vulnerability status,
+pass/readiness or publication. Verify current dependency identities in the
+[bridge locks](../../examples/) and [Python requirements](../../python/requirements.txt),
+then rerun audits/tests via [candidate CI](../../.github/workflows/ci.yml).
+The [independent review](reporting-dependency-independent-review.md) records the
+bounded historical follow-up, not whole-release approval.
+
 ## Scope and candidate identity
 
 The owner authorized closing the remaining reporting-release blockers, followed
@@ -10,11 +18,9 @@ by merge/deploy subject to the existing gates. This sidecar was specifically
 restricted to local dependency remediation and evidence: no commit, push, alert
 dismissal, publication, merge, payment/network activation or sibling changes.
 
-Original/current SDK HEAD: `5d28340da6251a107219a10fa0e79ab8e9353e28`.
-Source changes below are uncommitted; this is not a new Git commit/tree claim.
-The binary diff over the nine dependency files has SHA256
-`ba35c9d58021e7b3f8f045be032575097096a00460ae2a4748c0f37d9f0e11ed`.
-The report and untracked worklog are not included in that dependency-only hash.
+Candidate identity must be recovered from version control and source-bound CI,
+not copied HEAD/diff digests in prose. The original report described an
+uncommitted dependency-only candidate, not a committed release tree.
 
 Changed product inputs are exactly `package.json` and `package-lock.json` in
 each of `examples/_generic-x402-bridge`, `examples/exa-x402-bridge`,
@@ -107,15 +113,15 @@ pip-audit2.10.1 runs separately from the scanned SDK environment.
 | Original32 advisory-range controls | Vulnerable input snapshot | All32 candidate ranges covered |
 | Strict installed Python scan, exactly45 runtime packages | 4 advisories in2 packages | 0 vulnerabilities, exit0 |
 | Python installed dependency consistency | Not claimed | `uv pip check` PASS |
-| Full Python tests with exact runtime pins | Not claimed | 435/435 PASS,0skip,25.62s |
-| Full Python tests with socket/DNS refusal guard | Not claimed | 435/435 PASS,0skip,12.20s |
+| Full Python tests with exact runtime pins | Not claimed | Historical local replay; current outcomes: [tests](../../python/tests/) |
+| Full Python tests with socket/DNS refusal guard | Not claimed | Historical offline replay, not live backend acceptance |
 | Disposable Python network-refusal controls | Not claimed | 4/4 PASS |
-| Generic existing bridge tests | Not claimed | 14/14 PASS,0skip |
-| io-net existing bridge tests | Not claimed | 15/15 PASS,0skip |
-| Venice existing bridge tests | Not claimed | 15/15 PASS,0skip |
+| Generic existing bridge tests | Not claimed | Historical local replay; [test sources](../../examples/_generic-x402-bridge/) |
+| io-net existing bridge tests | Not claimed | Historical local replay; [test sources](../../examples/io-net-x402-bridge/) |
+| Venice existing bridge tests | Not claimed | Historical local replay; [test sources](../../examples/venice-x402-bridge/) |
 | Exa existing bridge tests | Exact HEAD replay24/25;1FAIL | Same24/25;same1FAIL |
 | Focused strict source-cohort tests | Historical evidence separate | 10/10 PASS,0skip |
-| Existing version gate against local origin/main94900c0 | Historical evidence separate | PASS |
+| Existing version gate against the then-local origin/main | Historical evidence separate | Historical PASS; current [version gate](../../scripts/check-version-bump.mjs) must be rerun |
 | Eight unchanged example server/store JS syntax checks | Not claimed | PASS |
 | Git diff whitespace check | Not claimed | PASS |
 
@@ -152,16 +158,24 @@ Author self-check: bounded implementation and dependency verification complete;
 independent review/DoD/deployment pending. HANDOFF: parent-owned sdlc-qa,
 sdlc-security and sdlc-reviewer, using this artifact and exact candidate bytes.
 
-## Retained local evidence
+## Historical local evidence and durable references
 
-Owned evidence root: `/private/tmp/aifp-sdk-deps-20261010.VldTtY`.
+The original run used local-only audit/probe logs and disposable environments.
+Their retention is not verified here; filenames below describe historical
+evidence categories, not repository artifacts or reproducible current proof.
+Use the [generic lock](../../examples/_generic-x402-bridge/package-lock.json),
+[Exa lock](../../examples/exa-x402-bridge/package-lock.json),
+[io-net lock](../../examples/io-net-x402-bridge/package-lock.json),
+[Venice lock](../../examples/venice-x402-bridge/package-lock.json),
+[requirements](../../python/requirements.txt) and linked test sources for a
+fresh candidate-bound replay.
 
 - `dependabot-before.json`: original32 read-only alert records.
 - `{_generic,exa,io-net,venice}-audit-{before,after}.json`: actual npm reports.
 - `advisory-range-controls.json`: all32 original advisory instances mapped to candidate versions/absence.
 - `registry-integrity-check.json` and `*-registry.json`: live registry identity/integrity proof.
 - `*-installed-tree.json`, `*-install-before.log`, `*-install-after.log`, `*-lock-regeneration.log`.
-- `bridge-dependency-probes.cjs`, SHA256 `d6c5c4b1280dfb39dc957bf3516a26bf21220a3bb262d15b398d109f6d4216f0`; `*-probes-{before,after}.json`.
+- Local bridge-dependency probes and `*-probes-{before,after}.json`.
 - `python-audit-before.json`, `python-runtime-audit-after.json`: strict45-package before/after scans.
 - `python-tests-after.log`, `python-tests-network-blocked.log`, `python-network-guard/sitecustomize.py`.
 - `*-tests-after.log`, `exa-tests-baseline-replay.log`, `exa-install-baseline-replay.log`; `baseline/` is a disposable exact HEAD export.

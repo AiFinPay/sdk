@@ -22,7 +22,7 @@ const splitterAddr = evmRegistry.getSplitterAddress(10);
 const stablecoins = evmRegistry.getStablecoins(10);
 
 // Get supported chains
-const chains = evmRegistry.getSupportedChains("enabled");  // [10, 137, ...]
+const chains = evmRegistry.getSupportedChains("enabled");
 const networks = evmRegistry.getNetworkList();             // [{ chainId, name, status, ... }]
 
 // Export as markdown/json/csv
@@ -36,6 +36,19 @@ const solanaIdl = artifacts.getSolanaIdl("mainnet");
 ```
 
 See [USAGE.md](./USAGE.md) for complete documentation.
+
+## Evidence and availability
+
+Use the [registry index](registry/splitter/INDEX.md) to select the actual
+machine-readable record for the required ecosystem, version, chain and route.
+Addresses, program IDs, runtime hashes, governance and provenance belong in
+those records, not copied tables here.
+
+Registry queries read packaged metadata; they do not check live chain state or
+backend receipt verification. Status flags and disabled reasons are recorded
+claims, not current verification results. Follow the index's runtime/backend
+verification checklist and obtain fresh end-to-end evidence before claiming
+availability. Never bypass a disabled record or infer activation from an export.
 
 ---
 
@@ -80,15 +93,10 @@ registry/
     └── casper/      # Casper IDL artifacts
 ```
 
-### Version history
-
-| Registry | Location | Versions | Status |
-|---|---|---|---|
-| Legacy route table | `registry/splitter/evm/v1.3` | v1.2 `legacy`, v1.3 `merchant-aifp1` / `agent-x402` | Superseded; kept for `node/` SDK generation |
-| Legacy v1.2 | `registry/splitter/evm/v1.2` | v1.2 with `paymentId` replay guard | Superseded |
-| Legacy v1.1 | `registry/splitter/evm/v1.1` | v1.1 initial release | Superseded |
-| This package | `registry/splitter/evm/v1.4/deployments.json` | v1.4 EVM | Active grabber output |
-| This package | `registry/splitter/solana/deployments.json` | v1.4 Solana | Active grabber output |
+The [registry index](registry/splitter/INDEX.md) links versioned JSON records and
+interface guides. Output selection is implemented in the
+[grabber](src/grabber.ts) and [build CLI](src/build.ts); upstream provenance is
+stored in the generated JSON rather than this README.
 
 ## Exports
 
@@ -100,7 +108,7 @@ registry/
 - `getEvmByNetwork(network)` — lookup by network name
 - `getSplitterAddress(chainId)`, `getTokenListAddress(chainId)`, `getProfilesAddress(chainId)` — contract addresses
 - `getStablecoins(chainId)` — stablecoin list
-- `isSettlementEnabled(chainId)` — settlement status
+- `isSettlementEnabled(chainId)` — recorded settlement flag, not a live check
 - `getGovernanceSafe(env)` — Safe multisig address
 - `filterByStatus(status)`, `getProdDeployments()`, `getTestnetDeployments()` — filtering
 - `getSupportedChains(filter?)` — get list of supported chain IDs (filter: "all" | "prod" | "testnet" | "enabled")

@@ -1,9 +1,11 @@
 # Reporting v2 — explicit Python producer
 
-Frozen contract: `reporting.v2.20261009`, S06 of REPORTING-FUNNELS-20261009.
-Source candidate `aifinpay-gate`0.1.3 / `aifinpay-agent`2.5.1, unpublished.
+Contract: `reporting.v2.20261009`, S06 of REPORTING-FUNNELS-20261009.
 The existing `GateReporter` and `on_event=` integration remain strict v1.
 Use one version per producer; never attach both or add overlapping totals.
+This interface description is not evidence of publication, deployed backend
+acceptance or partner coverage. Verify releases with package manifests and
+lockfiles, registry inputs, matching CI and backend capability evidence.
 
 ```python
 from aifinpay_gate import Gate, GateReporterV2, Route, AifpGateMiddleware
@@ -135,9 +137,9 @@ required original quote operation; actual cross-component acceptance is S03.
 
 ## Evidence boundary
 
-Author tests use synthetic signing, mocks, actual FastAPI/Flask, POSIX fork and
-localhost-only wire fixtures; no production credentials, external API/RPC,
-payment, partner rollout, publication or Git change. Backend commit-before-ack,
-scope/expiry/erasure, PG races, Node interoperability and deployed partner
-coverage require later independent acceptance. See the exact author
+Source tests use synthetic signing, mocks, FastAPI/Flask, POSIX fork and
+localhost-only wire fixtures; they do not establish live API/RPC behavior,
+payment acceptance, publication or partner coverage. Verify backend
+commit-before-ack, scope/expiry/erasure, database races and deployed
+interoperability against the backend contract and CI. See the
 [assumptions/handoff](../docs/stories/reporting-funnels-s06-assumptions.md).

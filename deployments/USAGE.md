@@ -2,6 +2,16 @@
 
 Programmatic interface for querying AIFP deployment records and contract artifacts (ABI/IDL).
 
+## Evidence boundary
+
+These APIs read packaged registry metadata, not live chain or backend state.
+Use the [registry index](registry/splitter/INDEX.md) to find the actual JSON and
+the runtime/backend verification checklist. Read addresses, program IDs, runtime
+hashes, governance and provenance there rather than copying snapshot values.
+Status, settlement flags and disabled reasons do not prove current availability
+or receipt-verifier behavior. Preserve disabled gates and require fresh live
+runtime and backend/end-to-end evidence before settlement.
+
 ## Installation
 
 ```bash
@@ -59,7 +69,7 @@ const registry = AifinpayRegistry.loadEvm();
 const optimism = registry.getEvmDeployment(10);
 if (optimism) {
   console.log(optimism.chain);        // "optimism"
-  console.log(optimism.status);       // "enabled"
+  console.log(optimism.status);       // Recorded status, not live verification
   console.log(optimism.contracts);    // { splitter, tokenList, profiles, ... }
 }
 
@@ -116,7 +126,7 @@ const empty = registry.getStablecoins(99999); // []
 ```typescript
 const registry = AifinpayRegistry.loadEvm();
 
-// Check if settlement is enabled
+// Read the registry settlement flag (not a live availability check)
 const enabled = registry.isSettlementEnabled(10); // true/false
 
 // Returns false for unknown chains
@@ -148,7 +158,7 @@ console.log(registry.getGeneratedAt());  // ISO 8601 timestamp
 const registry = AifinpayRegistry.loadEvm();
 
 // Get all supported chain IDs
-const allChains = registry.getSupportedChains();           // [1, 10, 137, ...]
+const allChains = registry.getSupportedChains();
 
 // Get only production chains
 const prodChains = registry.getSupportedChains("prod");
@@ -200,10 +210,6 @@ const registry = AifinpayRegistry.loadEvm();
 // Export as markdown table
 const markdown = registry.exportAsMarkdown();
 console.log(markdown);
-// | Chain ID | Network | Status | Settlement | Testnet |
-// |----------|---------|--------|------------|---------|
-// | 10 | optimism | enabled | ✅ | No |
-// | 137 | polygon | enabled | ✅ | No |
 
 // Export filtered markdown
 const prodMarkdown = registry.exportAsMarkdown("prod");
@@ -212,14 +218,11 @@ const enabledMarkdown = registry.exportAsMarkdown("enabled");
 // Export as JSON
 const json = registry.exportAsJson();
 console.log(json);
-// [{"chainId":10,"name":"optimism","status":"enabled",...}, ...]
 
 // Export as CSV
 const csv = registry.exportAsCsv();
 console.log(csv);
 // chainId,name,status,settlementEnabled,testnet
-// 10,optimism,enabled,true,false
-// 137,polygon,enabled,true,false
 ```
 
 ---
@@ -323,7 +326,11 @@ const allAbis = artifacts.getAllTronAbis();
 
 ## Complete Examples
 
-### Setup Payment on Chain
+### Inspect Payment Configuration
+
+This example only inspects registry configuration. Its flag check does not
+verify runtime code, backend support or authority to pay; use the
+[verification checklist](registry/splitter/INDEX.md) before settlement.
 
 ```typescript
 import { AifinpayRegistry, ArtifactRegistry } from "@aifinpay/deployments";
@@ -339,7 +346,7 @@ async function setupPayment(chainId: number) {
     throw new Error(`No deployment for chain ${chainId}`);
   }
 
-  // Check settlement status
+  // Check the recorded settlement flag; this is not payment authorization
   if (!evmRegistry.isSettlementEnabled(chainId)) {
     throw new Error(`Settlement disabled on chain ${chainId}`);
   }
@@ -350,7 +357,7 @@ async function setupPayment(chainId: number) {
 
   // Get stablecoins
   const stablecoins = evmRegistry.getStablecoins(chainId);
-  console.log(`Available stablecoins: ${stablecoins.map(s => s.symbol).join(", ")}`);
+  console.log(`Configured stablecoins: ${stablecoins.map(s => s.symbol).join(", ")}`);
 
   // Get ABI for contract interaction
   const abi = artifacts.getEvmAbi("B2BSplitterV14", "1.4");
@@ -383,13 +390,9 @@ import { AifinpayRegistry } from "@aifinpay/deployments";
 
 const registry = AifinpayRegistry.loadEvm();
 
-// Generate markdown table for README
+// Generate a view of the loaded registry; not a live availability report
 const markdown = registry.exportAsMarkdown("prod");
 console.log(markdown);
-// | Chain ID | Network   | Status  | Settlement | Testnet |
-// |----------|-----------|---------|------------|---------|
-// | 10       | optimism  | enabled | ✅         | No      |
-// | 137      | polygon   | enabled | ✅         | No      |
 
 // Generate JSON for API response
 const json = registry.exportAsJson("enabled");

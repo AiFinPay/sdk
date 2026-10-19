@@ -1,8 +1,9 @@
 # MCP install — one config block per client
 
-`@aifinpay/mcp` is the AiFinPay MCP server for wallet discovery, payment history, quotas, Agent Passport resolution, deployment/route inspection and **non-signing** settlement preparation — and, only when the owner enables it, `payable_fetch` for AIFP-1 purchases on Polygon v1.4.
+`@aifinpay/mcp` is the AiFinPay MCP server for wallet discovery, payment history, quotas, Agent Passport resolution, deployment/route inspection and **non-signing** settlement preparation — and, only when the owner enables it, `payable_fetch` for AIFP-1 purchases on an explicitly configured and verified route.
 
-Current source package version: **2.4.1**.
+Source version: [package manifest](mcp/package.json). Installed SDK and skill
+inputs: [lockfile](mcp/package-lock.json). Verify publication in npm separately.
 
 Without owner payment configuration the server signs no payment, and a quote or settlement invoice is not a completed payment. With it, `payable_fetch` signs and broadcasts locally within the owner's limits — see [Enabling payments](#enabling-payments).
 
@@ -144,14 +145,16 @@ After init or a wallet-file update, call `agent_reload`, then `agent_address`.
 
 ## Current tools
 
-The current `main` source registers these tools:
+The tool inventory is defined by [server.ts](mcp/src/server.ts). Registration
+depends on owner configuration; inspect that implementation for the installed
+source rather than relying on a release-status snapshot.
 
 | Tool | Purpose |
 |---|---|
 | `agent_address` | Read the current EVM, Solana and Casper public addresses. |
 | `agent_reload` | Reload configured local wallet files in the current MCP connection. |
 | `agent_claim_self` | Link the agent to its owner's dashboard with a one-time URL from dash.aifinpay.io. Signs only an AiFinPay claim challenge for the agent's own address; moves no funds. |
-| `payable_fetch` | Registered only when payments are enabled (below). Fetch a GET resource from an owner-approved AIFP-1 merchant, buying a prepaid batch on Polygon v1.4 within the owner's limits. |
+| `payable_fetch` | Registered only when payments are enabled (below). Fetch a GET resource from an owner-approved AIFP-1 merchant, buying a prepaid batch on the configured route within the owner's limits. |
 | `agent_quota` | Read the agent's quota. |
 | `agent_history` | Read indexed AiFinPay settlement history or retained receipt history. |
 | `agent_passport_resolve` | Resolve a public Agent Passport identity and verified wallet bindings. |
@@ -167,7 +170,11 @@ Legacy `agent_call`, `agent_quote`, `pay_with_split` and `quote_split` are not r
 
 ## Enabling payments
 
-`payable_fetch` is registered only when the owner sets all of the following in the server's `env`. With `AIFINPAY_PAYMENTS_ENABLED=1` and any of them missing or invalid, the server refuses to start rather than run without a limit. Payments also need a persistent wallet (not the ephemeral identity) and cannot be combined with `AIFINPAY_MODE=dev`.
+`payable_fetch` is registered only with owner-enabled payments and a persistent
+wallet. [config.ts](mcp/src/config.ts) validates limits, exact origins and
+family-specific network/fee settings before startup. The block below is a
+Polygon example, not payment authorization. See the
+[payment guide](mcp/README.md) for other chains and environments.
 
 ```json
 {
@@ -198,12 +205,17 @@ The full payment guide, including stablecoin payments and network access, is in 
 | `AIFINPAY_DAILY_USD` | — | Rolling 24-hour cap; required when payments are enabled. |
 | `AIFINPAY_GATEWAY_ORIGINS` | — | Comma-separated exact HTTPS origins the agent may pay; required when payments are enabled. No wildcards. |
 | `AIFINPAY_GATEWAY_PATH_MODE` | `gateway` | `gateway` for merchant-slug identity or `direct` for full request-path identity. |
-| `AIFINPAY_MAX_GAS_POL` | — | Gas cap per payment in POL, e.g. `0.3`; required when payments are enabled. |
-| `AIFINPAY_PAY_ASSET` | `POL` | Pay in POL or a stablecoin the SDK pins for Polygon v1.4, e.g. `USDC`. Gas is POL either way. |
+| `AIFINPAY_PAY_CHAIN` | `polygon` | Owner-selected chain; accepted names come from [pay-chains.ts](mcp/src/pay-chains.ts). |
+| `AIFINPAY_MAX_GAS` | — | EVM gas cap in the selected chain's native currency. |
+| `AIFINPAY_MAX_GAS_POL` | — | Legacy Polygon-only gas cap in POL, e.g. `0.3`; never interpreted as another chain's gas allowance. |
+| `AIFINPAY_SOLANA_NETWORK` | — | Explicit cluster, bound to the selected environment; does not override deployment availability. |
+| `AIFINPAY_MAX_FEE_LAMPORTS` | — | Solana transaction-fee plus account-rent cap in integer lamports. |
+| `AIFINPAY_RPC_URL` | Chain-specific | Owner RPC; Solana requires an explicit trusted RPC. |
+| `AIFINPAY_PAY_ASSET` | Chain native asset | Native currency or an independently pinned stablecoin on the selected chain. |
 | `AIFINPAY_TRUSTED_HOSTS` | — | Exact hosts allowed to skip the SSRF DNS pre-check, for environments that resolve only through a proxy. |
 | `AIFINPAY_CLAIM_ORIGINS` | aifinpay.io dashboard/API origins | Origins `agent_claim_self` may contact; override only for staging. |
 | `AIFINPAY_ALLOW_PRIVATE_FETCH` | — | `1` allows private-network fetches for local development. Never on a public host. |
-| `AIFINPAY_MODE` | `live` | `live` or `dev`. `dev` exposes `dev_payment_quote`, needs an explicit non-production `AIFINPAY_BASE_URL`, and cannot be combined with payments. |
+| `AIFINPAY_MODE` | `live` | `live` or `dev`. Family-specific restrictions are enforced by [config.ts](mcp/src/config.ts) and [server.ts](mcp/src/server.ts); a mode setting never activates a deployment. |
 
 ## Verify installation
 

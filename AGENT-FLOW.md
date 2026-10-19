@@ -1,8 +1,8 @@
 # AiFinPay — agent flow, end to end
 
 How an AI agent goes from "hit a paywall" to "got the data", and where the
-wallet, identity and money live along the way. Written against the audit of six
-questions; each section says what the code actually does today.
+wallet, identity and money live along the way. For installed behavior, check
+the referenced implementation and package inputs rather than a version snapshot.
 
 ## Current client support
 
@@ -10,25 +10,25 @@ Start with `npx skills add AiFinPay/skill`: choose `aifinpay` for the paying
 agent or `aifinpay-merchant` for a site owner. The [skill source](https://github.com/AiFinPay/skill)
 and npm `@aifinpay/skill` provide instructions, not an executor.
 
-- **MCP 2.4.1** registers wallet, history, quota and non-signing preparation
+- **MCP** registers wallet, history, quota and non-signing preparation
   tools, and — only when the owner enables payments with exact origins and
   per-payment, daily and gas limits — `payable_fetch`, which buys AIFP-1
-  batches on Polygon v1.4 in POL or a pinned stablecoin. It does not register
+  batches on an explicitly configured and verified route. It does not register
   `agent_call` or `agent_quote`. See [mcp/README.md](mcp/README.md).
-- **Node 2.3.0** `fetchPaid` settles AIFP-1 on v1.4: Polygon by default, Base
+- **Node** `fetchPaid` settles AIFP-1 on v1.4: Polygon by default, Base
   when selected with `v14.chain: "base"`, in the native asset or a pinned
   stablecoin. Before signing it checks the pinned deployment, runtime, signer,
   profile, token and RPC chain; native payments need a fresh independent
   `nativeUsdPrice`. The legacy Polygon v1.3 route still needs an independently
   trusted deployment pin. See [node/PAYMENT_RECEIPTS.md](node/PAYMENT_RECEIPTS.md)
   for the journal and recovery.
-- **Python 2.3.0** `AiFinPayAgent.fetch_paid` covers the same v1.4 Polygon and
+- **Python** `AiFinPayAgent.fetch_paid` covers the same v1.4 Polygon and
   Base purchases.
 
-The merchant selects v1.4 through authenticated settings; no contract
-redeployment is involved. A deployed contract or a passing test is not proof
-that a given merchant's route is enabled — check `deployment_info` or the
-deployment registry.
+The merchant authorizes settlement through authenticated settings. A deployed
+contract or a passing test is not proof that a merchant's route is available:
+check the installed registry through `deployment_info`, backend capabilities,
+merchant authorization and the executor's fresh runtime checks.
 
 ---
 

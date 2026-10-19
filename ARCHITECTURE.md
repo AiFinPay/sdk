@@ -24,9 +24,8 @@ build orchestrator. Package instructions and lockfiles are authoritative.
   rate or Python gas cap denominated in POL. OP gas budgets include an
   oracle-based L1/operator preflight estimate with a buffer; they cannot cap a
   future inclusion-time L1 fee on-chain.
-- `wallet/`, `python/`, and `mcp-http/` are independent packages. The full-flow
-  extension coordinates Node/Python/MCP source candidates; wallet and transport
-  packages retain their existing releases.
+- `wallet/`, `python/`, and `mcp-http/` are independent packages. Resolve release
+  inputs from their manifests, lockfiles and build artifacts.
 
 Current integration proposal and acceptance criteria:
 [v1.4 public payment](docs/architecture/v14-public-payment.md).
@@ -39,8 +38,9 @@ The conditional Solana extension retains these boundaries. Separate owner
 and classic SPL6 amounts, fee/rent preflight and same-signature recovery share the
 existing private wallet ledger. Failure-only fee accounting is canonical-proof
 bound and atomic; it cannot refund successful spending. Public history/quota
-preserve payer case and select cluster/program independently. Canonical records
-remain disabled. Source checks, deployed ELF/governance and funded acceptance
+preserve payer case and select cluster/program independently. Availability is
+enforced by [the resolver](node/src/solanaDeploymentResolver.ts) using generated
+registry metadata. Source checks, deployed ELF/governance and funded acceptance
 are separate. See [ADR0004](docs/adr/0004-solana-payment-flow.md).
 
 The user-approved full-flow extension retains this architecture and reuses the

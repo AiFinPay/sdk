@@ -1,3 +1,20 @@
+# Changelog
+
+Entries record changes and release context at the time they were written.
+They are not current publication, deployment or acceptance evidence. Resolve
+versions from manifests/registries, deployment metadata from
+[the registry](deployments/registry/splitter/INDEX.md), and execution results
+from the corresponding CI or payment artifacts.
+
+## Documentation source-of-truth cleanup
+
+- Replace duplicated transaction hashes, deployment addresses and operational
+  status snapshots in guides with registry, implementation and verification links.
+- Keep runtime trust pins, settlement flags and payment checks unchanged.
+- Documentation-only package patches: Node agent 2.6.5, MCP 2.8.3, Python
+  agent 2.5.2, Node gate 0.4.1, Python gate 0.1.4, wallet 1.5.1 and
+  deployments 1.1.5. Version changes do not assert registry publication.
+
 ## Node 2.6.4 — standalone wallet dependency
 
 - Replace the Node SDK's duplicated wallet derivation with the full
@@ -239,7 +256,7 @@ Documentation only; no code change in either SDK.
 
 ## Deployments 1.1.3 — unreleased
 
-- Polygon v1.4 pins USDT0 (`0xc2132D05D31c914a87C6611C10748AEb04B58e8F`) as
+- Polygon v1.4 pins USDT0 (see the [registry](deployments/registry/splitter/evm/v1.4/deployments.json)) as
   asset `USDT`, from AiFinPay/evm-contract#39. A stablecoin quote in it is
   signed only once the Polygon TokenList also allows it (Safe transaction in
   that PR); until then the backend refuses with `V14_TOKEN_NOT_ALLOWED`.

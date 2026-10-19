@@ -130,7 +130,7 @@ Not included, on purpose: free allowances, daily caps and per-agent blocks live
 in the AiFinPay dashboard, so there is one source of truth for each rule.
 
 
-## Opt-in dashboard request reporting (0.1.2)
+## Opt-in dashboard request reporting
 
 Use one `GateReporter` per merchant per worker, created **after worker fork**.
 It uses only Python's standard library. Add its callback to your existing gate;

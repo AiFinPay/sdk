@@ -16,8 +16,9 @@ revenue-share bookkeeping, no contracts to sign, no custodial arrangement.
 > **1%**, creator **0%**, settled on v1.4. To monetize your own site or API
 > under those terms, use the merchant gate instead —
 > [`@aifinpay/gate`](./gate/README.md) (Node) or
-> [`aifinpay-gate`](./python-gate/README.md) (Python). Solana settlement is
-> disabled in the current deployment registry.
+> [`aifinpay-gate`](./python-gate/README.md) (Python). Check network availability
+> in the [deployment registry](deployments/registry/splitter/INDEX.md), backend
+> capabilities and the merchant's authenticated settings.
 
 ## What you need from your side
 
@@ -119,10 +120,10 @@ dashboard. Agents discover you via:
 ## What the on-chain split looks like
 
 Every successful call generates exactly one `Payment` event on the
-legacy v1.2 `B2BSplitter` the reference bridges use, at
-[`0xbD1fa5453f212F096c0213788a645eC597FB4DDe`](https://polygonscan.com/address/0xbD1fa5453f212F096c0213788a645eC597FB4DDe)
-(`SPLITTER_ADDRESS_POLYGON`). The earlier `0xE34Fc0E6…8440` splitter is
-retired.
+legacy v1.2 `B2BSplitter` the reference bridges use. Resolve
+`SPLITTER_ADDRESS_POLYGON` from the [bridge implementation](examples/exa-x402-bridge/server.js)
+and verify it against the selected deployment and RPC; do not copy an address
+from documentation.
 
 ```
 agent  ──msg.value──▶  B2BSplitter.payNative(paymentId, merchant, ipCreator, orderId)

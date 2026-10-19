@@ -3,6 +3,14 @@
 2026-09-19. Local candidate only. Not published, merged, deployed or exercised
 with a new live payment. Requirements: `v14-public-payment`.
 
+Historical review only: all results, release progress and gate dispositions
+describe that dated candidate, not today's pass/readiness or publication state.
+Use the [test sources](../../node/tests/), [MCP tests](../../mcp/tests/),
+[gate tests](../../gate/tests/) and [candidate CI](../../.github/workflows/ci.yml)
+for fresh evidence. Deployment identity/availability comes from the
+[registry](../../deployments/registry/splitter/evm/v1.4/deployments.json)
+and runtime verification, never this report.
+
 ## Result
 
 An ordinary owner can use the candidate's generic MCP `payable_fetch`, backed by
@@ -16,23 +24,25 @@ registry installation cannot be claimed until those dependencies are published.
 
 ## Automated and independent evidence
 
-- Node: registry check, build, lint and437/437 tests pass.
-- MCP:174/174 tests, build and lint pass against the actual packed Node candidate.
-- Gate:115/115 tests, build and lint pass. Removed instructions link negative
+- Node: registry check, build, lint and tests were exercised.
+- MCP: tests, build and lint were exercised against the actual packed Node candidate.
+- Gate: tests, build and lint were exercised. Removed instructions link negative
   control fails; restored version passes.
-- Backend merchant configuration:25 adjacent tests pass. Real store and route
-  handlers cover12 cases; HTTP auth middleware was stubbed in that focused suite.
-- Backend v1.4 verification:18 behavioral tests pass. Removing the mutable-fee
+- Backend merchant configuration: adjacent tests and real store/route handlers
+  were exercised; HTTP auth middleware was stubbed in that focused suite.
+- Backend v1.4 verification: behavioral tests were exercised. Removing the mutable-fee
   compatibility fix reproduces the regression; restored version passes.
-- Backend full suite:885 tests,883 passed,0 failed,2 skipped (unavailable live
-  Solana RPC). RPC-budget fixtures now count the pinned-runtime read and restore
+- Backend full suite: the historical run included conditional skips for unavailable
+  live Solana RPC, not live Solana acceptance. RPC-budget fixtures count the pinned-runtime read and restore
   their mocks after success/failure. Independent parent review found no blocker.
-- Website and merchant dashboard: TypeScript/build pass. Dashboard route check
-  passes. Docs:8 edited MDX pages compile,18 internal links resolve locally.
+- Website and merchant dashboard: TypeScript/build, route checks and edited
+  MDX compilation/internal links were exercised locally.
 - Node/MCP production dependency scans: no high or critical advisory; two existing
   moderate stream-json/jayson findings remain. This is not a zero-risk claim.
-- Final artifact metadata, Node/skill SHA512 lock integrity and MCP bundled-skill
-  equality pass. Tarballs and SHA256 manifest are in the workspace release evidence.
+- Final artifact metadata, lock integrity and MCP bundled-skill equality were
+  checked locally. Current package identity must be verified from the
+  [MCP lockfile](../../mcp/package-lock.json) and fresh source-pack/registry CI;
+  a historical workspace-artifact claim is not durable release proof.
 
 Independent review was performed by agents other than each change's author:
 `v14_executor`, `payment_sdlc`, `payment_route_review` and parent cross-review.
