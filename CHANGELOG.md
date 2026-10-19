@@ -16,6 +16,12 @@
   unset sends nothing. The MCP source-cohort guard follows both versions.
   Nothing is published.
 
+## Analytics 0.1.0 — new opt-in telemetry package (unreleased)
+
+- Add `@aifinpay/analytics`: opt-in SDK telemetry, off by default, zero runtime
+  dependencies, sanitized payloads and a schema v1 event catalog shared with
+  the backend gateway. No consumer emits events yet.
+
 ## Python 2.6.1 — `fetch_paid` declares the agent on every request
 
 - `aifinpay-agent` sends `User-Agent: aifinpay-agent-py/<version>` and
@@ -418,6 +424,12 @@ daily_amount_usd=…, asset="POL"|"USDC")` pays AIFP-1 merchants on the Polygon
   legacy Robinhood deployment (Robinhood remains in the v1.4 registry).
 
 # Changelog
+
+## Analytics 0.1.0 — new opt-in telemetry package (unreleased)
+
+- Add `@aifinpay/analytics`: opt-in SDK telemetry, off by default, zero runtime
+  dependencies, sanitized payloads and a schema v1 event catalog shared with
+  the backend gateway. No consumer emits events yet.
 
 All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From
