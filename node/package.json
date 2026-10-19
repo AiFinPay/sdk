@@ -92,7 +92,7 @@
   },
   "bugs": "https://github.com/AiFinPay/sdk/issues",
   "dependencies": {
-    "@aifinpay/deployments": "1.1.4",
+    "@aifinpay/deployments": "2.1.0",
     "@aifinpay/wallet": "1.5.0",
     "@noble/curves": "^1.9.0",
     "@noble/hashes": "^1.5.0",
@@ -107,12 +107,12 @@
     }
   },
   "devDependencies": {
-    "@eslint/js": "^9.0.0",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.20.5",
-    "eslint": "^10.10.0",
+    "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
-    "globals": "^16.0.0",
-    "prettier": "^3.9.6",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
     "typescript": "^7.0.2",
     "vitest": "^4.1.5"
   },
