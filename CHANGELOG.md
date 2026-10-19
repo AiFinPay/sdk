@@ -1,3 +1,11 @@
+## MCP 2.10.0 — payable_fetch names the connected AI client
+
+- `@aifinpay/mcp` maps the MCP client's `clientInfo.name` from initialize to
+  `AIFP-Agent-Framework` through an explicit, exact-name table and passes it to
+  the agent's purchase and pending-payment recovery. Unknown clients send no
+  header. Requires `@aifinpay/agent` 2.8.0; the release-input guard refuses MCP
+  publication until 2.8.0 is published and the lock refreshed.
+
 ## Node 2.8.0 / Python 2.7.0 — AIFP-Agent-Framework names the AI client that pays
 
 - `@aifinpay/agent` and `aifinpay-agent` take an optional `framework`

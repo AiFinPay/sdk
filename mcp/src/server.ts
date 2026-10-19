@@ -1,4 +1,4 @@
-import { AiFinPayAgent, PAYMENT_CHAINS } from "@aifinpay/agent";
+import { AiFinPayAgent, PAYMENT_CHAINS, type AgentFramework } from "@aifinpay/agent";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
@@ -32,6 +32,7 @@ import {
 } from "./tools/production-control.js";
 import { deploymentInfoTool, runDeploymentInfo } from "./tools/supported-chains.js";
 import { payChain } from "./pay-chains.js";
+import { frameworkForClient } from "./client-framework.js";
 
 // Every backend/public request made by this server goes through safeFetch.
 // Public deployments never lift private-network protection; local development
@@ -160,7 +161,9 @@ export async function createServer(config: McpConfig = {}) {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    const ctx = { agent, config, log, paymentState };
+    // The client named itself at initialize; unknown clients send no framework.
+    const framework = frameworkForClient(server.getClientVersion()?.name);
+    const ctx = { agent, config, log, paymentState, framework };
     switch (name) {
       case "agent_reload":
         try {
@@ -266,6 +269,8 @@ export interface ToolContext {
   agent: AiFinPayAgent;
   config: McpConfig;
   paymentState?: PaymentStateStore;
+  /** AIFP-Agent-Framework for this connection's payments; unset sends none. */
+  framework?: AgentFramework;
   log: (level: "info" | "warn" | "error", msg: string) => void;
 }
 

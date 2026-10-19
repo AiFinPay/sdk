@@ -193,6 +193,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
         const paid = await ctx.agent
           .recoverPaidPayment(recovery, {
             paymentIssuer: configuredApi,
+            ...(ctx.framework ? { framework: ctx.framework } : {}),
             ...(pay.name === "solana"
               ? {
                   solanaNetwork: ctx.config.solanaNetwork!,
@@ -260,6 +261,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
             resourcePathMode: ctx.config.gatewayPathMode,
             scope,
             ...(expectedMerchantId !== undefined ? { expectedMerchantId } : {}),
+            ...(ctx.framework ? { framework: ctx.framework } : {}),
             // A pending Solana quote pins this owner limit across restarts and
             // rollover. Fresh daily allowance is checked again in persistPrepared
             // under the operation lock, before any broadcast.

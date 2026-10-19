@@ -4,8 +4,9 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Version **2.9.0** is prepared in this checkout, on the published agent 2.7.0
-and canonical skill 2.9.0. The separate canonical producer's final immutable
+Version **2.10.0** is prepared in this checkout, on the source agent 2.8.0
+(unpublished; 2.10.0 cannot be released until agent 2.8.0 is published and the
+lock refreshed) and canonical skill 2.9.0. The separate canonical producer's final immutable
 source pin is a required handoff, not a moving-branch substitution.
 The published baseline checked2026-10-04 was MCP2.5.0. Package publication and
 real registry dependency/lock refresh remain release gates; a source-cohort
@@ -122,6 +123,24 @@ uses the pinned Chainlink feed on Polygon/Base, then `api.coinbase.com`,
 then `api.coingecko.com`; other chains use those HTTP price sources.
 If none provides a valid fresh rate, `payable_fetch` stops before paying and
 the error names each host it tried.
+
+### Which AI client paid
+
+`payable_fetch` tells the merchant which AI client is paying: the server maps the
+`clientInfo.name` your MCP client sent at initialize to an `AIFP-Agent-Framework`
+header on the payment requests (and on recovery of a pending payment).
+
+| `clientInfo.name`          | `AIFP-Agent-Framework` |
+| -------------------------- | ---------------------- |
+| `claude-ai`, `claude-code` | `claude`               |
+| `cursor`, `cursor-vscode`  | `cursor`               |
+| `windsurf`                 | `windsurf`             |
+| `chatgpt`, `openai`        | `chatgpt`              |
+| `gemini`                   | `gemini`               |
+| `perplexity`               | `perplexity`           |
+
+Names are matched exactly. Any other client sends no header; the server never
+guesses. Nothing in the payment, limits or receipts depends on it.
 
 ## Link the agent to its owner's dashboard
 

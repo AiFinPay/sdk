@@ -53,13 +53,13 @@ test("canonical mirror and both CI refs bind the reviewed reporting producer; wr
 });
 test("reporting source target refuses every stale package version without claiming registry availability", () => {
   verifyCohortVersions({
-    mcp: "2.9.0",
+    mcp: "2.10.0",
     agent: "2.8.0",
     python: "2.7.0",
     skill: "2.9.0",
   });
   for (const [name, oldVersion] of Object.entries({
-    mcp: "2.8.2",
+    mcp: "2.9.0",
     agent: "2.7.0",
     python: "2.6.1",
     skill: "2.8.0",
@@ -115,10 +115,9 @@ test("MCP candidate metadata preserves the real registry lock of the published c
     },
   );
   assert.deepEqual(agentEdges, baselineEdges);
-  // agent 2.7.0 and skill 2.9.0 are published and the lock pins their real
-  // registry resolution, so the release metadata check must pass. This test
-  // runs before any MCP install, so the guard may still stop at the
-  // installed-package check; it must never refuse the lock itself.
+  // MCP 2.10.0 needs agent 2.8.0, which is not published: the release
+  // metadata check must refuse the 2.7.0 lock for the agent, never for the
+  // MCP metadata itself, until 2.8.0 is published and the lock refreshed.
   const guard = spawnSync(
     process.execPath,
     ["scripts/verify-release-inputs.mjs"],
@@ -127,9 +126,14 @@ test("MCP candidate metadata preserves the real registry lock of the published c
       encoding: "utf8",
     },
   );
+  assert.notEqual(guard.status, 0);
+  assert.match(
+    guard.stderr,
+    /@aifinpay\/agent 2\.8\.0 must be published and installed with its real registry resolution/,
+  );
   assert.doesNotMatch(
     guard.stderr,
-    /must be published and installed with its real registry resolution|release metadata and real registry lock disagree/,
+    /release metadata and real registry lock disagree/,
   );
 });
 test("immutable bootstrap uses the existing patched registry lock without source tarball resolutions", () => {
