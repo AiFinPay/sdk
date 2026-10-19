@@ -16,6 +16,28 @@ const DEFAULT_BASE_URL = "https://aifinpay.io";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const SDK_UA = "aifinpay-agent-node/0.3.0";
 
+/** The AI clients the AiFinPay backend records for AIFP-Agent-Framework. */
+export const AGENT_FRAMEWORKS = [
+  "chatgpt",
+  "claude",
+  "perplexity",
+  "gemini",
+  "cursor",
+  "openai-agents",
+  "windsurf",
+  "custom",
+] as const;
+export type AgentFramework = (typeof AGENT_FRAMEWORKS)[number];
+
+/** `undefined` stays unset; any value outside AGENT_FRAMEWORKS throws. Never guessed. */
+export function agentFramework(value: unknown): AgentFramework | undefined {
+  if (value === undefined) return undefined;
+  if (!(AGENT_FRAMEWORKS as readonly unknown[]).includes(value)) {
+    throw new AiFinPayError(`framework must be one of ${AGENT_FRAMEWORKS.join(", ")}; got ${JSON.stringify(value)}`);
+  }
+  return value as AgentFramework;
+}
+
 /** Optional observation capability, scoped to fixed first-party quote endpoints.
  * Invalid input loses attribution, never payment/access. No state is retained. */
 export function reportingHeaders(reportingToken: unknown, endpoint: string): Record<string, string> {
@@ -59,6 +81,12 @@ export interface AgentOptions {
    * wallet's sign methods instead of holding the key itself.
    */
   evmWallet?: AgentWallet;
+  /**
+   * The AI client this agent runs in, sent as AIFP-Agent-Framework so the
+   * merchant sees who paid. One of AGENT_FRAMEWORKS; anything else throws.
+   * Unset sends no header.
+   */
+  framework?: AgentFramework;
 }
 
 export interface PayInit extends Omit<RequestInit, "method"> {
@@ -74,6 +102,7 @@ export class Agent {
   readonly timeoutMs: number;
   /** Internal — facilitators reach for this when they need to refetch from the backend. */
   readonly fetchImpl: typeof fetch;
+  readonly framework?: AgentFramework;
 
   private constructor(secretKey: Uint8Array, publicKey: Uint8Array, opts: AgentOptions = {}) {
     this.secretKey = secretKey;
@@ -85,6 +114,7 @@ export class Agent {
     }
     this.baseUrl = (opts.baseUrl || DEFAULT_BASE_URL).replace(/\/$/, "");
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.framework = agentFramework(opts.framework);
     this.fetchImpl = opts.fetchImpl ?? globalThis.fetch;
     if (!this.fetchImpl) {
       throw new AiFinPayError("global fetch not available. Pass opts.fetchImpl or upgrade to Node 18+.");
@@ -274,7 +304,7 @@ export class Agent {
     const reporting = reportingHeaders(args.reportingToken, url.toString());
     url.searchParams.set(param, String(args.merchantAmount));
     const r = await this.fetchImpl(url.toString(), {
-      headers: { accept: "application/json", "user-agent": SDK_UA, ...reporting },
+      headers: { accept: "application/json", ...this.sdkHeaders(), ...reporting },
       ...(reporting["AIFP-Reporting-Token"] ? { redirect: "manual" as const } : {}),
     });
     if (!r.ok) {
@@ -318,7 +348,7 @@ export class Agent {
       headers: {
         accept: "application/json",
         "content-type": "application/json",
-        "user-agent": SDK_UA,
+        ...this.sdkHeaders(),
       },
       body: JSON.stringify({
         chain: args.chain,
@@ -375,7 +405,7 @@ export class Agent {
         redirect: "error",
       });
 
-    let resp = await send(method, { ...baseHeaders, "user-agent": SDK_UA });
+    let resp = await send(method, { ...baseHeaders, ...this.sdkHeaders() });
     let attempt = 0;
 
     while (resp.status === 402 && attempt < maxRetries) {
@@ -388,8 +418,7 @@ export class Agent {
         trustedOrigin,
         bodyDigest,
       });
-      const merged = mergeHeaders(baseHeaders, auth.headers);
-      merged["user-agent"] = SDK_UA;
+      const merged = { ...mergeHeaders(baseHeaders, auth.headers), ...this.sdkHeaders() };
       resp = await send(auth.method ?? method, merged, auth.body);
     }
 
@@ -421,12 +450,17 @@ export class Agent {
 
   // ── Internal helpers ──────────────────────────────────────────────────
 
+  private sdkHeaders(): Record<string, string> {
+    // Lower-case keys, so they replace a caller's lower-cased copy rather than join it.
+    return { "user-agent": SDK_UA, ...(this.framework ? { "aifp-agent-framework": this.framework } : {}) };
+  }
+
   private async json(method: string, path: string, body?: unknown): Promise<unknown> {
     const init: RequestInit = {
       method,
       headers: {
         accept: "application/json",
-        "user-agent": SDK_UA,
+        ...this.sdkHeaders(),
         ...(body ? { "content-type": "application/json" } : {}),
       },
     };

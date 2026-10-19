@@ -1,3 +1,12 @@
+## Node 2.8.0 — AIFP-Agent-Framework names the AI client that pays
+
+- `@aifinpay/agent` takes an optional `framework` (`chatgpt`, `claude`,
+  `perplexity`, `gemini`, `cursor`, `openai-agents`, `windsurf`, `custom`) and
+  sends it as `AIFP-Agent-Framework` on every request of the payment flow, so
+  the merchant dashboard can attribute revenue to the AI client instead of
+  "unknown". Any other value is refused at construction; unset sends nothing.
+  Nothing is published.
+
 ## Python 2.6.1 — `fetch_paid` declares the agent on every request
 
 - `aifinpay-agent` sends `User-Agent: aifinpay-agent-py/<version>` and

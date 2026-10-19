@@ -41,7 +41,7 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import { AiFinPayError, X402Error } from "./errors.js";
-import { Agent, type AgentOptions } from "./agent.js";
+import { Agent, agentFramework, type AgentOptions } from "./agent.js";
 import { loadLocalWalletIdentity } from "./localIdentity.js";
 import {
   SettlementClient,
@@ -1848,6 +1848,7 @@ export class AiFinPayAgent {
       // (backend/aifp/agent-policy.js normalizeAddress) — a Solana pubkey here
       // would silently opt the agent out of its owner's own limits.
       agentId: opts.agentId ?? (opts.solanaV14 ? this.solanaAddress : this.evmAddress),
+      framework: agentFramework(opts.framework) ?? this.inner.framework,
       payerAddress: opts.solanaV14 ? this.solanaAddress : this.evmAddress,
       signPaymentAuthorization: (message) =>
         opts.solanaV14
@@ -1932,6 +1933,7 @@ export class AiFinPayAgent {
       {
         walletIdentity: this.evmAddress.toLowerCase(),
         payerAddress: recovery.family === "solana" ? this.solanaAddress : this.evmAddress,
+        framework: agentFramework(opts.framework) ?? this.inner.framework,
         ...(recovery.family === "solana"
           ? {
               solanaRpc: solanaV14Rpc(this.solanaRpc, this.inner.fetchImpl),

@@ -1874,3 +1874,83 @@ it("exposes serializable recovery context and recovers without another settlemen
   expect(recovered.receipt).toBeTruthy();
   expect(settlements).toHaveLength(1);
 });
+
+describe("AIFP-Agent-Framework", () => {
+  /** Every request the agent makes, with the framework header it carried. */
+  function recording(server: MockServer) {
+    const seen: Array<{ url: string; receipt: boolean; framework: string | null }> = [];
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const headers = new Headers(init?.headers as HeadersInit | undefined);
+      seen.push({
+        url: String(input).split("?")[0],
+        receipt: headers.has("AIFP-Receipt"),
+        framework: headers.get("AIFP-Agent-Framework"),
+      });
+      return server.fetch(input, init);
+    }) as typeof fetch;
+    return { seen, fetchImpl };
+  }
+  const FLOW = [
+    { url: `${GATEWAY}/acme/paid`, receipt: false },
+    { url: `${API}/v1/quote`, receipt: false },
+    { url: `${API}/v1/pay`, receipt: false },
+    { url: `${GATEWAY}/acme/paid`, receipt: true },
+  ];
+
+  it("is sent on the 402 probe, quote, pay and paid retry when configured", async () => {
+    const server = mockServer();
+    const { seen, fetchImpl } = recording(server);
+    const { agent, settlements } = await agentFor(server, { fetchImpl, framework: "claude" });
+    expect((await agent.fetchPaid(`${GATEWAY}/acme/paid`))!.status).toBe(200);
+    expect(settlements).toHaveLength(1);
+    expect(seen.map(({ url, receipt }) => ({ url, receipt }))).toEqual(FLOW);
+    expect(seen.map((r) => r.framework)).toEqual(FLOW.map(() => "claude"));
+  });
+
+  it("is never sent, or guessed, when not configured", async () => {
+    const server = mockServer();
+    const { seen, fetchImpl } = recording(server);
+    const { agent } = await agentFor(server, { fetchImpl });
+    expect((await agent.fetchPaid(`${GATEWAY}/acme/paid`))!.status).toBe(200);
+    expect(seen.map(({ url, receipt }) => ({ url, receipt }))).toEqual(FLOW);
+    expect(seen.every((r) => r.framework === null)).toBe(true);
+  });
+
+  it("can be set per call by a host that learns its client after construction", async () => {
+    const server = mockServer();
+    const { seen, fetchImpl } = recording(server);
+    const { agent } = await agentFor(server, { fetchImpl, framework: "custom" });
+    await agent.fetchPaid(`${GATEWAY}/acme/paid`, {}, { framework: "cursor" });
+    expect(seen.map((r) => r.framework)).toEqual(FLOW.map(() => "cursor"));
+  });
+
+  it("rides along when a settled payment is recovered", async () => {
+    const server = mockServer();
+    server.payUnavailableTimes = 1;
+    const { seen, fetchImpl } = recording(server);
+    const { agent, settlements } = await agentFor(server, { fetchImpl, framework: "windsurf" });
+    const failure = await agent
+      .fetchPaid(`${GATEWAY}/acme/paid`, {}, { settlementConfirmMs: 0 })
+      .catch((e: Aifp1PayError) => e);
+    expect(failure).toBeInstanceOf(Aifp1PayError);
+    seen.length = 0;
+    const recovered = await agent.recoverPaidPayment(JSON.parse(JSON.stringify((failure as Aifp1PayError).recovery)));
+    expect(recovered.receipt).toBeTruthy();
+    expect(settlements).toHaveLength(1);
+    expect(seen).toEqual([{ url: `${API}/v1/pay`, receipt: false, framework: "windsurf" }]);
+  });
+
+  it.each(["Claude", "openai", "unknown", "", 42, null])(
+    "refuses %j at construction and per call, before any request",
+    async (value) => {
+      const server = mockServer();
+      const { seen, fetchImpl } = recording(server);
+      await expect(agentFor(server, { fetchImpl, framework: value })).rejects.toThrow(/framework must be one of/);
+      const { agent } = await agentFor(server, { fetchImpl });
+      await expect(
+        agent.fetchPaid(`${GATEWAY}/acme/paid`, {}, { framework: value as unknown as "claude" })
+      ).rejects.toThrow(/framework must be one of chatgpt, claude, perplexity, gemini, cursor, openai-agents/);
+      expect(seen).toEqual([]);
+    }
+  );
+});
