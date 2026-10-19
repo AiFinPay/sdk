@@ -640,6 +640,7 @@ def submit_payment(
     account: Any,
     recovery: Dict[str, Any],
     agent_id: Optional[str] = None,
+    framework: Optional[str] = None,
     confirm_s: float = 60.0,
     sleep: Callable[[float], None] = time.sleep,
 ) -> Dict[str, Any]:
@@ -707,7 +708,11 @@ def submit_payment(
         try:
             r = session.post(
                 f"{api_base}/v1/pay",
-                headers={"Idempotency-Key": idem, **({"AIFP-Agent-Id": agent_id} if agent_id else {})},
+                headers={
+                    "Idempotency-Key": idem,
+                    **({"AIFP-Agent-Id": agent_id} if agent_id else {}),
+                    **({"AIFP-Agent-Framework": framework} if framework else {}),
+                },
                 json={
                     "quote_id": quote["quote_id"],
                     "chain": chain,
@@ -1397,6 +1402,7 @@ def aifp1_fetch(
     issuer: str = DEFAULT_API_BASE,
     units: Optional[int] = None,
     agent_id: Optional[str] = None,
+    framework: _OptionalStr = None,
     solana_network: _OptionalStr = None,
     environment: _OptionalStr = None,
     max_fee_lamports: _OptionalInt = None,
@@ -1450,7 +1456,11 @@ def aifp1_fetch(
     # python-requests' default User-Agent and no AIFP-Agent-Id, so such a gate
     # took the agent for a human reader, served the page free, and the agent
     # never met the paywall it was built to pay.
-    agent_headers = {"User-Agent": _user_agent(), **({"AIFP-Agent-Id": agent_id} if agent_id else {})}
+    agent_headers = {
+        "User-Agent": _user_agent(),
+        **({"AIFP-Agent-Id": agent_id} if agent_id else {}),
+        **({"AIFP-Agent-Framework": framework} if framework else {}),
+    }
     response = session.get(url, headers=agent_headers, timeout=30, allow_redirects=False)
     if response.status_code == 410:
         try:
@@ -1595,6 +1605,7 @@ def aifp1_fetch(
     else:
         quote_url = f"{api_base.rstrip('/')}/v1/quote"
         quote_headers = {**({"content-type": "application/json"} if admission else {}),
+                         **({"AIFP-Agent-Framework": framework} if framework else {}),
                          **_reporting_headers(reporting_token, quote_url, api_base.rstrip('/'))}
         r = session.post(
             quote_url,
@@ -1810,7 +1821,7 @@ def aifp1_fetch(
     recovery["tx_ref"] = result["hash"]
     try:
         ledger.confirm(reservation_id, result["hash"], binding)
-        paid = submit_payment(session, account, recovery, agent_id=agent_id)
+        paid = submit_payment(session, account, recovery, agent_id=agent_id, framework=framework)
         ledger.confirm(reservation_id, result["hash"], binding, complete=True)
     except Aifp1PayError:
         raise

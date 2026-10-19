@@ -652,3 +652,60 @@ def test_the_ledger_persists_owner_only_and_survives_a_restart(tmp_path):
     assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
     with pytest.raises(a.Aifp1QuoteError):
         a.SpendLedger(1.0, 1.0, path).check(0.4)
+
+
+# ── AIFP-Agent-Framework names the AI client on every request of the flow ──
+
+
+class FrameworkRecorder(Server):
+    """The same fake, noting which requests carried AIFP-Agent-Framework."""
+
+    def __init__(self, dep):
+        super().__init__(dep)
+        self.seen = []
+
+    def get(self, url, headers=None, **kw):
+        self.seen.append(("GET", url, "AIFP-Receipt" in (headers or {}), (headers or {}).get("AIFP-Agent-Framework")))
+        return super().get(url, headers=headers, **kw)
+
+    def post(self, url, json=None, headers=None, **kw):
+        self.seen.append(("POST", url, False, (headers or {}).get("AIFP-Agent-Framework")))
+        return super().post(url, json=json, headers=headers, **kw)
+
+
+FLOW = [("GET", f"{SHOP}/data", False), ("POST", f"{API}/v1/quote", False), ("POST", f"{API}/v1/pay", False),
+        ("GET", f"{SHOP}/data", True)]
+
+
+def _flow(h):
+    return [(m, u, r) for m, u, r, _ in h.server.seen if u.startswith((SHOP, f"{API}/v1/"))]
+
+
+def test_framework_rides_on_the_402_probe_quote_pay_and_paid_retry(pinned):
+    h = Harness(pinned)
+    h.server = FrameworkRecorder(pinned)
+    assert h.fetch(framework="claude").status_code == 200
+    assert _flow(h) == FLOW
+    for method, url, _, framework in h.server.seen:
+        on_flow = url.startswith((SHOP, f"{API}/v1/"))
+        # Price sources, the RPC and the issuer's JWKS are not told who is paying.
+        assert framework == ("claude" if on_flow else None), (method, url)
+
+
+def test_no_framework_means_no_header_on_any_request(pinned):
+    h = Harness(pinned)
+    h.server = FrameworkRecorder(pinned)
+    assert h.fetch().status_code == 200
+    assert _flow(h) == FLOW
+    assert all(framework is None for *_, framework in h.server.seen)
+
+
+def test_recovery_resubmits_with_the_framework(pinned):
+    h = Harness(pinned)
+    h.server = FrameworkRecorder(pinned)
+    h.server.pay_statuses = [500]
+    with pytest.raises(a.Aifp1PayError) as e:
+        h.fetch(framework="cursor")
+    h.server.seen.clear()
+    a.submit_payment(h.server, PAYER, e.value.recovery, framework="cursor")
+    assert [(m, u, f) for m, u, _, f in h.server.seen if u == f"{API}/v1/pay"] == [("POST", f"{API}/v1/pay", "cursor")]
