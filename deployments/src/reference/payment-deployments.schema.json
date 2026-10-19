@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AiFinPay payment deployment registry",
-  "description": "Schema for the versioned EVM, Solana, and Casper deployment registry files.",
+  "description": "Schema for the versioned contract deployment registry files.",
   "type": "object",
   "required": [
     "$schema",
