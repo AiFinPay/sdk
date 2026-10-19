@@ -1,3 +1,12 @@
+## MCP 2.11.0 — a fresh agent reaches its first payment in five steps
+
+- `@aifinpay/mcp` always lists `payable_fetch`; without the owner's setup it
+  signs nothing and returns the new read-only `payment_setup_status` checklist
+  with one `next_step`. `settlement_routes` reports splitter v1.4 (Polygon,
+  Base) as live first and the v1.3 routes under `legacy_v13`. `init` without a
+  terminal generates the passphrase, encrypts the keystore and prints JSON with
+  the env block for the MCP client config. Signing conditions are unchanged.
+
 ## MCP 2.10.0 — payable_fetch names the connected AI client
 
 - `@aifinpay/mcp` maps the MCP client's `clientInfo.name` from initialize to

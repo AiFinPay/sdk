@@ -18,6 +18,7 @@ import { makeSafeFetch } from "./safe-fetch.js";
 import { loadConfigFromEnv, validatePaymentConfig } from "./config.js";
 import { PaymentStateStore } from "./payment-state.js";
 import { payableFetchTool, runPayableFetch } from "./tools/payable-fetch.js";
+import { paymentSetupStatusTool, runPaymentSetupStatus } from "./tools/payment-setup-status.js";
 import {
   agentPassportResolveTool,
   runAgentPassportResolve,
@@ -146,7 +147,11 @@ export async function createServer(config: McpConfig = {}) {
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       },
-      ...(paymentState ? [payableFetchTool()] : []),
+      // Always listed. Without the owner's setup it returns the same checklist
+      // as payment_setup_status and signs nothing; a fresh install used to show
+      // no payment tool at all, and agents stopped there.
+      paymentSetupStatusTool(),
+      payableFetchTool(),
       agentQuotaTool(),
       agentHistoryTool(),
       ...(config.devMode ? [devPaymentQuoteTool()] : []),
@@ -163,7 +168,7 @@ export async function createServer(config: McpConfig = {}) {
     const { name, arguments: args } = request.params;
     // The client named itself at initialize; unknown clients send no framework.
     const framework = frameworkForClient(server.getClientVersion()?.name);
-    const ctx = { agent, config, log, paymentState, framework };
+    const ctx = { agent, config, log, paymentState, framework, walletSource: identitySource };
     switch (name) {
       case "agent_reload":
         try {
@@ -202,6 +207,8 @@ export async function createServer(config: McpConfig = {}) {
         }
       case "payable_fetch":
         return runPayableFetch(ctx, args ?? {});
+      case "payment_setup_status":
+        return runPaymentSetupStatus(ctx, args ?? {});
       case "agent_address":
         return runAgentAddress(ctx, args ?? {});
       case "agent_claim_self":
@@ -271,6 +278,8 @@ export interface ToolContext {
   paymentState?: PaymentStateStore;
   /** AIFP-Agent-Framework for this connection's payments; unset sends none. */
   framework?: AgentFramework;
+  /** Which identity the server loaded: "ephemeral", "legacy-keystore", "SEED_HASH", "agents.json" or "AIFINPAY_AGENT_SECRET". */
+  walletSource?: string;
   log: (level: "info" | "warn" | "error", msg: string) => void;
 }
 

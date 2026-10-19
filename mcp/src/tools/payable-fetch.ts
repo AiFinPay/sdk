@@ -14,6 +14,7 @@ import { validatePaymentConfig } from "../config.js";
 import { PaymentStateError, type PaymentState } from "../payment-state.js";
 import { independentNativeUsd } from "../native-price.js";
 import { payChain, type PayChain } from "../pay-chains.js";
+import { paymentSetupStatus } from "./payment-setup-status.js";
 
 // "prefix" is left out on purpose: it needs a resource to anchor to, and the
 // owner's two real requests are "this endpoint" and "this site".
@@ -27,7 +28,7 @@ export function payableFetchTool() {
   return {
     name: "payable_fetch",
     description:
-      'Fetch a GET resource from an owner-approved AiFinPay merchant. Buys a prepaid batch through verified v1.4 on the chain the owner set in AIFINPAY_PAY_CHAIN (Polygon by default; other supported networks require explicit owner selection) — in its native currency (POL, SOL, ETH, AVAX, BNB or XRP), or in the stablecoin the owner set in AIFINPAY_PAY_ASSET (e.g. USDC; gas is still native) — within owner limits, then reuses its receipt. With scope "merchant" one batch covers every path on the site. Pending payments are recovered without sending another transaction. Other payment protocols are unsupported.',
+      'Fetch a GET resource from an owner-approved AiFinPay merchant, paying its AIFP-1 402 when needed. Always listed: until the owner has set up a persistent wallet (npx @aifinpay/mcp init), AIFINPAY_PAYMENTS_ENABLED=1 and every limit, it signs nothing and returns the payment_setup_status checklist with the one next step.  Buys a prepaid batch through verified v1.4 on the chain the owner set in AIFINPAY_PAY_CHAIN (Polygon by default; other supported networks require explicit owner selection) — in its native currency (POL, SOL, ETH, AVAX, BNB or XRP), or in the stablecoin the owner set in AIFINPAY_PAY_ASSET (e.g. USDC; gas is still native) — within owner limits, then reuses its receipt. With scope "merchant" one batch covers every path on the site. Pending payments are recovered without sending another transaction. Other payment protocols are unsupported.',
     inputSchema: {
       type: "object",
       properties: {
@@ -62,6 +63,16 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
   let state: PaymentState | undefined;
   let chain: PayChain | undefined;
   try {
+    const store = ctx.paymentState;
+    // Not set up: say exactly what is missing instead of refusing in one line.
+    // Nothing below runs, so nothing is quoted, signed or sent. The journal
+    // exists only for the persistent wallet the server started with.
+    if (!ctx.config.paymentsEnabled || !store || store.address !== ctx.agent.evmAddress.toLowerCase()) {
+      const status = await paymentSetupStatus(ctx, { readBalance: false });
+      return errorResult(
+        JSON.stringify({ error: "payable_fetch is not set up yet; nothing was signed or paid.", ...status }, null, 2)
+      );
+    }
     let feeCap: bigint;
     try {
       feeCap = validatePaymentConfig(ctx.config);
@@ -69,9 +80,6 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
     } catch (error) {
       return errorResult((error as Error).message);
     }
-    const store = ctx.paymentState;
-    if (!store || store.address !== ctx.agent.evmAddress.toLowerCase())
-      return errorResult("A persistent matching wallet is required for payments.");
     if (Object.keys(args).some((k) => !["url", "max_amount_usd", "scope", "expected_merchant_id"].includes(k)))
       return errorResult(
         "Only url, max_amount_usd, scope and expected_merchant_id are supported; no facilitator fallback."

@@ -9,34 +9,127 @@ import type { ToolContext } from "../src";
 
 function ctx(overrides?: { fetchImpl?: typeof fetch; baseUrl?: string }): ToolContext {
   return {
-    config: { baseUrl: overrides?.baseUrl ?? "https://aifinpay.io" },
+    config: overrides?.baseUrl ? { baseUrl: overrides.baseUrl } : {},
     agent: {
       evmAddress: "0x" + "ab".repeat(20),
-      inner: { fetchImpl: overrides?.fetchImpl ?? (async () => Response.json({})) as typeof fetch },
+      inner: { fetchImpl: overrides?.fetchImpl ?? ((async () => Response.json({})) as typeof fetch) },
     },
     log: () => {},
   } as unknown as ToolContext;
 }
 
+/**
+ * The backend as the 2026-10-19 agent test saw it: GET /v1/settlement/routes
+ * describes only splitter v1.3 and every one of its routes is disabled, while
+ * the issuer's health and x402 documents name the chains served on v1.4.
+ */
+function backend(served: string[] = ["polygon-mainnet", "base-mainnet"]) {
+  const calls: string[] = [];
+  const legacyRoutes = ["polygon", "base", "arbitrum", "optimism"].flatMap((chain) =>
+    ["AIFP-1", "AIFP-2"].map((route_class) => ({
+      route_class,
+      chain,
+      splitter_version: "1.3",
+      live: false,
+      reason: "settlement is not enabled",
+    }))
+  );
+  const fetchImpl = (async (url: any, init?: any) => {
+    const target = String(url);
+    calls.push(target);
+    if (target.endsWith("/api/health")) return Response.json({ status: "ok", chains: served });
+    if (target.endsWith("/.well-known/x402.json"))
+      return Response.json({
+        protocol: "AIFP-1",
+        networks: Object.fromEntries(served.map((c) => [c, { live: true }])),
+      });
+    if (target.includes("/v1/settlement/routes")) {
+      const wanted = new URL(target).searchParams.get("route_class");
+      return Response.json({ routes: legacyRoutes.filter((r) => !wanted || r.route_class === wanted) });
+    }
+    throw new Error(`unexpected request ${target} ${init?.method ?? "GET"}`);
+  }) as typeof fetch;
+  return { fetchImpl, calls };
+}
+const parse = (result: { content: Array<{ text: string }> }) => JSON.parse(result.content[0].text);
+
 describe("settlement_routes", () => {
-  it("fetches all routes when no route_class given", async () => {
-    let captured = "";
-    const fetchImpl = (async (url: any) => {
-      captured = String(url);
-      return Response.json({ routes: [] });
-    }) as typeof fetch;
-    await runSettlementRoutes(ctx({ fetchImpl }), {});
-    expect(captured).toBe("https://aifinpay.io/v1/settlement/routes");
+  it("shows Polygon and Base v1.4 live first, even when every v1.3 route is disabled", async () => {
+    const b = backend();
+    const result = await runSettlementRoutes(ctx({ fetchImpl: b.fetchImpl }), {});
+    expect(result.isError).toBeFalsy();
+    const text = result.content[0].text;
+    expect(text.indexOf('"v14"')).toBeLessThan(text.indexOf('"legacy_v13"'));
+    const { v14, legacy_v13 } = parse(result);
+    expect(v14.routes[0]).toMatchObject({
+      route_class: "AIFP-1",
+      chain: "polygon",
+      chain_id: 137,
+      assets: ["POL", "USDC", "USDC.e"],
+      splitter_version: "1.4",
+      live: true,
+      served_by_backend: true,
+      quote_endpoint: "https://api.aifinpay.io/v1/quote",
+      pay_endpoint: "https://api.aifinpay.io/v1/pay",
+      pay_with: "payable_fetch",
+    });
+    expect(v14.routes[1]).toMatchObject({ chain: "base", chain_id: 8453, assets: ["ETH", "USDC"], live: true });
+    const rest = v14.routes.slice(2);
+    expect(rest.length).toBeGreaterThan(0);
+    for (const route of rest)
+      expect(route).toMatchObject({ live: false, served_by_backend: false, deployment_enabled: true });
+    expect(v14.routes.map((r: any) => r.chain)).not.toContain("solana");
+    expect(v14.served_from).toEqual([
+      "https://aifinpay.io/api/health: read",
+      "https://aifinpay.io/.well-known/x402.json: read",
+    ]);
+    // The legacy answer is passed through unchanged, under its own name.
+    expect(legacy_v13.routes).toHaveLength(8);
+    expect(legacy_v13.routes.every((r: any) => r.live === false)).toBe(true);
+    expect(legacy_v13.note).toContain("v1.3");
+    expect(b.calls).toEqual([
+      "https://aifinpay.io/api/health",
+      "https://aifinpay.io/.well-known/x402.json",
+      "https://aifinpay.io/v1/settlement/routes",
+    ]);
   });
 
-  it("fetches a specific route", async () => {
-    let captured = "";
-    const fetchImpl = (async (url: any) => {
-      captured = String(url);
-      return Response.json({ routes: [] });
-    }) as typeof fetch;
-    await runSettlementRoutes(ctx({ fetchImpl }), { route_class: "AIFP-2" });
-    expect(captured).toContain("route_class=AIFP-2");
+  it("marks a chain not live when the issuer's documents list other chains but not it", async () => {
+    const b = backend(["base-mainnet"]);
+    const { v14 } = parse(await runSettlementRoutes(ctx({ fetchImpl: b.fetchImpl }), {}));
+    expect(v14.routes[0]).toMatchObject({ chain: "base", live: true });
+    expect(v14.routes.find((r: any) => r.chain === "polygon")).toMatchObject({ live: false, served_by_backend: false });
+  });
+
+  it("reports unreadable discovery as unknown rather than disabled, and a failed legacy lookup inline", async () => {
+    const fetchImpl = (async () => new Response("down", { status: 503 })) as typeof fetch;
+    const result = await runSettlementRoutes(ctx({ fetchImpl }), {});
+    expect(result.isError).toBeFalsy();
+    const { v14, legacy_v13 } = parse(result);
+    expect(v14.routes[0]).toMatchObject({ chain: "polygon", served_by_backend: "unknown", live: true });
+    expect(v14.served_from[0]).toContain("HTTP 503");
+    expect(legacy_v13.error).toContain("Settlement route lookup failed");
+  });
+
+  it("filters the legacy query and leaves v1.4 empty for AIFP-2", async () => {
+    const b = backend();
+    const { v14, legacy_v13 } = parse(
+      await runSettlementRoutes(ctx({ fetchImpl: b.fetchImpl }), { route_class: "AIFP-2" })
+    );
+    expect(b.calls.at(-1)).toContain("route_class=AIFP-2");
+    expect(v14.routes).toEqual([]);
+    expect(legacy_v13.routes.every((r: any) => r.route_class === "AIFP-2")).toBe(true);
+  });
+
+  it("uses the configured base for discovery and the API origin for quote/pay", async () => {
+    const b = backend();
+    const { v14 } = parse(
+      await runSettlementRoutes(ctx({ fetchImpl: b.fetchImpl, baseUrl: "https://api.aifinpay.io" }), {
+        route_class: "AIFP-1",
+      })
+    );
+    expect(b.calls[0]).toBe("https://api.aifinpay.io/health");
+    expect(v14.routes[0].quote_endpoint).toBe("https://api.aifinpay.io/v1/quote");
   });
 
   it("rejects invalid route_class", async () => {
