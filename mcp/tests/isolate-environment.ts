@@ -11,6 +11,9 @@ process.env.TMP = testRoot;
 process.env.TEMP = testRoot;
 process.env.HOME = join(testRoot, "home");
 process.env.AIFINPAY_HOME = join(testRoot, "wallet");
+// The agent keeps its spend ledger and gateway merchant pins here, not under
+// AIFINPAY_HOME; an inherited value would point tests at a real state directory.
+process.env.AIFINPAY_STATE_DIR = join(testRoot, "state");
 
 for (const name of [
   "SEED_HASH",
@@ -22,7 +25,7 @@ for (const name of [
   delete process.env[name];
 }
 
-for (const path of [homedir(), tmpdir(), process.env.AIFINPAY_HOME]) {
+for (const path of [homedir(), tmpdir(), process.env.AIFINPAY_HOME, process.env.AIFINPAY_STATE_DIR]) {
   const relativePath = relative(testRoot, resolve(path!));
   if (relativePath === ".." || relativePath.startsWith(`..${sep}`)) {
     throw new Error(`MCP tests must keep home and temporary files inside ${testRoot}; got ${path}`);

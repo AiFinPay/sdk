@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
   BASE,
@@ -53,15 +53,15 @@ test("canonical mirror and both CI refs bind the reviewed reporting producer; wr
 });
 test("reporting source target refuses every stale package version without claiming registry availability", () => {
   verifyCohortVersions({
-    mcp: "2.8.0",
-    agent: "2.6.0",
-    python: "2.5.1",
+    mcp: "2.9.0",
+    agent: "2.7.0",
+    python: "2.6.1",
     skill: "2.9.0",
   });
   for (const [name, oldVersion] of Object.entries({
-    mcp: "2.7.0",
-    agent: "2.5.0",
-    python: "2.5.0",
+    mcp: "2.8.2",
+    agent: "2.6.5",
+    python: "2.6.0",
     skill: "2.8.0",
   })) {
     assert.throws(
@@ -70,7 +70,7 @@ test("reporting source target refuses every stale package version without claimi
     );
   }
 });
-test("MCP candidate metadata preserves the real registry lock and refuses publication until the new inputs exist", () => {
+test("MCP candidate metadata preserves the real registry lock of the published cohort", () => {
   const root = fileURLToPath(new URL("../", import.meta.url));
   const manifest = JSON.parse(readFileSync(join(root, "mcp/package.json")));
   const lock = JSON.parse(readFileSync(join(root, "mcp/package-lock.json")));
@@ -83,23 +83,50 @@ test("MCP candidate metadata preserves the real registry lock and refuses public
   assert.equal(lock.version, COHORT.mcp);
   assert.equal(lock.packages[""].version, COHORT.mcp);
   assert.deepEqual(lock.packages[""].dependencies, manifest.dependencies);
-  for (const name of ["@aifinpay/agent", "@aifinpay/skill"]) {
-    assert.equal(
-      manifest.dependencies[name],
-      baseline.packages[""].dependencies[name],
-    );
-    assert.deepEqual(
-      lock.packages[`node_modules/${name}`],
-      baseline.packages[`node_modules/${name}`],
-    );
-  }
-  assert.throws(
-    () =>
-      execFileSync(process.execPath, ["scripts/verify-release-inputs.mjs"], {
-        cwd: join(root, "mcp"),
-        stdio: ["ignore", "pipe", "pipe"],
-      }),
-    /@aifinpay\/agent 2\.6\.0 must be published and installed with its real registry resolution/,
+  assert.equal(
+    manifest.dependencies["@aifinpay/skill"],
+    baseline.packages[""].dependencies["@aifinpay/skill"],
+  );
+  assert.deepEqual(
+    lock.packages["node_modules/@aifinpay/skill"],
+    baseline.packages["node_modules/@aifinpay/skill"],
+  );
+  // The lock follows the published agent 2.7.0 (2026-10-18). Its registry
+  // identity is the only change: 2.7.0 depends on exactly what 2.6.4 did.
+  assert.equal(manifest.dependencies["@aifinpay/agent"], `^${COHORT.agent}`);
+  const { version, resolved, integrity, ...agentEdges } =
+    lock.packages["node_modules/@aifinpay/agent"];
+  const {
+    version: _version,
+    resolved: _resolved,
+    integrity: _integrity,
+    ...baselineEdges
+  } = baseline.packages["node_modules/@aifinpay/agent"];
+  assert.deepEqual(
+    { version, resolved, integrity },
+    {
+      version: COHORT.agent,
+      resolved: `https://registry.npmjs.org/@aifinpay/agent/-/agent-${COHORT.agent}.tgz`,
+      integrity:
+        "sha512-BKV3mz0CH9cjX423TBTDbK6fTTv+LebjQqmv+BSQpACfjTp2rxHKGgQe8pODNrROKZAYMABqvG7B/8g85AUxFA==",
+    },
+  );
+  assert.deepEqual(agentEdges, baselineEdges);
+  // agent 2.7.0 and skill 2.9.0 are published and the lock pins their real
+  // registry resolution, so the release metadata check must pass. This test
+  // runs before any MCP install, so the guard may still stop at the
+  // installed-package check; it must never refuse the lock itself.
+  const guard = spawnSync(
+    process.execPath,
+    ["scripts/verify-release-inputs.mjs"],
+    {
+      cwd: join(root, "mcp"),
+      encoding: "utf8",
+    },
+  );
+  assert.doesNotMatch(
+    guard.stderr,
+    /must be published and installed with its real registry resolution|release metadata and real registry lock disagree/,
   );
 });
 test("immutable bootstrap uses the existing patched registry lock without source tarball resolutions", () => {
@@ -218,7 +245,7 @@ test("source cohort distinguishes a real registry lock from stale or fabricated 
   const skill = { version: "2.8.0", integrity: "sha512-skill" };
   const packs = { "@aifinpay/agent": agent, "@aifinpay/skill": skill };
   const dependencies = {
-    "@aifinpay/agent": "^2.5.1",
+    "@aifinpay/agent": "^2.5.0",
     "@aifinpay/skill": "^2.8.0",
   };
   const manifest = { version: "2.7.0", dependencies };

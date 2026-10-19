@@ -16,6 +16,19 @@ npm/PyPI for published versions and CI artifacts for the exact source/pack input
 that were exercised. Neither a source version nor this README proves publication
 or production readiness.
 
+| Package                                |   Install                        |
+| -------------------------------------- | | ------------------------------ |
+| `aifinpay-agent` (Python)              |                                                                                                                                    | `pip install aifinpay-agent`   |
+| `aifinpay-gate` (Python merchant gate) |                                                                                                                                               | `pip install aifinpay-gate`    |
+| `@aifinpay/agent` (Node / TypeScript)  |                                                                                                                                    | `npm install @aifinpay/agent`  |
+| `@aifinpay/mcp`                        |                                                                                                                             | `npx @aifinpay/mcp`            |
+| `@aifinpay/mcp-http`                   |                                                                                                                                              | Streamable HTTP wrapper        |
+| `@aifinpay/skill`                      | | `npm install @aifinpay/skill`  |
+| `@aifinpay/gate`                       |                                                                                                                                               | `npm install @aifinpay/gate`   |
+| `@aifinpay/wallet`                     |                                                                                                                                              | `npm install @aifinpay/wallet` |
+| `@aifinpay/analytics`                  |                                                                                                                                    | opt-in SDK telemetry          |
+| `@aifinpay/deployments`                |                                                                                                                                            | deployment registry package    |
+
 ## Solana paid access
 
 The `fetchPaid` / `fetch_paid` Solana adapters provide conditional execution for

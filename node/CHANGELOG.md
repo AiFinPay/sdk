@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.7.0 — gateway sites keep the merchant they were first paid as
+
+- `fetchPaid` pins each gateway site (origin + slug) to the merchant it was
+  first paid as, before any money moves. A 402 naming another merchant for
+  that site throws `Aifp1MerchantChangedError` before any quote request.
+  `allowMerchantChange: true` or `expectedMerchantId` allows a change for one
+  call, and paying re-pins the site. `expectedMerchantId` also refuses any
+  other merchant on an unpinned site.
+- Pins are durable: `AiFinPayAgent` keeps one owner-only file per site under
+  `~/.aifinpay/merchant-pins` (or `AIFINPAY_STATE_DIR`). Override with the
+  `merchantPins` option (`Aifp1MerchantPinStore`; `MemoryMerchantPinStore` and
+  `FileMerchantPinStore` are exported). A bare `Aifp1ReceiptCache` keeps pins
+  in memory. An unreadable pin, or one that cannot be written, refuses payment.
+- `410 {"error":"gateway_retired"}` throws `Aifp1GatewayRetiredError` after one
+  request, with no quote or retry; held batches are kept.
+
+## 2.6.6 — rebuild with TypeScript 7
+
+- No API change. Built with TypeScript 7; the published type declarations and
+  development dependencies differ from 2.6.4, so the version moves with them.
+
 ## 2.6.5 — documentation refresh
 
 - Remove transient release and deployment snapshots from package documentation;

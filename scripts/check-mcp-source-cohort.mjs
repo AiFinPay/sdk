@@ -17,13 +17,14 @@ import { basename, dirname, join, resolve } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-// Existing registry lock with MCP SDK 1.31.0 and proxy-addr 2.0.8 fixes
+// Registry lock refreshed onto the published cohort (agent 2.6.4, skill 2.9.0,
+// ee4b3b4); it keeps MCP SDK 1.31.0 and proxy-addr 2.0.8, which fix
 // GHSA-6qxp-vccf-f47h / GHSA-jqcg-44mw-7w3h. Keep the bootstrap immutable.
-export const BASE = "94900c0a9a3e0330449d200dbcdb7bb82a787f32";
+export const BASE = "ee4b3b450af3fec988c6520e1033c25868065df0";
 export const COHORT = {
-  mcp: "2.8.0",
-  agent: "2.6.0",
-  python: "2.5.1",
+  mcp: "2.9.0",
+  agent: "2.7.0",
+  python: "2.6.1",
   skill: "2.9.0",
 };
 // Real CLI subprocess tests retain their default five-second limit. Serialize
@@ -42,9 +43,9 @@ export const SKILL_PACK = {
 };
 export const BASE_HASHES = {
   "package.json":
-    "21206d6ce0f34174417d649acb8c22c087744c918e44d0ece36ffc84fd7b64d4",
+    "4d6225033308cca95444fd4a0d671d69d221db19add88f9cfc9e30f5afb85ec2",
   "package-lock.json":
-    "1f7b3290c98f6acfc574a577074d80d5e300669230b7e203de838224b31b9afe",
+    "7cb72539d0dc17b885a89a73f9be91870449a578811eb61c3c492ea576f0cdc8",
 };
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const json = (path) => JSON.parse(readFileSync(path, "utf8"));

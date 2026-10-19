@@ -15,6 +15,53 @@ from the corresponding CI or payment artifacts.
   agent 2.5.2, Node gate 0.4.1, Python gate 0.1.4, wallet 1.5.1 and
   deployments 1.1.5. Version changes do not assert registry publication.
 
+## Analytics 0.1.0 — new opt-in telemetry package (unreleased)
+
+- Add `@aifinpay/analytics`: opt-in SDK telemetry, off by default, zero runtime
+  dependencies, sanitized payloads and a schema v1 event catalog shared with
+  the backend gateway. No consumer emits events yet.
+
+## Python 2.6.1 — `fetch_paid` declares the agent on every request
+
+- `aifinpay-agent` sends `User-Agent: aifinpay-agent-py/<version>` and
+  `AIFP-Agent-Id` on the first request to a merchant and on every paid retry,
+  matching the Node client. The first GET used to be a bare
+  `python-requests/x.y`, which a content site's `knownAiAgent` gate exempts as
+  a human reader: the Python agent read the page free and never paid. The MCP
+  source-cohort guard follows Python 2.6.1. Nothing is published.
+
+## MCP 2.9.0 — merchant pins in payable_fetch
+
+- `@aifinpay/mcp` 2.9.0 depends on the published `@aifinpay/agent` 2.7.0.
+  `payable_fetch` takes an optional `expected_merchant_id`, with no blanket
+  merchant-change switch. A changed merchant or a retired gateway site comes
+  back as a clear tool error; nothing is quoted or paid.
+- The source-cohort and release-input guards follow MCP 2.9.0 and the
+  registry lock for agent 2.7.0.
+
+## Node 2.7.0 / Python 2.6.0 — gateway merchant pins and retired slugs
+
+- Both SDKs pin each gateway site (origin + slug) to the merchant it was first
+  paid as, durably and before any money moves, and refuse a 402 that names
+  another merchant for that site before any quote request
+  (`Aifp1MerchantChangedError`). An explicit per-call opt-in
+  (`allowMerchantChange` / `allow_merchant_change`, or an expected merchant id)
+  allows a change and re-pins the site. This backs up the gateway's slug holds:
+  a slug that changes hands anyway does not redirect an agent's payments.
+- `410 gateway_retired` is terminal (`Aifp1GatewayRetiredError`): one request,
+  no quote, no retry.
+- The MCP source-cohort guard follows the new agent 2.7.0 / Python 2.6.0
+  source versions. Nothing is published.
+
+## Node 2.6.5 / MCP CI — TypeScript 7 rebuild and red main CI
+
+- `@aifinpay/agent` 2.6.5: rebuilt with TypeScript 7 (published declarations
+  and dev dependencies changed after 2.6.4). No API change.
+- CI: the Node 22 lockfile now records the nested optional `utf-8-validate` 5
+  that npm 10 requires; MCP compiles with Node types under TypeScript 7; the
+  source-cohort and release-input guards follow the published registry
+  cohort (agent 2.6.4, skill 2.9.0) instead of the superseded 2.6.0 / 2.6.1.
+
 ## Node 2.6.4 — standalone wallet dependency
 
 - Replace the Node SDK's duplicated wallet derivation with the full
@@ -256,7 +303,7 @@ Documentation only; no code change in either SDK.
 
 ## Deployments 1.1.3 — unreleased
 
-- Polygon v1.4 pins USDT0 (see the [registry](deployments/registry/splitter/evm/v1.4/deployments.json)) as
+- Polygon v1.4 pins USDT0 (`0xc2132D05D31c914a87C6611C10748AEb04B58e8F`) as
   asset `USDT`, from AiFinPay/evm-contract#39. A stablecoin quote in it is
   signed only once the Polygon TokenList also allows it (Safe transaction in
   that PR); until then the backend refuses with `V14_TOKEN_NOT_ALLOWED`.

@@ -14,6 +14,8 @@
 // routes/aifp.js idempotency — because a mock that is merely agreeable would
 // pass while the SDK talks to nobody.
 
+import { readdirSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { verifyMessage, keccak256, stringToHex, encodeFunctionData } from "viem";
 import { AiFinPayAgent, BudgetCapExceededError } from "../src/unifiedAgent.js";
@@ -22,6 +24,10 @@ import {
   Aifp1ReceiptCache,
   Aifp1QuoteError,
   Aifp1PayError,
+  Aifp1ReceiptRejectedError,
+  Aifp1MerchantChangedError,
+  Aifp1GatewayRetiredError,
+  FileMerchantPinStore,
   recoverAifp1Payment,
   idempotencyKeyFor,
   scopeCovers,
@@ -67,6 +73,8 @@ interface MockServer {
   patterns: string[];
   /** slug → merchant_id. */
   merchants: Record<string, string>;
+  /** Slugs a site published and no longer serves: 410 gateway_retired. */
+  retired: string[];
   /** Number of AIFP-425 answers /v1/pay gives before settling. */
   payNotConfirmedTimes: number;
   payUnavailableTimes?: number;
@@ -117,6 +125,7 @@ function mockServer(): MockServer {
     weights: {},
     patterns: [],
     merchants: { acme: "mrch_acme", other: "mrch_other" },
+    retired: [],
     payNotConfirmedTimes: 0,
     receipts: new Map(),
     fetch: null as unknown as typeof fetch,
@@ -318,6 +327,10 @@ function mockServer(): MockServer {
       const token = headers.get("AIFP-Receipt");
       s.gatewayHits.push({ path: restPath, receipt: token });
 
+      // routes/gateway.js renders gateway-routing.js refused("gateway_retired", 410).
+      if (s.retired.includes(slug)) {
+        return json({ error: "gateway_retired", detail: "the selected gateway is not available" }, 410);
+      }
       const merchantId = s.merchants[slug];
       if (!merchantId) return json({ error: "AIFP-404", detail: "unknown gateway slug" }, 404);
       const resource = s.patterns.find((p) => serverPatternCovers(p, restPath)) ?? restPath;
@@ -1189,6 +1202,183 @@ describe("aifp1: refusing to pay the wrong people", () => {
     // A config bug that produces [] must fail closed. "No allowlist" reading
     // as "allow all" is how this class of check is usually defeated.
     expect(() => parseGatewayUrl(`${GATEWAY}/acme/x`, [])).toThrow(/refusing to pay any host/i);
+  });
+});
+
+describe("aifp1: a gateway site keeps the merchant it was first paid as", () => {
+  // slug → merchant is a lookup on the gateway, and gateway mode used to
+  // quote and pay whatever merchant the 402 named. The gateway keeps a slug
+  // with the site that published it; the pin is the client's own second line,
+  // so a slug that changes hands anyway does not take the agent's money with
+  // it.
+  const SITE = `${GATEWAY}/acme`;
+  const stateDir = () => process.env.AIFINPAY_STATE_DIR!;
+
+  it("pins each site to the merchant of its first payment, in an owner-only file", async () => {
+    const server = mockServer();
+    const { agent } = await agentFor(server);
+    await agent.fetchPaid(`${GATEWAY}/acme/articles/one`);
+    await agent.fetchPaid(`${GATEWAY}/other/articles/one`);
+
+    const pins = new FileMerchantPinStore(join(stateDir(), "merchant-pins"));
+    expect(await pins.get(SITE)).toBe("mrch_acme");
+    expect(await pins.get(`${GATEWAY}/other`)).toBe("mrch_other");
+    for (const name of readdirSync(join(stateDir(), "merchant-pins"))) {
+      expect(statSync(join(stateDir(), "merchant-pins", name)).mode & 0o777).toBe(0o600);
+    }
+  });
+
+  it("refuses a 402 that names another merchant for a pinned site, before any quote", async () => {
+    const server = mockServer();
+    await (await agentFor(server)).agent.fetchPaid(`${GATEWAY}/acme/articles/one`);
+    expect(server.quotes).toBe(1);
+
+    // The slug changes hands; a restarted agent holds no receipts, only the pin.
+    server.merchants.acme = "mrch_squatter";
+    const hitsBefore = server.gatewayHits.length;
+    const { agent, settlements } = await agentFor(server);
+    const refused = await agent.fetchPaid(`${GATEWAY}/acme/articles/two`).catch((e: unknown) => e);
+
+    expect(refused).toBeInstanceOf(Aifp1MerchantChangedError);
+    expect(refused).toMatchObject({
+      code: "AIFP1_MERCHANT_CHANGED",
+      site: SITE,
+      expectedMerchantId: "mrch_acme",
+      merchantId: "mrch_squatter",
+    });
+    expect(server.quotes).toBe(1);
+    expect(server.gatewayHits.length - hitsBefore).toBe(1);
+    expect(settlements).toHaveLength(0);
+  });
+
+  it("keeps refusing in the same process once the old batch is turned away", async () => {
+    const server = mockServer();
+    const { agent, settlements } = await agentFor(server);
+    await agent.fetchPaid(`${GATEWAY}/acme/articles/one`);
+
+    server.merchants.acme = "mrch_squatter";
+    // The held batch is for mrch_acme, so the gateway refuses its audience.
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/articles/two`)).rejects.toBeInstanceOf(Aifp1ReceiptRejectedError);
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/articles/two`)).rejects.toBeInstanceOf(Aifp1MerchantChangedError);
+    expect(server.quotes).toBe(1);
+    expect(settlements).toHaveLength(1);
+  });
+
+  it("pays the new merchant when the caller allows the change, and re-pins the site", async () => {
+    const server = mockServer();
+    await (await agentFor(server)).agent.fetchPaid(`${GATEWAY}/acme/articles/one`);
+
+    server.merchants.acme = "mrch_new";
+    const { agent, settlements } = await agentFor(server);
+    const res = await agent.fetchPaid(`${GATEWAY}/acme/articles/two`, {}, { allowMerchantChange: true });
+    expect(res!.status).toBe(200);
+    expect(settlements).toHaveLength(1);
+    expect(server.quotes).toBe(2);
+
+    // The pin moved with the payment: the old merchant is now the stranger.
+    server.merchants.acme = "mrch_acme";
+    const again = await agentFor(server);
+    await expect(again.agent.fetchPaid(`${GATEWAY}/acme/articles/three`)).rejects.toMatchObject({
+      expectedMerchantId: "mrch_new",
+      merchantId: "mrch_acme",
+    });
+    expect(again.settlements).toHaveLength(0);
+  });
+
+  it("expectedMerchantId refuses any other merchant, pinned or not", async () => {
+    const server = mockServer();
+    const { agent, settlements } = await agentFor(server);
+    await expect(
+      agent.fetchPaid(`${GATEWAY}/acme/articles/one`, {}, { expectedMerchantId: "mrch_other" })
+    ).rejects.toMatchObject({
+      code: "AIFP1_MERCHANT_CHANGED",
+      expectedMerchantId: "mrch_other",
+      merchantId: "mrch_acme",
+    });
+    expect(server.quotes).toBe(0);
+    expect(settlements).toHaveLength(0);
+  });
+
+  it("expectedMerchantId naming the new merchant pays it and re-pins the site", async () => {
+    const server = mockServer();
+    await (await agentFor(server)).agent.fetchPaid(`${GATEWAY}/acme/articles/one`);
+
+    server.merchants.acme = "mrch_new";
+    const { agent, settlements } = await agentFor(server);
+    const res = await agent.fetchPaid(`${GATEWAY}/acme/articles/two`, {}, { expectedMerchantId: "mrch_new" });
+    expect(res!.status).toBe(200);
+    expect(settlements).toHaveLength(1);
+    expect(await new FileMerchantPinStore(join(stateDir(), "merchant-pins")).get(SITE)).toBe("mrch_new");
+  });
+
+  it("writes the pin before money moves: a pin that cannot be saved stops the payment", async () => {
+    const server = mockServer();
+    const merchantPins = {
+      get: async () => undefined,
+      set: async () => {
+        throw new Error("read-only file system");
+      },
+    };
+    const { agent, settlements } = await agentFor(server, { merchantPins });
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/articles/one`)).rejects.toThrow(/read-only/);
+    expect(settlements).toHaveLength(0);
+    expect(server.pays).toBe(0);
+  });
+
+  it("refuses to pay when a pin cannot be read, rather than pinning afresh", async () => {
+    const server = mockServer();
+    await (await agentFor(server)).agent.fetchPaid(`${GATEWAY}/acme/articles/one`);
+    const dir = join(stateDir(), "merchant-pins");
+    for (const name of readdirSync(dir)) writeFileSync(join(dir, name), "{not json");
+
+    const { agent, settlements } = await agentFor(server);
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/articles/two`)).rejects.toThrow(/merchant pin/);
+    expect(server.quotes).toBe(1);
+    expect(settlements).toHaveLength(0);
+  });
+});
+
+describe("aifp1: a retired gateway slug is terminal", () => {
+  it("surfaces 410 gateway_retired after one request: no quote, no retry", async () => {
+    const server = mockServer();
+    server.retired = ["acme"];
+    const { agent, settlements } = await agentFor(server);
+
+    const refused = await agent.fetchPaid(`${GATEWAY}/acme/articles/one`).catch((e: unknown) => e);
+    expect(refused).toBeInstanceOf(Aifp1GatewayRetiredError);
+    expect(refused).toMatchObject({ code: "AIFP1_GATEWAY_RETIRED", site: `${GATEWAY}/acme` });
+    expect(server.gatewayHits).toHaveLength(1);
+    expect(server.quotes).toBe(0);
+    expect(settlements).toHaveLength(0);
+  });
+
+  it("keeps the batch it holds when the slug is retired under it", async () => {
+    const server = mockServer();
+    const { agent, settlements } = await agentFor(server);
+    await agent.fetchPaid(`${GATEWAY}/acme/articles/one`);
+    const hitsBefore = server.gatewayHits.length;
+
+    server.retired = ["acme"];
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/articles/two`)).rejects.toBeInstanceOf(Aifp1GatewayRetiredError);
+    expect(server.gatewayHits.length - hitsBefore).toBe(1);
+    // A site may take its own slug back; the receipt is still good there.
+    expect(agent.aifp1Receipts.size).toBe(1);
+    expect(settlements).toHaveLength(1);
+  });
+
+  it("returns a merchant's own 410 untouched", async () => {
+    const server = mockServer();
+    const base = server.fetch;
+    server.fetch = (async (i: RequestInfo | URL, init?: RequestInit) => {
+      const u = new URL(typeof i === "string" ? i : i.toString());
+      if (u.origin === GATEWAY) return json({ error: "gone", detail: "article withdrawn" }, 410);
+      return base(i, init);
+    }) as typeof globalThis.fetch;
+    const { agent } = await agentFor(server);
+
+    const res = await agent.fetchPaid(`${GATEWAY}/acme/articles/one`);
+    expect(res!.status).toBe(410);
+    expect((await res!.json()).error).toBe("gone");
   });
 });
 

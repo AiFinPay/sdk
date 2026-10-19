@@ -894,6 +894,8 @@ class AiFinPayAgent:
         units: [int] = None,
         api_base: str = "https://api.aifinpay.io",
         reporting_token: [str] = None,
+        expected_merchant_id: [str] = None,
+        allow_merchant_change: bool = False,
     ) -> requests.Response:
         """
         GET an AIFP-1 paywalled URL, paying for one batch if it answers 402.
@@ -921,6 +923,15 @@ class AiFinPayAgent:
         unknown, :class:`aifinpay.aifp1.Aifp1PayError` is raised with the
         journal path in ``recovery`` — call :meth:`recover_paid` with it
         rather than paying again.
+
+        A ``https://gateway.aifinpay.io/<slug>`` site is pinned to the merchant
+        it was first paid as, in ``journal_dir/merchant-pins``. A 402 naming
+        another merchant raises :class:`aifinpay.aifp1.Aifp1MerchantChangedError`
+        before anything is quoted, unless ``allow_merchant_change=True`` or
+        ``expected_merchant_id`` names the new merchant; paying re-pins the site.
+        ``expected_merchant_id`` also refuses any other merchant on any origin.
+        A retired slug (410 gateway_retired) raises
+        :class:`aifinpay.aifp1.Aifp1GatewayRetiredError`; do not retry it.
 
         A non-402 response, or a 402 from another protocol, is returned as is.
         """
@@ -987,6 +998,9 @@ class AiFinPayAgent:
                 max_fee_lamports=max_fee_lamports,
                 wallet_identity=self.evm_address.lower(),
                 reporting_token=reporting_token,
+                merchant_pins=aifp1.MerchantPins(os.path.join(journal, "merchant-pins")),
+                expected_merchant_id=expected_merchant_id,
+                allow_merchant_change=allow_merchant_change,
             )
         except aifp1.Aifp1PayError as e:
             path = os.path.join(journal, f"{e.tx_ref}.json")
