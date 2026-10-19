@@ -116,6 +116,9 @@ describe("payment_setup_status", () => {
     expect(status.next_step).toContain(`"AIFINPAY_GATEWAY_ORIGINS":"${origin}"`);
     expect(status.next_step).toContain('"AIFINPAY_MAX_GAS_POL":"0.3"');
     expect(status.next_step).toContain("reconnect");
+    // Settings saved but not yet read: the server must be restarted, not reloaded.
+    expect(status.next_step).toContain("Have the client restart the aifinpay MCP server");
+    expect(status.next_step).toContain("agent_reload does not read env");
     // Every example key the owner needs is in the block; nothing is invented.
     for (const key of Object.keys(PAYMENT_ENV)) expect(status.next_step).toContain(`"${key}"`);
   });
@@ -128,6 +131,8 @@ describe("payment_setup_status", () => {
     expect(status.ready).toBe(false);
     expect(status.config_error).toMatch(/AIFINPAY_MAX_GAS_POL/);
     expect(status.next_step).toMatch(/^Owner setting refused: AIFINPAY_MAX_GAS_POL/);
+    // Enabled and read: a restart would not change a refused value.
+    expect(status.next_step).not.toContain("restart");
   });
 
   it("with everything set and an empty wallet: says what to fund, where, and about how much", async () => {

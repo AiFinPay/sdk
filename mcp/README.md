@@ -36,7 +36,8 @@ and only once the owner has set every limit in step 4.
    batch price in POL plus the gas cap, so about `0.5 POL` for one `$0.10`
    batch at `$0.20`/POL plus up to `0.3 POL` gas (the SDK refuses before
    signing if the worst-case fee exceeds the cap). When the owner confirms
-   funding, they add the payment settings to the same `env` and reconnect:
+   funding, they add the payment settings to the same `env` and restart the
+   aifinpay MCP server in the client (`agent_reload` does not read env):
 
    ```json
    {

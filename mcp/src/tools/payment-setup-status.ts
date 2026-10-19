@@ -201,7 +201,12 @@ export async function paymentSetupStatus(
         ? `Owner setting refused: ${configError}. `
         : `Payments are off until the owner enables them. `) +
       `Have the owner add this to the server's env in the MCP client config (their real site origin and limits, not the example), then reconnect: ${block}` +
-      (configError && !config.paymentsEnabled ? ` Currently missing: ${configError}` : "");
+      (configError && !config.paymentsEnabled ? ` Currently missing: ${configError}` : "") +
+      // The env is read once, at start. An agent that saw agent_reload succeed
+      // and payments stay off concluded the settings were lost, and stopped.
+      (config.paymentsEnabled
+        ? ""
+        : ` If the owner has already saved these settings, this server has not been restarted since: agent_reload does not read env. Have the client restart the aifinpay MCP server, then call payment_setup_status again.`);
     return status;
   }
   const gasCap = Number(status.limits.gas_cap.value);

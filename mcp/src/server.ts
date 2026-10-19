@@ -45,6 +45,9 @@ const safeFetch = makeSafeFetch({
   trustedHosts: loadConfigFromEnv().trustedHosts,
 });
 
+const RELOAD_ENV_NOTE =
+  "Owner limits and AIFINPAY_PAYMENTS_ENABLED are read only when this server starts; agent_reload re-reads the keystore and nothing else. If the owner has saved them since, have the client restart the aifinpay MCP server (restart the client, or disable and re-enable the server), then call payment_setup_status.";
+
 /** Read-only by default. Explicit owner configuration enables the reviewed
  * family-specific v1.4 payable_fetch path; legacy signing tools stay retired. */
 export async function createServer(config: McpConfig = {}) {
@@ -143,7 +146,7 @@ export async function createServer(config: McpConfig = {}) {
       {
         name: "agent_reload",
         description:
-          "Reload the configured local wallet files after init or a file update, without starting a new conversation. Returns public addresses only. Shell environment changes still require reconnecting the MCP process.",
+          "Reload the configured local wallet files after init or a file update, without starting a new conversation. Returns public addresses only. Owner limits and other env changes take effect only after the client restarts the aifinpay MCP server; agent_reload does not read them.",
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       },
@@ -195,6 +198,11 @@ export async function createServer(config: McpConfig = {}) {
                   evm: agent.evmAddress,
                   casper: agent.casperAddress,
                   reloaded: true,
+                  // A reload that succeeds while payments stay off read as "the
+                  // env was not picked up", and an agent stopped there
+                  // (2026-10-19): config is fixed at start, so say so.
+                  payments_enabled: Boolean(config.paymentsEnabled),
+                  ...(config.paymentsEnabled ? {} : { env_note: RELOAD_ENV_NOTE }),
                 }),
               },
             ],
