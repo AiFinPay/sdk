@@ -6,7 +6,7 @@ description: Pay for x402-gated APIs and sites as an agent (AIFP-1 on an owner-s
   wallet, payment history, prepaid quotas and Agent Passport records through
   the AiFinPay MCP server or SDK.
 license: MIT
-version: 2.10.0
+version: 2.10.1
 author: AiFinPay Support
 metadata:
   hermes:
@@ -61,11 +61,11 @@ your language. There is no "install together" scenario.
 
 ## Version and release status
 
-Release target: MCP **2.11.0**, Node SDK **2.8.0**, Python **2.7.0**.
+Release target: MCP **2.11.1**, Node SDK **2.8.0**, Python **2.7.0**.
 This skill describes that coordinated package cohort. Check the installed
 versions before using its additional-network instructions; a release target
 does not establish npm/PyPI publication or production network activation.
-Published baseline checked 2026-10-19: MCP **2.10.0**, Node SDK **2.8.0**.
+Published baseline checked 2026-10-19: MCP **2.11.0**, Node SDK **2.8.0**.
 `payable_fetch` has shipped since MCP 2.2.0, and Base since MCP 2.5.0.
 Published packages remain usable within their documented capabilities.
 
@@ -194,21 +194,32 @@ step — no key handling of your own, no funding of an ephemeral address.
    (`persistent` or ephemeral), `payments_enabled`, which owner limits are
    set, the balance when the RPC answers, `ready`, and `next_step` — the one
    thing still missing. Follow `next_step`; do not skip ahead.
-3. **Persistent wallet.** If `wallet.persistent` is false, run
-   `npx @aifinpay/mcp init`. Without a terminal it does not prompt: it
-   generates the passphrase, writes the keystore and prints one JSON document
-   with `addresses` and an `env` block. Put that `env` into the `aifinpay`
-   server entry of the MCP client config (the passphrase is only there — the
-   output is a secret, and a second run never reprints it), reconnect the
-   server, then call `agent_reload`. Never fund an ephemeral address.
+3. **Persistent wallet.** If `wallet.persistent` is false, run the exact
+   command in `next_step` (it is `npx @aifinpay/mcp init`, prefixed with
+   `AIFINPAY_HOME=…` when the server uses its own wallet directory — keep
+   that prefix, or the server will not see the keystore). Without a terminal
+   init does not prompt: it generates the passphrase, writes the keystore and
+   prints one JSON document with `addresses` and an `env` block. Put that
+   `env` into the `aifinpay` server entry of the MCP client config (the
+   passphrase is only there — the output is a secret, and a second run never
+   reprints it), then call `agent_reload`: it reads the keystore and switches
+   this server to the persistent wallet. If init answers that a keystore
+   already exists and cannot be opened, do not delete or replace it: follow
+   its `next_step` and start a new wallet directory. Never fund an ephemeral
+   address.
 4. **Fund and enable.** Tell the owner `addresses.evm` and the amount: the
    batch price in the pay chain's native currency plus the gas cap (on
    Polygon, about `0.5 POL` covers one `$0.10` batch plus a `0.3 POL` cap).
    When the owner confirms funding, they add the payment settings from
    "Paying with payable_fetch" below — with their real origin and limits —
-   to the same `env` and reconnect. `payment_setup_status` then reports
-   `ready: true`. Funding, origins and limits are the owner's decisions;
-   never choose them yourself.
+   to the same `env`. **Limits are read only when the server starts**:
+   `agent_reload` re-reads the keystore and nothing else, so after the env
+   changes the client has to restart the `aifinpay` MCP server (restart the
+   client, or disable and re-enable the server in it). Until that restart
+   `payment_setup_status` keeps reporting `payments_enabled: false`; that is
+   expected, not a refusal — say so, ask the owner for the restart, and stop.
+   After it, `payment_setup_status` reports `ready: true`. Funding, origins
+   and limits are the owner's decisions; never choose them yourself.
 5. **Pay.** `payable_fetch({"url":"<origin><path>"})` (add
    `"scope":"merchant"` for a site-wide batch) buys the batch and returns the
    content with the receipt summary. Later requests reuse the batch.
@@ -238,9 +249,10 @@ into ratersapp.com", "купи доступ до цього сайту". Handle 
    persistent wallet first, then the owner's funding and environment block
    with this origin in `AIFINPAY_GATEWAY_ORIGINS` (and
    `AIFINPAY_GATEWAY_PATH_MODE=direct` when the 402 comes from the site
-   itself) — and stop until the owner has done their part. Adding a site,
-   raising a limit and funding the wallet are the owner's decisions; never
-   make them on your own initiative.
+   itself) — and stop until the owner has done their part. Env changes take
+   effect only after the client restarts the `aifinpay` server; `agent_reload`
+   does not read them. Adding a site, raising a limit and funding the wallet
+   are the owner's decisions; never make them on your own initiative.
 5. **Buy.** `payable_fetch({"url":"<origin><path>","scope":"merchant"})`, where
    the path is what the owner wants to read, or a standard resource from the
    discovery document.
