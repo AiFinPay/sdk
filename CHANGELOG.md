@@ -1,3 +1,18 @@
+## MCP 2.11.3 / Node 2.9.0 — Codex named, funding priced, limits in the dashboard
+
+- `@aifinpay/agent` 2.9.0 adds `codex` to `AGENT_FRAMEWORKS`. The MCP maps
+  Codex's `clientInfo.name` `codex-mcp-client` to it and logs every client's
+  name at initialize, so the merchant dashboard no longer shows a Codex agent
+  as "Independent".
+- `payment_setup_status` returns `funding`: the smallest batch at today's rate
+  plus the gas cap, before payments are enabled; no fixed POL rate remains in
+  the MCP README or tool text. When no rate can be read it says so and names
+  no number.
+- The env USD limits are documented as a one-time ceiling; the working limits
+  are the dashboard Controls after `agent_claim_self`. No enforcement change.
+- Publish order: agent 2.9.0 first, then the MCP lock bump (with skill 2.10.2),
+  then MCP 2.11.3.
+
 ## MCP 2.11.2 — env changes need a server restart; skill 2.10.1
 
 - 2.11.1 was merged without these two changes and was never published; 2.11.2

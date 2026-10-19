@@ -4,8 +4,10 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Version **2.11.2** is prepared in this checkout, on the published agent 2.8.0
-and canonical skill 2.10.1 (AiFinPay/skill b8d2309, published 2026-10-19). The separate canonical producer's final immutable
+Version **2.11.3** is prepared in this checkout, on agent 2.9.0 (this
+repository's `node/`, to be published before it) and canonical skill 2.10.1
+(AiFinPay/skill b8d2309, published 2026-10-19; the skill 2.10.2 guide that
+matches this version follows with its own dependency bump). The separate canonical producer's final immutable
 source pin is a required handoff, not a moving-branch substitution.
 The published baseline checked2026-10-04 was MCP2.5.0. Package publication and
 real registry dependency/lock refresh remain release gates; a source-cohort
@@ -25,31 +27,38 @@ and only once the owner has set every limit in step 4.
    200 standard requests).
 2. **Check the setup.** Call `payment_setup_status`. It returns the wallet
    (persistent or ephemeral), whether payments are enabled, which owner limits
-   are set, the balance when the RPC answers, and `next_step`: the first thing
+   are set, the balance when the RPC answers, `funding` (what a persistent
+   wallet needs, priced at today's rate) and `next_step`: the first thing
    still missing.
 3. **Persistent wallet.** If `wallet.persistent` is false, run
    `npx @aifinpay/mcp init`. Without a terminal it prints one JSON document;
    copy its `env` (the passphrase is only there) into the `aifinpay` server
    entry of the MCP client config, reconnect the server, then call
    `agent_reload`. Never fund an ephemeral address.
-4. **Fund and enable.** Tell the owner `addresses.evm` and the amount: the
-   batch price in POL plus the gas cap, so about `0.5 POL` for one `$0.10`
-   batch at `$0.20`/POL plus up to `0.3 POL` gas (the SDK refuses before
-   signing if the worst-case fee exceeds the cap). When the owner confirms
-   funding, they add the payment settings to the same `env` and restart the
-   aifinpay MCP server in the client (`agent_reload` does not read env):
+4. **Fund and enable.** Tell the owner `addresses.evm` and the amount from
+   `payment_setup_status`'s `funding`: the smallest batch (`$0.10`) in POL at
+   today's rate plus the gas cap (the SDK refuses before signing if the
+   worst-case fee exceeds the cap). The rate moves — `$0.10` was 1.08 POL on
+   2026-10-19 — so never quote a remembered number; if `funding` carries a
+   `rate_error` instead of an `amount`, ask the owner to fund "the batch price
+   in POL at today's rate plus the gas cap" and name no number. When the owner
+   confirms funding, they add the payment settings to the same `env` and
+   restart the aifinpay MCP server in the client (`agent_reload` does not read
+   env):
 
    ```json
    {
      "AIFINPAY_PAYMENTS_ENABLED": "1",
      "AIFINPAY_GATEWAY_ORIGINS": "https://dev.ratersapp.com",
      "AIFINPAY_GATEWAY_PATH_MODE": "direct",
-     "AIFINPAY_MAX_USD": "0.15",
-     "AIFINPAY_DAILY_USD": "1.00",
+     "AIFINPAY_MAX_USD": "5",
+     "AIFINPAY_DAILY_USD": "20",
      "AIFINPAY_MAX_GAS_POL": "0.3"
    }
    ```
 
+   The USD values are a ceiling the owner sets once, not the budget: the
+   working limits live in the dashboard (see "Owner limits" below).
    `payment_setup_status` then reports `ready: true`.
 
 5. **Pay.** `payable_fetch({"url": "https://dev.ratersapp.com/api/agent/genres/list"})`
@@ -71,8 +80,8 @@ to the server's `env` (`init` prints the same block):
   "AIFINPAY_PAYMENTS_ENABLED": "1",
   "AIFINPAY_GATEWAY_ORIGINS": "https://merchant.example",
   "AIFINPAY_GATEWAY_PATH_MODE": "direct",
-  "AIFINPAY_MAX_USD": "0.15",
-  "AIFINPAY_DAILY_USD": "1.00",
+  "AIFINPAY_MAX_USD": "5",
+  "AIFINPAY_DAILY_USD": "20",
   "AIFINPAY_MAX_GAS_POL": "0.3"
 }
 ```
@@ -82,6 +91,18 @@ own POL cap. Origins are exact HTTPS origins authorized by the
 owner. `direct` uses the full path for self-hosted sites; `gateway` uses the
 merchant slug on the hosted gateway. Restart/reconnect the MCP process after
 changing its environment.
+
+### Owner limits: a ceiling in env, the working limits in the dashboard
+
+`AIFINPAY_MAX_USD` and `AIFINPAY_DAILY_USD` are the ceiling the SDK requires
+before it signs with the owner's key: set them once, high enough that they do
+not need revisiting (the example `5` per payment and `20` per day is a ceiling,
+not a budget), and leave them. The day-to-day limits belong in the dashboard:
+once the agent is linked with `agent_claim_self`, the owner manages the
+per-payment cap, the daily cap, pause and the allowed sites under **Controls**
+at https://dash.aifinpay.io, and the backend enforces that policy on every
+`/v1/quote` and `/v1/pay` for the claimed agent — no env change, no server
+restart. The env ceiling still applies underneath; a payment has to pass both.
 
 ## Indexed wallet derivation
 
@@ -149,8 +170,8 @@ runtime/signer verification and owner limits. It persists the prepared transacti
 before sending, verifies the receipt, and reuses the purchased batch. No special
 merchant script, alternate contract or facilitator fallback is used. GET on the configured chain; EVM receipt payments use live
 mode only, in its native currency or the configured
-stablecoin; Amoy payment receipts are not supported. The smallest batch is $0.10 plus gas, so keep `AIFINPAY_MAX_USD`
-a little above the batch you expect to buy.
+stablecoin; Amoy payment receipts are not supported. The smallest batch is $0.10 plus gas; `AIFINPAY_MAX_USD`
+only has to be at or above the batch you expect to buy.
 
 To buy access to a whole site rather than one endpoint, call
 `payable_fetch({"url":"https://merchant.example/api/data","scope":"merchant"})`.
@@ -181,11 +202,15 @@ header on the payment requests (and on recovery of a pending payment).
 | `cursor`, `cursor-vscode`  | `cursor`               |
 | `windsurf`                 | `windsurf`             |
 | `chatgpt`, `openai`        | `chatgpt`              |
+| `codex-mcp-client`         | `codex`                |
 | `gemini`                   | `gemini`               |
 | `perplexity`               | `perplexity`           |
 
 Names are matched exactly. Any other client sends no header; the server never
-guesses. Nothing in the payment, limits or receipts depends on it.
+guesses. Nothing in the payment, limits or receipts depends on it. At
+initialize the server logs one line to stderr with the name it received, for
+example `[aifinpay-mcp] client "codex-mcp-client" → framework codex`, so a
+client missing from this table can be reported with its exact name.
 
 ## Link the agent to its owner's dashboard
 
@@ -196,7 +221,8 @@ origins, signs only the claim challenge for this agent's own address, and moves
 no funds. The owner-selected payment family must be confirmed successfully;
 the second wallet is best-effort. Use the selected wallet's Fund panel for
 available networks and assets; binding does not activate a disabled network.
-Offer this to the owner after `init`.
+Offer this to the owner after `init`: from then on the owner manages the
+agent's working limits under Controls there (see "Owner limits" above).
 
 Private recovery state for all payment families lives at `AIFINPAY_HOME/payments/<evm-address>/state.json`
 (default home `~/.aifinpay`). State is mode600 in mode700 directories, atomically

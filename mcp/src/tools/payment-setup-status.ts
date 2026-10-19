@@ -23,16 +23,24 @@ export const SMALLEST_BATCH_USD = 0.1;
 
 // The owner settings that let payable_fetch sign, as init prints them. README
 // "Enable native paid GET requests" shows the same block; a test keeps the two
-// equal and starts a server with it. The gas cap is a worst case at the current
-// Polygon gas price, not the fee: 0.05 POL refused every payment at ~280 gwei.
+// equal and starts a server with it. The USD values are a ceiling the owner
+// sets once, not the budget: the working limits (per-payment cap, daily cap,
+// pause, allowed sites) live in the dashboard Controls once the agent is
+// claimed, and the backend enforces those on every quote and payment. The gas
+// cap is a worst case at the current Polygon gas price, not the fee: 0.05 POL
+// refused every payment at ~280 gwei.
 export const PAYMENT_ENV = Object.freeze({
   AIFINPAY_PAYMENTS_ENABLED: "1",
   AIFINPAY_GATEWAY_ORIGINS: "https://merchant.example",
   AIFINPAY_GATEWAY_PATH_MODE: "direct",
-  AIFINPAY_MAX_USD: "0.15",
-  AIFINPAY_DAILY_USD: "1.00",
+  AIFINPAY_MAX_USD: "5",
+  AIFINPAY_DAILY_USD: "20",
   AIFINPAY_MAX_GAS_POL: "0.3",
 });
+
+/** Where the owner manages the working limits once the agent is claimed. */
+export const CONTROLS_NOTE =
+  "The USD env values are a ceiling the owner sets once, not the budget: after agent_claim_self the owner sets the working limits (per-payment cap, daily cap, pause, allowed sites) in the dashboard Controls at https://dash.aifinpay.io, and the backend enforces them on every quote and payment.";
 
 export const INIT_COMMAND = "npx @aifinpay/mcp init";
 
@@ -104,7 +112,28 @@ export interface PaymentSetupStatus {
   config_error?: string;
   balance: { amount: string; asset: string; chain: string; rpc: string } | "unknown";
   balance_error?: string;
+  /** What to fund a persistent wallet with, priced now; absent for an ephemeral wallet. */
+  funding?: Funding;
   next_step: string;
+}
+
+export interface Funding {
+  address: string;
+  chain: string;
+  asset: string;
+  batch_usd: number;
+  /** The native/USD rate read for this answer; absent when no price source answered. */
+  rate_usd?: number;
+  rate_source?: string;
+  rate_error?: string;
+  /** The smallest batch at that rate. */
+  batch_native?: string;
+  /** The owner's gas cap, when set. */
+  gas_cap?: string;
+  /** batch_native plus gas_cap: the amount to fund, when both are known. */
+  amount?: string;
+  /** The sentence to give the owner. Names a number only when one was read. */
+  advice: string;
 }
 
 export function paymentSetupStatusTool() {
@@ -112,7 +141,8 @@ export function paymentSetupStatusTool() {
     name: "payment_setup_status",
     description:
       "Read-only checklist for paying with payable_fetch: wallet (persistent or ephemeral), whether the owner enabled payments, which owner limits are set, the wallet's native balance on the pay chain when readable, and next_step — exactly one instruction for the first unmet item. " +
-      "First payment in five steps: (1) GET the resource and read its 402 (merchant, price, smallest batch); (2) call payment_setup_status; (3) no persistent wallet: run `npx @aifinpay/mcp init` without a terminal, put its printed env into the MCP client config, reconnect, agent_reload; (4) tell the owner the address and the amount to fund, and have the owner add the payment env (AIFINPAY_PAYMENTS_ENABLED=1, origins, USD limits, gas cap) and reconnect; (5) payable_fetch the URL. " +
+      "First payment in five steps: (1) GET the resource and read its 402 (merchant, price, smallest batch); (2) call payment_setup_status; (3) no persistent wallet: run `npx @aifinpay/mcp init` without a terminal, put its printed env into the MCP client config, reconnect, agent_reload; (4) tell the owner the address and the amount in `funding` (the smallest batch at today's rate plus the gas cap; if no rate could be read, ask for the batch price in the native currency at today's rate plus the gas cap and name no number), and have the owner add the payment env (AIFINPAY_PAYMENTS_ENABLED=1, origins, a USD ceiling, gas cap) and restart the server; (5) payable_fetch the URL. " +
+      "The env USD values are a one-time ceiling; after agent_claim_self the owner manages the working limits in the dashboard Controls. " +
       "Signs nothing, moves nothing, never asks the owner's limits from the model.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: { readOnlyHint: true, openWorldHint: true, destructiveHint: false },
@@ -194,13 +224,24 @@ export async function paymentSetupStatus(
         : `Run \`${initCommand(config.walletHome)}\` (without a terminal it prints JSON; copy its "env" into this server's env in the MCP client config), reconnect the server, then call agent_reload and payment_setup_status again.`);
     return status;
   }
+  // The amount to fund is answered before payments are enabled too: step 4
+  // ("tell the owner the address and the amount") happens with payments still
+  // off, and the 2026-10-19 quote priced $0.10 at 1.08 POL while the guide
+  // still said 0.5 — no fixed rate survives, so the tool reads one now.
+  const gasCap =
+    status.limits.gas_cap.set && Number(status.limits.gas_cap.value) > 0 ? String(status.limits.gas_cap.value) : undefined;
+  const rpc = config.rpcUrl ?? chain.defaultRpc;
+  if (options.readBalance && chain.name !== "solana") {
+    status.funding = await funding(ctx, chain, rpc, gasCap);
+  }
   if (!config.paymentsEnabled || configError) {
     const block = JSON.stringify(paymentEnvFor(config));
     status.next_step =
       (configError && config.paymentsEnabled
         ? `Owner setting refused: ${configError}. `
         : `Payments are off until the owner enables them. `) +
-      `Have the owner add this to the server's env in the MCP client config (their real site origin and limits, not the example), then reconnect: ${block}` +
+      (status.funding ? `${status.funding.advice} ` : "") +
+      `Have the owner add this to the server's env in the MCP client config (their real site origin, not the example; ${CONTROLS_NOTE}), then reconnect: ${block}` +
       (configError && !config.paymentsEnabled ? ` Currently missing: ${configError}` : "") +
       // The env is read once, at start. An agent that saw agent_reload succeed
       // and payments stay off concluded the settings were lost, and stopped.
@@ -209,26 +250,16 @@ export async function paymentSetupStatus(
         : ` If the owner has already saved these settings, this server has not been restarted since: agent_reload does not read env. Have the client restart the aifinpay MCP server, then call payment_setup_status again.`);
     return status;
   }
-  const gasCap = Number(status.limits.gas_cap.value);
-  if (options.readBalance && chain.name !== "solana") {
-    const rpc = config.rpcUrl ?? chain.defaultRpc;
+  if (status.funding) {
     try {
       const balance = await nativeBalance(ctx, rpc, ctx.agent.evmAddress);
       status.balance = { amount: formatNative(balance), asset: chain.native, chain: chain.name, rpc };
-      const price = await independentNativeUsd({
-        fetchImpl: (input, init) => ctx.agent.inner.fetchImpl(input, init),
-        chain,
-        rpc,
-      }).catch(() => undefined);
-      const batchNative = price ? SMALLEST_BATCH_USD / price.usd : 0;
-      const needed = batchNative + gasCap;
+      const needed = status.funding.amount !== undefined ? Number(status.funding.amount) : Number(gasCap);
       if (Number(status.balance.amount) < needed) {
         status.next_step =
-          `Fund ${ctx.agent.evmAddress} on ${chain.label} with about ${needed.toFixed(2)} ${chain.native}` +
-          (price
-            ? ` (the smallest batch is $${SMALLEST_BATCH_USD.toFixed(2)} ≈ ${batchNative.toFixed(4)} ${chain.native} plus up to ${gasCap} ${chain.native} gas; it holds ${status.balance.amount})`
-            : ` (at least the gas cap of ${gasCap} ${chain.native} plus the batch price; it holds ${status.balance.amount})`) +
-          `, then call payment_setup_status again.`;
+          status.funding.amount !== undefined
+            ? `Fund ${ctx.agent.evmAddress} on ${chain.label} with about ${status.funding.amount} ${chain.native} (the smallest batch is $${SMALLEST_BATCH_USD.toFixed(2)} ≈ ${status.funding.batch_native} ${chain.native} at today's rate plus up to ${gasCap} ${chain.native} gas; it holds ${status.balance.amount}), then call payment_setup_status again.`
+            : `Fund ${ctx.agent.evmAddress} on ${chain.label} with the batch price in ${chain.native} at today's rate plus the gas cap of ${gasCap} ${chain.native} (the rate could not be read here, so ask the owner to look it up; it holds ${status.balance.amount}), then call payment_setup_status again.`;
         return status;
       }
     } catch (error) {
@@ -238,11 +269,65 @@ export async function paymentSetupStatus(
   status.ready = true;
   status.next_step =
     `Ready. Call payable_fetch({"url": "<HTTPS resource on ${config.gatewayOrigins!.join(" or ")}>"}); ` +
-    `it pays at most $${config.maxAmountUsd} per call and $${config.dailyAmountUsd} per 24 hours, with gas capped at ${status.limits.gas_cap.value} ${chain.native}.` +
+    `it pays at most $${config.maxAmountUsd} per call and $${config.dailyAmountUsd} per 24 hours, with gas capped at ${status.limits.gas_cap.value} ${chain.native}. ` +
+    CONTROLS_NOTE +
     (status.balance === "unknown"
-      ? ` The wallet must hold the batch price plus up to the gas cap in ${chain.native} on ${chain.label}.`
+      ? ` The wallet must hold the batch price plus up to the gas cap in ${chain.native} on ${chain.label}` +
+        (status.funding?.amount !== undefined ? ` (about ${status.funding.amount} ${chain.native} at today's rate).` : ".")
       : "");
   return status;
+}
+
+/**
+ * The amount to fund, priced now. Never a fixed rate: the number comes from
+ * the same independent price sources payable_fetch uses, and when none
+ * answers the advice says so and names no number, so the agent asks the owner
+ * for "the batch price at today's rate plus the gas cap" instead of inventing one.
+ */
+async function funding(ctx: ToolContext, chain: PayChain, rpc: string, gasCap: string | undefined): Promise<Funding> {
+  const address = ctx.agent.evmAddress;
+  const base: Funding = {
+    address,
+    chain: chain.name,
+    asset: chain.native,
+    batch_usd: SMALLEST_BATCH_USD,
+    ...(gasCap !== undefined ? { gas_cap: gasCap } : {}),
+    advice: "",
+  };
+  const batch = `the smallest batch ($${SMALLEST_BATCH_USD.toFixed(2)})`;
+  const cap = gasCap !== undefined ? `the gas cap of ${gasCap} ${chain.native}` : "the gas cap the owner sets";
+  try {
+    const price = await independentNativeUsd({
+      fetchImpl: (input, init) => ctx.agent.inner.fetchImpl(input, init),
+      chain,
+      rpc,
+    });
+    const batchNative = SMALLEST_BATCH_USD / price.usd;
+    const funded: Funding = {
+      ...base,
+      rate_usd: price.usd,
+      rate_source: price.source,
+      batch_native: formatAmount(batchNative, 4),
+    };
+    if (gasCap === undefined) {
+      funded.advice = `Fund ${address} on ${chain.label} with ${batch} ≈ ${funded.batch_native} ${chain.native} at today's rate ($${formatAmount(price.usd, 4)}/${chain.native}) plus ${cap}.`;
+      return funded;
+    }
+    funded.amount = formatAmount(batchNative + Number(gasCap), 2);
+    funded.advice = `Fund ${address} on ${chain.label} with about ${funded.amount} ${chain.native}: ${batch} ≈ ${funded.batch_native} ${chain.native} at today's rate ($${formatAmount(price.usd, 4)}/${chain.native}) plus up to ${gasCap} ${chain.native} gas.`;
+    return funded;
+  } catch (error) {
+    return {
+      ...base,
+      rate_error: (error as Error).message,
+      advice: `The ${chain.native}/USD rate could not be read here, so name no amount: ask the owner to fund ${address} on ${chain.label} with the price of ${batch} in ${chain.native} at today's rate plus ${cap}.`,
+    };
+  }
+}
+
+/** Fixed decimals for readable amounts; more for ones that would round to zero (ETH on Base). */
+function formatAmount(value: number, decimals: number): string {
+  return value.toFixed(value >= 0.01 || value === 0 ? decimals : 6);
 }
 
 function unready(ctx: ToolContext, source: string, chain: PayChain, error: string): PaymentSetupStatus {

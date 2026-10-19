@@ -121,6 +121,62 @@ describe("payment_setup_status", () => {
     expect(status.next_step).toContain("agent_reload does not read env");
     // Every example key the owner needs is in the block; nothing is invented.
     for (const key of Object.keys(PAYMENT_ENV)) expect(status.next_step).toContain(`"${key}"`);
+    // The env USD values are a ceiling; the working limits live in the dashboard.
+    expect(PAYMENT_ENV.AIFINPAY_MAX_USD).toBe("5");
+    expect(PAYMENT_ENV.AIFINPAY_DAILY_USD).toBe("20");
+    expect(status.next_step).toContain("a ceiling the owner sets once, not the budget");
+    expect(status.next_step).toContain("dashboard Controls");
+  });
+
+  // Step 4 of the five steps — "tell the owner the address and the amount" —
+  // happens with payments still off. The 2026-10-19 quote priced $0.10 at
+  // 1.08 POL while the guide said 0.5: the amount is read now, never fixed.
+  it("with payments off: still prices the amount to fund at today's rate, with the gas cap when the owner set one", async () => {
+    const bare = await paymentSetupStatus(ctx({ gatewayOrigins: [origin] }, "legacy-keystore"), { readBalance: true });
+    expect(bare.funding).toEqual({
+      address,
+      chain: "polygon",
+      asset: "POL",
+      batch_usd: 0.1,
+      rate_usd: 0.2,
+      rate_source: "coinbase",
+      batch_native: "0.5000",
+      advice: `Fund ${address} on Polygon with the smallest batch ($0.10) ≈ 0.5000 POL at today's rate ($0.2000/POL) plus the gas cap the owner sets.`,
+    });
+    expect(bare.next_step).toContain(bare.funding!.advice);
+    expect(bare.balance).toBe("unknown");
+
+    const capped = await paymentSetupStatus(ctx({ gatewayOrigins: [origin], maxGasPol: "0.3" }, "legacy-keystore"), {
+      readBalance: true,
+    });
+    expect(capped.funding).toMatchObject({ gas_cap: "0.3", amount: "0.80" });
+    expect(capped.next_step).toContain(`Fund ${address} on Polygon with about 0.80 POL`);
+  });
+
+  it("with no price source reachable: names no number and says to ask the owner for the batch at today's rate plus the gas cap", async () => {
+    const f = vi.fn(async () => new Response("down", { status: 503 }));
+    const status = await paymentSetupStatus(ctx({ gatewayOrigins: [origin], maxGasPol: "0.3" }, "legacy-keystore", f as never), {
+      readBalance: true,
+    });
+    expect(status.funding).toMatchObject({ gas_cap: "0.3", rate_error: expect.stringContaining("price unavailable") });
+    expect(status.funding!.amount).toBeUndefined();
+    expect(status.funding!.batch_native).toBeUndefined();
+    expect(status.funding!.advice).toBe(
+      `The POL/USD rate could not be read here, so name no amount: ask the owner to fund ${address} on Polygon with the price of the smallest batch ($0.10) in POL at today's rate plus the gas cap of 0.3 POL.`
+    );
+    expect(status.next_step).toContain(status.funding!.advice);
+    // No fixed rate anywhere in the answer.
+    expect(JSON.stringify(status)).not.toMatch(/0\.5 POL|\$0\.20/);
+  });
+
+  it("with a refused gas cap: prices the batch but adds no cap to the amount", async () => {
+    const status = await paymentSetupStatus(
+      ctx({ paymentsEnabled: true, ...limits, maxGasPol: "lots" }, "legacy-keystore"),
+      { readBalance: true }
+    );
+    expect(status.funding).toMatchObject({ batch_native: "0.5000" });
+    expect(status.funding!.gas_cap).toBeUndefined();
+    expect(status.funding!.amount).toBeUndefined();
   });
 
   it("with payments enabled but a limit refused: repeats the server's own refusal", async () => {
@@ -148,8 +204,20 @@ describe("payment_setup_status", () => {
     });
     // $0.10 at $0.20/POL is 0.5 POL, plus the 0.3 POL gas cap.
     expect(status.next_step).toBe(
-      `Fund ${address} on Polygon with about 0.80 POL (the smallest batch is $0.10 ≈ 0.5000 POL plus up to 0.3 POL gas; it holds 0.0000), then call payment_setup_status again.`
+      `Fund ${address} on Polygon with about 0.80 POL (the smallest batch is $0.10 ≈ 0.5000 POL at today's rate plus up to 0.3 POL gas; it holds 0.0000), then call payment_setup_status again.`
     );
+    expect(status.funding).toEqual({
+      address,
+      chain: "polygon",
+      asset: "POL",
+      batch_usd: 0.1,
+      rate_usd: 0.2,
+      rate_source: "coinbase",
+      batch_native: "0.5000",
+      gas_cap: "0.3",
+      amount: "0.80",
+      advice: `Fund ${address} on Polygon with about 0.80 POL: the smallest batch ($0.10) ≈ 0.5000 POL at today's rate ($0.2000/POL) plus up to 0.3 POL gas.`,
+    });
   });
 
   it("with a funded wallet: ready, and the next step is payable_fetch within the limits", async () => {
@@ -162,6 +230,8 @@ describe("payment_setup_status", () => {
     expect(status.next_step).toContain("payable_fetch");
     expect(status.next_step).toContain(origin);
     expect(status.next_step).toContain("$0.15 per call");
+    expect(status.next_step).toContain("dashboard Controls");
+    expect(status.funding).toMatchObject({ amount: "0.80" });
   });
 
   it("reads the balance over the owner's RPC when set, and reports an unreadable RPC without failing", async () => {
@@ -175,6 +245,7 @@ describe("payment_setup_status", () => {
     expect(status.balance).toBe("unknown");
     expect(status.balance_error).toContain("https://rpc.owner.example");
     expect(status.next_step).toContain("must hold the batch price plus up to the gas cap");
+    expect(status.funding).toMatchObject({ rate_error: expect.stringContaining("rpc.owner.example") });
   });
 
   it("does not read a balance when asked not to (payable_fetch's refusal path)", async () => {

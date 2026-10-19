@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.9.0 — `codex` as an AI client
+
+- `AGENT_FRAMEWORKS` gains `codex`, so an agent running in OpenAI Codex can
+  send `AIFP-Agent-Framework: codex`. The MCP server maps Codex's
+  `clientInfo.name` (`codex-mcp-client`) to it; Codex is not ChatGPT. No other
+  value, validation or request changes.
+
 ## 2.8.0 — name the AI client that pays
 
 - New `framework` option (`AgentOptions`, so also `AiFinPayAgentOptions`). When

@@ -1,5 +1,40 @@
 # Changelog
 
+## 2.11.3 — Codex is named, the funding amount is priced, limits live in the dashboard
+
+Three findings from the 2026-10-19 end-to-end test (Codex + MCP 2.11.2 paid
+$0.10 on Raters Dev).
+
+- The merchant dashboard showed the Codex agent as "Independent": its
+  `clientInfo.name`, `codex-mcp-client` (openai/codex
+  `codex-rs/codex-mcp/src/rmcp_client.rs`), was not in the framework table, so
+  no `AIFP-Agent-Framework` was sent. It now maps to the new framework `codex`
+  (not `chatgpt`), which needs `@aifinpay/agent` 2.9.0. At initialize the
+  server logs one stderr line with the client name it received and the
+  framework it mapped to (`[aifinpay-mcp] client "codex-mcp-client" → framework
+  codex`), so an unlisted client is visible instead of silent. Nothing secret
+  is logged.
+- The guide said "about 0.5 POL for one $0.10 batch at $0.20/POL"; the test's
+  quote priced $0.10 at 1.08 POL. No fixed rate remains. `payment_setup_status`
+  now returns `funding` for a persistent wallet — the smallest batch in the
+  pay chain's native currency at a rate read now, the owner's gas cap, and
+  their sum as `amount` — before payments are enabled, which is when the agent
+  tells the owner what to fund. When no price source answers, `funding` carries
+  `rate_error` and the advice names no number: ask the owner for the batch
+  price at today's rate plus the gas cap.
+- Owner limits: the env `AIFINPAY_MAX_USD` / `AIFINPAY_DAILY_USD` are
+  documented as a ceiling the owner sets once (the example block now shows
+  `5` and `20` and says they are not a budget); the working limits —
+  per-payment cap, daily cap, pause, allowed sites — are the dashboard
+  Controls once the agent is claimed with `agent_claim_self`, enforced by the
+  backend on every quote and payment. `payment_setup_status`, the tool
+  description, `init`'s help and the README say so. No enforcement, default
+  or validation changed.
+- Requires `@aifinpay/agent` 2.9.0: the release-input guard refuses
+  publication until the lock points at it. The bundled skill is still 2.10.1;
+  skill 2.10.2 (the same three fixes in the guide) follows with its own
+  dependency bump.
+
 ## 2.11.2 — env changes need a server restart; skill 2.10.1
 
 2.11.1 was merged without these two changes and was never published; 2.11.2

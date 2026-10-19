@@ -18,12 +18,13 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // Registry lock refreshed onto the published cohort (agent 2.6.4, skill 2.9.0,
-// ee4b3b4), since moved to agent 2.8.0 and skill 2.10.1; it keeps MCP SDK 1.31.0 and proxy-addr 2.0.8, which fix
+// ee4b3b4), since moved to agent 2.8.0 and skill 2.10.1 (the source agent is
+// 2.9.0 until its lock bump); it keeps MCP SDK 1.31.0 and proxy-addr 2.0.8, which fix
 // GHSA-6qxp-vccf-f47h / GHSA-jqcg-44mw-7w3h. Keep the bootstrap immutable.
 export const BASE = "ee4b3b450af3fec988c6520e1033c25868065df0";
 export const COHORT = {
-  mcp: "2.11.2",
-  agent: "2.8.0",
+  mcp: "2.11.3",
+  agent: "2.9.0",
   python: "2.7.0",
   skill: "2.10.1",
 };

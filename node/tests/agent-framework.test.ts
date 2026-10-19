@@ -48,6 +48,7 @@ describe("Agent framework option", () => {
       "cursor",
       "openai-agents",
       "windsurf",
+      "codex",
       "custom",
     ]);
     for (const framework of AGENT_FRAMEWORKS) expect(Agent.new({ framework }).framework).toBe(framework);
@@ -89,7 +90,7 @@ describe("Agent framework option", () => {
     (framework) => {
       expect(() => Agent.new({ framework: framework as unknown as "claude" })).toThrow(AiFinPayError);
       expect(() => Agent.new({ framework: framework as unknown as "claude" })).toThrow(
-        "framework must be one of chatgpt, claude, perplexity, gemini, cursor, openai-agents, windsurf, custom"
+        "framework must be one of chatgpt, claude, perplexity, gemini, cursor, openai-agents, windsurf, codex, custom"
       );
     }
   );

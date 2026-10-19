@@ -268,7 +268,8 @@ const agent = await AiFinPayAgent.fromEnvironment({ framework: "claude" });
 ```
 
 Accepted values (`AGENT_FRAMEWORKS`): `chatgpt`, `claude`, `perplexity`,
-`gemini`, `cursor`, `openai-agents`, `windsurf`, `custom`. Anything else throws
+`gemini`, `cursor`, `openai-agents`, `windsurf`, `codex`, `custom`. Anything
+else throws
 `AiFinPayError` when the agent is constructed. Leave it unset and no header is
 sent; the SDK never guesses. A host that learns its client after constructing
 the agent passes it per call: `fetchPaid(url, init, { framework })` or

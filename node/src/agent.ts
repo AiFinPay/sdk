@@ -25,6 +25,7 @@ export const AGENT_FRAMEWORKS = Object.freeze([
   "cursor",
   "openai-agents",
   "windsurf",
+  "codex",
   "custom",
 ] as const);
 export type AgentFramework = (typeof AGENT_FRAMEWORKS)[number];
