@@ -91,11 +91,9 @@ test("MCP candidate metadata preserves the real registry lock of the published c
     lock.packages["node_modules/@aifinpay/skill"],
     baseline.packages["node_modules/@aifinpay/skill"],
   );
-  // The lock follows the published agent 2.7.0 (2026-10-18). Its registry
-  // identity is the only change: 2.7.0 depends on exactly what 2.6.4 did.
-  // The source cohort's agent 2.8.0 is unpublished; the lock stays on 2.7.0
-  // until the owner publishes it and refreshes the lock.
-  const registryAgent = "2.7.0";
+  // The lock follows the published agent 2.8.0 (2026-10-19). Its registry
+  // identity is the only change: 2.8.0 depends on exactly what 2.7.0 did.
+  const registryAgent = "2.8.0";
   assert.equal(manifest.dependencies["@aifinpay/agent"], `^${registryAgent}`);
   const { version, resolved, integrity, ...agentEdges } =
     lock.packages["node_modules/@aifinpay/agent"];
@@ -111,13 +109,12 @@ test("MCP candidate metadata preserves the real registry lock of the published c
       version: registryAgent,
       resolved: `https://registry.npmjs.org/@aifinpay/agent/-/agent-${registryAgent}.tgz`,
       integrity:
-        "sha512-BKV3mz0CH9cjX423TBTDbK6fTTv+LebjQqmv+BSQpACfjTp2rxHKGgQe8pODNrROKZAYMABqvG7B/8g85AUxFA==",
+        "sha512-BA6aDVkA7ky7hfpCAv5Y5+u814ceA+UYq+hwKj1G563dcFf/+bXbQ7HWCTgpGvutQHiG3hR64j/Dt2iCXF91mw==",
     },
   );
   assert.deepEqual(agentEdges, baselineEdges);
-  // MCP 2.10.0 needs agent 2.8.0, which is not published: the release
-  // metadata check must refuse the 2.7.0 lock for the agent, never for the
-  // MCP metadata itself, until 2.8.0 is published and the lock refreshed.
+  // With agent 2.8.0 published and installed from the registry, the release
+  // metadata check must accept the lock.
   const guard = spawnSync(
     process.execPath,
     ["scripts/verify-release-inputs.mjs"],
@@ -126,15 +123,8 @@ test("MCP candidate metadata preserves the real registry lock of the published c
       encoding: "utf8",
     },
   );
-  assert.notEqual(guard.status, 0);
-  assert.match(
-    guard.stderr,
-    /@aifinpay\/agent 2\.8\.0 must be published and installed with its real registry resolution/,
-  );
-  assert.doesNotMatch(
-    guard.stderr,
-    /release metadata and real registry lock disagree/,
-  );
+  assert.equal(guard.status, 0, guard.stderr);
+  assert.match(guard.stdout, /Coordinated registry release inputs verified\./);
 });
 test("immutable bootstrap uses the existing patched registry lock without source tarball resolutions", () => {
   const root = fileURLToPath(new URL("../", import.meta.url));
