@@ -198,7 +198,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: AiFinPay/skill
-          ref: b8d2309ca88a1f306662a1b3ca2d7e3b293e14e4
+          ref: 48285cf68f119a584886cf77f89ccdc4129fae76
           path: .ci/skill-source
 
       - name: Build same-commit agent producer
@@ -241,7 +241,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: AiFinPay/skill
-          ref: b8d2309ca88a1f306662a1b3ca2d7e3b293e14e4
+          ref: 48285cf68f119a584886cf77f89ccdc4129fae76
           path: .ci/skill-source
 
       - name: Build same-commit agent producer

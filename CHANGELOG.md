@@ -1,3 +1,9 @@
+## MCP 2.11.4 — published agent 2.9.0 and skill 2.10.2
+
+- MCP 2.11.3 was never published; 2.11.4 carries its changes on the published
+  `@aifinpay/agent` 2.9.0 and `@aifinpay/skill` 2.10.2, with the lock and cohort
+  pins refreshed.
+
 ## MCP 2.11.3 / Node 2.9.0 — Codex named, funding priced, limits in the dashboard
 
 - `@aifinpay/agent` 2.9.0 adds `codex` to `AGENT_FRAMEWORKS`. The MCP maps
