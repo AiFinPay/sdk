@@ -149,6 +149,8 @@ export {
 export {
   aifp1Fetch,
   Aifp1ReceiptCache,
+  MemoryMerchantPinStore,
+  FileMerchantPinStore,
   scopeCovers,
   prefixHint,
   parseGatewayUrl,
@@ -165,6 +167,7 @@ export type {
   Aifp1Quote,
   Aifp1PayResult,
   Aifp1CachedReceipt,
+  Aifp1MerchantPinStore,
   Aifp1FetchOptions,
   Aifp1V14Chain,
   Aifp1Deps,
@@ -177,6 +180,8 @@ export {
   Aifp1FinalizedFailureError,
   Aifp1SettlementUnsupportedError,
   Aifp1ReceiptRejectedError,
+  Aifp1MerchantChangedError,
+  Aifp1GatewayRetiredError,
 } from "./aifp1.js";
 
 // ── Cross-chain orchestration ─────────────────────────────────────────────

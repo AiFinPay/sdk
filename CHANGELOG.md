@@ -4,6 +4,38 @@
   dependencies, sanitized payloads and a schema v1 event catalog shared with
   the backend gateway. No consumer emits events yet.
 
+## Python 2.6.1 — `fetch_paid` declares the agent on every request
+
+- `aifinpay-agent` sends `User-Agent: aifinpay-agent-py/<version>` and
+  `AIFP-Agent-Id` on the first request to a merchant and on every paid retry,
+  matching the Node client. The first GET used to be a bare
+  `python-requests/x.y`, which a content site's `knownAiAgent` gate exempts as
+  a human reader: the Python agent read the page free and never paid. The MCP
+  source-cohort guard follows Python 2.6.1. Nothing is published.
+
+## MCP 2.9.0 — merchant pins in payable_fetch
+
+- `@aifinpay/mcp` 2.9.0 depends on the published `@aifinpay/agent` 2.7.0.
+  `payable_fetch` takes an optional `expected_merchant_id`, with no blanket
+  merchant-change switch. A changed merchant or a retired gateway site comes
+  back as a clear tool error; nothing is quoted or paid.
+- The source-cohort and release-input guards follow MCP 2.9.0 and the
+  registry lock for agent 2.7.0.
+
+## Node 2.7.0 / Python 2.6.0 — gateway merchant pins and retired slugs
+
+- Both SDKs pin each gateway site (origin + slug) to the merchant it was first
+  paid as, durably and before any money moves, and refuse a 402 that names
+  another merchant for that site before any quote request
+  (`Aifp1MerchantChangedError`). An explicit per-call opt-in
+  (`allowMerchantChange` / `allow_merchant_change`, or an expected merchant id)
+  allows a change and re-pins the site. This backs up the gateway's slug holds:
+  a slug that changes hands anyway does not redirect an agent's payments.
+- `410 gateway_retired` is terminal (`Aifp1GatewayRetiredError`): one request,
+  no quote, no retry.
+- The MCP source-cohort guard follows the new agent 2.7.0 / Python 2.6.0
+  source versions. Nothing is published.
+
 ## Node 2.6.5 / MCP CI — TypeScript 7 rebuild and red main CI
 
 - `@aifinpay/agent` 2.6.5: rebuilt with TypeScript 7 (published declarations

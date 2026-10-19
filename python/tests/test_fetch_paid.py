@@ -8,7 +8,9 @@ import os
 import stat
 
 import pytest
+import requests
 
+import aifinpay
 import aifinpay.aifp1 as a
 from aifinpay import AiFinPayAgent
 
@@ -120,3 +122,99 @@ def test_base_cannot_reuse_the_legacy_pol_gas_default(agent, tmp_path, monkeypat
                          max_amount_usd=1, daily_amount_usd=1, journal_dir=str(tmp_path),
                          chain="base", max_gas_wei=gas)
     assert list(tmp_path.iterdir()) == []
+
+
+def test_fetch_paid_keeps_merchant_pins_beside_its_journal(agent, tmp_path, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(a, "aifp1_fetch", lambda url, **kw: seen.update(kw) or "ok")
+    agent.fetch_paid("https://gateway.aifinpay.io/acme/x", allowed_origins=["https://gateway.aifinpay.io"],
+                     max_amount_usd=1, daily_amount_usd=1, journal_dir=str(tmp_path),
+                     expected_merchant_id="mrch_acme", allow_merchant_change=True)
+    assert isinstance(seen["merchant_pins"], a.MerchantPins)
+    assert seen["merchant_pins"].directory == str(tmp_path / "merchant-pins")
+    assert seen["expected_merchant_id"] == "mrch_acme" and seen["allow_merchant_change"] is True
+
+    agent.fetch_paid("https://gateway.aifinpay.io/acme/x", allowed_origins=["https://gateway.aifinpay.io"],
+                     max_amount_usd=1, daily_amount_usd=1, journal_dir=str(tmp_path))
+    assert seen["expected_merchant_id"] is None and seen["allow_merchant_change"] is False
+
+
+# ── Who is asking ─────────────────────────────────────────────────────────────
+#
+# A content site's gate (gate/src/agents.ts, knownAiAgent) decides from the
+# request alone whether to answer 402 or serve the page as it would to a human:
+# an AIFP-Agent-Id header, or a User-Agent naming one of our own clients, is the
+# declaration. Until 2.6.1 the first GET of fetch_paid carried neither — it went
+# out as "python-requests/x.y" — so such a gate served the content free and the
+# agent never met the paywall. Node's aifp1Fetch sets AIFP-Agent-Id (the agent's
+# EVM address) on first and paid requests alike; these pin the same for Python.
+
+FAR_FUTURE = 4102444800  # 2100-01-01T00:00:00Z
+
+
+class RecordingSession(requests.Session):
+    """A real Session whose transport is replaced: records every prepared
+    request (session defaults merged in, exactly what would hit the wire) and
+    answers from a scripted list."""
+
+    def __init__(self, scripted):
+        super().__init__()
+        self.scripted = list(scripted)
+        self.sent = []
+
+    def send(self, request, **kwargs):
+        self.sent.append(request)
+        status, body = self.scripted.pop(0)
+        resp = requests.Response()
+        resp.status_code = status
+        resp._content = json.dumps(body).encode() if body is not None else b"ok"
+        resp.headers["content-type"] = "application/json" if body is not None else "text/html"
+        resp.url = request.url
+        resp.request = request
+        return resp
+
+
+def _identifying(req):
+    return {k: v for k, v in req.headers.items() if k.lower() in ("user-agent", "aifp-agent-id", "aifp-receipt")}
+
+
+def test_the_first_request_declares_the_agent_like_node_does(agent, tmp_path):
+    session = RecordingSession([(200, None)])
+    agent._aifp1_session = session
+
+    out = agent.fetch_paid("https://shop.example/x", allowed_origins=["https://shop.example"],
+                           max_amount_usd=1, daily_amount_usd=1, journal_dir=str(tmp_path))
+
+    assert out.status_code == 200 and len(session.sent) == 1
+    assert _identifying(session.sent[0]) == {
+        "User-Agent": f"aifinpay-agent-py/{aifinpay.__version__}",
+        "AIFP-Agent-Id": agent.evm_address,
+    }
+    # The version comes from the package, not a literal: it is the one pyproject
+    # publishes, so `pip show` and the header a merchant logs agree.
+    assert not aifinpay.__version__.startswith("0+"), "run the tests against an installed checkout"
+    assert "python-requests" not in session.sent[0].headers["User-Agent"]
+
+
+def test_the_paid_retry_keeps_the_declaration_next_to_the_receipt(agent, tmp_path):
+    challenge = {"protocol": "AIFP-1", "merchant_id": "mrch_acme", "resource": "/x", "how_to_pay": []}
+    session = RecordingSession([(402, challenge), (200, None)])
+    agent._aifp1_session = session
+    agent._aifp1_receipts = {"mrch_acme": [{"jwt": "h.p.s", "expires_at": FAR_FUTURE, "scope": "prefix",
+                                            "resource": "/", "receipt_id": "rcpt_1", "unit_quota": 10}]}
+
+    out = agent.fetch_paid("https://shop.example/x", allowed_origins=["https://shop.example"],
+                           max_amount_usd=1, daily_amount_usd=1, journal_dir=str(tmp_path))
+
+    assert out.status_code == 200 and len(session.sent) == 2
+    assert _identifying(session.sent[1]) == {
+        "User-Agent": f"aifinpay-agent-py/{aifinpay.__version__}",
+        "AIFP-Agent-Id": agent.evm_address,
+        "AIFP-Receipt": "h.p.s",
+    }
+
+
+def test_the_legacy_agent_session_carries_the_same_user_agent():
+    from aifinpay import Agent
+
+    assert Agent.new()._session.headers["User-Agent"] == f"aifinpay-agent-py/{aifinpay.__version__}"

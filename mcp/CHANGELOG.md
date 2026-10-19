@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.9.0 — gateway merchant pins
+
+- Require the published `@aifinpay/agent` 2.7.0, which pins each gateway site
+  (origin + slug) to the merchant it was first paid as and treats
+  `410 gateway_retired` as terminal.
+- `payable_fetch` accepts an optional `expected_merchant_id`, passed to the SDK
+  as `expectedMerchantId`. It does not expose the SDK's `allowMerchantChange`:
+  the 402 that names a merchant is unauthenticated, so a blanket "allow change"
+  argument would be too easy for a model to set.
+- A site that answers as another merchant (`AIFP1_MERCHANT_CHANGED`) returns a
+  tool error naming the site and both merchant ids. The error says nothing was
+  paid and that only the owner can confirm the new merchant. Merchant ids that are
+  not plain identifiers are never repeated to the model.
+- A retired gateway site (`AIFP1_GATEWAY_RETIRED`) returns a terminal tool error
+  that says not to retry.
+- Tests isolate `AIFINPAY_STATE_DIR`, where the agent keeps its merchant pins.
+
 ## 2.8.0 — unreleased
 
 - Support deterministic child wallet selection with `AIFINPAY_WALLET_INDEX`

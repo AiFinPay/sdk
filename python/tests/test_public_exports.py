@@ -27,6 +27,8 @@ def test_every_name_in_all_resolves():
         ("Aifp1Error", "aifinpay.aifp1"),
         ("Aifp1QuoteError", "aifinpay.aifp1"),
         ("Aifp1PayError", "aifinpay.aifp1"),
+        ("Aifp1MerchantChangedError", "aifinpay.aifp1"),
+        ("Aifp1GatewayRetiredError", "aifinpay.aifp1"),
         ("V14SettlementError", "aifinpay.settlement_v14"),
         ("ProviderEntry", "aifinpay.unified_agent"),
     ],

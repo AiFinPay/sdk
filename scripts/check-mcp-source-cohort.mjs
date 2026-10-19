@@ -22,9 +22,9 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // GHSA-6qxp-vccf-f47h / GHSA-jqcg-44mw-7w3h. Keep the bootstrap immutable.
 export const BASE = "ee4b3b450af3fec988c6520e1033c25868065df0";
 export const COHORT = {
-  mcp: "2.8.2",
-  agent: "2.6.5",
-  python: "2.5.1",
+  mcp: "2.9.0",
+  agent: "2.7.0",
+  python: "2.6.1",
   skill: "2.9.0",
 };
 // Real CLI subprocess tests retain their default five-second limit. Serialize
