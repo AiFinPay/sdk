@@ -18,28 +18,28 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // Registry lock refreshed onto the published cohort (agent 2.6.4, skill 2.9.0,
-// ee4b3b4); it keeps MCP SDK 1.31.0 and proxy-addr 2.0.8, which fix
+// ee4b3b4), since moved to agent 2.8.0 and skill 2.10.0; it keeps MCP SDK 1.31.0 and proxy-addr 2.0.8, which fix
 // GHSA-6qxp-vccf-f47h / GHSA-jqcg-44mw-7w3h. Keep the bootstrap immutable.
 export const BASE = "ee4b3b450af3fec988c6520e1033c25868065df0";
 export const COHORT = {
   mcp: "2.11.0",
   agent: "2.8.0",
   python: "2.7.0",
-  skill: "2.9.0",
+  skill: "2.10.0",
 };
 // Real CLI subprocess tests retain their default five-second limit. Serialize
 // the complete suite to avoid competing compiler/import workers starving them.
 export const MCP_TEST_ARGS = ["test", "--", "--maxWorkers=1"];
 // Parent-reviewed canonical reporting producer; no moving branch or registry
 // artifact stands in for its committed tree and actual source pack.
-export const SKILL_COMMIT = "b3fe28285befe0a1fb48a047fe5733bff975e854";
-export const SKILL_TREE = "45e976f453dff5052f0063a972c6b441b0255666";
+export const SKILL_COMMIT = "49c2e2ad207b2611b4d0066a08eb1e3cf0010a08";
+export const SKILL_TREE = "2955e15fc2e0defd2529f012fd0e5034a51b14f7";
 export const SKILL_SHA =
-  "f3cc00429c126593622fd8f488080535fd83f7069d3224d6dcaefef0b217a8ee";
+  "1ec8b0d6f63624c9f966e4c82b4110c1369f1193adf074d12bc72221cfeac3bb";
 export const SKILL_PACK = {
-  sha256: "91afabce5cecc5262a2a956a01b02e53ede151d7c8aaa8f248dc3122cc2375df",
+  sha256: "f79c15430b39915845f4abda9134b922bbb2c446377e09fbe216f787cba83cc1",
   integrity:
-    "sha512-BoesNrlmiDvhij+qOD8Apxji1BPjPFzgCo/hfT//msseGzsALYmDBckW6Ery+ky4yNARSGfMOntVYQCACrbLzA==",
+    "sha512-oJqT70Ux0K8TDbboY9mRQORJe9v8HHt3cEAqBkZ04PAznmINaWuBT5PmTgwrQdabqa327nzqOxpfAaGTeVEpKg==",
 };
 export const BASE_HASHES = {
   "package.json":

@@ -62,13 +62,13 @@ test("reporting source target refuses every stale package version without claimi
     mcp: "2.11.0",
     agent: "2.8.0",
     python: "2.7.0",
-    skill: "2.9.0",
+    skill: "2.10.0",
   });
   for (const [name, oldVersion] of Object.entries({
     mcp: "2.10.0",
     agent: "2.7.0",
     python: "2.6.1",
-    skill: "2.8.0",
+    skill: "2.9.0",
   })) {
     assert.throws(
       () => verifyCohortVersions({ ...COHORT, [name]: oldVersion }),
@@ -89,14 +89,30 @@ test("MCP candidate metadata preserves the real registry lock of the published c
   assert.equal(lock.version, COHORT.mcp);
   assert.equal(lock.packages[""].version, COHORT.mcp);
   assert.deepEqual(lock.packages[""].dependencies, manifest.dependencies);
-  assert.equal(
-    manifest.dependencies["@aifinpay/skill"],
-    baseline.packages[""].dependencies["@aifinpay/skill"],
-  );
-  assert.deepEqual(
-    lock.packages["node_modules/@aifinpay/skill"],
-    baseline.packages["node_modules/@aifinpay/skill"],
-  );
+  // The skill follows the published 2.10.0 (2026-10-19, AiFinPay/skill
+  // 49c2e2a), whose registry tarball is byte-identical to the pinned source
+  // pack. As with the agent, the registry identity is the only change.
+  const registrySkill = "2.10.0";
+  assert.equal(manifest.dependencies["@aifinpay/skill"], `^${registrySkill}`);
+  {
+    const { version, resolved, integrity, ...skillEdges } =
+      lock.packages["node_modules/@aifinpay/skill"];
+    const {
+      version: _v,
+      resolved: _r,
+      integrity: _i,
+      ...baselineSkillEdges
+    } = baseline.packages["node_modules/@aifinpay/skill"];
+    assert.deepEqual(
+      { version, resolved, integrity },
+      {
+        version: registrySkill,
+        resolved: `https://registry.npmjs.org/@aifinpay/skill/-/skill-${registrySkill}.tgz`,
+        integrity: SKILL_PACK.integrity,
+      },
+    );
+    assert.deepEqual(skillEdges, baselineSkillEdges);
+  }
   // The lock follows the published agent 2.8.0 (2026-10-19). Its registry
   // identity is the only change: 2.8.0 depends on exactly what 2.7.0 did.
   const registryAgent = "2.8.0";
