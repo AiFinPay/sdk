@@ -161,6 +161,10 @@ describe("persistent wallet identity", () => {
         (await client.callTool({ name: "payable_fetch", arguments: { url: "https://unapproved.example/data" } }))
           .isError
       ).toBe(true);
+      const reload = await client.callTool({ name: "agent_reload", arguments: {} });
+      const reloaded = JSON.parse((reload.content as Array<{ text: string }>)[0].text);
+      expect(reloaded).toMatchObject({ reloaded: true, payments_enabled: true });
+      expect(reloaded.env_note).toBeUndefined();
     } finally {
       await client.close();
       await active.server.close();
@@ -420,8 +424,14 @@ describe("persistent wallet identity", () => {
         }),
         { mode: 0o600 }
       );
-      expect((await client.callTool({ name: "agent_reload", arguments: {} })).isError).not.toBe(true);
+      const reload = await client.callTool({ name: "agent_reload", arguments: {} });
+      expect(reload.isError).not.toBe(true);
       expect(active.agent.evmAddress).toBe(expected.evmAddress);
+      // The keystore is new; the env is still the one the server started with.
+      const reloaded = JSON.parse((reload.content as Array<{ text: string }>)[0].text);
+      expect(reloaded.payments_enabled).toBe(false);
+      expect(reloaded.env_note).toContain("restart the aifinpay MCP server");
+      expect(reloaded.env_note).toContain("agent_reload re-reads the keystore and nothing else");
     } finally {
       await client.close();
       await active.server.close();

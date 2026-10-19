@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.11.2 — env changes need a server restart; skill 2.10.1
+
+2.11.1 was merged without these two changes and was never published; 2.11.2
+is the first release with AIFINPAY_HOME handling (the 2.11.1 changes below).
+
+- `agent_reload` reports `payments_enabled` and, while it is false, an
+  `env_note`: owner limits and `AIFINPAY_PAYMENTS_ENABLED` are read only when
+  the server starts, so settings saved since need the client to restart the
+  aifinpay MCP server. `payment_setup_status` says the same while payments are
+  off. A second agent run on 2026-10-19 saved the payment settings, called
+  `agent_reload`, saw payments still off and stopped. The tool description now
+  says env changes need a server restart.
+- Depends on the published `@aifinpay/skill` 2.10.1 (AiFinPay/skill b8d2309),
+  whose payer guide says to run init with the server's `AIFINPAY_HOME` and to
+  restart the server after env changes. The bundled `skills/SKILL.md` is that
+  release's guide.
+
+Signing conditions and owner limits are unchanged.
+
 ## 2.11.1 — init and payment_setup_status agree on where the wallet is
 
 Preparing the retest of 2.11.0 showed two machines on which the first payment

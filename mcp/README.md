@@ -4,8 +4,8 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Version **2.11.0** is prepared in this checkout, on the published agent 2.8.0
-and canonical skill 2.10.0 (AiFinPay/skill 49c2e2a, published 2026-10-19). The separate canonical producer's final immutable
+Version **2.11.2** is prepared in this checkout, on the published agent 2.8.0
+and canonical skill 2.10.1 (AiFinPay/skill b8d2309, published 2026-10-19). The separate canonical producer's final immutable
 source pin is a required handoff, not a moving-branch substitution.
 The published baseline checked2026-10-04 was MCP2.5.0. Package publication and
 real registry dependency/lock refresh remain release gates; a source-cohort
@@ -36,7 +36,8 @@ and only once the owner has set every limit in step 4.
    batch price in POL plus the gas cap, so about `0.5 POL` for one `$0.10`
    batch at `$0.20`/POL plus up to `0.3 POL` gas (the SDK refuses before
    signing if the worst-case fee exceeds the cap). When the owner confirms
-   funding, they add the payment settings to the same `env` and reconnect:
+   funding, they add the payment settings to the same `env` and restart the
+   aifinpay MCP server in the client (`agent_reload` does not read env):
 
    ```json
    {

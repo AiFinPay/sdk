@@ -18,28 +18,28 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // Registry lock refreshed onto the published cohort (agent 2.6.4, skill 2.9.0,
-// ee4b3b4), since moved to agent 2.8.0 and skill 2.10.0; it keeps MCP SDK 1.31.0 and proxy-addr 2.0.8, which fix
+// ee4b3b4), since moved to agent 2.8.0 and skill 2.10.1; it keeps MCP SDK 1.31.0 and proxy-addr 2.0.8, which fix
 // GHSA-6qxp-vccf-f47h / GHSA-jqcg-44mw-7w3h. Keep the bootstrap immutable.
 export const BASE = "ee4b3b450af3fec988c6520e1033c25868065df0";
 export const COHORT = {
-  mcp: "2.11.1",
+  mcp: "2.11.2",
   agent: "2.8.0",
   python: "2.7.0",
-  skill: "2.10.0",
+  skill: "2.10.1",
 };
 // Real CLI subprocess tests retain their default five-second limit. Serialize
 // the complete suite to avoid competing compiler/import workers starving them.
 export const MCP_TEST_ARGS = ["test", "--", "--maxWorkers=1"];
 // Parent-reviewed canonical reporting producer; no moving branch or registry
 // artifact stands in for its committed tree and actual source pack.
-export const SKILL_COMMIT = "49c2e2ad207b2611b4d0066a08eb1e3cf0010a08";
-export const SKILL_TREE = "2955e15fc2e0defd2529f012fd0e5034a51b14f7";
+export const SKILL_COMMIT = "b8d2309ca88a1f306662a1b3ca2d7e3b293e14e4";
+export const SKILL_TREE = "d44c625dce5bb7f42a6112d03580b817fc1149a0";
 export const SKILL_SHA =
-  "1ec8b0d6f63624c9f966e4c82b4110c1369f1193adf074d12bc72221cfeac3bb";
+  "658e7c1c786d7493508c867265fde7372d8583999be1096ae1a20e6e07bc96ab";
 export const SKILL_PACK = {
-  sha256: "f79c15430b39915845f4abda9134b922bbb2c446377e09fbe216f787cba83cc1",
+  sha256: "a969dc2b1b59edd96942693e9f9b4261abf0b69ff721f14e7666e839a4719c0a",
   integrity:
-    "sha512-oJqT70Ux0K8TDbboY9mRQORJe9v8HHt3cEAqBkZ04PAznmINaWuBT5PmTgwrQdabqa327nzqOxpfAaGTeVEpKg==",
+    "sha512-HV2MKDjlZFbchtau2Av1Dcfp7GpRkSLmiH2l5CWDMJNY09XB7KCyb0ldlV3F8Hy07sP6Cnc6vYFCeJUcytWXcw==",
 };
 export const BASE_HASHES = {
   "package.json":

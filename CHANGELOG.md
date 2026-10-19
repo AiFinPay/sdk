@@ -1,3 +1,12 @@
+## MCP 2.11.2 — env changes need a server restart; skill 2.10.1
+
+- 2.11.1 was merged without these two changes and was never published; 2.11.2
+  is the first release with AIFINPAY_HOME handling (the 2.11.1 changes below).
+- `agent_reload` reports `payments_enabled` and says that owner limits need a
+  server restart, not a reload; `payment_setup_status` says the same while
+  payments are off. `@aifinpay/mcp` depends on `@aifinpay/skill` 2.10.1.
+  Signing conditions are unchanged.
+
 ## MCP 2.11.1 — init and payment_setup_status agree on where the wallet is
 
 - `payment_setup_status` names `AIFINPAY_HOME=<path> npx @aifinpay/mcp init`

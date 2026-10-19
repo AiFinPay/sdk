@@ -59,16 +59,16 @@ test("canonical mirror and both CI refs bind the reviewed reporting producer; wr
 });
 test("reporting source target refuses every stale package version without claiming registry availability", () => {
   verifyCohortVersions({
-    mcp: "2.11.1",
+    mcp: "2.11.2",
     agent: "2.8.0",
     python: "2.7.0",
-    skill: "2.10.0",
+    skill: "2.10.1",
   });
   for (const [name, oldVersion] of Object.entries({
-    mcp: "2.11.0",
+    mcp: "2.11.1",
     agent: "2.7.0",
     python: "2.6.1",
-    skill: "2.9.0",
+    skill: "2.10.0",
   })) {
     assert.throws(
       () => verifyCohortVersions({ ...COHORT, [name]: oldVersion }),
@@ -89,10 +89,10 @@ test("MCP candidate metadata preserves the real registry lock of the published c
   assert.equal(lock.version, COHORT.mcp);
   assert.equal(lock.packages[""].version, COHORT.mcp);
   assert.deepEqual(lock.packages[""].dependencies, manifest.dependencies);
-  // The skill follows the published 2.10.0 (2026-10-19, AiFinPay/skill
-  // 49c2e2a), whose registry tarball is byte-identical to the pinned source
+  // The skill follows the published 2.10.1 (2026-10-19, AiFinPay/skill
+  // b8d2309), whose registry tarball is byte-identical to the pinned source
   // pack. As with the agent, the registry identity is the only change.
-  const registrySkill = "2.10.0";
+  const registrySkill = "2.10.1";
   assert.equal(manifest.dependencies["@aifinpay/skill"], `^${registrySkill}`);
   {
     const { version, resolved, integrity, ...skillEdges } =
