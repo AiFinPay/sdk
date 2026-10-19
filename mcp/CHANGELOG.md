@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.11.4 — the 2.11.3 changes on the published agent 2.9.0 and skill 2.10.2
+
+2.11.3 was merged before `@aifinpay/agent` 2.9.0 and `@aifinpay/skill` 2.10.2
+were on the registry and was never published; 2.11.4 is the first release with
+its changes.
+
+- Depends on the published `@aifinpay/agent` ^2.9.0 (the `codex` framework) and
+  `@aifinpay/skill` ^2.10.2; the bundled guide is the 2.10.2 payer guide
+  (funding at today's rate, working limits in dashboard Controls). Its
+  "Release target" line still names MCP 2.11.3: the guide is the published
+  skill file, pinned by hash, and changes only with the next skill release.
+
 ## 2.11.3 — Codex is named, the funding amount is priced, limits live in the dashboard
 
 Three findings from the 2026-10-19 end-to-end test (Codex + MCP 2.11.2 paid
