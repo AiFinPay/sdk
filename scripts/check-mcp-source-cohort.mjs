@@ -23,7 +23,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const BASE = "ee4b3b450af3fec988c6520e1033c25868065df0";
 export const COHORT = {
   mcp: "2.9.0",
-  agent: "2.7.0",
+  agent: "2.8.0",
   python: "2.6.1",
   skill: "2.9.0",
 };

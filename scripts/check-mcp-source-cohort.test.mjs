@@ -54,13 +54,13 @@ test("canonical mirror and both CI refs bind the reviewed reporting producer; wr
 test("reporting source target refuses every stale package version without claiming registry availability", () => {
   verifyCohortVersions({
     mcp: "2.9.0",
-    agent: "2.7.0",
+    agent: "2.8.0",
     python: "2.6.1",
     skill: "2.9.0",
   });
   for (const [name, oldVersion] of Object.entries({
     mcp: "2.8.2",
-    agent: "2.6.5",
+    agent: "2.7.0",
     python: "2.6.0",
     skill: "2.8.0",
   })) {
@@ -93,7 +93,10 @@ test("MCP candidate metadata preserves the real registry lock of the published c
   );
   // The lock follows the published agent 2.7.0 (2026-10-18). Its registry
   // identity is the only change: 2.7.0 depends on exactly what 2.6.4 did.
-  assert.equal(manifest.dependencies["@aifinpay/agent"], `^${COHORT.agent}`);
+  // The source cohort's agent 2.8.0 is unpublished; the lock stays on 2.7.0
+  // until the owner publishes it and refreshes the lock.
+  const registryAgent = "2.7.0";
+  assert.equal(manifest.dependencies["@aifinpay/agent"], `^${registryAgent}`);
   const { version, resolved, integrity, ...agentEdges } =
     lock.packages["node_modules/@aifinpay/agent"];
   const {
@@ -105,8 +108,8 @@ test("MCP candidate metadata preserves the real registry lock of the published c
   assert.deepEqual(
     { version, resolved, integrity },
     {
-      version: COHORT.agent,
-      resolved: `https://registry.npmjs.org/@aifinpay/agent/-/agent-${COHORT.agent}.tgz`,
+      version: registryAgent,
+      resolved: `https://registry.npmjs.org/@aifinpay/agent/-/agent-${registryAgent}.tgz`,
       integrity:
         "sha512-BKV3mz0CH9cjX423TBTDbK6fTTv+LebjQqmv+BSQpACfjTp2rxHKGgQe8pODNrROKZAYMABqvG7B/8g85AUxFA==",
     },
