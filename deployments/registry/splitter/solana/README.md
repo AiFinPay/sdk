@@ -4,13 +4,9 @@
 
 Solana deployments use a program ID and IDL rather than an EVM contract suite.
 Read [deployments.json](deployments.json) for cluster, environment, program ID,
-IDL metadata, recorded status, settlement flag and reason fields.
-
-`disabledReason` is a recorded explanation, not a currently verified statement
-about backend implementation or upgrade authority. Inspect the actual registry
-and obtain live program/runtime and backend receipt-verification evidence.
-Never infer activation from the presence of a program ID or IDL, and never
-bypass a disabled record.
+IDL metadata and settlement flag. Inspect the actual registry and obtain live
+program/runtime and backend receipt-verification evidence. Never infer
+activation from the presence of a program ID or IDL.
 
 ## Verification
 

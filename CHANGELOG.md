@@ -6,6 +6,15 @@ versions from manifests/registries, deployment metadata from
 [the registry](deployments/registry/splitter/INDEX.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## Deployments 2.1.0 — payment registry schema
+
+- Add and package a shared JSON Schema for EVM, Solana and Casper deployment
+  records, and link each registry artifact to it.
+- Omit `status` and `disabledReason` from generated EVM/Solana deployment
+  records, their public types, the schema, and tracked registry records.
+- Retain `settlementEnabled` as packaged metadata, not live availability
+  evidence.
+
 ## Documentation source-of-truth cleanup
 
 - Replace duplicated transaction hashes, deployment addresses and operational

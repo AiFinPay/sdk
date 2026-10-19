@@ -12,7 +12,7 @@ v1.3 introduced protocol routes with immutable fee splits at construction.
 ## Deployment lookup
 
 Read [deployments.json](deployments.json) for addresses, assets, runtime hashes,
-governance and recorded settlement/status metadata. Select records using
+governance and settlement metadata. Select records using
 `chainId` and `_route`, never address alone. The same address can occur on
 different chains or routes with different economics.
 
@@ -28,8 +28,8 @@ Inspect the actual selected registry record and the consumed route table's
 mutable owner/treasury and route economics with the expected values, and obtain
 fresh backend receipt-verification and end-to-end settlement evidence.
 
-See the [verification checklist](../../INDEX.md). Registry status, policy dates
-or reason strings do not establish current availability; disabled or
+See the [verification checklist](../../INDEX.md). Registry metadata and policy
+dates do not establish current availability; settlement-disabled or
 out-of-window routes must not settle.
 
 Read `source`, `sourceArtifact` and `generatedAt` in the JSON for recorded

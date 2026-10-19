@@ -1,0 +1,392 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AiFinPay payment deployment registry",
+  "description": "Schema for the versioned EVM, Solana, and Casper deployment registry files.",
+  "type": "object",
+  "required": [
+    "$schema",
+    "version",
+    "description",
+    "schemaVersion",
+    "generatedAt",
+    "ecosystem",
+    "protocolVersion",
+    "source",
+    "deployments",
+    "sourceArtifact"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri-reference"
+    },
+    "version": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ecosystem": {
+      "enum": ["evm", "solana", "casper", "aptos", "near"]
+    },
+    "protocolVersion": {
+      "type": "string"
+    },
+    "source": {
+      "type": "object",
+      "required": ["repo"],
+      "properties": {
+        "repo": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "localPath": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "governance": {
+      "$ref": "#/$defs/governance"
+    },
+    "deployments": {
+      "type": "array"
+    },
+    "sourceArtifact": {
+      "type": "object",
+      "required": ["path", "retrievedAt"],
+      "properties": {
+        "path": {
+          "type": ["string", "null"]
+        },
+        "retrievedAt": {
+          "type": "string",
+          "format": "date"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "ecosystem": {
+            "const": "evm"
+          }
+        },
+        "required": ["ecosystem"]
+      },
+      "then": {
+        "required": ["governance"],
+        "properties": {
+          "source": {
+            "required": ["commit", "path"]
+          },
+          "deployments": {
+            "items": {
+              "$ref": "#/$defs/evmDeployment"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ecosystem": {
+            "const": "solana"
+          }
+        },
+        "required": ["ecosystem"]
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "required": ["commit", "path"]
+          },
+          "deployments": {
+            "items": {
+              "$ref": "#/$defs/solanaDeployment"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ecosystem": {
+            "const": "casper"
+          }
+        },
+        "required": ["ecosystem"]
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "required": ["url"]
+          },
+          "deployments": {
+            "items": {
+              "$ref": "#/$defs/casperDeployment"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "governance": {
+      "type": "object",
+      "required": ["prod", "testnet"],
+      "properties": {
+        "prod": {
+          "$ref": "#/$defs/governanceConfig"
+        },
+        "testnet": {
+          "$ref": "#/$defs/governanceConfig"
+        }
+      },
+      "additionalProperties": true
+    },
+    "governanceConfig": {
+      "type": "object",
+      "required": ["safe", "version", "threshold", "owners"],
+      "properties": {
+        "safe": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "threshold": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "owners": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "evmDeployment": {
+      "type": "object",
+      "required": [
+        "chain",
+        "chainId",
+        "environment",
+        "testnet",
+        "settlementEnabled",
+        "runtimeCodeHash",
+        "contracts",
+        "assets",
+        "safe"
+      ],
+      "properties": {
+        "chain": {
+          "type": "string"
+        },
+        "chainId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "environment": {
+          "enum": ["dev", "prod"]
+        },
+        "testnet": {
+          "type": "boolean"
+        },
+        "settlementEnabled": {
+          "type": "boolean"
+        },
+        "runtimeCodeHash": {
+          "type": "string"
+        },
+        "contracts": {
+          "type": "object",
+          "required": [
+            "splitter",
+            "tokenList",
+            "profiles",
+            "admin",
+            "signer",
+            "pauser",
+            "treasury"
+          ],
+          "properties": {
+            "splitter": {
+              "type": "string"
+            },
+            "tokenList": {
+              "type": "string"
+            },
+            "profiles": {
+              "type": "string"
+            },
+            "admin": {
+              "type": "string"
+            },
+            "signer": {
+              "type": "string"
+            },
+            "pauser": {
+              "type": "string"
+            },
+            "treasury": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        },
+        "assets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["symbol", "name", "address"],
+            "properties": {
+              "symbol": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "address": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "safe": {
+          "type": "object",
+          "required": ["address", "version", "threshold"],
+          "properties": {
+            "address": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "threshold": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "owners": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": true
+        },
+        "_route": {
+          "type": "string"
+        },
+        "_routeDescription": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "solanaDeployment": {
+      "type": "object",
+      "required": [
+        "cluster",
+        "environment",
+        "testnet",
+        "settlementEnabled",
+        "programId",
+        "idl",
+        "sourceArtifact"
+      ],
+      "properties": {
+        "cluster": {
+          "enum": ["mainnet", "devnet"]
+        },
+        "environment": {
+          "enum": ["dev", "prod"]
+        },
+        "testnet": {
+          "type": "boolean"
+        },
+        "settlementEnabled": {
+          "type": "boolean"
+        },
+        "programId": {
+          "type": "string"
+        },
+        "idl": {
+          "type": "object",
+          "required": ["name", "version"],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        },
+        "sourceArtifact": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "casperDeployment": {
+      "type": "object",
+      "required": [
+        "network",
+        "environment",
+        "testnet",
+        "settlementEnabled",
+        "version"
+      ],
+      "properties": {
+        "network": {
+          "type": "string"
+        },
+        "environment": {
+          "enum": ["testnet", "mainnet"]
+        },
+        "testnet": {
+          "type": "boolean"
+        },
+        "settlementEnabled": {
+          "type": "boolean"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

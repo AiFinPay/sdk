@@ -52,6 +52,7 @@ or backend verification.
 
 ## Interface artifacts
 
+- [Payment deployment JSON Schema](../../src/reference/payment-deployments.schema.json)
 - [EVM ABI bundles](../abi/evm/)
 - [Solana IDL copies](../idl/solana/splitter-v14/)
 - [Casper contract schema](../idl/casper/aifinpay-casper-schema.json)

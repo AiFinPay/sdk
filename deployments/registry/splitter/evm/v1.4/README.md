@@ -15,9 +15,9 @@ The v1.4 registry describes a contract suite:
 ## Deployment and governance lookup
 
 Read [deployments.json](deployments.json) for each chain's contract addresses,
-asset list, `runtimeCodeHash`, `status`, `settlementEnabled`, reason fields and
-Safe metadata. Inspect both top-level `governance` and per-deployment `safe` and
-`contracts` fields rather than assuming all chains share a Safe.
+asset list, `runtimeCodeHash`, `settlementEnabled` and Safe metadata. Inspect
+both top-level `governance` and per-deployment `safe` and `contracts` fields
+rather than assuming all chains share a Safe.
 
 The registry's `source`, `sourceArtifact` and `generatedAt` fields carry recorded
 provenance. Generation is implemented by the [grabber](../../../../src/grabber.ts)
@@ -27,8 +27,8 @@ these artifacts.
 
 ## Verification
 
-Registry flags and disabled reasons are not fresh runtime/backend evidence.
-Before settlement, check the actual selected record and obtain live evidence for
+Settlement flags are not fresh runtime/backend evidence. Before settlement,
+check the actual selected record and obtain live evidence for
 contract bytecode, configured signer, governance, treasury, allowed assets and
 backend receipt verification. Do not treat a listed address or ABI as proof of
 availability.

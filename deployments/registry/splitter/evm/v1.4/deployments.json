@@ -1,5 +1,5 @@
 {
-  "$schema": "./reference/payment-deployments.schema.json",
+  "$schema": "../../../../src/reference/payment-deployments.schema.json",
   "version": "1.4",
   "description": "B2BSplitter v1.4 — Full contract suite deployment",
   "schemaVersion": 1,
@@ -198,7 +198,6 @@
       "environment": "prod",
       "testnet": false,
       "settlementEnabled": true,
-      "disabledReason": "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
       "runtimeCodeHash": "0x3b8b3833842bf0fefac1b02f9e1d4494f74e9338b15d62725739050b347d3f25",
       "contracts": {
         "splitter": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
@@ -274,7 +273,6 @@
       "environment": "prod",
       "testnet": false,
       "settlementEnabled": true,
-      "disabledReason": "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
       "runtimeCodeHash": "0x8d5cda7c85169c4ad6e0cf3a08ba51994391de087d5223ab8723cc324d52c423",
       "contracts": {
         "splitter": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",

@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/deployments",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Contracts deployment registry for AiFinPay SDK and Agent Passport identity and settlement protocol.",
   "keywords": [
     "aifinpay",
@@ -32,6 +32,7 @@
     "package-lock.json",
     "dist",
     "registry",
+    "src/reference",
     "README.md",
     "USAGE.md",
     "LICENSE"

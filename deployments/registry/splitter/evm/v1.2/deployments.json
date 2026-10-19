@@ -1,5 +1,5 @@
 {
-  "$schema": "./reference/payment-deployments.schema.json",
+  "$schema": "../../../../src/reference/payment-deployments.schema.json",
   "version": "1.2",
   "description": "B2BSplitter v1.2 — Added bytes32 paymentId replay guard",
   "schemaVersion": 1,

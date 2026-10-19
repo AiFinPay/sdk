@@ -69,7 +69,7 @@ const registry = AifinpayRegistry.loadEvm();
 const optimism = registry.getEvmDeployment(10);
 if (optimism) {
   console.log(optimism.chain);        // "optimism"
-  console.log(optimism.status);       // Recorded status, not live verification
+  console.log(optimism.settlementEnabled); // Packaged flag, not live verification
   console.log(optimism.contracts);    // { splitter, tokenList, profiles, ... }
 }
 
@@ -79,10 +79,6 @@ console.log(polygon?.chainId); // 137
 
 // Get all deployments
 const all = registry.getAllEvmDeployments();
-
-// Filter by status
-const enabled = registry.filterByStatus("enabled");
-const disabled = registry.filterByStatus("disabled");
 
 // Get prod/testnet deployments
 const prod = registry.getProdDeployments();
@@ -166,7 +162,7 @@ const prodChains = registry.getSupportedChains("prod");
 // Get only testnet chains
 const testnetChains = registry.getSupportedChains("testnet");
 
-// Get only enabled chains (status = "enabled" AND settlementEnabled = true)
+// Get chains with settlementEnabled = true
 const enabledChains = registry.getSupportedChains("enabled");
 ```
 
@@ -177,10 +173,10 @@ const registry = AifinpayRegistry.loadEvm();
 
 // Get network list with metadata
 const networks = registry.getNetworkList();
-// Returns: Array<{ chainId, name, status, settlementEnabled, testnet }>
+// Returns: Array<{ chainId, name, settlementEnabled, testnet }>
 
 for (const network of networks) {
-  console.log(`${network.name} (chainId: ${network.chainId}): ${network.status}`);
+  console.log(`${network.name} (chainId: ${network.chainId}): ${network.settlementEnabled}`);
 }
 
 // Filter by production only
@@ -222,7 +218,7 @@ console.log(json);
 // Export as CSV
 const csv = registry.exportAsCsv();
 console.log(csv);
-// chainId,name,status,settlementEnabled,testnet
+// chainId,name,settlementEnabled,testnet
 ```
 
 ---
@@ -467,7 +463,6 @@ interface EvmDeploymentRecord {
   chainId: number;
   environment: "dev" | "prod";
   testnet: boolean;
-  status: "enabled" | "disabled" | "invalid" | "retired";
   settlementEnabled: boolean;
   contracts: {
     splitter: string;

@@ -6,6 +6,7 @@ Canonical deployment registry grabber. Fetches the latest AIFP deployment record
 
 - This package only (`src/`, `tests/`, `registry/`, `package.json`). Do not touch `node/`, `python/`, `mcp/`, `mcp-http/`, `wallet/`, `gate/`, `skill/`.
 - Entry: `src/index.ts`. Core: `src/grabber.ts` (EVM + Solana fetch + latest-per-chain logic + split-file writer), `src/types.ts` (registry types), `src/build.ts` (CLI that writes split files).
+- `src/reference/payment-deployments.schema.json` defines the schema linked by the versioned registry JSON files.
 - Output artifacts live in `registry/`:
   - `registry/splitter/` — versioned registry with governance metadata:
     - `evm/v1.4/deployments.json` — EVM v1.4 full contract suite with governance Safe info
@@ -25,11 +26,11 @@ Canonical deployment registry grabber. Fetches the latest AIFP deployment record
 ## Evidence, not snapshots
 
 - Resolve addresses, program IDs, runtime hashes, provenance, governance and
-  settlement/status fields from the actual JSON linked in the
+  settlement fields from the actual JSON linked in the
   [registry index](registry/splitter/INDEX.md), not copied Markdown tables.
-- Registry flags and `disabledReason` are recorded metadata, not currently
-  verified backend/runtime findings. Require fresh chain evidence and actual
-  backend receipt-verification/end-to-end evidence before claiming availability.
+- Settlement flags are packaged metadata, not currently verified backend/runtime
+  findings. Require fresh chain evidence and actual backend
+  receipt-verification/end-to-end evidence before claiming availability.
 - Follow the index's links to SDK resolution and settlement checks. Preserve
   fail-closed gates; no documentation update authorizes activation or bypass.
 

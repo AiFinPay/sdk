@@ -2,7 +2,7 @@
 
 ## Deployment lookup
 
-Casper deployments use a contract hash and contract schema rather than an EVM contract suite. Read [deployments.json](deployments.json) for network, environment, contract hash, schema metadata, recorded status, settlement flag and reason fields.
+Casper deployments use a contract hash and contract schema rather than an EVM contract suite. Read [deployments.json](deployments.json) for network, environment, contract hash, schema metadata and settlement flag.
 
 ## Supports
 

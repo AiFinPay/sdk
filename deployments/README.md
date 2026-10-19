@@ -23,7 +23,7 @@ const stablecoins = evmRegistry.getStablecoins(10);
 
 // Get supported chains
 const chains = evmRegistry.getSupportedChains("enabled");
-const networks = evmRegistry.getNetworkList();             // [{ chainId, name, status, ... }]
+const networks = evmRegistry.getNetworkList();             // [{ chainId, name, settlementEnabled, testnet }]
 
 // Export as markdown/json/csv
 const markdown = evmRegistry.exportAsMarkdown("prod");
@@ -45,10 +45,10 @@ Addresses, program IDs, runtime hashes, governance and provenance belong in
 those records, not copied tables here.
 
 Registry queries read packaged metadata; they do not check live chain state or
-backend receipt verification. Status flags and disabled reasons are recorded
-claims, not current verification results. Follow the index's runtime/backend
-verification checklist and obtain fresh end-to-end evidence before claiming
-availability. Never bypass a disabled record or infer activation from an export.
+backend receipt verification. Settlement flags are not current verification
+results. Follow the index's runtime/backend verification checklist and obtain
+fresh end-to-end evidence before claiming availability. Never infer activation
+from an export.
 
 ---
 
@@ -93,8 +93,10 @@ registry/
     └── casper/      # Casper IDL artifacts
 ```
 
-The [registry index](registry/splitter/INDEX.md) links versioned JSON records and
-interface guides. Output selection is implemented in the
+The [registry index](registry/splitter/INDEX.md) links versioned JSON records
+and interface guides, and the [payment deployment JSON
+Schema](src/reference/payment-deployments.schema.json) describes their
+ecosystem-specific record shapes. Output selection is implemented in the
 [grabber](src/grabber.ts) and [build CLI](src/build.ts); upstream provenance is
 stored in the generated JSON rather than this README.
 
@@ -110,7 +112,7 @@ stored in the generated JSON rather than this README.
 - `getStablecoins(chainId)` — stablecoin list
 - `isSettlementEnabled(chainId)` — recorded settlement flag, not a live check
 - `getGovernanceSafe(env)` — Safe multisig address
-- `filterByStatus(status)`, `getProdDeployments()`, `getTestnetDeployments()` — filtering
+- `getProdDeployments()`, `getTestnetDeployments()` — filtering
 - `getSupportedChains(filter?)` — get list of supported chain IDs (filter: "all" | "prod" | "testnet" | "enabled")
 - `getNetworkList(filter?)` — get network list with metadata
 - `isChainSupported(chainId)` — check if chain is supported

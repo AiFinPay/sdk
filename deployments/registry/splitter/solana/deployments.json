@@ -1,5 +1,5 @@
 {
-  "$schema": "./reference/payment-deployments.schema.json",
+  "$schema": "../../../src/reference/payment-deployments.schema.json",
   "version": "1.4",
   "description": "Solana Splitter v1.4 — Program deployment",
   "schemaVersion": 1,

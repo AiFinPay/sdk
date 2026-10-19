@@ -4,8 +4,8 @@
 
 Legacy contract records are retained for reference and migration audits.
 Read [deployments.json](deployments.json) for chain/address, owner/treasury,
-runtime hash, fee and settlement/status fields. Inspect its provenance metadata
-instead of relying on copied verification dates.
+runtime hash, fee and settlement fields. Inspect its provenance metadata instead
+of relying on copied verification dates.
 
 ## Legacy fee structure
 

@@ -68,7 +68,6 @@ describe("grabEvmDeployments", () => {
         stablecoins: [{ symbol: "USDC", name: "USDC", address: "0x2" }],
       },
       runtimeCodeHash: "0x3",
-      status: "disabled",
       settlementEnabled: false,
     };
 
@@ -184,7 +183,6 @@ describe("buildRegistry", () => {
         stablecoins: [{ symbol: "USDC", name: "USDC", address: "0x2" }],
       },
       runtimeCodeHash: "0x3",
-      status: "disabled",
       settlementEnabled: false,
     };
     const idl = { address: "So11111111111111111111111111111111111111112", metadata: { version: "1.4.1" } };
@@ -237,7 +235,6 @@ describe("writeSplitRegistries", () => {
           runtimeCodeHash: "0x2",
           stablecoins: [],
           settlementEnabled: false,
-          status: "disabled",
           deployedAt: "2026-09-13T00:00:00.000Z",
           sourceUrl: "http://gh/polygon.json",
           abiPath: null,
@@ -271,19 +268,23 @@ describe("writeSplitRegistries", () => {
     expect(evm.ecosystem).toBe("evm");
     expect(evm.protocolVersion).toBe("v1.4");
     expect(evm.deployments).toHaveLength(1);
-    expect(evm.$schema).toBeDefined();
+    expect(evm.$schema).toBe("../../../../src/reference/payment-deployments.schema.json");
     expect(evm.governance).toBeDefined();
     expect(evm.deployments[0].chain).toBe("polygon");
     expect(evm.deployments[0].contracts).toBeDefined();
     expect(evm.deployments[0].safe).toBeDefined();
+    expect(evm.deployments[0]).not.toHaveProperty("status");
+    expect(evm.deployments[0]).not.toHaveProperty("disabledReason");
 
     const solana = JSON.parse(readFileSync(solanaPath, "utf-8"));
     expect(solana.ecosystem).toBe("solana");
     expect(solana.protocolVersion).toBe("v1.4");
     expect(solana.deployments).toHaveLength(1);
-    expect(solana.$schema).toBeDefined();
+    expect(solana.$schema).toBe("../../../src/reference/payment-deployments.schema.json");
     expect(solana.deployments[0].cluster).toBe("mainnet");
     expect(solana.deployments[0].idl).toBeDefined();
+    expect(solana.deployments[0]).not.toHaveProperty("status");
+    expect(solana.deployments[0]).not.toHaveProperty("disabledReason");
 
     rmSync(TEST_DIR, { recursive: true, force: true });
   });

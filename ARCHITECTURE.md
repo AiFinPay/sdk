@@ -9,8 +9,11 @@ build orchestrator. Package instructions and lockfiles are authoritative.
 - `node/src/settlement*.ts` separates HTTP invoice retrieval, validation, and
   on-chain execution. `settlementV14.ts` validates signed v1.4 quote structs;
   execution support must independently establish deployment trust.
-- `deployments/` supplies canonical deployment metadata. Node generated registry
-  files are regenerated from these inputs, never edited by hand.
+- `deployments/` supplies canonical deployment metadata and
+  `deployments/src/reference/payment-deployments.schema.json` for its EVM,
+  Solana and Casper registry files. Node generated registry files are
+  regenerated from these inputs, never edited by hand. See
+  [ADR 0007](docs/adr/0007-payment-deployment-schema.md).
 - `mcp/` adapts the public Node SDK to stdio tools. It consumes the published Node
   package; source changes require a packed SDK integration test. Operator config,
   wallet loading, SSRF-safe fetch, and tool dispatch are separate boundaries.

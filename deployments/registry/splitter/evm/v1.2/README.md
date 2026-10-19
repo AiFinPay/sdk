@@ -8,8 +8,8 @@ Payment IDs can be derived deterministically from an order ID using
 `keccak256(orderId)`.
 
 Use [deployments.json](deployments.json) for historical chain/address,
-owner/treasury, runtime hash, fee and status records. Read its provenance fields
-rather than relying on copied verification dates.
+owner/treasury, runtime hash, fee and settlement records. Read its provenance
+fields rather than relying on copied verification dates.
 
 ## Legacy fee structure
 
@@ -26,9 +26,9 @@ Select by chain and version, never address alone; matching addresses on differen
 chains do not imply matching runtime code or governance.
 
 For migration audits, compare the actual record with live runtime code and
-mutable owner/treasury state. Check settlement/status fields and the actual
-backend's receipt verification before considering any settlement. A registry
-entry is not proof of activation, and disabled records must not settle.
+mutable owner/treasury state. Check settlement fields and the actual backend's
+receipt verification before considering any settlement. A registry entry is
+not proof of activation, and settlement-disabled records must not settle.
 
 See the [registry verification checklist](../../INDEX.md) and
 [route selection guards](../../../../../node/src/splitterRoutes.ts).
