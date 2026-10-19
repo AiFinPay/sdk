@@ -27,31 +27,6 @@ does not perform live verification. For v1.3, select the raw record by chain
 **and** `_route`; the chain-keyed registry API cannot distinguish multiple routes
 on the same chain.
 
-## Verification
-
-1. Select the exact ecosystem, network, environment, version and route. Never
-   select a deployment by address alone: identical addresses can occur on
-   different chains or routes.
-2. Inspect the actual registry's status, settlement flag, policy window and
-   provenance. `disabledReason` and other notes are recorded explanations, not
-   currently verified backend or runtime findings.
-3. Obtain fresh chain evidence. For EVM, compare `eth_getCode` runtime hashes,
-   mutable governance/treasury and allowed assets with the selected record. See
-   [v1.4 preflight and execution checks](../../../node/src/settlementV14.ts).
-   For Solana, inspect the executable program, ProgramData, upgrade authority
-   and configuration against
-   [settlement checks](../../../node/src/settlementSolanaV14.ts) and the
-   [deployment resolver](../../../node/src/solanaDeploymentResolver.ts).
-   For Casper, use the [contract schema](../idl/casper/aifinpay-casper-schema.json)
-   and live execution results to verify both value transfer and receipt binding.
-4. Check the actual backend's receipt-verification behavior for the selected
-   deployment with fresh end-to-end settlement evidence. SDK source, a registry
-   flag, an explorer link or a sample transaction alone is not activation proof.
-
-Keep fail-closed gates intact. A disabled record must not be used for settlement;
-testnet requires explicit opt-in. Routes outside their `validFrom`/`validUntil`
-window must not settle. This index grants no activation or bypass authority.
-
 ## Refreshing and testing
 
 The [grabber](../../src/grabber.ts) and [build CLI](../../src/build.ts) define

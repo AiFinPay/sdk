@@ -41,7 +41,6 @@
       "chainId": 8453,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x545b3a4ba195edc6b728df8cc64f28da528c9e7805c15f1aa61ef58c3c562197",
       "contracts": {
@@ -65,7 +64,6 @@
       "chainId": 130,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x545b3a4ba195edc6b728df8cc64f28da528c9e7805c15f1aa61ef58c3c562197",
       "contracts": {

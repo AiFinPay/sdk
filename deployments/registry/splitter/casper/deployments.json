@@ -55,7 +55,7 @@
       "environment": "testnet",
       "testnet": true,
       "status": "live",
-      "settlementEnabled": true,
+      "settlementEnabled": false,
       "contractPackageHash": "hash-47df409829ddf0612617460293ba591a19b26fa0c06918878204088d3eb9b78a",
       "rpcEndpoint": "https://node.testnet.casper.network/rpc",
       "explorer": "https://testnet.cspr.live/contract/47df409829ddf0612617460293ba591a19b26fa0c06918878204088d3eb9b78a",

@@ -42,8 +42,7 @@
       "chainId": 80002,
       "environment": "dev",
       "testnet": true,
-      "status": "retired",
-      "settlementEnabled": true,
+      "settlementEnabled": false,
       "runtimeCodeHash": "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
       "contracts": {
         "splitter": "0xdB772E64F63854bf31f2366BF27e47D5699fe7fC",
@@ -74,8 +73,7 @@
       "chainId": 80002,
       "environment": "dev",
       "testnet": true,
-      "status": "retired",
-      "settlementEnabled": true,
+      "settlementEnabled": false,
       "runtimeCodeHash": "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
       "contracts": {
         "splitter": "0xFd1622847A89FB3De240d64DFCbd09C65c77D99d",
@@ -106,7 +104,6 @@
       "chainId": 137,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
       "contracts": {
@@ -138,7 +135,6 @@
       "chainId": 137,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
       "contracts": {
@@ -170,7 +166,6 @@
       "chainId": 10,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
       "contracts": {
@@ -202,7 +197,6 @@
       "chainId": 10,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
       "contracts": {
@@ -234,7 +228,6 @@
       "chainId": 56,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
       "contracts": {
@@ -260,7 +253,6 @@
       "chainId": 56,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
       "contracts": {
@@ -286,7 +278,6 @@
       "chainId": 130,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
       "contracts": {
@@ -318,7 +309,6 @@
       "chainId": 130,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
       "contracts": {
@@ -350,7 +340,6 @@
       "chainId": 677,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
       "contracts": {
@@ -376,7 +365,6 @@
       "chainId": 677,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
       "contracts": {
@@ -402,7 +390,6 @@
       "chainId": 8453,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
       "contracts": {
@@ -434,7 +421,6 @@
       "chainId": 8453,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
       "contracts": {
@@ -466,7 +452,6 @@
       "chainId": 42161,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
       "contracts": {
@@ -498,7 +483,6 @@
       "chainId": 42161,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
       "contracts": {
@@ -530,7 +514,6 @@
       "chainId": 43114,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
       "contracts": {
@@ -567,7 +550,6 @@
       "chainId": 43114,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
       "contracts": {
@@ -604,7 +586,6 @@
       "chainId": 1440000,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x4ba01815b55bf6ed2d608bed91f480c179fd644d706680c3e4a91d8181ba5c6b",
       "contracts": {
@@ -630,7 +611,6 @@
       "chainId": 1440000,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x0eb0f8ca7792b13ab70f2aa3e779609cd352d279e925ddcd9e901fd9fd68b1b0",
       "contracts": {

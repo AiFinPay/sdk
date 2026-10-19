@@ -42,7 +42,6 @@
       "chainId": 10,
       "environment": "prod",
       "testnet": false,
-      "status": "enabled",
       "settlementEnabled": true,
       "runtimeCodeHash": "0x5a2d0ffb996d5655fa483e41d3e5870c6a032fd00bea71c3107f95a4b405e152",
       "contracts": {
@@ -78,7 +77,6 @@
       "chainId": 56,
       "environment": "prod",
       "testnet": false,
-      "status": "enabled",
       "settlementEnabled": true,
       "runtimeCodeHash": "0x8aa8c5999a1a0ee87198e380188faaa9d6df88819b47d68682096cc33db81638",
       "contracts": {
@@ -119,7 +117,6 @@
       "chainId": 130,
       "environment": "prod",
       "testnet": false,
-      "status": "enabled",
       "settlementEnabled": true,
       "runtimeCodeHash": "0xcb4f1c15a87720c326daa574a7ab52c116c208805167b46dd055f47c9c8695ca",
       "contracts": {
@@ -155,7 +152,6 @@
       "chainId": 137,
       "environment": "prod",
       "testnet": false,
-      "status": "enabled",
       "settlementEnabled": true,
       "runtimeCodeHash": "0x974b871ac79082d92a7e3bba89ba52794f7906f99119dfad7959017e5b0bf038",
       "contracts": {
@@ -201,8 +197,7 @@
       "chainId": 677,
       "environment": "prod",
       "testnet": false,
-      "status": "disabled",
-      "settlementEnabled": false,
+      "settlementEnabled": true,
       "disabledReason": "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
       "runtimeCodeHash": "0x3b8b3833842bf0fefac1b02f9e1d4494f74e9338b15d62725739050b347d3f25",
       "contracts": {
@@ -238,7 +233,6 @@
       "chainId": 4663,
       "environment": "prod",
       "testnet": false,
-      "status": "enabled",
       "settlementEnabled": true,
       "runtimeCodeHash": "0x96812eb70224f48c095b240bc0e1d739a7fcb878c3237b5f795629c239d7ef72",
       "contracts": {
@@ -279,8 +273,7 @@
       "chainId": 5042,
       "environment": "prod",
       "testnet": false,
-      "status": "disabled",
-      "settlementEnabled": false,
+      "settlementEnabled": true,
       "disabledReason": "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
       "runtimeCodeHash": "0x8d5cda7c85169c4ad6e0cf3a08ba51994391de087d5223ab8723cc324d52c423",
       "contracts": {
@@ -321,7 +314,6 @@
       "chainId": 8453,
       "environment": "prod",
       "testnet": false,
-      "status": "enabled",
       "settlementEnabled": true,
       "runtimeCodeHash": "0xf8438af51b0197b13e1f9abe9b5d193d559e1827384db6e3285f65784d693905",
       "contracts": {
@@ -357,7 +349,6 @@
       "chainId": 42161,
       "environment": "prod",
       "testnet": false,
-      "status": "enabled",
       "settlementEnabled": true,
       "runtimeCodeHash": "0xc15837e6f438d0fd2f23e0c5eb7a2f655b2af7dc717bd2861365819de45757f7",
       "contracts": {
@@ -393,7 +384,6 @@
       "chainId": 43114,
       "environment": "prod",
       "testnet": false,
-      "status": "enabled",
       "settlementEnabled": true,
       "runtimeCodeHash": "0x65db1830b1d15400cba35b4ef54dd6c5852d5baa077a732bdc84f7c2218952ef",
       "contracts": {
@@ -434,7 +424,6 @@
       "chainId": 80002,
       "environment": "dev",
       "testnet": true,
-      "status": "enabled",
       "settlementEnabled": true,
       "runtimeCodeHash": "0xd4990487312c00916aa218bdcd697bbf1a2729335b6a4fda903517b9d3153a27",
       "contracts": {
@@ -470,7 +459,6 @@
       "chainId": 1440000,
       "environment": "prod",
       "testnet": false,
-      "status": "enabled",
       "settlementEnabled": true,
       "runtimeCodeHash": "0xd26862dbc501481675f50924ca013acd5c20aca339f2a1aca818becedf7b5aa0",
       "contracts": {
@@ -500,7 +488,6 @@
       "chainId": 5042002,
       "environment": "dev",
       "testnet": true,
-      "status": "enabled",
       "settlementEnabled": true,
       "runtimeCodeHash": "0x2605a351c5595aafabbb9064b2b842fb5db9eb8fdf00a62a66f02b43c46b698b",
       "contracts": {
