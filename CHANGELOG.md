@@ -1,3 +1,12 @@
+## MCP 2.11.1 — init and payment_setup_status agree on where the wallet is
+
+- `payment_setup_status` names `AIFINPAY_HOME=<path> npx @aifinpay/mcp init`
+  when the server runs with `AIFINPAY_HOME`, and `init` puts that
+  `AIFINPAY_HOME` into the printed `env`. An existing encrypted keystore without
+  its passphrase is still never touched; init's exit-2 JSON and
+  `payment_setup_status` now both point at a new, empty `AIFINPAY_HOME`.
+  Signing conditions are unchanged.
+
 ## MCP 2.11.0 — a fresh agent reaches its first payment in five steps
 
 - `@aifinpay/mcp` always lists `payable_fetch`; without the owner's setup it

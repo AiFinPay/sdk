@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import type { ToolContext } from "../server.js";
 import { validatePaymentConfig, type McpConfig } from "../config.js";
 import { independentNativeUsd } from "../native-price.js";
@@ -32,6 +35,57 @@ export const PAYMENT_ENV = Object.freeze({
 });
 
 export const INIT_COMMAND = "npx @aifinpay/mcp init";
+
+/** POSIX single quotes: the path reaches init byte for byte, spaces and quotes included. */
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * init, run so that it writes the keystore this server reads. An agent's shell
+ * does not have the server's AIFINPAY_HOME, so a bare `npx @aifinpay/mcp init`
+ * wrote ~/.aifinpay/agent.json while the server kept looking elsewhere.
+ */
+export function initCommand(walletHome: string | undefined): string {
+  return walletHome ? `AIFINPAY_HOME=${shellQuote(resolve(walletHome))} ${INIT_COMMAND}` : INIT_COMMAND;
+}
+
+/** A directory that does not exist yet, for a new wallet beside one that cannot be opened. */
+export function freshWalletHome(now: Date = new Date()): string {
+  const base = join(homedir(), ".aifinpay", `agent-${now.toISOString().slice(0, 10).replace(/-/g, "")}`);
+  for (let n = 1; ; n++) {
+    const candidate = n === 1 ? base : `${base}-${n}`;
+    if (!existsSync(candidate)) return candidate;
+  }
+}
+
+/**
+ * The way past an encrypted keystore nobody here can open. init and the server
+ * both refuse to replace it, rightly: it may hold funds. Without this the agent
+ * had a refusal and no next move, and the next move it invented was its own key
+ * handling. A new, empty AIFINPAY_HOME leaves the old file untouched.
+ */
+export function lockedKeystoreStep(keystore: string): string {
+  return (
+    `${keystore} is an encrypted wallet that cannot be opened here: AIFINPAY_WALLET_PASSPHRASE is not set or is wrong. ` +
+    `Do not delete, move or overwrite it; it may hold funds. ` +
+    `If its passphrase is known, set AIFINPAY_WALLET_PASSPHRASE in the aifinpay server's env in the MCP client config and reconnect. ` +
+    `Otherwise create a new wallet in a new, empty directory: run \`${initCommand(freshWalletHome())}\`, ` +
+    `put the "env" it prints (it includes AIFINPAY_HOME) into the aifinpay server's env in the MCP client config, ` +
+    `reconnect the server, then call agent_reload and payment_setup_status again.`
+  );
+}
+
+/** The keystore this server reads, when it is encrypted and the server has no passphrase for it. */
+function lockedKeystore(config: McpConfig): string | undefined {
+  if (config.walletPassphrase) return undefined;
+  const keystore = join(resolve(config.walletHome || join(homedir(), ".aifinpay")), "agent.json");
+  try {
+    return JSON.parse(readFileSync(keystore, "utf8"))?.enc ? keystore : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 interface Limit {
   env: string;
@@ -132,9 +186,12 @@ export async function paymentSetupStatus(
     next_step: "",
   };
   if (!persistent) {
+    const locked = lockedKeystore(config);
     status.next_step =
       `No persistent wallet: this server started with an ephemeral one — do not fund ${ctx.agent.evmAddress}. ` +
-      `Run \`${INIT_COMMAND}\` (without a terminal it prints JSON; copy its "env" into this server's env in the MCP client config), reconnect the server, then call agent_reload and payment_setup_status again.`;
+      (locked
+        ? lockedKeystoreStep(locked)
+        : `Run \`${initCommand(config.walletHome)}\` (without a terminal it prints JSON; copy its "env" into this server's env in the MCP client config), reconnect the server, then call agent_reload and payment_setup_status again.`);
     return status;
   }
   if (!config.paymentsEnabled || configError) {

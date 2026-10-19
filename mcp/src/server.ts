@@ -18,7 +18,7 @@ import { makeSafeFetch } from "./safe-fetch.js";
 import { loadConfigFromEnv, validatePaymentConfig } from "./config.js";
 import { PaymentStateStore } from "./payment-state.js";
 import { payableFetchTool, runPayableFetch } from "./tools/payable-fetch.js";
-import { paymentSetupStatusTool, runPaymentSetupStatus } from "./tools/payment-setup-status.js";
+import { initCommand, paymentSetupStatusTool, runPaymentSetupStatus } from "./tools/payment-setup-status.js";
 import {
   agentPassportResolveTool,
   runAgentPassportResolve,
@@ -85,7 +85,7 @@ export async function createServer(config: McpConfig = {}) {
   if (!configured)
     log(
       "warn",
-      "[aifinpay-mcp] EPHEMERAL wallet — DO NOT FUND. Run `npx @aifinpay/mcp init`, then agent_reload in this connection."
+      `[aifinpay-mcp] EPHEMERAL wallet — DO NOT FUND. Run \`${initCommand(config.walletHome)}\`, then agent_reload in this connection.`
     );
   let paymentState: PaymentStateStore | undefined;
   if (config.paymentsEnabled) {

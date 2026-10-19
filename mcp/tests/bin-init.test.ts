@@ -21,7 +21,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, existsSync, statSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -266,7 +266,9 @@ describe("aifinpay-mcp init without a terminal", () => {
     expect(r.json.addresses.evm).toMatch(EVM);
     expect(r.json.addresses.solana).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
     expect(r.json.addresses.casper).toMatch(/^account-hash-[a-f0-9]{64}$/);
-    expect(Object.keys(r.json.env)).toEqual(["AIFINPAY_WALLET_PASSPHRASE"]);
+    // The keystore is under this AIFINPAY_HOME, so the server must be told it too.
+    expect(Object.keys(r.json.env)).toEqual(["AIFINPAY_HOME", "AIFINPAY_WALLET_PASSPHRASE"]);
+    expect(r.json.env.AIFINPAY_HOME).toBe(home);
     const passphrase = r.json.env.AIFINPAY_WALLET_PASSPHRASE;
     expect(passphrase).toMatch(PASSPHRASE);
     // The passphrase is in the env block and nowhere else: not twice, not on stderr.
@@ -319,17 +321,64 @@ describe("aifinpay-mcp init without a terminal", () => {
     expect(readFileSync(join(home, "agent.json"), "utf8")).toBe(before);
   });
 
+  // 2.11.0 stopped here: exit 2, a refusal, and no move left that did not touch
+  // the keystore. The agent must get one, and the keystore must stay byte-equal.
+  it("an existing encrypted keystore without its passphrase: exit 2, untouched, and a new AIFINPAY_HOME as next_step", () => {
+    const first = runJson(["init"]);
+    const keystore = join(home, "agent.json");
+    const before = readFileSync(keystore);
+
+    const locked = runJson(["init"]);
+    expect(locked.status).toBe(2);
+    expect(locked.json).toMatchObject({ keystore, missing_env: "AIFINPAY_WALLET_PASSPHRASE" });
+    expect(readFileSync(keystore).equals(before)).toBe(true);
+    expect(locked.json.next_step).toContain(keystore);
+    expect(locked.json.next_step).toMatch(/Do not delete, move or overwrite it/);
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const command = locked.json.next_step.match(/`(AIFINPAY_HOME='([^']+)' npx @aifinpay\/mcp init)`/);
+    expect(command, locked.json.next_step).not.toBeNull();
+    const fresh = command[2];
+    expect(fresh).toBe(join(homedir(), ".aifinpay", `agent-${today}`));
+    // Suggested, not created: init that refused writes nothing anywhere.
+    expect(existsSync(fresh)).toBe(false);
+
+    // Following the advice reaches a wallet the server opens, the old one untouched.
+    try {
+      const created = runJson(["init"], { AIFINPAY_HOME: fresh });
+      expect(created.status).toBe(0);
+      expect(created.json).toMatchObject({ keystore: join(fresh, "agent.json"), created: true });
+      expect(created.json.env.AIFINPAY_HOME).toBe(fresh);
+      expect(created.json.addresses.evm).not.toBe(first.json.addresses.evm);
+      const server = run([], created.json.env);
+      expect(server).not.toMatch(/EPHEMERAL/);
+      expect(server).toContain(created.json.addresses.evm);
+      expect(readFileSync(keystore).equals(before)).toBe(true);
+    } finally {
+      rmSync(fresh, { recursive: true, force: true });
+    }
+  });
+
+  it("without AIFINPAY_HOME, env does not invent one", () => {
+    // HOME moves to this test's directory so the default ~/.aifinpay is private to it.
+    const r = runJson(["init"], { AIFINPAY_HOME: "", HOME: home });
+    expect(r.status).toBe(0);
+    expect(r.json.keystore).toBe(join(home, ".aifinpay", "agent.json"));
+    expect(Object.keys(r.json.env)).toEqual(["AIFINPAY_WALLET_PASSPHRASE"]);
+  });
+
   it("with --plaintext prints the same JSON with an empty env", () => {
     const r = runJson(["init", "--plaintext"]);
     expect(r.status).toBe(0);
-    expect(r.json).toMatchObject({ created: true, encrypted: false, env: {} });
+    expect(r.json).toMatchObject({ created: true, encrypted: false });
+    expect(r.json.env).toEqual({ AIFINPAY_HOME: home });
     expect(r.stdout).not.toContain(JSON.parse(readFileSync(join(home, "agent.json"), "utf8")).secretB58);
   });
 
   it("with a configured seed reports it as JSON and creates nothing", () => {
     const r = runJson(["init"], { SEED_HASH: "11".repeat(32) });
     expect(r.status).toBe(0);
-    expect(r.json).toMatchObject({ keystore: null, created: false, source: "SEED_HASH", env: {} });
+    expect(r.json).toMatchObject({ keystore: null, created: false, source: "SEED_HASH" });
+    expect(r.json.env).toEqual({ AIFINPAY_HOME: home });
     expect(r.json.addresses.evm).toMatch(EVM);
     expect(existsSync(join(home, "agent.json"))).toBe(false);
   });
@@ -570,14 +619,14 @@ describe("aifinpay-mcp init payment settings", () => {
     const pass = { AIFINPAY_WALLET_PASSPHRASE: "fixture-passphrase" };
     for (const out of [run(["init"], pass), run(["init"], pass)]) {
       const [config] = printed(out);
-      expect(Object.keys(config.mcpServers.aifinpay.env)).toEqual(["AIFINPAY_WALLET_PASSPHRASE"]);
+      expect(Object.keys(config.mcpServers.aifinpay.env)).toEqual(["AIFINPAY_HOME", "AIFINPAY_WALLET_PASSPHRASE"]);
       expect(out.includes(pass.AIFINPAY_WALLET_PASSPHRASE)).toBe(false);
     }
   });
 
   it("gives a plaintext wallet's config no passphrase", () => {
     const [config] = printed(run(["init", "--plaintext"]));
-    expect(config.mcpServers.aifinpay.env).toEqual({});
+    expect(config.mcpServers.aifinpay.env).toEqual({ AIFINPAY_HOME: home });
   });
 });
 

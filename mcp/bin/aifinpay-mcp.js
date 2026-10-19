@@ -41,7 +41,7 @@ import {
   linkSync,
   unlinkSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { createRequire } from "node:module";
 import { scryptSync, randomBytes, createCipheriv, createDecipheriv } from "node:crypto";
@@ -178,19 +178,31 @@ if (arg === "init") {
 
   const { loadConfigFromEnv } = await import("../dist/config.js");
   const { loadWalletIdentity } = await import("../dist/identity.js");
-  const { PAYMENT_ENV } = await import("../dist/tools/payment-setup-status.js");
+  const { PAYMENT_ENV, lockedKeystoreStep } = await import("../dist/tools/payment-setup-status.js");
   const config = loadConfigFromEnv();
   // A keystore that cannot be opened is reported in one line that names the
-  // variable, never as a stack trace — and never replaced.
+  // variable, never as a stack trace — and never replaced. An agent cannot ask
+  // anyone for the passphrase, so its JSON also names the way past it that
+  // touches nothing: a new wallet in a new, empty AIFINPAY_HOME.
   const failKeystore = (error) => {
     const line =
       !PASSPHRASE && existsSync(KEYSTORE)
         ? `${KEYSTORE} exists and is encrypted; set ${PASSPHRASE_ENV} to the passphrase used at init (it is not set in this environment).`
         : error.message;
+    let encrypted = false;
+    try {
+      encrypted = Boolean(JSON.parse(readFileSync(KEYSTORE, "utf8"))?.enc);
+    } catch {
+      /* No readable keystore: the error is about something else. */
+    }
     if (NONINTERACTIVE)
       process.stdout.write(
-        JSON.stringify({ error: line, keystore: KEYSTORE, ...(PASSPHRASE ? {} : { missing_env: PASSPHRASE_ENV }) }) +
-          "\n"
+        JSON.stringify({
+          error: line,
+          keystore: KEYSTORE,
+          ...(PASSPHRASE ? {} : { missing_env: PASSPHRASE_ENV }),
+          ...(encrypted ? { next_step: lockedKeystoreStep(KEYSTORE) } : {}),
+        }) + "\n"
       );
     else process.stderr.write(line + "\n");
     process.exit(2);
@@ -205,6 +217,10 @@ if (arg === "init") {
   const addressesOf = (agent) => ({ evm: agent.evmAddress, solana: agent.solanaAddress, casper: agent.casperAddress });
   const indexEnv =
     selected?.derivationIndex === undefined ? {} : { AIFINPAY_WALLET_INDEX: String(selected.derivationIndex) };
+  // The server reads the keystore (and keeps its payment journal) under the same
+  // AIFINPAY_HOME init used, so a non-default one goes into the client env too,
+  // absolute: the client does not start the server in this directory.
+  const homeEnv = process.env.AIFINPAY_HOME ? { AIFINPAY_HOME: resolve(process.env.AIFINPAY_HOME) } : {};
   // Non-interactive stdout is one JSON document and nothing else, so the
   // caller can parse it. The same facts, as prose, go to a terminal.
   const emit = (json, text) => process.stdout.write(NONINTERACTIVE ? JSON.stringify(json, null, 2) + "\n" : text);
@@ -222,7 +238,7 @@ if (arg === "init") {
         encrypted: null,
         source: selected.source,
         addresses: addressesOf(agent),
-        env: indexEnv,
+        env: { ...homeEnv, ...indexEnv },
         payment_env_example: PAYMENT_ENV,
         next_step: nextStep,
       },
@@ -316,6 +332,7 @@ if (arg === "init") {
         source: "legacy-keystore",
         addresses: addressesOf(agent),
         env: {
+          ...homeEnv,
           ...(encrypted
             ? {
                 [PASSPHRASE_ENV]: GENERATED_PASSPHRASE
@@ -383,6 +400,7 @@ if (arg === "init") {
               command: "npx",
               args: ["-y", `@aifinpay/mcp@${VERSION}`],
               env: {
+                ...homeEnv,
                 ...(encrypted ? { AIFINPAY_WALLET_PASSPHRASE: "<the passphrase you used for init>" } : {}),
                 ...indexEnv,
               },
