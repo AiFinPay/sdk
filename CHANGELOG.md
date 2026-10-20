@@ -1,3 +1,11 @@
+## MCP 2.12.0 — the owner's dashboard Controls in payment_setup_status
+
+- `payment_setup_status` returns `dashboard`: the owner's Controls read with
+  the agent's own signature from `GET /v1/agents/<address>/policy`, or an
+  offer to link the agent when no owner has claimed it. Paused or expired
+  Controls stop the checklist. Needs the backend route from aifinpay-web#277;
+  before it is deployed the field reads `unknown` and blocks nothing.
+
 ## Python 2.7.1 — Codex is a framework
 
 - `aifinpay-agent` 2.7.1 adds `codex` to `AGENT_FRAMEWORKS`, the same value as

@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.12.0 — payment_setup_status shows the owner's dashboard Controls
+
+- For a persistent EVM wallet, `payment_setup_status` reads the owner's
+  dashboard Controls through the new backend route
+  `GET /v1/agents/<address>/policy` (aifinpay-web#277), signed by the wallet's
+  own key over a 60-second AiFinPay read statement, and returns them as
+  `dashboard`: linked with the policy, not linked (`next_step` offers Claim
+  via MCP and `agent_claim_self`), or unknown when the read fails. An unknown
+  read blocks nothing: the backend enforces the policy on every quote and
+  payment either way. Paused or expired Controls stop the checklist before
+  funding with a `next_step` that names the dashboard.
+- Merchant ids from the response are repeated to the model only when they are
+  plain identifiers; a malformed policy is reported as unknown.
+- No read on `payable_fetch`'s refusal path (it still contacts nothing), for
+  an ephemeral wallet, or on Solana. No change to signing, limits or env.
+
 ## 2.11.4 — the 2.11.3 changes on the published agent 2.9.0 and skill 2.10.2
 
 2.11.3 was merged before `@aifinpay/agent` 2.9.0 and `@aifinpay/skill` 2.10.2

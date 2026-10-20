@@ -25,7 +25,8 @@ export interface McpConfig {
   /** Request timeout in ms. */
   timeoutMs?: number;
 
-  /** Owner opt-in; never accepted from tool arguments. */
+  /** On unless the owner sets AIFINPAY_PAYMENTS_ENABLED=0; never accepted from tool arguments.
+   *  An unfunded wallet spends nothing, and the built-in ceiling below bounds a funded one. */
   paymentsEnabled?: boolean;
   dailyAmountUsd?: number;
   /** Chain payable_fetch settles on: "polygon" (default), another supported EVM chain, or "solana". Set by
@@ -89,8 +90,8 @@ export function loadConfigFromEnv(): McpConfig {
     throw new Error("AIFINPAY_PAYMENTS_ENABLED must be 0 or 1");
   }
   return {
-    paymentsEnabled: process.env.AIFINPAY_PAYMENTS_ENABLED === "1",
-    dailyAmountUsd: process.env.AIFINPAY_DAILY_USD ? Number(process.env.AIFINPAY_DAILY_USD) : undefined,
+    paymentsEnabled: process.env.AIFINPAY_PAYMENTS_ENABLED !== "0",
+    dailyAmountUsd: ownerCeiling("AIFINPAY_DAILY_USD", process.env.AIFINPAY_DAILY_USD, DEFAULT_DAILY_USD),
     payChain: process.env.AIFINPAY_PAY_CHAIN || undefined,
     rpcUrl: process.env.AIFINPAY_RPC_URL || undefined,
     maxGas: process.env.AIFINPAY_MAX_GAS || undefined,
@@ -108,7 +109,7 @@ export function loadConfigFromEnv(): McpConfig {
     agentSecretB58: process.env.AIFINPAY_AGENT_SECRET || undefined,
     baseUrl: process.env.AIFINPAY_BASE_URL || undefined,
     timeoutMs: process.env.AIFINPAY_TIMEOUT_MS ? Number(process.env.AIFINPAY_TIMEOUT_MS) : undefined,
-    maxAmountUsd: process.env.AIFINPAY_MAX_USD ? Number(process.env.AIFINPAY_MAX_USD) : undefined,
+    maxAmountUsd: ownerCeiling("AIFINPAY_MAX_USD", process.env.AIFINPAY_MAX_USD, DEFAULT_MAX_USD),
     gatewayOrigins: splitOrigins(process.env.AIFINPAY_GATEWAY_ORIGINS),
     gatewayPathMode: parseGatewayPathMode(process.env.AIFINPAY_GATEWAY_PATH_MODE),
     trustedHosts: splitList(process.env.AIFINPAY_TRUSTED_HOSTS),
@@ -189,9 +190,24 @@ function splitOrigins(raw: string | undefined): string[] | undefined {
   return list;
 }
 
-/** Signing is available only after the owner configures all spending boundaries. */
+/** Built-in spending ceiling (owner decision 2026-10-20): $5 per payment, $20 per
+ *  24 h. The env values can only lower it; a higher value is refused so a
+ *  pasted config cannot raise the ceiling above what the dashboard Controls
+ *  are meant to manage. */
+export const DEFAULT_MAX_USD = 5;
+export const DEFAULT_DAILY_USD = 20;
+
+function ownerCeiling(name: string, raw: string | undefined, ceiling: number): number {
+  if (raw === undefined || raw === "") return ceiling;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} must be a positive finite owner limit`);
+  if (value > ceiling) throw new Error(`${name} can only lower the built-in ceiling of ${ceiling}; set the working limits in the dashboard`);
+  return value;
+}
+
+/** Signing is available only while payments are on and every spending boundary is set. */
 export function validatePaymentConfig(config: McpConfig): bigint {
-  if (!config.paymentsEnabled) throw new Error("Payments disabled; owner must set AIFINPAY_PAYMENTS_ENABLED=1");
+  if (!config.paymentsEnabled) throw new Error("Payments disabled by the owner (AIFINPAY_PAYMENTS_ENABLED=0)");
   const chain = payChain(config.payChain);
   if (config.devMode && chain.name !== "solana") throw new Error("MCP receipt payments support live mode only");
   if (config.rpcUrl !== undefined) {
