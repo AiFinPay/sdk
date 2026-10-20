@@ -24,7 +24,7 @@ export const BASE = "ee4b3b450af3fec988c6520e1033c25868065df0";
 export const COHORT = {
   mcp: "2.11.4",
   agent: "2.9.0",
-  python: "2.7.0",
+  python: "2.7.1",
   skill: "2.10.2",
 };
 // Real CLI subprocess tests retain their default five-second limit. Serialize

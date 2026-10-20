@@ -1,3 +1,10 @@
+## 2.7.1 — Codex is a framework
+
+- `codex` joins `AGENT_FRAMEWORKS`, matching `@aifinpay/agent` 2.9.0 and the
+  backend whitelist. A Python agent run by Codex can now say so instead of
+  being counted as "Independent". Anything outside the list is still refused at
+  construction; `codex-mcp-client` (the MCP client name) is not a framework.
+
 ## 2.7.0 — name the AI client that pays
 
 - New `framework` option on `AiFinPayAgent` (all constructors) and the legacy
