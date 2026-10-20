@@ -29,7 +29,7 @@ DEFAULT_BASE_URL = "https://aifinpay.io"
 DEFAULT_TIMEOUT = 30  # seconds
 
 #: The AI clients the AiFinPay backend records for ``AIFP-Agent-Framework``.
-AGENT_FRAMEWORKS = ("chatgpt", "claude", "perplexity", "gemini", "cursor", "openai-agents", "windsurf", "custom")
+AGENT_FRAMEWORKS = ("chatgpt", "claude", "perplexity", "gemini", "cursor", "openai-agents", "windsurf", "codex", "custom")
 
 
 def _agent_framework(value: Any) -> str | None:

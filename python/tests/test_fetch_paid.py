@@ -265,17 +265,17 @@ def test_the_legacy_agent_session_names_the_framework_only_when_set():
 
 def test_exactly_the_backend_values_are_accepted():
     assert aifinpay.AGENT_FRAMEWORKS == (
-        "chatgpt", "claude", "perplexity", "gemini", "cursor", "openai-agents", "windsurf", "custom",
+        "chatgpt", "claude", "perplexity", "gemini", "cursor", "openai-agents", "windsurf", "codex", "custom",
     )
     for framework in aifinpay.AGENT_FRAMEWORKS:
         assert AiFinPayAgent.from_seed("11" * 32, framework=framework).framework == framework
 
 
-@pytest.mark.parametrize("value", ["Claude", "claude-code", "openai", " claude", "", 1, True])
+@pytest.mark.parametrize("value", ["Claude", "claude-code", "openai", " claude", "codex-mcp-client", "", 1, True])
 def test_any_other_framework_is_refused_at_construction(value):
     from aifinpay import Agent, AiFinPayError
 
-    message = "framework must be one of chatgpt, claude, perplexity, gemini, cursor, openai-agents, windsurf, custom"
+    message = "framework must be one of chatgpt, claude, perplexity, gemini, cursor, openai-agents, windsurf, codex, custom"
     secret = AiFinPayAgent.from_seed("11" * 32).inner.secret_b58
     for build in (
         lambda: AiFinPayAgent.new(framework=value),
