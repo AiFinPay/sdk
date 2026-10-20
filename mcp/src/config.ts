@@ -28,6 +28,13 @@ export interface McpConfig {
   /** On unless the owner sets AIFINPAY_PAYMENTS_ENABLED=0; never accepted from tool arguments.
    *  An unfunded wallet spends nothing, and the built-in ceiling below bounds a funded one. */
   paymentsEnabled?: boolean;
+  /** The owner wrote AIFINPAY_PAYMENTS_ENABLED=1 themselves. A refused payment setting then
+   *  stops the server, as it always did; with the variable unset the server starts read-only
+   *  and payment_setup_status names the refusal instead. */
+  paymentsRequired?: boolean;
+  /** Names of the limit variables the owner set in env to lower the built-in ceiling;
+   *  payment_setup_status reports each limit's source from this. */
+  ownerOverrides?: string[];
   dailyAmountUsd?: number;
   /** Chain payable_fetch settles on: "polygon" (default), another supported EVM chain, or "solana". Set by
    *  the owner only; never inferred from a quote or a tool argument. */
@@ -49,21 +56,24 @@ export interface McpConfig {
   /** Hard cap on a single payment to prevent runaway agents. */
   maxAmountUsd?: number;
 
-  /** Gateway origins this agent may settle against.
+  /** Optional allowlist of gateway origins this agent may settle against.
    *
-   *  The SDK has always supported this (parseGatewayUrl in @aifinpay/agent) and
-   *  this wrapper never exposed it, so a self-hosted merchant was unreachable:
-   *  payable_fetch reached the 402 and then refused with "dev.ratersapp.com is
-   *  not a known AiFinPay gateway; allowed: https://gateway.aifinpay.io".
-   *  Observed in an external E2E run on 2026-08-27.
+   *  Unset (the default since 2.12.0), payable_fetch accepts the https origin
+   *  of the URL it is given. That is safe because the 402 never decides who is
+   *  paid: the SDK takes only the merchant id from it and asks the configured
+   *  AiFinPay backend for a signed quote, so money can only reach a registered
+   *  merchant, within the ceiling below and the owner's dashboard Controls.
+   *  Before 2.12.0 this variable was required, and an unlisted origin was
+   *  refused by name (observed in an external E2E run on 2026-08-27).
    *
-   *  Set by the OPERATOR, exact origins only, never a wildcard. The refusal it
-   *  relaxes is not paranoia: a 402 is unauthenticated, so paying an
-   *  unrecognised host means paying whoever answered. Naming a host here is a
-   *  statement that you know who that is. */
+   *  Set by the OPERATOR, exact https origins only, never a wildcard, it
+   *  narrows that default: an origin not listed is refused before any quote.
+   *  Naming a host here is a statement that you know who that is. */
   gatewayOrigins?: string[];
 
-  /** AIFP-1 resource identity: merchant slug or full direct request path. */
+  /** AIFP-1 resource identity: merchant slug or full direct request path.
+   *  Unset, payable_fetch infers it per URL: the hosted gateway
+   *  (https://gateway.aifinpay.io) uses the slug, any other origin the path. */
   gatewayPathMode?: "gateway" | "direct";
 
   /** Hosts whose DNS pre-check is skipped, exact names only.
@@ -91,6 +101,11 @@ export function loadConfigFromEnv(): McpConfig {
   }
   return {
     paymentsEnabled: process.env.AIFINPAY_PAYMENTS_ENABLED !== "0",
+    paymentsRequired: process.env.AIFINPAY_PAYMENTS_ENABLED === "1",
+    ownerOverrides: [
+      ...(process.env.AIFINPAY_MAX_USD ? ["AIFINPAY_MAX_USD"] : []),
+      ...(process.env.AIFINPAY_DAILY_USD ? ["AIFINPAY_DAILY_USD"] : []),
+    ],
     dailyAmountUsd: ownerCeiling("AIFINPAY_DAILY_USD", process.env.AIFINPAY_DAILY_USD, DEFAULT_DAILY_USD),
     payChain: process.env.AIFINPAY_PAY_CHAIN || undefined,
     rpcUrl: process.env.AIFINPAY_RPC_URL || undefined,
@@ -134,8 +149,8 @@ function parseSolanaNetwork(raw: string | undefined): "mainnet" | "devnet" | und
   throw new Error("AIFINPAY_SOLANA_NETWORK must be mainnet or devnet");
 }
 
-function parseGatewayPathMode(raw: string | undefined): "gateway" | "direct" {
-  if (raw === undefined || raw.trim() === "") return "gateway";
+function parseGatewayPathMode(raw: string | undefined): "gateway" | "direct" | undefined {
+  if (raw === undefined || raw.trim() === "") return undefined;
   if (raw === "gateway" || raw === "direct") return raw;
   throw new Error("AIFINPAY_GATEWAY_PATH_MODE must be either gateway or direct");
 }
@@ -196,6 +211,11 @@ function splitOrigins(raw: string | undefined): string[] | undefined {
  *  are meant to manage. */
 export const DEFAULT_MAX_USD = 5;
 export const DEFAULT_DAILY_USD = 20;
+/** Gas cap per payment on Polygon when the owner sets none: the worst case at
+ *  ~280 gwei is ~0.10 POL paying in POL and ~0.21 POL in USDC, so 0.3 POL
+ *  (~$0.06) leaves room without being a budget. Another chain still needs
+ *  AIFINPAY_MAX_GAS in its own currency: choosing the chain is explicit anyway. */
+export const DEFAULT_MAX_GAS_POL = "0.3";
 
 function ownerCeiling(name: string, raw: string | undefined, ceiling: number): number {
   if (raw === undefined || raw === "") return ceiling;
@@ -205,7 +225,9 @@ function ownerCeiling(name: string, raw: string | undefined, ceiling: number): n
   return value;
 }
 
-/** Signing is available only while payments are on and every spending boundary is set. */
+/** Signing is available only while payments are on and every spending boundary is set:
+ *  the per-payment and daily USD ceiling, a gas cap, and an exact https allowlist when
+ *  the owner chose to set one. */
 export function validatePaymentConfig(config: McpConfig): bigint {
   if (!config.paymentsEnabled) throw new Error("Payments disabled by the owner (AIFINPAY_PAYMENTS_ENABLED=0)");
   const chain = payChain(config.payChain);
@@ -227,20 +249,24 @@ export function validatePaymentConfig(config: McpConfig): bigint {
     if (typeof value !== "number" || !Number.isFinite(value) || value <= 0)
       throw new Error(`${name} must be a positive finite owner limit`);
   }
+  // Unset means "the origin of the URL being fetched" (see McpConfig). An empty
+  // list is a config bug's shape, not a request for that default, and a
+  // malformed entry would read as allowed while matching nothing.
   if (
-    !config.gatewayOrigins?.length ||
-    config.gatewayOrigins.some((origin) => {
-      try {
-        const u = new URL(origin);
-        return (
-          u.protocol !== "https:" || u.origin !== origin || !!u.username || !!u.password || u.hostname.includes("*")
-        );
-      } catch {
-        return true;
-      }
-    })
+    config.gatewayOrigins !== undefined &&
+    (!config.gatewayOrigins.length ||
+      config.gatewayOrigins.some((origin) => {
+        try {
+          const u = new URL(origin);
+          return (
+            u.protocol !== "https:" || u.origin !== origin || !!u.username || !!u.password || u.hostname.includes("*")
+          );
+        } catch {
+          return true;
+        }
+      }))
   )
-    throw new Error("Payments require explicit exact HTTPS AIFINPAY_GATEWAY_ORIGINS");
+    throw new Error("AIFINPAY_GATEWAY_ORIGINS must list exact HTTPS origins; unset it to accept the origin of each URL");
   if (chain.name === "solana") {
     const expectedNetwork = config.devMode ? "devnet" : "mainnet";
     if (config.solanaNetwork !== expectedNetwork)
@@ -278,8 +304,8 @@ export function validatePaymentConfig(config: McpConfig): bigint {
     );
   if (config.maxGas !== undefined && config.maxGasPol !== undefined && config.maxGas !== config.maxGasPol)
     throw new Error("AIFINPAY_MAX_GAS and AIFINPAY_MAX_GAS_POL disagree; set one");
-  const name = config.maxGas !== undefined ? "AIFINPAY_MAX_GAS" : "AIFINPAY_MAX_GAS_POL";
-  const gas = config.maxGas ?? config.maxGasPol;
+  const name = config.maxGas !== undefined || chain.name !== "polygon" ? "AIFINPAY_MAX_GAS" : "AIFINPAY_MAX_GAS_POL";
+  const gas = config.maxGas ?? config.maxGasPol ?? (chain.name === "polygon" ? DEFAULT_MAX_GAS_POL : undefined);
   if (typeof gas !== "string" || !/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,18})?$/.test(gas))
     throw new Error(
       `${name} must be a positive decimal with at most 18 places: the gas cap per payment in ${chain.native}`

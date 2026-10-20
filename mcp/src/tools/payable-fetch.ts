@@ -23,16 +23,23 @@ type PayableScope = (typeof SCOPES)[number];
 // Real ids are "mrch_" plus hex. A 402's merchant id is unauthenticated, so
 // only an id this plain is ever repeated to the model.
 const MERCHANT_ID = /^[A-Za-z0-9_.:-]{1,64}$/;
+// The hosted gateway addresses merchants by slug; every other origin is a site
+// running its own paywall, whose AIFP-1 resource is the full request path.
+const HOSTED_GATEWAY_ORIGIN = "https://gateway.aifinpay.io";
 
 export function payableFetchTool() {
   return {
     name: "payable_fetch",
     description:
-      'Fetch a GET resource from an owner-approved AiFinPay merchant, paying its AIFP-1 402 when needed. Always listed: until the owner has set up a persistent wallet (npx @aifinpay/mcp init), AIFINPAY_PAYMENTS_ENABLED=1 and every limit, it signs nothing and returns the payment_setup_status checklist with the one next step.  Buys a prepaid batch through verified v1.4 on the chain the owner set in AIFINPAY_PAY_CHAIN (Polygon by default; other supported networks require explicit owner selection) — in its native currency (POL, SOL, ETH, AVAX, BNB or XRP), or in the stablecoin the owner set in AIFINPAY_PAY_ASSET (e.g. USDC; gas is still native) — within owner limits, then reuses its receipt. With scope "merchant" one batch covers every path on the site. Pending payments are recovered without sending another transaction. Other payment protocols are unsupported.',
+      'Fetch a GET resource from an AiFinPay merchant, paying its AIFP-1 402 when needed. Always listed: until a persistent wallet exists (npx @aifinpay/mcp init, then agent_reload) it signs nothing and returns the payment_setup_status checklist with the one next step. Payments are on by default within a built-in ceiling of $5 per payment and $20 per 24 hours (the owner can only lower it in env; the working limits are the dashboard Controls after agent_claim_self) and only ever reach a merchant registered with AiFinPay, through a quote signed by the AiFinPay backend; a 402 never chooses who is paid. Any https site is accepted unless the owner narrowed AIFINPAY_GATEWAY_ORIGINS; AIFINPAY_PAYMENTS_ENABLED=0 turns payments off.  Buys a prepaid batch through verified v1.4 on the chain the owner set in AIFINPAY_PAY_CHAIN (Polygon by default; other supported networks require explicit owner selection) — in its native currency (POL, SOL, ETH, AVAX, BNB or XRP), or in the stablecoin the owner set in AIFINPAY_PAY_ASSET (e.g. USDC; gas is still native) — within owner limits, then reuses its receipt. With scope "merchant" one batch covers every path on the site. Pending payments are recovered without sending another transaction. Other payment protocols are unsupported.',
     inputSchema: {
       type: "object",
       properties: {
-        url: { type: "string", description: "HTTPS resource on an owner-configured exact gateway origin." },
+        url: {
+          type: "string",
+          description:
+            "HTTPS resource to fetch. Any https origin unless the owner set AIFINPAY_GATEWAY_ORIGINS, which then lists the only payable origins.",
+        },
         max_amount_usd: {
           type: "number",
           exclusiveMinimum: 0,
@@ -96,13 +103,18 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
       return errorResult("expected_merchant_id must be a merchant id such as mrch_0123abcd.");
     const url = new URL(args.url);
     if (url.protocol !== "https:" || url.username || url.password || url.hash)
-      return errorResult("The URL must use an owner-approved exact HTTPS origin without credentials or fragment.");
-    // The agent cannot approve a site itself: a page asking to be paid is not
-    // the owner asking to pay it. Name the origin so the owner can decide.
-    if (!ctx.config.gatewayOrigins!.includes(url.origin))
+      return errorResult("The URL must be an https resource without credentials or fragment.");
+    // Unset, the allowlist is the origin of this very URL: whoever answers its
+    // 402 is still only paid if the AiFinPay backend quotes them as a
+    // registered merchant. Set, it is the owner's word on which sites may be
+    // paid at all, and the agent cannot add to it: a page asking to be paid is
+    // not the owner asking to pay it. Name the origin so the owner can decide.
+    const origins = ctx.config.gatewayOrigins ?? [url.origin];
+    if (!origins.includes(url.origin))
       return errorResult(
         `${url.origin} is not an owner-approved site. Nothing was paid. The owner can add it to AIFINPAY_GATEWAY_ORIGINS and reconnect this server; the agent cannot approve a site itself.`
       );
+    const pathMode = ctx.config.gatewayPathMode ?? (url.origin === HOSTED_GATEWAY_ORIGIN ? "gateway" : "direct");
     if (
       args.max_amount_usd !== undefined &&
       (typeof args.max_amount_usd !== "number" || !Number.isFinite(args.max_amount_usd) || args.max_amount_usd <= 0)
@@ -112,7 +124,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
       ctx.config.maxAmountUsd!,
       typeof args.max_amount_usd === "number" ? args.max_amount_usd : Infinity
     );
-    const parsed = parseGatewayUrl(url.href, ctx.config.gatewayOrigins, ctx.config.gatewayPathMode);
+    const parsed = parseGatewayUrl(url.href, origins, pathMode);
     const pay = chain;
     const payAsset = ctx.config.payAsset ?? pay.native;
     const rpc = ctx.config.rpcUrl ?? pay.defaultRpc;
@@ -245,9 +257,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
         )
           throw new Error("Owner spending limit reached");
         const site =
-          ctx.config.gatewayPathMode === "direct"
-            ? `direct:${JSON.stringify([url.origin, prepared.quote.merchant_id])}`
-            : parsed.site;
+          pathMode === "direct" ? `direct:${JSON.stringify([url.origin, prepared.quote.merchant_id])}` : parsed.site;
         state!.pending = {
           recovery: prepared,
           ...(serializedTransaction ? { serializedTransaction } : {}),
@@ -265,8 +275,8 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
           {
             apiBaseUrl: ctx.config.baseUrl,
             paymentIssuer: ctx.config.baseUrl ?? "https://api.aifinpay.io",
-            gatewayOrigins: ctx.config.gatewayOrigins,
-            resourcePathMode: ctx.config.gatewayPathMode,
+            gatewayOrigins: origins,
+            resourcePathMode: pathMode,
             scope,
             ...(expectedMerchantId !== undefined ? { expectedMerchantId } : {}),
             ...(ctx.framework ? { framework: ctx.framework } : {}),
