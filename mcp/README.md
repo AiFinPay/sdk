@@ -4,7 +4,7 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Version **2.11.4** is prepared in this checkout, on the published agent 2.9.0
+Version **2.12.0** is prepared in this checkout, on the published agent 2.9.0
 and canonical skill 2.10.2 (AiFinPay/skill 48285cf, published 2026-10-19). The separate canonical producer's final immutable
 source pin is a required handoff, not a moving-branch substitution.
 The published baseline checked2026-10-04 was MCP2.5.0. Package publication and
@@ -101,6 +101,19 @@ per-payment cap, the daily cap, pause and the allowed sites under **Controls**
 at https://dash.aifinpay.io, and the backend enforces that policy on every
 `/v1/quote` and `/v1/pay` for the claimed agent — no env change, no server
 restart. The env ceiling still applies underneath; a payment has to pass both.
+
+`payment_setup_status` reads those Controls back for a persistent EVM wallet
+and returns them as `dashboard`: `{ linked: true, policy }` with the per-payment
+cap, daily cap, merchant allowlist, expiry and pause; `{ linked: false }` when
+no owner has claimed the agent yet (its `next_step` then offers the dashboard
+link); `{ linked: "unknown", reason }` when the read fails, which blocks
+nothing because the backend enforces the policy either way. Paused or expired
+Controls stop the checklist with a `next_step` that says so. The read is
+`GET /v1/agents/<address>/policy` on the configured backend, signed by the
+wallet's own key (EIP-191 over `["AiFinPay agent policy read v1", <backend
+origin>, <lowercase address>, <expires_at>]`, valid 60 s); it signs no payment
+and changes nothing. It is not made on `payable_fetch`'s refusal path, for an
+ephemeral wallet or on Solana.
 
 ## Indexed wallet derivation
 
@@ -240,7 +253,7 @@ state file in chat. Unconfirmed payments consume the budget conservatively.
 | `agent_reload`           | Reload local wallet files in the current MCP connection. |
 | `agent_quota`            | Read the agent's quota.                                  |
 | `agent_passport_resolve` | Resolve the global Agent Passport identity.              |
-| `payment_setup_status`   | Read-only setup checklist with the one `next_step`.      |
+| `payment_setup_status`   | Setup checklist, owner's dashboard Controls, `next_step`. |
 | `settlement_routes`      | Splitter v1.4 routes (live now) first, then legacy v1.3. |
 | `settlement_invoice`     | Prepare a non-signing settlement invoice.                |
 | `agent_history`          | Read indexed settlements or retained receipt batches.    |

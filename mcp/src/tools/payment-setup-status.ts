@@ -5,6 +5,7 @@ import type { ToolContext } from "../server.js";
 import { validatePaymentConfig, type McpConfig } from "../config.js";
 import { independentNativeUsd } from "../native-price.js";
 import { payChain, type PayChain } from "../pay-chains.js";
+import { dashboardRefusal, dashboardSentence, readDashboardPolicy, type DashboardStatus } from "../dashboard-policy.js";
 
 /**
  * The one read-only checklist between "server connected" and "first payment".
@@ -114,6 +115,9 @@ export interface PaymentSetupStatus {
   balance_error?: string;
   /** What to fund a persistent wallet with, priced now; absent for an ephemeral wallet. */
   funding?: Funding;
+  /** The owner's dashboard Controls, read with this wallet's own signature; absent for an
+   *  ephemeral wallet, on Solana, and on payable_fetch's refusal (which contacts nothing). */
+  dashboard?: DashboardStatus;
   next_step: string;
 }
 
@@ -142,8 +146,8 @@ export function paymentSetupStatusTool() {
     description:
       "Read-only checklist for paying with payable_fetch: wallet (persistent or ephemeral), whether the owner enabled payments, which owner limits are set, the wallet's native balance on the pay chain when readable, and next_step — exactly one instruction for the first unmet item. " +
       "First payment in five steps: (1) GET the resource and read its 402 (merchant, price, smallest batch); (2) call payment_setup_status; (3) no persistent wallet: run `npx @aifinpay/mcp init` without a terminal, put its printed env into the MCP client config, reconnect, agent_reload; (4) tell the owner the address and the amount in `funding` (the smallest batch at today's rate plus the gas cap; if no rate could be read, ask for the batch price in the native currency at today's rate plus the gas cap and name no number), and have the owner add the payment env (AIFINPAY_PAYMENTS_ENABLED=1, origins, a USD ceiling, gas cap) and restart the server; (5) payable_fetch the URL. " +
-      "The env USD values are a one-time ceiling; after agent_claim_self the owner manages the working limits in the dashboard Controls. " +
-      "Signs nothing, moves nothing, never asks the owner's limits from the model.",
+      "The env USD values are a one-time ceiling; after agent_claim_self the owner manages the working limits in the dashboard Controls, and this tool reads them back in `dashboard`. " +
+      "Moves nothing and signs no payment: for a persistent wallet it signs one short AiFinPay read statement to fetch the owner's Controls. Never asks the owner's limits from the model.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: { readOnlyHint: true, openWorldHint: true, destructiveHint: false },
   };
@@ -233,10 +237,15 @@ export async function paymentSetupStatus(
   const rpc = config.rpcUrl ?? chain.defaultRpc;
   if (options.readBalance && chain.name !== "solana") {
     status.funding = await funding(ctx, chain, rpc, gasCap);
+    // The owner's Controls are the working limits once the agent is claimed;
+    // read them here so the agent can name them, or offer the link if there is none.
+    status.dashboard = await readDashboardPolicy(ctx);
   }
+  const withDashboard = (text: string) =>
+    status.dashboard ? `${text} ${dashboardSentence(status.dashboard)}` : text;
   if (!config.paymentsEnabled || configError) {
     const block = JSON.stringify(paymentEnvFor(config));
-    status.next_step =
+    status.next_step = withDashboard(
       (configError && config.paymentsEnabled
         ? `Owner setting refused: ${configError}. `
         : `Payments are off until the owner enables them. `) +
@@ -247,7 +256,14 @@ export async function paymentSetupStatus(
       // and payments stay off concluded the settings were lost, and stopped.
       (config.paymentsEnabled
         ? ""
-        : ` If the owner has already saved these settings, this server has not been restarted since: agent_reload does not read env. Have the client restart the aifinpay MCP server, then call payment_setup_status again.`);
+        : ` If the owner has already saved these settings, this server has not been restarted since: agent_reload does not read env. Have the client restart the aifinpay MCP server, then call payment_setup_status again.`)
+    );
+    return status;
+  }
+  // Paused or expired Controls refuse every quote; funding or paying now would only fail.
+  const refusal = status.dashboard && dashboardRefusal(status.dashboard);
+  if (refusal) {
+    status.next_step = refusal;
     return status;
   }
   if (status.funding) {
@@ -256,10 +272,11 @@ export async function paymentSetupStatus(
       status.balance = { amount: formatNative(balance), asset: chain.native, chain: chain.name, rpc };
       const needed = status.funding.amount !== undefined ? Number(status.funding.amount) : Number(gasCap);
       if (Number(status.balance.amount) < needed) {
-        status.next_step =
+        status.next_step = withDashboard(
           status.funding.amount !== undefined
             ? `Fund ${ctx.agent.evmAddress} on ${chain.label} with about ${status.funding.amount} ${chain.native} (the smallest batch is $${SMALLEST_BATCH_USD.toFixed(2)} ≈ ${status.funding.batch_native} ${chain.native} at today's rate plus up to ${gasCap} ${chain.native} gas; it holds ${status.balance.amount}), then call payment_setup_status again.`
-            : `Fund ${ctx.agent.evmAddress} on ${chain.label} with the batch price in ${chain.native} at today's rate plus the gas cap of ${gasCap} ${chain.native} (the rate could not be read here, so ask the owner to look it up; it holds ${status.balance.amount}), then call payment_setup_status again.`;
+            : `Fund ${ctx.agent.evmAddress} on ${chain.label} with the batch price in ${chain.native} at today's rate plus the gas cap of ${gasCap} ${chain.native} (the rate could not be read here, so ask the owner to look it up; it holds ${status.balance.amount}), then call payment_setup_status again.`
+        );
         return status;
       }
     } catch (error) {
@@ -267,14 +284,15 @@ export async function paymentSetupStatus(
     }
   }
   status.ready = true;
-  status.next_step =
+  status.next_step = withDashboard(
     `Ready. Call payable_fetch({"url": "<HTTPS resource on ${config.gatewayOrigins!.join(" or ")}>"}); ` +
-    `it pays at most $${config.maxAmountUsd} per call and $${config.dailyAmountUsd} per 24 hours, with gas capped at ${status.limits.gas_cap.value} ${chain.native}. ` +
-    CONTROLS_NOTE +
-    (status.balance === "unknown"
-      ? ` The wallet must hold the batch price plus up to the gas cap in ${chain.native} on ${chain.label}` +
-        (status.funding?.amount !== undefined ? ` (about ${status.funding.amount} ${chain.native} at today's rate).` : ".")
-      : "");
+      `it pays at most $${config.maxAmountUsd} per call and $${config.dailyAmountUsd} per 24 hours, with gas capped at ${status.limits.gas_cap.value} ${chain.native}. ` +
+      CONTROLS_NOTE +
+      (status.balance === "unknown"
+        ? ` The wallet must hold the batch price plus up to the gas cap in ${chain.native} on ${chain.label}` +
+          (status.funding?.amount !== undefined ? ` (about ${status.funding.amount} ${chain.native} at today's rate).` : ".")
+        : "")
+  );
   return status;
 }
 
