@@ -22,7 +22,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // GHSA-6qxp-vccf-f47h / GHSA-jqcg-44mw-7w3h. Keep the bootstrap immutable.
 export const BASE = "ee4b3b450af3fec988c6520e1033c25868065df0";
 export const COHORT = {
-  mcp: "2.11.4",
+  mcp: "2.12.1",
   agent: "2.9.0",
   python: "2.7.1",
   skill: "2.10.2",
