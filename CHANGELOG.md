@@ -1,5 +1,14 @@
-## MCP 2.12.0 — the owner's dashboard Controls in payment_setup_status
+## MCP 2.12.1 — payments on by default, $5 / $20 ceiling, limits in the dashboard
 
+- 2.12.0 (merged, never published) carried only the switch and refused to
+  start without env; 2.12.1 is the first release of the change.
+- `payable_fetch` is on unless `AIFINPAY_PAYMENTS_ENABLED=0`, signs only from a
+  persistent wallet, and never above a built-in $5 per payment / $20 per 24 h;
+  env can only lower that ceiling. `AIFINPAY_GATEWAY_ORIGINS` is an optional
+  allowlist (unset: the https origin of the fetched URL; the backend-signed
+  quote decides who is paid), the path mode is inferred per URL, and Polygon
+  has a 0.3 POL default gas cap. `agent_reload` after `init` enables payments
+  without a restart. `payment_setup_status` and `init` no longer ask for env.
 - `payment_setup_status` returns `dashboard`: the owner's Controls read with
   the agent's own signature from `GET /v1/agents/<address>/policy`, or an
   offer to link the agent when no owner has claimed it. Paused or expired
