@@ -20,7 +20,7 @@ describe("operator payment config", () => {
     ])
       expect(() => validatePaymentConfig({ ...valid, ...patch })).toThrow();
   });
-  // 2.12.0: a first payment needs no env. Unset origins mean the origin of the
+  // 2.12.1: a first payment needs no env. Unset origins mean the origin of the
   // URL being fetched (payable-fetch.ts decides per call), and Polygon has a
   // built-in gas cap; another chain still names its own.
   it("accepts unset origins and applies the Polygon gas cap when the owner set none", () => {

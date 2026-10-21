@@ -57,7 +57,7 @@ describe("gateway origins", () => {
 
 describe("gateway path mode", () => {
   it("is unset by default, so payable_fetch infers it from each URL, and accepts both values", () => {
-    // Before 2.12.0 the default was "gateway", which meant a site running its
+    // Before 2.12.1 the default was "gateway", which meant a site running its
     // own paywall needed one more variable before its first payment.
     const previous = process.env.AIFINPAY_GATEWAY_PATH_MODE;
     try {

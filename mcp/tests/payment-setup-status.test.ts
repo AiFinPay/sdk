@@ -9,7 +9,8 @@ import { describe, expect, it, vi } from "vitest";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { paymentSetupStatus, runPaymentSetupStatus, PAYMENT_ENV } from "../src/tools/payment-setup-status.js";
+import { paymentSetupStatus, runPaymentSetupStatus, PAYMENT_OVERRIDES } from "../src/tools/payment-setup-status.js";
+import { DEFAULT_DAILY_USD, DEFAULT_MAX_USD, loadConfigFromEnv } from "../src/config.js";
 import { PaymentStateStore } from "../src/payment-state.js";
 import type { ToolContext } from "../src/server.js";
 
@@ -59,7 +60,9 @@ describe("payment_setup_status", () => {
     expect(status.wallet).toEqual({ persistent: false, source: "ephemeral", evm_address: address });
     expect(status.payments_enabled).toBe(false);
     expect(status.limits.max_usd).toEqual({ env: "AIFINPAY_MAX_USD", set: false });
-    expect(status.limits.gas_cap).toEqual({ env: "AIFINPAY_MAX_GAS_POL", set: false });
+    // Polygon's gas cap is built in (0.3 POL); the owner may still set one.
+    expect(status.limits.gas_cap).toEqual({ env: "AIFINPAY_MAX_GAS_POL", set: true, value: "0.3", source: "default" });
+    expect(status.ceiling).toEqual({ max_usd: 5, daily_usd: 20 });
     expect(status.balance).toBe("unknown");
     expect(status.next_step).toContain("npx @aifinpay/mcp init");
     expect(status.next_step).toContain(`do not fund ${address}`);
@@ -104,36 +107,35 @@ describe("payment_setup_status", () => {
     expect(open.next_step).not.toContain("cannot be opened");
   });
 
-  it("with a persistent wallet and payments off: gives the owner the exact env block, keeping their origin", async () => {
-    const status = await paymentSetupStatus(ctx({ gatewayOrigins: [origin] }, "legacy-keystore"), {
-      readBalance: true,
-    });
+  // 2.12.1: payments are on by default; "off" now means the owner set
+  // AIFINPAY_PAYMENTS_ENABLED=0, so the one step is to remove it and restart.
+  it("with a persistent wallet and payments off: says the owner turned them off and how to undo it, with no env block", async () => {
+    const status = await paymentSetupStatus(ctx({ paymentsEnabled: false }, "legacy-keystore"), { readBalance: true });
     expect(status.ready).toBe(false);
     expect(status.wallet.persistent).toBe(true);
-    expect(status.limits.origins).toEqual({ env: "AIFINPAY_GATEWAY_ORIGINS", set: true, value: [origin] });
-    expect(status.config_error).toMatch(/AIFINPAY_MAX_USD/);
-    expect(status.next_step).toContain('"AIFINPAY_PAYMENTS_ENABLED":"1"');
-    expect(status.next_step).toContain(`"AIFINPAY_GATEWAY_ORIGINS":"${origin}"`);
-    expect(status.next_step).toContain('"AIFINPAY_MAX_GAS_POL":"0.3"');
-    expect(status.next_step).toContain("reconnect");
-    // Settings saved but not yet read: the server must be restarted, not reloaded.
-    expect(status.next_step).toContain("Have the client restart the aifinpay MCP server");
-    expect(status.next_step).toContain("agent_reload does not read env");
-    // Every example key the owner needs is in the block; nothing is invented.
-    for (const key of Object.keys(PAYMENT_ENV)) expect(status.next_step).toContain(`"${key}"`);
-    // The env USD values are a ceiling; the working limits live in the dashboard.
-    expect(PAYMENT_ENV.AIFINPAY_MAX_USD).toBe("5");
-    expect(PAYMENT_ENV.AIFINPAY_DAILY_USD).toBe("20");
-    expect(status.next_step).toContain("a ceiling the owner sets once, not the budget");
+    expect(status.payments_enabled).toBe(false);
+    expect(status.next_step).toMatch(/^Payments are off: the owner set AIFINPAY_PAYMENTS_ENABLED=0/);
+    expect(status.next_step).toContain("removes that variable");
+    expect(status.next_step).toContain("restart the aifinpay MCP server");
+    expect(status.next_step).toContain("agent_reload does not read it");
     expect(status.next_step).toContain("dashboard Controls");
+    // Nothing asks for the four variables 2.11 required.
+    for (const asked of ['"AIFINPAY_PAYMENTS_ENABLED":"1"', "AIFINPAY_MAX_USD", "AIFINPAY_DAILY_USD", "AIFINPAY_GATEWAY_ORIGINS"])
+      expect(status.next_step).not.toContain(asked);
+    expect(Object.keys(PAYMENT_OVERRIDES)).toEqual(["AIFINPAY_GATEWAY_ORIGINS", "AIFINPAY_MAX_GAS_POL"]);
   });
 
-  // Step 4 of the five steps — "tell the owner the address and the amount" —
-  // happens with payments still off. The 2026-10-19 quote priced $0.10 at
-  // 1.08 POL while the guide said 0.5: the amount is read now, never fixed.
-  it("with payments off: still prices the amount to fund at today's rate, with the gas cap when the owner set one", async () => {
-    const bare = await paymentSetupStatus(ctx({ gatewayOrigins: [origin] }, "legacy-keystore"), { readBalance: true });
-    expect(bare.funding).toEqual({
+  // The defaults loadConfigFromEnv gives with nothing set: the state of every
+  // fresh 2.12 install after init.
+  const defaults = { paymentsEnabled: true, maxAmountUsd: DEFAULT_MAX_USD, dailyAmountUsd: DEFAULT_DAILY_USD };
+
+  it("with the defaults and an empty wallet: prices the amount to fund with the built-in gas cap, asks for no env", async () => {
+    const status = await paymentSetupStatus(ctx(defaults, "legacy-keystore"), { readBalance: true });
+    expect(status.config_error).toBeUndefined();
+    expect(status.limits.max_usd).toEqual({ env: "AIFINPAY_MAX_USD", set: true, value: 5, source: "default" });
+    expect(status.limits.daily_usd).toEqual({ env: "AIFINPAY_DAILY_USD", set: true, value: 20, source: "default" });
+    expect(status.limits.origins).toEqual({ env: "AIFINPAY_GATEWAY_ORIGINS", set: false });
+    expect(status.funding).toEqual({
       address,
       chain: "polygon",
       asset: "POL",
@@ -141,30 +143,48 @@ describe("payment_setup_status", () => {
       rate_usd: 0.2,
       rate_source: "coinbase",
       batch_native: "0.5000",
-      advice: `Fund ${address} on Polygon with the smallest batch ($0.10) ≈ 0.5000 POL at today's rate ($0.2000/POL) plus the gas cap the owner sets.`,
+      gas_cap: "0.3",
+      amount: "0.80",
+      advice: `Fund ${address} on Polygon with about 0.80 POL: the smallest batch ($0.10) ≈ 0.5000 POL at today's rate ($0.2000/POL) plus up to 0.3 POL gas.`,
     });
-    expect(bare.next_step).toContain(bare.funding!.advice);
-    expect(bare.balance).toBe("unknown");
+    expect(status.next_step).toMatch(new RegExp(`^Fund ${address} on Polygon with about 0\\.80 POL`));
+    expect(status.next_step).not.toMatch(/AIFINPAY_/);
+  });
 
-    const capped = await paymentSetupStatus(ctx({ gatewayOrigins: [origin], maxGasPol: "0.3" }, "legacy-keystore"), {
-      readBalance: true,
-    });
-    expect(capped.funding).toMatchObject({ gas_cap: "0.3", amount: "0.80" });
-    expect(capped.next_step).toContain(`Fund ${address} on Polygon with about 0.80 POL`);
+  it("with the defaults and a funded wallet: ready for any https site within the built-in ceiling", async () => {
+    const status = await paymentSetupStatus(ctx(defaults, "legacy-keystore", network(10n ** 18n)), { readBalance: true });
+    expect(status.ready).toBe(true);
+    expect(status.next_step).toContain("on any https site");
+    expect(status.next_step).toContain("$5 per call and $20 per 24 hours (the built-in ceiling)");
+    expect(status.next_step).toContain("only merchants registered with AiFinPay are ever paid");
+  });
+
+  it("an env override that lowers the ceiling is reported as the owner's", async () => {
+    vi.stubEnv("AIFINPAY_MAX_USD", "2");
+    vi.stubEnv("AIFINPAY_DAILY_USD", undefined);
+    vi.stubEnv("AIFINPAY_PAYMENTS_ENABLED", undefined);
+    try {
+      const config = loadConfigFromEnv();
+      expect(config).toMatchObject({ paymentsEnabled: true, maxAmountUsd: 2, dailyAmountUsd: 20, ownerOverrides: ["AIFINPAY_MAX_USD"] });
+      const status = await paymentSetupStatus(ctx(config, "legacy-keystore", network(10n ** 18n)), { readBalance: true });
+      expect(status.limits.max_usd).toEqual({ env: "AIFINPAY_MAX_USD", set: true, value: 2, source: "env" });
+      expect(status.limits.daily_usd.source).toBe("default");
+      expect(status.next_step).toContain("$2 per call and $20 per 24 hours (the built-in $5 / $20 ceiling, lowered by the owner's AIFINPAY_MAX_USD)");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("with no price source reachable: names no number and says to ask the owner for the batch at today's rate plus the gas cap", async () => {
     const f = vi.fn(async () => new Response("down", { status: 503 }));
-    const status = await paymentSetupStatus(ctx({ gatewayOrigins: [origin], maxGasPol: "0.3" }, "legacy-keystore", f as never), {
-      readBalance: true,
-    });
+    const status = await paymentSetupStatus(ctx(defaults, "legacy-keystore", f as never), { readBalance: true });
     expect(status.funding).toMatchObject({ gas_cap: "0.3", rate_error: expect.stringContaining("price unavailable") });
     expect(status.funding!.amount).toBeUndefined();
     expect(status.funding!.batch_native).toBeUndefined();
     expect(status.funding!.advice).toBe(
       `The POL/USD rate could not be read here, so name no amount: ask the owner to fund ${address} on Polygon with the price of the smallest batch ($0.10) in POL at today's rate plus the gas cap of 0.3 POL.`
     );
-    expect(status.next_step).toContain(status.funding!.advice);
+    expect(status.next_step).toContain("must hold the batch price plus up to the gas cap");
     // No fixed rate anywhere in the answer.
     expect(JSON.stringify(status)).not.toMatch(/0\.5 POL|\$0\.20/);
   });
@@ -187,8 +207,8 @@ describe("payment_setup_status", () => {
     expect(status.ready).toBe(false);
     expect(status.config_error).toMatch(/AIFINPAY_MAX_GAS_POL/);
     expect(status.next_step).toMatch(/^Owner setting refused: AIFINPAY_MAX_GAS_POL/);
-    // Enabled and read: a restart would not change a refused value.
-    expect(status.next_step).not.toContain("restart");
+    // The fix is an env change, which only a restart reads.
+    expect(status.next_step).toContain("once the owner has saved the change, have the client restart the aifinpay MCP server");
   });
 
   it("with everything set and an empty wallet: says what to fund, where, and about how much", async () => {

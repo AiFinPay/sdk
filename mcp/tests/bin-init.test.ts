@@ -26,7 +26,7 @@ import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer } from "../src/server.js";
-import { loadConfigFromEnv } from "../src/config.js";
+import { DEFAULT_DAILY_USD, DEFAULT_MAX_GAS_POL, DEFAULT_MAX_USD, loadConfigFromEnv } from "../src/config.js";
 
 const BIN = fileURLToPath(new URL("../bin/aifinpay-mcp.js", import.meta.url));
 const README = readFileSync(new URL("../README.md", import.meta.url), "utf8");
@@ -276,7 +276,12 @@ describe("aifinpay-mcp init without a terminal", () => {
     expect(r.stderr).not.toContain(passphrase);
     expect(r.json.passphrase_note).toContain("AIFINPAY_WALLET_PASSPHRASE");
     expect(r.json.next_step).toContain("payment_setup_status");
-    expect(r.json.payment_env_example.AIFINPAY_PAYMENTS_ENABLED).toBe("1");
+    // Payments need no env: the JSON says so and lists only optional overrides.
+    expect(r.json.payments).toContain("on by default");
+    expect(r.json.payments).toContain("$5 per payment and $20 per 24 hours");
+    expect(Object.keys(r.json.optional_env_example)).toEqual(["AIFINPAY_GATEWAY_ORIGINS", "AIFINPAY_MAX_GAS_POL"]);
+    expect(r.json.payment_env_example).toBeUndefined();
+    expect(r.json.next_step).toContain("without a restart");
     const store = JSON.parse(readFileSync(keystore, "utf8"));
     expect(store.enc).toBe("scrypt-aes-256-gcm");
     expect(store.secretB58).toBeUndefined();
@@ -413,8 +418,23 @@ describe("aifinpay-mcp server", () => {
   });
 
   it("still says so plainly when there is no wallet at all", () => {
+    // With payments on by default the ephemeral start must still come up
+    // (it signs nothing) and say the one way forward, which needs no restart.
     const out = run([], { AIFINPAY_AGENT_SECRET: "" });
+    expect(out).toMatch(/EPHEMERAL wallet — DO NOT FUND/);
     expect(out).toMatch(/npx @aifinpay\/mcp init/);
+    expect(out).toContain("no restart is needed to pay");
+  });
+
+  it("refuses to start when an env limit is above the built-in ceiling, naming the dashboard", () => {
+    const r = runRaw([], { AIFINPAY_MAX_USD: "6" });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain(
+      "AIFINPAY_MAX_USD can only lower the built-in ceiling of 5; set the working limits in the dashboard"
+    );
+    const daily = runRaw([], { AIFINPAY_DAILY_USD: "21" });
+    expect(daily.status).not.toBe(0);
+    expect(daily.stderr).toContain("AIFINPAY_DAILY_USD can only lower the built-in ceiling of 20");
   });
 });
 
@@ -555,12 +575,19 @@ const PAYMENT_KEYS = [
   "AIFINPAY_MAX_USD",
   "AIFINPAY_DAILY_USD",
   "AIFINPAY_MAX_GAS_POL",
+  "AIFINPAY_MAX_GAS",
+  "AIFINPAY_PAY_CHAIN",
   "AIFINPAY_PAY_ASSET",
   "AIFINPAY_MODE",
 ];
 
-/** A server configured with exactly this env: its tool names and the payable_fetch answer. */
-async function serverWith(env: Record<string, string>): Promise<{ tools: string[]; payable: any }> {
+/** A server configured with exactly this env: its tool names, the payable_fetch
+ *  answer and whether the call got past the setup gate to a (stubbed) purchase.
+ *  The purchase is stubbed so nothing here touches the network. */
+async function serverWith(
+  env: Record<string, string>,
+  url = "https://other.example/x"
+): Promise<{ tools: string[]; payable: any; purchase?: any }> {
   vi.unstubAllEnvs();
   for (const name of [...PAYMENT_KEYS, "AIFINPAY_WALLET_PASSPHRASE"]) vi.stubEnv(name, undefined);
   for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
@@ -572,47 +599,127 @@ async function serverWith(env: Record<string, string>): Promise<{ tools: string[
     walletHome: home,
     logFn: () => {},
   });
+  const purchase = vi.spyOn(active.agent, "fetchPaid").mockRejectedValue(new Error("stub: no network"));
   const client = new Client({ name: "init-output-test", version: "1" });
   const [left, right] = InMemoryTransport.createLinkedPair();
   await active.server.connect(right);
   await client.connect(left);
   try {
     const tools = (await client.listTools()).tools.map((tool) => tool.name);
-    const result = await client.callTool({ name: "payable_fetch", arguments: { url: "https://other.example/x" } });
+    const result = await client.callTool({ name: "payable_fetch", arguments: { url } });
     const text = String((result.content as Array<{ text: string }>)[0].text);
-    return { tools, payable: { isError: result.isError, text } };
+    return { tools, payable: { isError: result.isError, text }, purchase: purchase.mock.calls[0]?.[2] };
   } finally {
     await client.close();
     await active.server.close();
   }
 }
 
+// 2.12.1 (owner decision 2026-10-20): payments are on by default with a
+// built-in $5 / $20 ceiling; the config init prints is all a first payment
+// needs, and every env variable is an optional override that only narrows.
 describe("aifinpay-mcp init payment settings", () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it("lists payable_fetch before and after the payment block, and only pays after it", async () => {
-    const [config, payment] = printed(run(["init", "--plaintext"]));
+  it("pays straight from the config init prints: no payment block, any https site, within the ceiling", async () => {
+    const [config] = printed(run(["init", "--plaintext"]));
     const env = config.mcpServers.aifinpay.env;
-    const before = await serverWith(env);
-    expect(before.tools).toContain("payable_fetch");
-    expect(before.tools).toContain("payment_setup_status");
-    // Persistent wallet, payments off: the refusal is the setup checklist with
-    // the exact block to add — not a one-line "disabled".
-    expect(before.payable.isError).toBe(true);
-    const status = JSON.parse(before.payable.text);
-    expect(status.wallet.persistent).toBe(true);
-    expect(status.payments_enabled).toBe(false);
-    expect(status.next_step).toContain('"AIFINPAY_PAYMENTS_ENABLED":"1"');
-    const after = await serverWith({ ...env, ...payment });
-    expect(after.tools).toContain("payable_fetch");
-    // Enabled: the refusal is now about the unapproved origin, past the setup gate.
-    expect(after.payable.text).toContain("https://other.example is not an owner-approved site");
+    expect(Object.keys(env)).toEqual(["AIFINPAY_HOME"]);
+    const paying = await serverWith(env);
+    expect(paying.tools).toContain("payable_fetch");
+    expect(paying.tools).toContain("payment_setup_status");
+    // Past the setup gate, to the purchase: nothing asked the owner to edit env.
+    expect(paying.purchase).toBeDefined();
+    expect(paying.purchase).toMatchObject({
+      maxAmountUsd: DEFAULT_MAX_USD,
+      gatewayOrigins: ["https://other.example"],
+      resourcePathMode: "direct",
+      paymentIssuer: "https://api.aifinpay.io",
+    });
+    expect(paying.purchase.v14.maxGasWei).toBe(3n * 10n ** 17n);
   });
 
-  it("leaves room above the smallest batch and for the worst-case gas at ~280 gwei", () => {
-    const [, payment] = printed(run(["init", "--plaintext"]));
-    expect(Number(payment.AIFINPAY_MAX_USD)).toBeGreaterThan(0.1);
-    expect(Number(payment.AIFINPAY_MAX_GAS_POL)).toBeGreaterThanOrEqual(0.21);
+  it("with no env at all, payments are on", () => {
+    vi.stubEnv("AIFINPAY_PAYMENTS_ENABLED", undefined);
+    vi.stubEnv("AIFINPAY_MAX_USD", undefined);
+    vi.stubEnv("AIFINPAY_DAILY_USD", undefined);
+    vi.stubEnv("AIFINPAY_GATEWAY_ORIGINS", undefined);
+    expect(loadConfigFromEnv()).toMatchObject({
+      paymentsEnabled: true,
+      paymentsByDefault: true,
+      maxAmountUsd: 5,
+      dailyAmountUsd: 20,
+      gatewayOrigins: undefined,
+      ownerOverrides: [],
+    });
+  });
+
+  it("an ephemeral wallet still cannot pay: the checklist, no purchase", async () => {
+    const ephemeral = await serverWith({});
+    expect(ephemeral.purchase).toBeUndefined();
+    expect(ephemeral.payable.isError).toBe(true);
+    const status = JSON.parse(ephemeral.payable.text);
+    expect(status.payments_enabled).toBe(true);
+    expect(status.wallet.persistent).toBe(false);
+    expect(status.next_step).toContain("npx @aifinpay/mcp init");
+    expect(status.error).toContain("nothing was signed or paid");
+  });
+
+  it("AIFINPAY_PAYMENTS_ENABLED=0 turns payments off: the checklist names it, no purchase", async () => {
+    const [config] = printed(run(["init", "--plaintext"]));
+    const off = await serverWith({ ...config.mcpServers.aifinpay.env, AIFINPAY_PAYMENTS_ENABLED: "0" });
+    expect(off.tools).toContain("payable_fetch");
+    expect(off.purchase).toBeUndefined();
+    const status = JSON.parse(off.payable.text);
+    expect(status.payments_enabled).toBe(false);
+    expect(status.next_step).toContain("AIFINPAY_PAYMENTS_ENABLED=0");
+  });
+
+  it("env lowers the ceiling, and the lower number is what the purchase may spend", async () => {
+    const [config] = printed(run(["init", "--plaintext"]));
+    const lower = await serverWith({
+      ...config.mcpServers.aifinpay.env,
+      AIFINPAY_MAX_USD: "2",
+      AIFINPAY_DAILY_USD: "3",
+    });
+    expect(lower.purchase).toMatchObject({ maxAmountUsd: 2 });
+  });
+
+  it("env above the ceiling is refused with the dashboard hint, never clipped", async () => {
+    const [config] = printed(run(["init", "--plaintext"]));
+    await expect(serverWith({ ...config.mcpServers.aifinpay.env, AIFINPAY_MAX_USD: "6" })).rejects.toThrow(
+      "AIFINPAY_MAX_USD can only lower the built-in ceiling of 5; set the working limits in the dashboard"
+    );
+    await expect(serverWith({ ...config.mcpServers.aifinpay.env, AIFINPAY_DAILY_USD: "100" })).rejects.toThrow(
+      "AIFINPAY_DAILY_USD can only lower the built-in ceiling of 20"
+    );
+  });
+
+  it("an owner origin allowlist narrows: an unlisted site is refused by name before any purchase", async () => {
+    const [config] = printed(run(["init", "--plaintext"]));
+    const env = { ...config.mcpServers.aifinpay.env, AIFINPAY_GATEWAY_ORIGINS: "https://listed.example" };
+    const refused = await serverWith(env);
+    expect(refused.purchase).toBeUndefined();
+    expect(refused.payable.text).toContain("https://other.example is not an owner-approved site");
+    const listed = await serverWith(env, "https://listed.example/x");
+    expect(listed.purchase).toMatchObject({ gatewayOrigins: ["https://listed.example"] });
+  });
+
+  it("the optional block init prints leaves room for the worst-case gas at ~280 gwei", () => {
+    const [, overrides] = printed(run(["init", "--plaintext"]));
+    expect(Object.keys(overrides)).toEqual(["AIFINPAY_GATEWAY_ORIGINS", "AIFINPAY_MAX_GAS_POL"]);
+    expect(Number(overrides.AIFINPAY_MAX_GAS_POL)).toBeGreaterThanOrEqual(0.21);
+    expect(overrides.AIFINPAY_MAX_GAS_POL).toBe(DEFAULT_MAX_GAS_POL);
+    expect(DEFAULT_MAX_USD).toBeGreaterThan(0.1);
+    expect(DEFAULT_DAILY_USD).toBeGreaterThanOrEqual(DEFAULT_MAX_USD);
+  });
+
+  it("init's prose says payments are on and asks for no env", () => {
+    const out = run(["init", "--plaintext"]);
+    expect(out).toContain("Payments are on");
+    expect(out).toContain("none of it is needed for a first payment");
+    expect(out).not.toContain("As printed it cannot pay");
+    expect(out).not.toContain('"AIFINPAY_PAYMENTS_ENABLED": "1"');
   });
 
   it("gives an encrypted wallet's config the passphrase variable, never the passphrase", () => {
@@ -631,11 +738,11 @@ describe("aifinpay-mcp init payment settings", () => {
 });
 
 describe("README, as npm shows it", () => {
-  it("shows the payment block init prints", () => {
-    const section = README.slice(README.indexOf("## Enable native paid GET requests"));
+  it("shows the optional override block init prints", () => {
+    const section = README.slice(README.indexOf("## Optional payment overrides"));
     const block = section.match(/```json\n([\s\S]*?)\n```/);
-    expect(block, "README lost its payment example").not.toBeNull();
-    const [, payment] = printed(run(["init", "--plaintext"]));
-    expect(JSON.parse(block![1])).toEqual(payment);
+    expect(block, "README lost its override example").not.toBeNull();
+    const [, overrides] = printed(run(["init", "--plaintext"]));
+    expect(JSON.parse(block![1])).toEqual(overrides);
   });
 });

@@ -55,26 +55,26 @@
         },
         {
           "name": "AIFINPAY_PAYMENTS_ENABLED",
-          "description": "Set to 1 to register payable_fetch (AIFP-1 v1.4 payments on Polygon or Base). Needs a persistent wallet and every owner limit below; the server refuses to start with payments enabled and a limit missing.",
+          "description": "Payments (payable_fetch, AIFP-1 v1.4 on Polygon or Base) are on unless this is 0. Only a persistent wallet signs, within the built-in ceiling of $5 per payment and $20 per 24 hours; an unfunded wallet spends nothing.",
           "format": "string",
           "choices": ["0", "1"],
           "isRequired": false
         },
         {
           "name": "AIFINPAY_MAX_USD",
-          "description": "Per-payment cap in USD for payable_fetch. Required when payments are enabled; a tool argument can lower it, never raise it.",
+          "description": "Lowers the built-in $5 per-payment ceiling of payable_fetch (default 5; a higher value is refused). The working limits are the dashboard Controls. A tool argument can lower it for one call, never raise it.",
           "format": "string",
           "isRequired": false
         },
         {
           "name": "AIFINPAY_DAILY_USD",
-          "description": "Rolling 24-hour spending cap in USD. Required when payments are enabled.",
+          "description": "Lowers the built-in $20 rolling 24-hour ceiling (default 20; a higher value is refused).",
           "format": "string",
           "isRequired": false
         },
         {
           "name": "AIFINPAY_GATEWAY_ORIGINS",
-          "description": "Comma-separated exact HTTPS origins the agent may pay. Required when payments are enabled.",
+          "description": "Optional allowlist: comma-separated exact HTTPS origins the agent may pay. Unset, any https site; who is paid is decided by the AiFinPay-signed quote, never by the 402.",
           "format": "string",
           "isRequired": false
         },

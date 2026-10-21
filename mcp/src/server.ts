@@ -46,10 +46,12 @@ const safeFetch = makeSafeFetch({
 });
 
 const RELOAD_ENV_NOTE =
-  "Owner limits and AIFINPAY_PAYMENTS_ENABLED are read only when this server starts; agent_reload re-reads the keystore and nothing else. If the owner has saved them since, have the client restart the aifinpay MCP server (restart the client, or disable and re-enable the server), then call payment_setup_status.";
+  "Payments are off: AIFINPAY_PAYMENTS_ENABLED=0 (or a programmatic config without payments). Env is read only when this server starts; agent_reload re-reads the keystore and nothing else. If the owner has changed it since, have the client restart the aifinpay MCP server (restart the client, or disable and re-enable the server), then call payment_setup_status.";
 
-/** Read-only by default. Explicit owner configuration enables the reviewed
- * family-specific v1.4 payable_fetch path; legacy signing tools stay retired. */
+/** Payments are on by default (2.12.1) within the built-in ceiling, and only a
+ * persistent wallet signs: a server that started ephemeral opens its payment
+ * journal at agent_reload after init, without a restart. Legacy signing tools
+ * stay retired; payable_fetch is the one reviewed v1.4 path. */
 export async function createServer(config: McpConfig = {}) {
   const log = config.logFn ?? defaultLog;
   assertInjectedWalletChain(config);
@@ -88,13 +90,21 @@ export async function createServer(config: McpConfig = {}) {
   if (!configured)
     log(
       "warn",
-      `[aifinpay-mcp] EPHEMERAL wallet — DO NOT FUND. Run \`${initCommand(config.walletHome)}\`, then agent_reload in this connection.`
+      `[aifinpay-mcp] EPHEMERAL wallet — DO NOT FUND. Run \`${initCommand(config.walletHome)}\`, then agent_reload in this connection; no restart is needed to pay.`
     );
+  // The journal exists only for a persistent wallet: an ephemeral one cannot
+  // pay, and payable_fetch explains instead. A refused setting stops a server
+  // whose owner asked for payments by name; with payments on by default it
+  // starts read-only and payment_setup_status repeats the refusal.
   let paymentState: PaymentStateStore | undefined;
   if (config.paymentsEnabled) {
-    validatePaymentConfig(config);
-    if (!configured) throw new Error("Payments require a persistent configured wallet; run init first");
-    paymentState = new PaymentStateStore(agent.evmAddress, config.walletHome);
+    try {
+      validatePaymentConfig(config);
+      if (configured) paymentState = new PaymentStateStore(agent.evmAddress, config.walletHome);
+    } catch (error) {
+      if (!config.paymentsByDefault) throw error;
+      log("warn", `[aifinpay-mcp] payments stay off until the owner fixes a setting: ${(error as Error).message}`);
+    }
   }
   // Keep the legacy agent budget configured even though this RC exposes no
   // signing tool. It remains an additional defence for downstream/private code
@@ -150,7 +160,7 @@ export async function createServer(config: McpConfig = {}) {
       {
         name: "agent_reload",
         description:
-          "Reload the configured local wallet files after init or a file update, without starting a new conversation. Returns public addresses only. Owner limits and other env changes take effect only after the client restarts the aifinpay MCP server; agent_reload does not read them.",
+          "Reload the configured local wallet files after init or a file update, without starting a new conversation. Returns public addresses only. With payments on (the default) it also opens the payment journal for the loaded wallet, so a server that started with an ephemeral wallet can pay right after init, without a restart. Env changes (owner overrides, AIFINPAY_PAYMENTS_ENABLED=0) take effect only after the client restarts the aifinpay MCP server; agent_reload does not read them.",
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       },
@@ -190,6 +200,17 @@ export async function createServer(config: McpConfig = {}) {
               "Reconnect to switch payment wallets; pending state must remain associated with its original wallet"
             );
           }
+          // init ran after this server started ephemeral: open the journal for
+          // the wallet it just loaded. The env is still the one read at start.
+          let refusal: string | undefined;
+          if (!paymentState && config.paymentsEnabled) {
+            try {
+              validatePaymentConfig(config);
+              paymentState = new PaymentStateStore(replacement.loaded.evmAddress, config.walletHome);
+            } catch (error) {
+              refusal = `Payments stay off: ${(error as Error).message}. Env is read only when this server starts; once the owner fixes it, have the client restart the aifinpay MCP server, then call payment_setup_status.`;
+            }
+          }
           agent = replacement.loaded;
           identitySource = replacement.source;
           return {
@@ -206,7 +227,10 @@ export async function createServer(config: McpConfig = {}) {
                   // env was not picked up", and an agent stopped there
                   // (2026-10-19): config is fixed at start, so say so.
                   payments_enabled: Boolean(config.paymentsEnabled),
-                  ...(config.paymentsEnabled ? {} : { env_note: RELOAD_ENV_NOTE }),
+                  // Whether this connection can sign now: the journal is open
+                  // for the loaded wallet.
+                  payments_ready: Boolean(paymentState),
+                  ...(config.paymentsEnabled ? (refusal ? { env_note: refusal } : {}) : { env_note: RELOAD_ENV_NOTE }),
                 }),
               },
             ],

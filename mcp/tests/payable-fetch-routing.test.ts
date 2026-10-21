@@ -458,7 +458,7 @@ describe("payable_fetch merchant pins", () => {
   });
 });
 
-// 2.12.0: a first payment needs no env. Without AIFINPAY_GATEWAY_ORIGINS the
+// 2.12.1: a first payment needs no env. Without AIFINPAY_GATEWAY_ORIGINS the
 // allowlist is the origin of the URL itself, and the AIFP-1 resource identity
 // follows the origin: the hosted gateway by slug, any other site by path. The
 // money is still bounded the same way — a backend-signed quote for a registered
@@ -526,6 +526,60 @@ describe("payable_fetch without AIFINPAY_GATEWAY_ORIGINS", () => {
     expect(f.fetchPaid).not.toHaveBeenCalled();
     expect((await runPayableFetch(f.ctx, { url: "https://listed.example/data" })).isError).not.toBe(true);
     expect(f.fetchPaid.mock.calls[0][2]).toMatchObject({ gatewayOrigins: ["https://listed.example"] });
+  });
+});
+
+// The built-in ceiling is what a default-on wallet can lose: $5 per payment,
+// $20 over any 24 hours, checked in persistPrepared under the lock before any
+// broadcast. These run with the ceiling exactly as loadConfigFromEnv gives it.
+describe("payable_fetch within the built-in $5 / $20 ceiling", () => {
+  function atCeiling() {
+    const f = fixture();
+    f.ctx.config.maxAmountUsd = 5;
+    f.ctx.config.dailyAmountUsd = 20;
+    return f;
+  }
+  const quoted = (usd: string) => ({ ...prepared, quote: { ...prepared.quote, amount: usd } });
+  const prepare = (f: ReturnType<typeof fixture>, usd: string) =>
+    f.fetchPaid.mockImplementationOnce(async (_url, _init, options) => {
+      await options.nativeUsdPrice();
+      await options.v14.onPrepared(quoted(usd));
+      return new Response("content");
+    });
+
+  it("refuses a $6 payment before broadcast and records nothing", async () => {
+    const f = atCeiling();
+    prepare(f, "6");
+    expect((await runPayableFetch(f.ctx, args)).isError).toBe(true);
+    expect(f.store.read().pending).toBeUndefined();
+    expect(f.store.read().spend).toHaveLength(0);
+  });
+
+  it("pays $5 exactly", async () => {
+    const f = atCeiling();
+    prepare(f, "5");
+    expect((await runPayableFetch(f.ctx, args)).isError).not.toBe(true);
+    expect(f.store.read().spend.map((s) => s.usd)).toEqual([5]);
+  });
+
+  it("refuses the 21st dollar within 24 hours, and offers the SDK only what is left", async () => {
+    const f = atCeiling();
+    const state = f.store.read();
+    state.spend = [
+      { at: Date.now() - 3_600_000, usd: 19.5, tx },
+      // Older than 24 h: no longer counts.
+      { at: Date.now() - 86_400_000 - 60_000, usd: 5, tx },
+    ];
+    f.store.save(state);
+    prepare(f, "1");
+    expect((await runPayableFetch(f.ctx, args)).isError).toBe(true);
+    expect(f.fetchPaid.mock.calls[0][2].maxAmountUsd).toBe(0.5);
+    expect(f.store.read().spend).toHaveLength(2);
+    expect(f.store.read().pending).toBeUndefined();
+    // The last half dollar of the day still pays.
+    prepare(f, "0.5");
+    expect((await runPayableFetch(f.ctx, args)).isError).not.toBe(true);
+    expect(f.store.spent24h(f.store.read())).toBe(20);
   });
 });
 

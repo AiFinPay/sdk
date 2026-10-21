@@ -27,7 +27,7 @@
  *   AIFINPAY_AGENT_SECRET   legacy base58 secret — overrides the legacy keystore
  *   AIFINPAY_BASE_URL       default https://aifinpay.io
  *   AIFINPAY_TIMEOUT_MS     default 30000
- *   AIFINPAY_MAX_USD        hard cap per single payment (no default)
+ *   AIFINPAY_MAX_USD        lowers the built-in $5-per-payment ceiling (never raises it)
  */
 import {
   readFileSync,
@@ -91,10 +91,16 @@ Env (all optional):
   AIFINPAY_TIMEOUT_MS     default 30000
   AIFINPAY_HOME           default ~/.aifinpay
 
-Payments (payable_fetch) sign nothing until the owner sets all of
-AIFINPAY_PAYMENTS_ENABLED=1, AIFINPAY_GATEWAY_ORIGINS, AIFINPAY_MAX_USD,
-AIFINPAY_DAILY_USD and AIFINPAY_MAX_GAS_POL. init prints an example block;
-the payment_setup_status tool says which of them is still missing.
+Payments (payable_fetch) are on by default, within a built-in ceiling of $5 per
+payment and $20 per 24 hours, only from a persistent wallet (init), and only to
+merchants registered with AiFinPay; an unfunded wallet spends nothing. The
+working limits are the dashboard Controls (https://dash.aifinpay.io) once the
+agent is claimed. Optional overrides, all narrowing:
+  AIFINPAY_PAYMENTS_ENABLED=0   turn payments off
+  AIFINPAY_MAX_USD, AIFINPAY_DAILY_USD   lower the ceiling (higher is refused)
+  AIFINPAY_GATEWAY_ORIGINS      exact https origins it may pay; unset, any https site
+  AIFINPAY_MAX_GAS_POL          gas cap per payment on Polygon (default 0.3)
+The payment_setup_status tool says what is still missing before a first payment.
 `);
   process.exit(0);
 }
@@ -178,7 +184,8 @@ if (arg === "init") {
 
   const { loadConfigFromEnv } = await import("../dist/config.js");
   const { loadWalletIdentity } = await import("../dist/identity.js");
-  const { PAYMENT_ENV, lockedKeystoreStep } = await import("../dist/tools/payment-setup-status.js");
+  const { PAYMENT_OVERRIDES, PAYMENTS_DEFAULT_NOTE, lockedKeystoreStep } =
+    await import("../dist/tools/payment-setup-status.js");
   const config = loadConfigFromEnv();
   // A keystore that cannot be opened is reported in one line that names the
   // variable, never as a stack trace — and never replaced. An agent cannot ask
@@ -225,7 +232,7 @@ if (arg === "init") {
   // caller can parse it. The same facts, as prose, go to a terminal.
   const emit = (json, text) => process.stdout.write(NONINTERACTIVE ? JSON.stringify(json, null, 2) + "\n" : text);
   const nextStep =
-    'Put "env" into the aifinpay server entry of the MCP client config and reconnect the server (or call agent_reload in an already connected one), then call payment_setup_status: it names the next step up to the first payment.';
+    'Put "env" into the aifinpay server entry of the MCP client config and reconnect the server (or call agent_reload in an already connected one: payments then work without a restart), then call payment_setup_status: it names the next step up to the first payment.';
 
   if (selected && selected.source !== "legacy-keystore") {
     const agent = selected.seedHash
@@ -239,7 +246,8 @@ if (arg === "init") {
         source: selected.source,
         addresses: addressesOf(agent),
         env: { ...homeEnv, ...indexEnv },
-        payment_env_example: PAYMENT_ENV,
+        payments: PAYMENTS_DEFAULT_NOTE,
+        optional_env_example: PAYMENT_OVERRIDES,
         next_step: nextStep,
       },
       `Using ${selected.source}${selected.derivationIndex === undefined ? "" : ` (index ${selected.derivationIndex})`}; no replacement wallet created.\n` +
@@ -347,7 +355,8 @@ if (arg === "init") {
               passphrase_note: `${PASSPHRASE_ENV} was generated for this wallet and appears only here, inside env. The wallet cannot be opened or recovered without it.`,
             }
           : {}),
-        payment_env_example: PAYMENT_ENV,
+        payments: PAYMENTS_DEFAULT_NOTE,
+        optional_env_example: PAYMENT_OVERRIDES,
         next_step: nextStep,
       },
       ""
@@ -389,10 +398,8 @@ if (arg === "init") {
       `  EVM     ${agent.evmAddress}\n` +
       `  Solana  ${agent.solanaAddress}\n` +
       `  Casper  ${agent.casperAddress}\n\n` +
-      `Add this to your MCP client config and connect/reconnect this MCP server.\n` +
-      `As printed it cannot pay: payable_fetch is listed but signs nothing until\n` +
-      `you add the payment settings further down (payment_setup_status says what\n` +
-      `is still missing):\n\n` +
+      `Add this to your MCP client config and connect/reconnect this MCP server\n` +
+      `(or call agent_reload in one that is already connected):\n\n` +
       JSON.stringify(
         {
           mcpServers: {
@@ -420,31 +427,32 @@ if (arg === "init") {
       `keystore. If this server is already connected, call agent_reload after init.\nA new conversation is not required by this server.\n\n` +
       `Back up ${KEYSTORE}. It is the only copy. The derivation is not\n` +
       `BIP-39, so no standard wallet can recover this from a phrase.\n\n` +
-      `To let it pay, add these to "env" above, then reconnect the server:\n\n` +
-      JSON.stringify(PAYMENT_ENV, null, 2) +
-      `\n\n` +
-      `  AIFINPAY_GATEWAY_ORIGINS    exact HTTPS origins it may pay, comma-separated;\n` +
-      `                              replace the example. No wildcards.\n` +
-      `  AIFINPAY_GATEWAY_PATH_MODE  "direct" for a site that runs its own AiFinPay\n` +
-      `                              paywall, "gateway" for gateway.aifinpay.io.\n` +
-      `  AIFINPAY_MAX_USD            per payment, a ceiling set once (the smallest\n` +
-      `                              batch is $0.10; the example is not a budget).\n` +
-      `  AIFINPAY_DAILY_USD          total over any 24 hours, the same kind of ceiling.\n` +
-      `                              Day-to-day limits: dashboard Controls, once the\n` +
-      `                              agent is claimed (see below).\n` +
-      `  AIFINPAY_MAX_GAS_POL        worst-case network fee of one payment, checked\n` +
-      `                              before signing. It follows Polygon's gas price:\n` +
-      `                              at ~280 gwei it is ~0.10 POL paying in POL and\n` +
-      `                              ~0.21 POL paying in USDC. A lower cap refuses\n` +
-      `                              the payment; raise it when gas is higher.\n\n` +
-      `Fund the EVM address on Polygon with the batch price at today's rate plus the\n` +
-      `gas cap, in POL; payment_setup_status prices it.\n` +
-      `To pay in USDC, also set "AIFINPAY_PAY_ASSET": "USDC" and hold USDC for the\n` +
-      `batch plus POL up to the gas cap. Check the balance before funding or paying.\n\n` +
-      `See its balance, payments and receipts in your dashboard:\n` +
+      `Payments are on: payable_fetch pays at most $5 per payment and $20 per 24\n` +
+      `hours (a built-in ceiling, not a budget), only to merchants registered with\n` +
+      `AiFinPay. It holds nothing yet, so it can spend nothing. To let it pay, fund\n` +
+      `the EVM address on Polygon with the batch price at today's rate plus the gas\n` +
+      `cap, in POL; payment_setup_status prices it (the smallest batch is $0.10).\n` +
+      `To pay in USDC, set "AIFINPAY_PAY_ASSET": "USDC" and hold USDC for the batch\n` +
+      `plus POL up to the gas cap. Check the balance before funding or paying.\n\n` +
+      `Set the working limits in your dashboard:\n` +
       `  https://dash.aifinpay.io → My Agents → Claim via MCP, then give the\n` +
       `  one-time URL to the agent (tool agent_claim_self). Controls there set the\n` +
-      `  working limits; the env values above stay as the ceiling.\n`
+      `  per-payment cap, daily cap, pause and allowed merchants, enforced on every\n` +
+      `  quote and payment; the ceiling above still applies underneath.\n\n` +
+      `Optional env, for reference (none of it is needed for a first payment):\n\n` +
+      JSON.stringify(PAYMENT_OVERRIDES, null, 2) +
+      `\n\n` +
+      `  AIFINPAY_GATEWAY_ORIGINS    exact HTTPS origins it may pay, comma-separated,\n` +
+      `                              no wildcards. Unset, any https site: the money\n` +
+      `                              still goes only where AiFinPay's signed quote says.\n` +
+      `  AIFINPAY_MAX_GAS_POL        worst-case network fee of one payment, checked\n` +
+      `                              before signing; default 0.3 POL. It follows\n` +
+      `                              Polygon's gas price: at ~280 gwei it is ~0.10 POL\n` +
+      `                              paying in POL and ~0.21 POL paying in USDC.\n` +
+      `  AIFINPAY_MAX_USD, AIFINPAY_DAILY_USD   lower the ceiling; a higher value\n` +
+      `                              is refused. Raise nothing here: use Controls.\n` +
+      `  AIFINPAY_PAYMENTS_ENABLED   "0" turns payments off.\n` +
+      `Env is read when the server starts; after changing it, restart the server.\n`
   );
   process.exit(0);
 }

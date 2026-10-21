@@ -28,10 +28,10 @@ export interface McpConfig {
   /** On unless the owner sets AIFINPAY_PAYMENTS_ENABLED=0; never accepted from tool arguments.
    *  An unfunded wallet spends nothing, and the built-in ceiling below bounds a funded one. */
   paymentsEnabled?: boolean;
-  /** The owner wrote AIFINPAY_PAYMENTS_ENABLED=1 themselves. A refused payment setting then
-   *  stops the server, as it always did; with the variable unset the server starts read-only
-   *  and payment_setup_status names the refusal instead. */
-  paymentsRequired?: boolean;
+  /** Payments are on because AIFINPAY_PAYMENTS_ENABLED is unset. A refused payment setting
+   *  then leaves the server running read-only, with payment_setup_status naming the refusal;
+   *  an explicit =1 (or a programmatic paymentsEnabled) stops the server, as it always did. */
+  paymentsByDefault?: boolean;
   /** Names of the limit variables the owner set in env to lower the built-in ceiling;
    *  payment_setup_status reports each limit's source from this. */
   ownerOverrides?: string[];
@@ -58,12 +58,12 @@ export interface McpConfig {
 
   /** Optional allowlist of gateway origins this agent may settle against.
    *
-   *  Unset (the default since 2.12.0), payable_fetch accepts the https origin
+   *  Unset (the default since 2.12.1), payable_fetch accepts the https origin
    *  of the URL it is given. That is safe because the 402 never decides who is
    *  paid: the SDK takes only the merchant id from it and asks the configured
    *  AiFinPay backend for a signed quote, so money can only reach a registered
    *  merchant, within the ceiling below and the owner's dashboard Controls.
-   *  Before 2.12.0 this variable was required, and an unlisted origin was
+   *  Before 2.12.1 this variable was required, and an unlisted origin was
    *  refused by name (observed in an external E2E run on 2026-08-27).
    *
    *  Set by the OPERATOR, exact https origins only, never a wildcard, it
@@ -101,7 +101,7 @@ export function loadConfigFromEnv(): McpConfig {
   }
   return {
     paymentsEnabled: process.env.AIFINPAY_PAYMENTS_ENABLED !== "0",
-    paymentsRequired: process.env.AIFINPAY_PAYMENTS_ENABLED === "1",
+    paymentsByDefault: !process.env.AIFINPAY_PAYMENTS_ENABLED,
     ownerOverrides: [
       ...(process.env.AIFINPAY_MAX_USD ? ["AIFINPAY_MAX_USD"] : []),
       ...(process.env.AIFINPAY_DAILY_USD ? ["AIFINPAY_DAILY_USD"] : []),
