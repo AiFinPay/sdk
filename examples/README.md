@@ -21,6 +21,18 @@ names `@aifinpay/mcp` uses), and refuse to start without them.
 | [`autogpt`](./autogpt) | Headless loop that reads a paid resource on a schedule and stops at the owner's 24-hour limit | Python 3.9+, `openai` |
 | [`claude-mcp`](./claude-mcp) | Claude Desktop MCP config + walkthrough | MCP client |
 
+## Shadow mode — observe AI-agent traffic without charging
+
+Observe-only installs for a site that wants the report before the paywall:
+same classification and the same gate events as `@aifinpay/gate` in
+`mode: "shadow"`, built on `@aifinpay/gate/edge`. Both have unit tests that
+run with `node --test` and no network.
+
+| Example | What it shows | Stack |
+|---|---|---|
+| [`cloudflare-worker-shadow`](./cloudflare-worker-shadow) | Pass-through Worker: classifies at the edge, batches `kind: "402"` events to `POST /v1/merchants/:id/gate-events`, adds `AIFP-Mode: shadow`; `wrangler deploy` with the merchant id and secret as Worker secrets | Cloudflare Workers, `@aifinpay/gate` ≥ 0.6.0 |
+| [`nginx-shadow`](./nginx-shadow) | A dedicated `log_format` (path, User-Agent, an AIFP-header flag) plus a log shipper that turns lines into the same events; `mirror` alternative documented | nginx, Node 22+ |
+
 ## Bridge templates (legacy splitter)
 
 These bridges sell per-call access by having the agent pay the legacy

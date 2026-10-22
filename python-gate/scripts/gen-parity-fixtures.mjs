@@ -67,21 +67,42 @@ const scenarios = [
   { name: "paying agent with browser UA metered", opts: { resource: "/paid", shouldCharge: "known" },
     reqs: [{ path: "/paid", headers: { "User-Agent": "Mozilla/5.0 Safari", "AIFP-Receipt": await t({}) } }] },
   { name: "api base override", opts: { resource: "/paid", apiBase: "https://staging.example/" }, reqs: [{ path: "/paid", headers: {} }] },
+  // Shadow: the same decisions and events as the scenarios above, served.
+  { name: "shadow: no receipt served, would-be 402", opts: { resource: "/paid", mode: "shadow" }, reqs: [{ path: "/paid", headers: {} }] },
+  { name: "shadow: crawler served, would-be 402", opts: { resource: "/paid", mode: "shadow", shouldCharge: "known" },
+    reqs: [{ path: "/paid", headers: { "User-Agent": "Mozilla/5.0 (compatible; GPTBot/1.1)" } }] },
+  { name: "shadow: human exempt as in enforce", opts: { resource: "/paid", mode: "shadow", shouldCharge: "known" },
+    reqs: [{ path: "/paid", headers: { "User-Agent": "Mozilla/5.0 (Macintosh) Safari/605.1.15" } }] },
+  { name: "shadow: wrong scope served, would-be 403", opts: { resource: "/paid", mode: "shadow" }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({ resource: "/other" }) } }] },
+  { name: "shadow: action receipt served, would-be 403", opts: { resource: "/paid", mode: "shadow" }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({ typ_aifp: "action" }) } }] },
+  { name: "shadow: expired served, would-be 402", opts: { resource: "/paid", mode: "shadow" }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({ exp: 1000000000 }) } }] },
+  { name: "shadow: batch of 3 metered, then served instead of 402", opts: { resource: "/paid", mode: "shadow" },
+    reqs: Array(4).fill({ path: "/paid", headers: { "AIFP-Receipt": await t({ receipt_id: "rcpt_0000000000000004" }) } }) },
+  { name: "shadow: agent mismatch served, would-be 403", opts: { resource: "/paid", mode: "shadow", requireAgentMatch: true },
+    reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({ receipt_id: "rcpt_0000000000000005" }), "AIFP-Agent-Id": "0xsomeoneelse" } }] },
+  { name: "explicit enforce is the default", opts: { resource: "/paid", mode: "enforce" }, reqs: [{ path: "/paid", headers: {} }] },
 ];
 
 const results = [];
 for (const s of scenarios) {
+  // Every event the gate emits is recorded with the request that caused it,
+  // so the Python port is held to the same stream — kind, resource, weight,
+  // detail and the identity triple — not only to the same response. A field
+  // Node leaves undefined is absent here; the Python side drops None to match.
+  let events = [];
   const gate = G.createGate({
     merchantId: MID, jwks: { keys: [pubJwk] }, resource: s.opts.resource, tier: s.opts.tier, weight: s.opts.weight,
-    requireAgentMatch: s.opts.requireAgentMatch, apiBase: s.opts.apiBase,
+    requireAgentMatch: s.opts.requireAgentMatch, apiBase: s.opts.apiBase, mode: s.opts.mode,
+    onEvent: (e) => events.push(e),
     ...(s.opts.shouldCharge === "known" ? { shouldCharge: G.knownAiAgent } : {}),
   });
   const reqs = [];
   for (const r of s.reqs) {
     const lower = Object.fromEntries(Object.entries(r.headers).map(([k, v]) => [k.toLowerCase(), v]));
     const request = { path: r.path, header: (n) => lower[n.toLowerCase()] };
+    events = [];
     const res = await gate(request);
-    reqs.push({ ...r, result: res, identity: G.classifyAgent(request) });
+    reqs.push({ ...r, result: res, identity: G.classifyAgent(request), events });
   }
   results.push({ name: s.name, opts: s.opts, requests: reqs });
 }
@@ -100,6 +121,7 @@ const fixture = {
   constants: {
     DETAIL_QUOTA_EXHAUSTED: G.DETAIL_QUOTA_EXHAUSTED, DETAIL_RECEIPT_EXPIRED: G.DETAIL_RECEIPT_EXPIRED,
     DETAIL_VERIFY_FAILED: G.DETAIL_VERIFY_FAILED, HEADER_QUOTA_REMAINING: G.HEADER_QUOTA_REMAINING,
+    HEADER_MODE: G.HEADER_MODE, HEADER_SHADOW_STATUS: G.HEADER_SHADOW_STATUS,
     AI_AGENT_UA_MARKERS: G.AI_AGENT_UA_MARKERS,
     AI_AGENT_UA_TABLE: G.AI_AGENT_UA_TABLE.map((row) => [row.marker, row.operator, row.ua_class]),
     GATE_OPERATORS: G.GATE_OPERATORS, UA_CLASSES: G.UA_CLASSES,

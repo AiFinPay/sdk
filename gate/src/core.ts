@@ -13,7 +13,7 @@
 // merchant edits in our dashboard would be a second source of truth for the
 // same rule, and the two would disagree on the day it mattered.
 // ──────────────────────────────────────────────────────────────────────────
-import type { AifpContext, AifpResource, GateEvent, GateRequest, GateResult, Tier } from "./types.js";
+import type { AifpContext, AifpResource, GateEvent, GateMode, GateRequest, GateResult, Tier } from "./types.js";
 import { MemoryStore } from "./stores/memory.js";
 import type { GateStore } from "./stores/types.js";
 import { createVerifier } from "./verify.js";
@@ -34,6 +34,25 @@ export interface GateOptions {
   /** Billing units per call. Defaults to the tier preset; a registry record's
    *  `unit_weight` wins over both. */
   weight?: number;
+  /**
+   * "enforce" (the default) answers 402 / 403 / 503 as README §4 describes.
+   * "shadow" makes exactly the same decision and emits exactly the same event
+   * — kind, resource, weight, detail, operator, ua_class, verified — and then
+   * serves the request anyway: no 402, no 403, no 503, and nothing metered
+   * for a call that would have been refused. The money path is untouched, so
+   * a site can watch its agent traffic in the dashboard before it charges.
+   *
+   * Every response from a shadow gate carries `AIFP-Mode: shadow`. One the
+   * gate would have refused also carries `AIFP-Shadow-Status` (402, 403 or
+   * 503) and hands your handler `req.aifp.mode === "shadow"` with the refusal
+   * in `req.aifp.shadow`. A request that WOULD have been served — a valid
+   * receipt, an open route, an exempt reader — is served exactly as in
+   * enforce, metered and all; shadow only changes refusals.
+   *
+   * Omitting `mode` is enforce. An install that predates this option keeps
+   * behaving as it always did; nothing flips a live paywall into shadow.
+   */
+  mode?: GateMode;
   store?: GateStore;
   issuer?: string;
   jwksUri?: string;
@@ -120,6 +139,11 @@ export const DETAIL_QUOTA_EXHAUSTED = "quota exhausted — prepay the next batch
 export const DETAIL_RECEIPT_EXPIRED = "receipt expired — prepay a new batch";
 export const DETAIL_VERIFY_FAILED = "receipt verification failed (signature/issuer/audience)";
 export const HEADER_QUOTA_REMAINING = "AIFP-Quota-Remaining";
+/** On every response from a gate in shadow mode: `AIFP-Mode: shadow`. Enforce
+ *  sends no such header — its 402 says what it is. */
+export const HEADER_MODE = "AIFP-Mode";
+/** On a shadow response the gate would have refused: the status it decided on. */
+export const HEADER_SHADOW_STATUS = "AIFP-Shadow-Status";
 
 export function createGate(options: GateOptions): (req: GateRequest) => Promise<GateResult> {
   const merchantId = options.merchantId;
@@ -129,6 +153,14 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
   }
   if (options.reporting && options.onEvent) {
     throw new Error("createGate: select reporting v2 or onEvent; producer dual-send is not supported");
+  }
+
+  const mode: GateMode = options.mode ?? "enforce";
+  // "Shadow" with a capital, "observe", "off": a mode the gate does not know
+  // must not silently become enforce (a 402 to traffic the merchant meant to
+  // watch) or shadow (a paywall that stops charging).
+  if (mode !== "enforce" && mode !== "shadow") {
+    throw new Error(`createGate: mode must be "shadow" or "enforce": ${JSON.stringify(options.mode)}`);
   }
 
   const tier: Tier = options.tier ?? "standard";
@@ -174,6 +206,34 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     let who: AgentIdentity = classifyAgent(req);
     const note = (e: GateEvent) => emit({ ...e, ...who });
 
+    const agentHeader = req.header("AIFP-Agent-Id") ?? null;
+
+    // ── Shadow ────────────────────────────────────────────────────────────
+    // By the time a refusal is built its event has already been emitted, so
+    // shadow has one job: keep the refusal as `aifp.shadow` and serve the
+    // request instead. Same event stream as enforce; a 200 wherever enforce
+    // would have sent 402, 403 or 503. Nothing is metered — a call enforce
+    // refuses never consumed a unit either.
+    const refuse = (resource: string, weight: number, r: Extract<GateResult, { ok: false }>): GateResult => {
+      if (mode !== "shadow") return r;
+      return {
+        ok: true,
+        status: 200,
+        headers: { [HEADER_MODE]: "shadow", [HEADER_SHADOW_STATUS]: String(r.status) },
+        aifp: {
+          agent: agentHeader,
+          receipt_id: "",
+          resource,
+          weight: 0,
+          unit_quota: 0,
+          used: 0,
+          remaining: 0,
+          mode: "shadow",
+          shadow: { status: r.status, error: r.body.error, detail: r.body.detail, weight },
+        },
+      };
+    };
+
     // `effectiveTier` is passed in per request, never taken from the closure. In
     // registry mode the weight comes from the MATCHED resource while the tier used
     // to come from the mount, so a premium route quoted unit_price_usd $0.0005 and
@@ -181,7 +241,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // Whatever tier is advertised here must be the one `weight` was derived from.
     const challenge = (resource: string, weight: number, effectiveTier: Tier, detail?: string): GateResult => {
       note({ kind: "402", resource, weight, detail });
-      return {
+      return refuse(resource, weight, {
         ok: false,
         status: 402,
         headers: { "Content-Type": "application/json" },
@@ -193,17 +253,17 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
           detail,
           apiBase: options.apiBase,
         }),
-      };
+      });
     };
 
     const forbid = (resource: string, weight: number, detail: string): GateResult => {
       note({ kind: "403", resource, weight, detail });
-      return {
+      return refuse(resource, weight, {
         ok: false,
         status: 403,
         headers: { "Content-Type": "application/json" },
         body: { error: "AIFP-403", detail },
-      };
+      });
     };
 
     // ── 1. What is this path, and what does it cost? ──────────────────────
@@ -222,7 +282,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
           weight: 0,
           detail: "registry never loaded",
         });
-        return {
+        return refuse(path, 0, {
           ok: false,
           status: 503,
           headers: { "Content-Type": "application/json", "Retry-After": "30" },
@@ -230,7 +290,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
             error: "AIFP-503-PRICING",
             detail: "pricing unavailable — this gate has not been able to reach the AiFinPay control plane yet",
           },
-        };
+        });
       }
       matched = options.registry.match(path);
     }
@@ -248,8 +308,6 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // published, which is what the receipt was quoted for, so it wins over
     // req.path (which a mounted router may have already stripped a prefix off).
     const scopePath = options.registry ? path : (options.resource ?? path);
-
-    const agentHeader = req.header("AIFP-Agent-Id") ?? null;
 
     // ── 2. Explicitly free resources ──────────────────────────────────────
     // paywall_enabled:false is the merchant saying "serve this to anyone". No
@@ -349,7 +407,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
         // one for the length of our outage, which is a worse failure than a
         // 503 the agent will retry.
         note({ kind: "meter_error", resource, weight, detail: v.reason });
-        return {
+        return refuse(resource, weight, {
           ok: false,
           status: 503,
           headers: { "Content-Type": "application/json", "Retry-After": "30" },
@@ -357,7 +415,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
             error: "AIFP-503-METER",
             detail: "receipt verification is temporarily unavailable — retry shortly",
           },
-        };
+        });
       }
       return forbid(resource, weight, DETAIL_VERIFY_FAILED);
     }
@@ -526,17 +584,17 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
           },
         };
       }
-      return {
+      return refuse(resource, weight, {
         ok: false,
         status: 503,
         headers: { "Content-Type": "application/json", "Retry-After": "5" },
         body: { error: "AIFP-503-METER", detail: "quota store unavailable — retry shortly" },
-      };
+      });
     }
   };
   return async (req) => {
     let registeredResource: string | undefined;
-    const result = await decide(
+    const decided = await decide(
       req,
       options.reporting
         ? (resource) => {
@@ -544,6 +602,13 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
           }
         : undefined
     );
+    // Every answer from a shadow gate says so — a served call as much as a
+    // would-be refusal — so a site owner, and the AiFinPay site check, can
+    // tell "gate installed, observing" from "no gate" on a 200.
+    const result: GateResult =
+      mode === "shadow" && decided.ok
+        ? { ...decided, headers: { ...decided.headers, [HEADER_MODE]: "shadow" } }
+        : decided;
     // Only explicitly registered patterns participate; a fallback request path
     // can contain caller identifiers. The adapter observes actual HTTP events.
     if (options.reporting && registeredResource) {

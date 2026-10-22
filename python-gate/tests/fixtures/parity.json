@@ -1,5 +1,5 @@
 {
- "generated_from": "@aifinpay/gate 0.5.0",
+ "generated_from": "@aifinpay/gate 0.6.0",
  "jwks": {
   "keys": [
    {
@@ -18,6 +18,8 @@
   "DETAIL_RECEIPT_EXPIRED": "receipt expired — prepay a new batch",
   "DETAIL_VERIFY_FAILED": "receipt verification failed (signature/issuer/audience)",
   "HEADER_QUOTA_REMAINING": "AIFP-Quota-Remaining",
+  "HEADER_MODE": "AIFP-Mode",
+  "HEADER_SHADOW_STATUS": "AIFP-Shadow-Status",
   "AI_AGENT_UA_MARKERS": [
    "gptbot",
    "oai-searchbot",
@@ -1573,7 +1575,17 @@
       "operator": "unknown",
       "ua_class": "unknown",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "operator": "unknown",
+       "ua_class": "unknown",
+       "verified": false
+      }
+     ]
     }
    ]
   },
@@ -1609,7 +1621,19 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     },
     {
      "path": "/paid",
@@ -1637,7 +1661,19 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     },
     {
      "path": "/paid",
@@ -1665,7 +1701,19 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     },
     {
      "path": "/paid",
@@ -1708,7 +1756,18 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "quota exhausted — prepay the next batch",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     }
    ]
   },
@@ -1745,7 +1804,19 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 10,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000002",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     },
     {
      "path": "/paid",
@@ -1773,7 +1844,19 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 10,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000002",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     },
     {
      "path": "/paid",
@@ -1816,7 +1899,18 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 10,
+       "detail": "quota exhausted — prepay the next batch",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     }
    ]
   },
@@ -1853,7 +1947,19 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 2,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     },
     {
      "path": "/paid",
@@ -1896,7 +2002,18 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 2,
+       "detail": "quota exhausted — prepay the next batch",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     }
    ]
   },
@@ -1926,7 +2043,18 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "receipt verification failed (signature/issuer/audience)",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": false
+      }
+     ]
     }
    ]
   },
@@ -1956,7 +2084,18 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "receipt verification failed (signature/issuer/audience)",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": false
+      }
+     ]
     }
    ]
   },
@@ -2007,7 +2146,18 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "receipt expired — prepay a new batch",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": false
+      }
+     ]
     }
    ]
   },
@@ -2037,7 +2187,18 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "receipt verification failed (signature/issuer/audience)",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": false
+      }
+     ]
     }
    ]
   },
@@ -2067,7 +2228,18 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "receipt is scoped to /other (exact), not /paid",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     }
    ]
   },
@@ -2103,7 +2275,19 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/articles/1",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     }
    ]
   },
@@ -2133,7 +2317,18 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/articles-internal",
+       "weight": 1,
+       "detail": "receipt is scoped to /articles (prefix), not /articles-internal",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     }
    ]
   },
@@ -2169,7 +2364,19 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/anything",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     }
    ]
   },
@@ -2205,7 +2412,19 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/movies/11",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     }
    ]
   },
@@ -2235,7 +2454,18 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "receipt verification failed (signature/issuer/audience)",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": false
+      }
+     ]
     }
    ]
   },
@@ -2265,7 +2495,18 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "receipt verification failed (signature/issuer/audience)",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": false
+      }
+     ]
     }
    ]
   },
@@ -2295,7 +2536,18 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "receipt verification failed (signature/issuer/audience)",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": false
+      }
+     ]
     }
    ]
   },
@@ -2325,7 +2577,18 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "receipt verification failed (signature/issuer/audience)",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": false
+      }
+     ]
     }
    ]
   },
@@ -2355,7 +2618,18 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "receipt type \"action\" is not spendable — this endpoint needs a quota receipt",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     }
    ]
   },
@@ -2391,7 +2665,19 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     }
    ]
   },
@@ -2421,7 +2707,18 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "receipt carries no receipt_id and cannot be metered",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     }
    ]
   },
@@ -2457,7 +2754,19 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000003",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     },
     {
      "path": "/paid",
@@ -2479,7 +2788,18 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "receipt already spent (single-use)",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     }
    ]
   },
@@ -2509,7 +2829,18 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "single-use receipt carries no nonce",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     }
    ]
   },
@@ -2545,7 +2876,19 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     }
    ]
   },
@@ -2577,7 +2920,18 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "AIFP-Agent-Id does not match the receipt subject",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     }
    ]
   },
@@ -2614,7 +2968,19 @@
       "operator": "unknown",
       "ua_class": "human",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": null,
+       "exempt": true,
+       "operator": "unknown",
+       "ua_class": "human",
+       "verified": false
+      }
+     ]
     }
    ]
   },
@@ -2666,7 +3032,17 @@
       "operator": "openai",
       "ua_class": "ai_crawler",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "operator": "openai",
+       "ua_class": "ai_crawler",
+       "verified": false
+      }
+     ]
     }
    ]
   },
@@ -2716,7 +3092,17 @@
       "operator": "unknown",
       "ua_class": "unknown",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "operator": "unknown",
+       "ua_class": "unknown",
+       "verified": false
+      }
+     ]
     }
    ]
   },
@@ -2754,7 +3140,19 @@
       "operator": "aifinpay",
       "ua_class": "aifp_agent",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
     }
    ]
   },
@@ -2804,7 +3202,635 @@
       "operator": "unknown",
       "ua_class": "unknown",
       "verified": false
-     }
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "operator": "unknown",
+       "ua_class": "unknown",
+       "verified": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "shadow: no receipt served, would-be 402",
+   "opts": {
+    "resource": "/paid",
+    "mode": "shadow"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {},
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Mode": "shadow",
+       "AIFP-Shadow-Status": "402"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "shadow",
+       "shadow": {
+        "status": 402,
+        "error": "AIFP-402",
+        "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+        "weight": 1
+       }
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "unknown",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "operator": "unknown",
+       "ua_class": "unknown",
+       "verified": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "shadow: crawler served, would-be 402",
+   "opts": {
+    "resource": "/paid",
+    "mode": "shadow",
+    "shouldCharge": "known"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Mozilla/5.0 (compatible; GPTBot/1.1)"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Mode": "shadow",
+       "AIFP-Shadow-Status": "402"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "shadow",
+       "shadow": {
+        "status": 402,
+        "error": "AIFP-402",
+        "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+        "weight": 1
+       }
+      }
+     },
+     "identity": {
+      "operator": "openai",
+      "ua_class": "ai_crawler",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "operator": "openai",
+       "ua_class": "ai_crawler",
+       "verified": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "shadow: human exempt as in enforce",
+   "opts": {
+    "resource": "/paid",
+    "mode": "shadow",
+    "shouldCharge": "known"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Mozilla/5.0 (Macintosh) Safari/605.1.15"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Paywall": "exempt",
+       "AIFP-Mode": "shadow"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "exempt"
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "human",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": null,
+       "exempt": true,
+       "operator": "unknown",
+       "ua_class": "human",
+       "verified": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "shadow: wrong scope served, would-be 403",
+   "opts": {
+    "resource": "/paid",
+    "mode": "shadow"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL290aGVyIiwic2NvcGUiOiJleGFjdCIsImFtb3VudCI6IjAuMSIsInVuaXRfcXVvdGEiOjMsInJlY2VpcHRfaWQiOiJyY3B0XzAwMDAwMDAwMDAwMDAwMDEiLCJub25jZSI6Im4tMSJ9.EHEtendsqivnpU6bSKDBrhyS2_5wxgJ7qt3T5ynz0fYZUhwRPRmk1YsCwcjVXSER0a3-SRwqkuMrvBys71uQCQ"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Mode": "shadow",
+       "AIFP-Shadow-Status": "403"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "shadow",
+       "shadow": {
+        "status": 403,
+        "error": "AIFP-403",
+        "detail": "receipt is scoped to /other (exact), not /paid",
+        "weight": 1
+       }
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "receipt is scoped to /other (exact), not /paid",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "shadow: action receipt served, would-be 403",
+   "opts": {
+    "resource": "/paid",
+    "mode": "shadow"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwMSIsIm5vbmNlIjoibi0xIiwidHlwX2FpZnAiOiJhY3Rpb24ifQ.JEj39HqbZFbxU0CrufJE_DbwfqinUHGkv9h2vI_gb0bO_LXEEUHjnfnodML8MJb7F4B-_RZRbm8aseiazRSKBQ"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Mode": "shadow",
+       "AIFP-Shadow-Status": "403"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "shadow",
+       "shadow": {
+        "status": 403,
+        "error": "AIFP-403",
+        "detail": "receipt type \"action\" is not spendable — this endpoint needs a quota receipt",
+        "weight": 1
+       }
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "receipt type \"action\" is not spendable — this endpoint needs a quota receipt",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "shadow: expired served, would-be 402",
+   "opts": {
+    "resource": "/paid",
+    "mode": "shadow"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjEwMDAwMDAwMDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwMSIsIm5vbmNlIjoibi0xIn0.uOar-Zl1RwePlg3Y-cd3uK0PV-Py-e--hjE9nZn80afV8Jtx_P5dbZSkHMYKaWBiRQEvZH16Jp-BOp994fBIDA"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Mode": "shadow",
+       "AIFP-Shadow-Status": "402"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "shadow",
+       "shadow": {
+        "status": 402,
+        "error": "AIFP-402",
+        "detail": "receipt expired — prepay a new batch",
+        "weight": 1
+       }
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "receipt expired — prepay a new batch",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "shadow: batch of 3 metered, then served instead of 402",
+   "opts": {
+    "resource": "/paid",
+    "mode": "shadow"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwNCIsIm5vbmNlIjoibi0xIn0.PdIXXHtFrUzOVmHV98Rz3E32NUAyf3bE72mXSAzEGs1l9Nk7Le_2FxpGEthwajvo97hymb2mJ0yGYfq6THGhBw"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Quota-Remaining": "2",
+       "AIFP-Mode": "shadow"
+      },
+      "aifp": {
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000004",
+       "resource": "/paid",
+       "weight": 1,
+       "unit_quota": 3,
+       "used": 1,
+       "remaining": 2,
+       "mode": "paid"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000004",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwNCIsIm5vbmNlIjoibi0xIn0.PdIXXHtFrUzOVmHV98Rz3E32NUAyf3bE72mXSAzEGs1l9Nk7Le_2FxpGEthwajvo97hymb2mJ0yGYfq6THGhBw"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Quota-Remaining": "1",
+       "AIFP-Mode": "shadow"
+      },
+      "aifp": {
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000004",
+       "resource": "/paid",
+       "weight": 1,
+       "unit_quota": 3,
+       "used": 2,
+       "remaining": 1,
+       "mode": "paid"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000004",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwNCIsIm5vbmNlIjoibi0xIn0.PdIXXHtFrUzOVmHV98Rz3E32NUAyf3bE72mXSAzEGs1l9Nk7Le_2FxpGEthwajvo97hymb2mJ0yGYfq6THGhBw"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Quota-Remaining": "0",
+       "AIFP-Mode": "shadow"
+      },
+      "aifp": {
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000004",
+       "resource": "/paid",
+       "weight": 1,
+       "unit_quota": 3,
+       "used": 3,
+       "remaining": 0,
+       "mode": "paid"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000004",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwNCIsIm5vbmNlIjoibi0xIn0.PdIXXHtFrUzOVmHV98Rz3E32NUAyf3bE72mXSAzEGs1l9Nk7Le_2FxpGEthwajvo97hymb2mJ0yGYfq6THGhBw"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Mode": "shadow",
+       "AIFP-Shadow-Status": "402"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "shadow",
+       "shadow": {
+        "status": 402,
+        "error": "AIFP-402",
+        "detail": "quota exhausted — prepay the next batch",
+        "weight": 1
+       }
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "quota exhausted — prepay the next batch",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "shadow: agent mismatch served, would-be 403",
+   "opts": {
+    "resource": "/paid",
+    "mode": "shadow",
+    "requireAgentMatch": true
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwNSIsIm5vbmNlIjoibi0xIn0.jwOii8hG8C3gcTPo85Q-V6cCGrc0GPuCWRfA8WSAqPRwy1IK2l0Y6iGAi5-R1jRM5p33_lVmbx5W0_PPuHosBw",
+      "AIFP-Agent-Id": "0xsomeoneelse"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Mode": "shadow",
+       "AIFP-Shadow-Status": "403"
+      },
+      "aifp": {
+       "agent": "0xsomeoneelse",
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "shadow",
+       "shadow": {
+        "status": 403,
+        "error": "AIFP-403",
+        "detail": "AIFP-Agent-Id does not match the receipt subject",
+        "weight": 1
+       }
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "AIFP-Agent-Id does not match the receipt subject",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "explicit enforce is the default",
+   "opts": {
+    "resource": "/paid",
+    "mode": "enforce"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {},
+     "result": {
+      "ok": false,
+      "status": 402,
+      "headers": {
+       "Content-Type": "application/json"
+      },
+      "body": {
+       "error": "AIFP-402",
+       "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+       "protocol": "AIFP-1",
+       "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+       "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+       "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+       "merchant_id": "mrch_parity",
+       "resource": "/paid",
+       "tier": "standard",
+       "unit_weight": 1,
+       "unit_price_usd": "0.0005",
+       "min_requests": 200,
+       "scope": "exact",
+       "protocol_fee_bps": 100,
+       "no_minimum_fee": true,
+       "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+       "how_to_pay": [
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":200,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+        "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+        "retry this request with header: AIFP-Receipt: <receipt JWT>"
+       ],
+       "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "unknown",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "operator": "unknown",
+       "ua_class": "unknown",
+       "verified": false
+      }
+     ]
     }
    ]
   }

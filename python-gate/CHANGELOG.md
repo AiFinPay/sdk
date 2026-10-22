@@ -1,3 +1,14 @@
+## 0.3.0 — unreleased
+
+- Port of `@aifinpay/gate` 0.6.0: `Gate(mode="shadow" | "enforce")`. Shadow
+  makes the same decision and emits the same event as enforce, then serves
+  the request — `AIFP-Mode: shadow` on every response, `AIFP-Shadow-Status`
+  and `aifp["shadow"]` on a would-be refusal; nothing metered for it.
+  Omitting `mode` is enforce; an unknown value raises. `HEADER_MODE` and
+  `HEADER_SHADOW_STATUS` exported.
+- The parity fixture now records the events of every Node scenario alongside
+  the responses, and adds shadow scenarios; `test_parity.py` replays both.
+
 ## 0.2.0 — unreleased
 
 - Port of `@aifinpay/gate` 0.5.0: every event carries `operator`, `ua_class`

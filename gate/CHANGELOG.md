@@ -1,5 +1,30 @@
 # Changelog
 
+## @aifinpay/gate 0.6.0 — unreleased
+
+- `mode: "shadow" | "enforce"`. Shadow makes the same decision and emits the
+  same event as enforce — kind, resource, weight, detail, operator, ua_class,
+  verified — and then serves the request: no 402 / 403 / 503, nothing metered
+  for a would-be refusal. Every shadow response carries `AIFP-Mode: shadow`;
+  a would-be refusal also carries `AIFP-Shadow-Status` and hands the handler
+  `req.aifp.mode === "shadow"` with the refusal in `req.aifp.shadow`
+  (`ShadowOutcome`). Requests enforce would serve are served identically,
+  metered and all. Omitting `mode` is enforce: no existing install changes
+  behaviour; an unknown mode throws at construction. Exported:
+  `HEADER_MODE`, `HEADER_SHADOW_STATUS`, types `GateMode`, `ShadowOutcome`.
+- New entry point `@aifinpay/gate/edge`: the dependency-free part of the
+  package (`classifyAgent`, `knownAiAgent`, the marker table and enums,
+  `matchResource`, `scopeCovers`) for Cloudflare Workers and log shippers —
+  no jose, no express, no Node built-ins. It verifies nothing and meters
+  nothing.
+- Examples: `examples/cloudflare-worker-shadow` (observe-only Worker, one
+  `wrangler deploy`, secrets for merchant id and secret, batched
+  `POST /v1/merchants/:id/gate-events`) and `examples/nginx-shadow`
+  (dedicated `log_format` + a log shipper). Both unit-tested with an injected
+  fetch.
+- README §1a "Start in shadow", including the Cloudflare "Block on pages with
+  ads" default that cuts agents off before they reach a gate.
+
 ## @aifinpay/gate 0.5.0 — unreleased
 
 - Every gate event says who asked: `operator`, `ua_class` and `verified`,

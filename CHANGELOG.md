@@ -1,3 +1,16 @@
+## Gate 0.6.0 / Python gate 0.3.0 — shadow mode and one-step observe installs
+
+- `@aifinpay/gate` and `aifinpay-gate` take `mode: "shadow" | "enforce"`.
+  Shadow makes the same decisions and emits the same events as enforce, then
+  serves every request (`AIFP-Mode: shadow`; `AIFP-Shadow-Status` and
+  `aifp.shadow` on a would-be refusal). Omitting `mode` is enforce — no
+  existing install changes behaviour.
+- `@aifinpay/gate/edge`: the dependency-free classifier / matcher for edge
+  runtimes. New examples `cloudflare-worker-shadow` and `nginx-shadow`
+  report the same events without touching responses. Partner onboarding now
+  opens with "Start in shadow" and the Cloudflare "Block on pages with ads"
+  default.
+
 ## Gate 0.5.0 / Python gate 0.2.0 — gate events say who asked
 
 - `@aifinpay/gate` and `aifinpay-gate` stamp `operator`, `ua_class` and

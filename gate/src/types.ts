@@ -18,6 +18,13 @@ export type Scope = "exact" | "prefix" | "merchant";
 
 export type ResourceType = "page" | "api" | "dataset" | "mcp_tool" | "product";
 
+/** How the gate answers a request it would refuse. `"enforce"` (the default,
+ *  and what every install without a `mode` has always done) sends the 402 /
+ *  403 / 503. `"shadow"` makes the same decision, emits the same event, and
+ *  then serves the request anyway — the money path is never touched, so a
+ *  site can watch its agent traffic before it charges for it. */
+export type GateMode = "shadow" | "enforce";
+
 /** Claims our issuer actually signs. Optional fields are optional in the
  *  signer too — `quota` predates billing units and still appears on old
  *  receipts, which is why the gate falls back to it rather than requiring
@@ -99,8 +106,21 @@ export interface AifpContext {
   /** "open" = the merchant registered this resource with paywall_enabled
    *  false. "exempt" = this request was served free by the shouldCharge
    *  predicate (a human reader on a content site) — the route itself is
-   *  still paid for everyone the predicate charges. */
-  mode: "paid" | "open" | "exempt";
+   *  still paid for everyone the predicate charges. "shadow" = the gate
+   *  runs in shadow mode and would have refused this request; it was served
+   *  instead, unmetered, and `shadow` says what the answer would have been. */
+  mode: "paid" | "open" | "exempt" | "shadow";
+  /** Only with mode "shadow": the refusal the gate decided on and did not
+   *  send. `weight` is what the call would have been metered at. */
+  shadow?: ShadowOutcome;
+}
+
+/** The answer a shadow-mode gate decided on instead of sending it. */
+export interface ShadowOutcome {
+  status: 402 | 403 | 503;
+  error: GateErrorBody["error"];
+  detail: string;
+  weight: number;
 }
 
 export interface GateErrorBody {

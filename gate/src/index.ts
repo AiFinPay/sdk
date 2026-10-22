@@ -21,6 +21,8 @@ export {
   DETAIL_RECEIPT_EXPIRED,
   DETAIL_VERIFY_FAILED,
   HEADER_QUOTA_REMAINING,
+  HEADER_MODE,
+  HEADER_SHADOW_STATUS,
 } from "./core.js";
 
 export { aifpGate } from "./express.js";
@@ -79,8 +81,10 @@ export type {
   GateErrorBody,
   GateEvent,
   GateEventKind,
+  GateMode,
   GateRequest,
   GateResult,
+  ShadowOutcome,
   MerchantPublicView,
   MerchantStats,
   ResourceInput,
