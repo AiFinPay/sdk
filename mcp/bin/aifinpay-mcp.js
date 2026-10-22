@@ -27,7 +27,7 @@
  *   AIFINPAY_AGENT_SECRET   legacy base58 secret — overrides the legacy keystore
  *   AIFINPAY_BASE_URL       default https://aifinpay.io
  *   AIFINPAY_TIMEOUT_MS     default 30000
- *   AIFINPAY_MAX_USD        hard cap per single payment (no default)
+ *   AIFINPAY_MAX_USD        lowers the built-in $5-per-payment ceiling (never raises it)
  */
 import {
   readFileSync,
@@ -41,7 +41,7 @@ import {
   linkSync,
   unlinkSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { createRequire } from "node:module";
 import { scryptSync, randomBytes, createCipheriv, createDecipheriv } from "node:crypto";
@@ -75,6 +75,11 @@ if (arg === "--help" || arg === "-h" || arg === "help") {
 Run init once. It writes ${KEYSTORE} with mode 600 and the server picks
 it up automatically — you do not have to put the secret in a config file.
 
+Without a terminal on stdin (an agent's subprocess), or with
+AIFINPAY_NONINTERACTIVE=1, init never prompts: it generates the passphrase
+itself, encrypts the keystore and prints one JSON document with the keystore
+path, the public addresses and the exact "env" block for the MCP client config.
+
 Env (all optional):
   SEED_HASH              32-byte hex seed; highest priority
   AIFINPAY_AGENTS_FILE   project agents file (default ./aifinpay/agents.json)
@@ -86,9 +91,16 @@ Env (all optional):
   AIFINPAY_TIMEOUT_MS     default 30000
   AIFINPAY_HOME           default ~/.aifinpay
 
-Payments (payable_fetch) are off until the owner sets all of
-AIFINPAY_PAYMENTS_ENABLED=1, AIFINPAY_GATEWAY_ORIGINS, AIFINPAY_MAX_USD,
-AIFINPAY_DAILY_USD and AIFINPAY_MAX_GAS_POL. init prints an example block.
+Payments (payable_fetch) are on by default, within a built-in ceiling of $5 per
+payment and $20 per 24 hours, only from a persistent wallet (init), and only to
+merchants registered with AiFinPay; an unfunded wallet spends nothing. The
+working limits are the dashboard Controls (https://dash.aifinpay.io) once the
+agent is claimed. Optional overrides, all narrowing:
+  AIFINPAY_PAYMENTS_ENABLED=0   turn payments off
+  AIFINPAY_MAX_USD, AIFINPAY_DAILY_USD   lower the ceiling (higher is refused)
+  AIFINPAY_GATEWAY_ORIGINS      exact https origins it may pay; unset, any https site
+  AIFINPAY_MAX_GAS_POL          gas cap per payment on Polygon (default 0.3)
+The payment_setup_status tool says what is still missing before a first payment.
 `);
   process.exit(0);
 }
@@ -100,7 +112,14 @@ if (arg === "--version" || arg === "-v" || arg === "version") {
 
 // ── init ──────────────────────────────────────────────────────────────────
 
-const PASSPHRASE = process.env.AIFINPAY_WALLET_PASSPHRASE || null;
+const PASSPHRASE_ENV = "AIFINPAY_WALLET_PASSPHRASE";
+let PASSPHRASE = process.env[PASSPHRASE_ENV] || null;
+// An agent's subprocess has no terminal on stdin. Nothing here may wait for a
+// human then: a 2026-10-19 agent run hung 167 s on a passphrase it could not
+// type and invented its own key handling instead. In this mode init generates
+// the passphrase itself and prints JSON the agent can act on.
+const NONINTERACTIVE = process.env.AIFINPAY_NONINTERACTIVE === "1" || !process.stdin.isTTY;
+let GENERATED_PASSPHRASE = false;
 
 // Optional at-rest encryption. Mode 600 keeps the keystore from OTHER users; it
 // does nothing against malware running as YOU — the threat the OSINT write-up of
@@ -130,7 +149,7 @@ function encryptSecret(secretB58) {
   };
 }
 function decryptSecret(store) {
-  if (!PASSPHRASE) throw new Error(`${KEYSTORE} is encrypted but AIFINPAY_WALLET_PASSPHRASE is not set.`);
+  if (!PASSPHRASE) throw new Error(`${KEYSTORE} is encrypted but ${PASSPHRASE_ENV} is not set.`);
   const key = scryptSync(PASSPHRASE, Buffer.from(store.salt, "base64"), 32, {
     N: 1 << 15,
     r: 8,
@@ -160,31 +179,77 @@ function readKeystore() {
   return typeof parsed?.secretB58 === "string" ? parsed : null;
 }
 
-// The owner settings that register payable_fetch, as init prints them. README
-// "Enable native paid GET requests" shows the same block; a test keeps the two
-// equal and starts a server with it. The gas cap is a worst case at the current
-// Polygon gas price, not the fee: 0.05 POL refused every payment at ~280 gwei.
-const PAYMENT_ENV = {
-  AIFINPAY_PAYMENTS_ENABLED: "1",
-  AIFINPAY_GATEWAY_ORIGINS: "https://merchant.example",
-  AIFINPAY_GATEWAY_PATH_MODE: "direct",
-  AIFINPAY_MAX_USD: "0.15",
-  AIFINPAY_DAILY_USD: "1.00",
-  AIFINPAY_MAX_GAS_POL: "0.3",
-};
-
 if (arg === "init") {
   const { Agent, AiFinPayAgent } = await import("@aifinpay/agent");
 
   const { loadConfigFromEnv } = await import("../dist/config.js");
   const { loadWalletIdentity } = await import("../dist/identity.js");
+  const { PAYMENT_OVERRIDES, PAYMENTS_DEFAULT_NOTE, lockedKeystoreStep } =
+    await import("../dist/tools/payment-setup-status.js");
   const config = loadConfigFromEnv();
-  const selected = loadWalletIdentity(config);
+  // A keystore that cannot be opened is reported in one line that names the
+  // variable, never as a stack trace — and never replaced. An agent cannot ask
+  // anyone for the passphrase, so its JSON also names the way past it that
+  // touches nothing: a new wallet in a new, empty AIFINPAY_HOME.
+  const failKeystore = (error) => {
+    const line =
+      !PASSPHRASE && existsSync(KEYSTORE)
+        ? `${KEYSTORE} exists and is encrypted; set ${PASSPHRASE_ENV} to the passphrase used at init (it is not set in this environment).`
+        : error.message;
+    let encrypted = false;
+    try {
+      encrypted = Boolean(JSON.parse(readFileSync(KEYSTORE, "utf8"))?.enc);
+    } catch {
+      /* No readable keystore: the error is about something else. */
+    }
+    if (NONINTERACTIVE)
+      process.stdout.write(
+        JSON.stringify({
+          error: line,
+          keystore: KEYSTORE,
+          ...(PASSPHRASE ? {} : { missing_env: PASSPHRASE_ENV }),
+          ...(encrypted ? { next_step: lockedKeystoreStep(KEYSTORE) } : {}),
+        }) + "\n"
+      );
+    else process.stderr.write(line + "\n");
+    process.exit(2);
+  };
+  let selected;
+  try {
+    selected = loadWalletIdentity(config);
+  } catch (error) {
+    failKeystore(error);
+  }
+  const plaintext = process.argv.includes("--plaintext");
+  const addressesOf = (agent) => ({ evm: agent.evmAddress, solana: agent.solanaAddress, casper: agent.casperAddress });
+  const indexEnv =
+    selected?.derivationIndex === undefined ? {} : { AIFINPAY_WALLET_INDEX: String(selected.derivationIndex) };
+  // The server reads the keystore (and keeps its payment journal) under the same
+  // AIFINPAY_HOME init used, so a non-default one goes into the client env too,
+  // absolute: the client does not start the server in this directory.
+  const homeEnv = process.env.AIFINPAY_HOME ? { AIFINPAY_HOME: resolve(process.env.AIFINPAY_HOME) } : {};
+  // Non-interactive stdout is one JSON document and nothing else, so the
+  // caller can parse it. The same facts, as prose, go to a terminal.
+  const emit = (json, text) => process.stdout.write(NONINTERACTIVE ? JSON.stringify(json, null, 2) + "\n" : text);
+  const nextStep =
+    'Put "env" into the aifinpay server entry of the MCP client config and reconnect the server (or call agent_reload in an already connected one: payments then work without a restart), then call payment_setup_status: it names the next step up to the first payment.';
+
   if (selected && selected.source !== "legacy-keystore") {
     const agent = selected.seedHash
       ? await AiFinPayAgent.fromSeed(selected.seedHash, { derivationIndex: selected.derivationIndex })
       : await AiFinPayAgent.fromSolanaSecret(selected.secretB58);
-    process.stdout.write(
+    emit(
+      {
+        keystore: null,
+        created: false,
+        encrypted: null,
+        source: selected.source,
+        addresses: addressesOf(agent),
+        env: { ...homeEnv, ...indexEnv },
+        payments: PAYMENTS_DEFAULT_NOTE,
+        optional_env_example: PAYMENT_OVERRIDES,
+        next_step: nextStep,
+      },
       `Using ${selected.source}${selected.derivationIndex === undefined ? "" : ` (index ${selected.derivationIndex})`}; no replacement wallet created.\n` +
         `EVM ${agent.evmAddress}\nSolana ${agent.solanaAddress}\nCasper ${agent.casperAddress}\n` +
         `Keep your configured seed backed up privately. Call agent_reload in an already connected MCP server.\n`
@@ -192,21 +257,37 @@ if (arg === "init") {
     process.exit(0);
   }
 
-  let store = readKeystore();
+  const openExistingKeystore = () => {
+    try {
+      return readKeystore();
+    } catch (error) {
+      failKeystore(error);
+    }
+  };
+  let store = openExistingKeystore();
   let freshlyCreated = false;
   // A new wallet is encrypted at rest unless the owner asks otherwise, by name.
   // It used to be written in plaintext whenever AIFINPAY_WALLET_PASSPHRASE was
   // unset — which is the default — so the documented one-liner produced an
   // unencrypted key for a wallet people then funded. Existing keystores are
   // untouched; only creating a new plaintext one needs the flag.
-  if (!store && !PASSPHRASE && !process.argv.includes("--plaintext")) {
-    process.stderr.write(
-      `No wallet at ${KEYSTORE}, and none will be created unencrypted by default.\n\n` +
-        `  Encrypted (recommended):  AIFINPAY_WALLET_PASSPHRASE='<a long passphrase>' npx @aifinpay/mcp init\n` +
-        `  Disposable test wallet:   npx @aifinpay/mcp init --plaintext\n\n` +
-        `Keep the passphrase: an encrypted wallet cannot be recovered without it.\n`
-    );
-    process.exit(2);
+  if (!store && !PASSPHRASE && !plaintext) {
+    if (NONINTERACTIVE) {
+      // 192 random bits. The passphrase is printed once, inside the env block
+      // below, because the caller has to put it in the client config and there
+      // is no other channel; this is the trade-off of a wallet created by a
+      // process that cannot be asked anything.
+      PASSPHRASE = randomBytes(24).toString("base64url");
+      GENERATED_PASSPHRASE = true;
+    } else {
+      process.stderr.write(
+        `No wallet at ${KEYSTORE}, and none will be created unencrypted by default.\n\n` +
+          `  Encrypted (recommended):  AIFINPAY_WALLET_PASSPHRASE='<a long passphrase>' npx @aifinpay/mcp init\n` +
+          `  Disposable test wallet:   npx @aifinpay/mcp init --plaintext\n\n` +
+          `Keep the passphrase: an encrypted wallet cannot be recovered without it.\n`
+      );
+      process.exit(2);
+    }
   }
   if (!store) {
     mkdirSync(HOME, { recursive: true, mode: 0o700 });
@@ -233,7 +314,9 @@ if (arg === "init") {
         freshlyCreated = true;
       } catch (error) {
         if (error.code !== "EEXIST") throw error;
-        store = readKeystore();
+        // The other process won; a passphrase generated here opens nothing.
+        if (GENERATED_PASSPHRASE) PASSPHRASE = null;
+        store = openExistingKeystore();
         if (!store) throw new Error(`Existing ${KEYSTORE} is unreadable; refusing to replace it.`);
       }
     } finally {
@@ -241,6 +324,46 @@ if (arg === "init") {
       if (ownsTemporary) unlinkSync(temporary);
     }
   }
+  const agent = selected?.seedHash
+    ? await AiFinPayAgent.fromSeed(selected.seedHash, { derivationIndex: selected.derivationIndex })
+    : await AiFinPayAgent.fromSolanaSecret(store.secretB58);
+  // The server cannot open an encrypted keystore without the passphrase, so a
+  // config block without it does not start.
+  const encrypted = freshlyCreated ? Boolean(PASSPHRASE) : Boolean(store.encrypted);
+
+  if (NONINTERACTIVE) {
+    emit(
+      {
+        keystore: KEYSTORE,
+        created: freshlyCreated,
+        encrypted,
+        source: "legacy-keystore",
+        addresses: addressesOf(agent),
+        env: {
+          ...homeEnv,
+          ...(encrypted
+            ? {
+                [PASSPHRASE_ENV]: GENERATED_PASSPHRASE
+                  ? PASSPHRASE
+                  : `<the ${PASSPHRASE_ENV} already set in this environment>`,
+              }
+            : {}),
+          ...indexEnv,
+        },
+        ...(GENERATED_PASSPHRASE
+          ? {
+              passphrase_note: `${PASSPHRASE_ENV} was generated for this wallet and appears only here, inside env. The wallet cannot be opened or recovered without it.`,
+            }
+          : {}),
+        payments: PAYMENTS_DEFAULT_NOTE,
+        optional_env_example: PAYMENT_OVERRIDES,
+        next_step: nextStep,
+      },
+      ""
+    );
+    process.exit(0);
+  }
+
   if (freshlyCreated) {
     process.stdout.write(
       PASSPHRASE
@@ -270,21 +393,13 @@ if (arg === "init") {
     );
   }
 
-  const agent = selected?.seedHash
-    ? await AiFinPayAgent.fromSeed(selected.seedHash, { derivationIndex: selected.derivationIndex })
-    : await AiFinPayAgent.fromSolanaSecret(store.secretB58);
-  // The server cannot open an encrypted keystore without the passphrase, so a
-  // config block without it does not start.
-  const encrypted = freshlyCreated ? Boolean(PASSPHRASE) : Boolean(store.encrypted);
-
   process.stdout.write(
     `Your agent's addresses${selected?.derivationIndex === undefined ? "" : ` (index ${selected.derivationIndex})`} — the EVM one is the same on every EVM chain:\n\n` +
       `  EVM     ${agent.evmAddress}\n` +
       `  Solana  ${agent.solanaAddress}\n` +
       `  Casper  ${agent.casperAddress}\n\n` +
-      `Add this to your MCP client config and connect/reconnect this MCP server.\n` +
-      `As printed it cannot pay; payable_fetch appears once you add the payment\n` +
-      `settings further down:\n\n` +
+      `Add this to your MCP client config and connect/reconnect this MCP server\n` +
+      `(or call agent_reload in one that is already connected):\n\n` +
       JSON.stringify(
         {
           mcpServers: {
@@ -292,10 +407,9 @@ if (arg === "init") {
               command: "npx",
               args: ["-y", `@aifinpay/mcp@${VERSION}`],
               env: {
+                ...homeEnv,
                 ...(encrypted ? { AIFINPAY_WALLET_PASSPHRASE: "<the passphrase you used for init>" } : {}),
-                ...(selected?.derivationIndex === undefined
-                  ? {}
-                  : { AIFINPAY_WALLET_INDEX: String(selected.derivationIndex) }),
+                ...indexEnv,
               },
             },
           },
@@ -313,27 +427,32 @@ if (arg === "init") {
       `keystore. If this server is already connected, call agent_reload after init.\nA new conversation is not required by this server.\n\n` +
       `Back up ${KEYSTORE}. It is the only copy. The derivation is not\n` +
       `BIP-39, so no standard wallet can recover this from a phrase.\n\n` +
-      `To let it pay, add these to "env" above, then reconnect the server:\n\n` +
-      JSON.stringify(PAYMENT_ENV, null, 2) +
-      `\n\n` +
-      `  AIFINPAY_GATEWAY_ORIGINS    exact HTTPS origins it may pay, comma-separated;\n` +
-      `                              replace the example. No wildcards.\n` +
-      `  AIFINPAY_GATEWAY_PATH_MODE  "direct" for a site that runs its own AiFinPay\n` +
-      `                              paywall, "gateway" for gateway.aifinpay.io.\n` +
-      `  AIFINPAY_MAX_USD            per payment. The smallest batch is $0.10, so\n` +
-      `                              keep it a little above the batch you expect.\n` +
-      `  AIFINPAY_DAILY_USD          total over any 24 hours.\n` +
-      `  AIFINPAY_MAX_GAS_POL        worst-case network fee of one payment, checked\n` +
-      `                              before signing. It follows Polygon's gas price:\n` +
-      `                              at ~280 gwei it is ~0.10 POL paying in POL and\n` +
-      `                              ~0.21 POL paying in USDC. A lower cap refuses\n` +
-      `                              the payment; raise it when gas is higher.\n\n` +
-      `Fund the EVM address on Polygon with the batch price plus the gas cap, in POL.\n` +
-      `To pay in USDC, also set "AIFINPAY_PAY_ASSET": "USDC" and hold USDC for the\n` +
-      `batch plus POL up to the gas cap. Check the balance before funding or paying.\n\n` +
-      `See its balance, payments and receipts in your dashboard:\n` +
+      `Payments are on: payable_fetch pays at most $5 per payment and $20 per 24\n` +
+      `hours (a built-in ceiling, not a budget), only to merchants registered with\n` +
+      `AiFinPay. It holds nothing yet, so it can spend nothing. To let it pay, fund\n` +
+      `the EVM address on Polygon with the batch price at today's rate plus the gas\n` +
+      `cap, in POL; payment_setup_status prices it (the smallest batch is $0.10).\n` +
+      `To pay in USDC, set "AIFINPAY_PAY_ASSET": "USDC" and hold USDC for the batch\n` +
+      `plus POL up to the gas cap. Check the balance before funding or paying.\n\n` +
+      `Set the working limits in your dashboard:\n` +
       `  https://dash.aifinpay.io → My Agents → Claim via MCP, then give the\n` +
-      `  one-time URL to the agent (tool agent_claim_self).\n`
+      `  one-time URL to the agent (tool agent_claim_self). Controls there set the\n` +
+      `  per-payment cap, daily cap, pause and allowed merchants, enforced on every\n` +
+      `  quote and payment; the ceiling above still applies underneath.\n\n` +
+      `Optional env, for reference (none of it is needed for a first payment):\n\n` +
+      JSON.stringify(PAYMENT_OVERRIDES, null, 2) +
+      `\n\n` +
+      `  AIFINPAY_GATEWAY_ORIGINS    exact HTTPS origins it may pay, comma-separated,\n` +
+      `                              no wildcards. Unset, any https site: the money\n` +
+      `                              still goes only where AiFinPay's signed quote says.\n` +
+      `  AIFINPAY_MAX_GAS_POL        worst-case network fee of one payment, checked\n` +
+      `                              before signing; default 0.3 POL. It follows\n` +
+      `                              Polygon's gas price: at ~280 gwei it is ~0.10 POL\n` +
+      `                              paying in POL and ~0.21 POL paying in USDC.\n` +
+      `  AIFINPAY_MAX_USD, AIFINPAY_DAILY_USD   lower the ceiling; a higher value\n` +
+      `                              is refused. Raise nothing here: use Controls.\n` +
+      `  AIFINPAY_PAYMENTS_ENABLED   "0" turns payments off.\n` +
+      `Env is read when the server starts; after changing it, restart the server.\n`
   );
   process.exit(0);
 }

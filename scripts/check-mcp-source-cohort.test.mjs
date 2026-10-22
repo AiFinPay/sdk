@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -53,16 +59,16 @@ test("canonical mirror and both CI refs bind the reviewed reporting producer; wr
 });
 test("reporting source target refuses every stale package version without claiming registry availability", () => {
   verifyCohortVersions({
-    mcp: "2.9.0",
-    agent: "2.7.0",
-    python: "2.6.1",
-    skill: "2.9.0",
+    mcp: "2.12.1",
+    agent: "2.9.0",
+    python: "2.7.1",
+    skill: "2.10.2",
   });
   for (const [name, oldVersion] of Object.entries({
-    mcp: "2.8.2",
-    agent: "2.6.5",
-    python: "2.6.0",
-    skill: "2.8.0",
+    mcp: "2.12.0",
+    agent: "2.8.0",
+    python: "2.7.0",
+    skill: "2.10.1",
   })) {
     assert.throws(
       () => verifyCohortVersions({ ...COHORT, [name]: oldVersion }),
@@ -83,17 +89,36 @@ test("MCP candidate metadata preserves the real registry lock of the published c
   assert.equal(lock.version, COHORT.mcp);
   assert.equal(lock.packages[""].version, COHORT.mcp);
   assert.deepEqual(lock.packages[""].dependencies, manifest.dependencies);
-  assert.equal(
-    manifest.dependencies["@aifinpay/skill"],
-    baseline.packages[""].dependencies["@aifinpay/skill"],
-  );
-  assert.deepEqual(
-    lock.packages["node_modules/@aifinpay/skill"],
-    baseline.packages["node_modules/@aifinpay/skill"],
-  );
-  // The lock follows the published agent 2.7.0 (2026-10-18). Its registry
-  // identity is the only change: 2.7.0 depends on exactly what 2.6.4 did.
-  assert.equal(manifest.dependencies["@aifinpay/agent"], `^${COHORT.agent}`);
+  // The skill follows the published 2.10.1 (2026-10-19, AiFinPay/skill
+  // b8d2309), whose registry tarball is byte-identical to the pinned source
+  // pack. As with the agent, the registry identity is the only change.
+  const registrySkill = "2.10.2";
+  assert.equal(manifest.dependencies["@aifinpay/skill"], `^${registrySkill}`);
+  {
+    const { version, resolved, integrity, ...skillEdges } =
+      lock.packages["node_modules/@aifinpay/skill"];
+    const {
+      version: _v,
+      resolved: _r,
+      integrity: _i,
+      ...baselineSkillEdges
+    } = baseline.packages["node_modules/@aifinpay/skill"];
+    assert.deepEqual(
+      { version, resolved, integrity },
+      {
+        version: registrySkill,
+        resolved: `https://registry.npmjs.org/@aifinpay/skill/-/skill-${registrySkill}.tgz`,
+        integrity: SKILL_PACK.integrity,
+      },
+    );
+    assert.deepEqual(skillEdges, baselineSkillEdges);
+  }
+  // The lock still follows the published agent 2.8.0 (2026-10-19); the source
+  // agent is 2.9.0 (adds "codex" to AGENT_FRAMEWORKS) and the lock moves to it
+  // once it is published, as #116 did for 2.8.0. Its registry identity is the
+  // only change: 2.8.0 depends on exactly what 2.7.0 did.
+  const registryAgent = "2.9.0";
+  assert.equal(manifest.dependencies["@aifinpay/agent"], `^${registryAgent}`);
   const { version, resolved, integrity, ...agentEdges } =
     lock.packages["node_modules/@aifinpay/agent"];
   const {
@@ -105,17 +130,21 @@ test("MCP candidate metadata preserves the real registry lock of the published c
   assert.deepEqual(
     { version, resolved, integrity },
     {
-      version: COHORT.agent,
-      resolved: `https://registry.npmjs.org/@aifinpay/agent/-/agent-${COHORT.agent}.tgz`,
+      version: registryAgent,
+      resolved: `https://registry.npmjs.org/@aifinpay/agent/-/agent-${registryAgent}.tgz`,
       integrity:
-        "sha512-BKV3mz0CH9cjX423TBTDbK6fTTv+LebjQqmv+BSQpACfjTp2rxHKGgQe8pODNrROKZAYMABqvG7B/8g85AUxFA==",
+        "sha512-+v58jgYpjK523mFzw8vKEaC5dsFl21h5/HwpAfCFuYSPPK3FyFbJ205jEgIet+ocE9cUglS0WPX/+i1tBjUMGQ==",
     },
   );
   assert.deepEqual(agentEdges, baselineEdges);
-  // agent 2.7.0 and skill 2.9.0 are published and the lock pins their real
-  // registry resolution, so the release metadata check must pass. This test
-  // runs before any MCP install, so the guard may still stop at the
-  // installed-package check; it must never refuse the lock itself.
+  // With agent 2.9.0 and skill 2.10.2 published and locked, the release
+  // metadata check must accept the lock. It also verifies the installed
+  // package, so it needs `npm ci` in mcp/; CI runs this file before any mcp
+  // install (it then installs the cohort in a disposable directory and runs
+  // the same guard there, in checkSourceCohort). Without an installation the
+  // metadata assertions above are the whole test.
+  if (!existsSync(join(root, "mcp/node_modules/@aifinpay/agent/package.json")))
+    return;
   const guard = spawnSync(
     process.execPath,
     ["scripts/verify-release-inputs.mjs"],
@@ -124,10 +153,7 @@ test("MCP candidate metadata preserves the real registry lock of the published c
       encoding: "utf8",
     },
   );
-  assert.doesNotMatch(
-    guard.stderr,
-    /must be published and installed with its real registry resolution|release metadata and real registry lock disagree/,
-  );
+  assert.equal(guard.status, 0, guard.stderr);
 });
 test("immutable bootstrap uses the existing patched registry lock without source tarball resolutions", () => {
   const root = fileURLToPath(new URL("../", import.meta.url));
@@ -145,7 +171,7 @@ test("immutable bootstrap uses the existing patched registry lock without source
   assert.deepEqual(lock.packages[""].dependencies, manifest.dependencies);
   assert.deepEqual(lock.packages[""].devDependencies, manifest.devDependencies);
   for (const [name, version] of [
-    ["@modelcontextprotocol/sdk", "1.31.0"],
+    ["@modelcontextprotocol/sdk", "1.32.1"],
     ["proxy-addr", "2.0.8"],
   ]) {
     const entry = lock.packages[`node_modules/${name}`];

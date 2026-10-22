@@ -6,7 +6,7 @@ description: Pay for x402-gated APIs and sites as an agent (AIFP-1 on an owner-s
   wallet, payment history, prepaid quotas and Agent Passport records through
   the AiFinPay MCP server or SDK.
 license: MIT
-version: 2.9.0
+version: 2.10.2
 author: AiFinPay Support
 metadata:
   hermes:
@@ -61,19 +61,19 @@ your language. There is no "install together" scenario.
 
 ## Version and release status
 
-Release target: MCP **2.8.0**, Node SDK **2.6.0**, Python **2.5.1**.
+Release target: MCP **2.11.3**, Node SDK **2.9.0**, Python **2.7.0**.
 This skill describes that coordinated package cohort. Check the installed
 versions before using its additional-network instructions; a release target
 does not establish npm/PyPI publication or production network activation.
-Published baseline checked 2026-10-04: MCP **2.5.0**, Node SDK **2.3.2**.
+Published baseline checked 2026-10-19: MCP **2.11.2**, Node SDK **2.8.0**.
 `payable_fetch` has shipped since MCP 2.2.0, and Base since MCP 2.5.0.
 Published packages remain usable within their documented capabilities.
 
 | Surface | Can it pay? |
 |---|---|
-| MCP `@aifinpay/mcp` 2.8.x | `payable_fetch`, only with a persistent wallet and every owner limit set. Polygon is the default; other networks require explicit `AIFINPAY_PAY_CHAIN`. The merchant and backend must authorize and serve that network. `scope: "merchant"` buys a site-wide batch. |
-| Node `@aifinpay/agent` 2.6.x | `fetchPaid` with a v14 journal, gas cap and owner budgets. Select another network with `v14.chain`; select a pinned stablecoin with `v14.asset`. Native payments require an independent native/USD rate. |
-| Python `aifinpay-agent` 2.5.x | `agent.fetch_paid(url, allowed_origins=…, max_amount_usd=…, daily_amount_usd=…)`; use explicit `chain` and the chain's native gas cap for another network, or a pinned stablecoin `asset`. `agent.recover_paid(journal_path)` recovers the original transaction. |
+| MCP `@aifinpay/mcp` 2.11.x | `payable_fetch`, only with a persistent wallet and every owner limit set; it is always listed and, until then, answers with the setup checklist instead of signing. `payment_setup_status` is the read-only checklist with one `next_step` and, from 2.11.3, `funding`: the amount to fund at today's rate. Polygon is the default; other networks require explicit `AIFINPAY_PAY_CHAIN`. The merchant and backend must authorize and serve that network. `scope: "merchant"` buys a site-wide batch. |
+| Node `@aifinpay/agent` 2.8.x | `fetchPaid` with a v14 journal, gas cap and owner budgets. Select another network with `v14.chain`; select a pinned stablecoin with `v14.asset`. Native payments require an independent native/USD rate. |
+| Python `aifinpay-agent` 2.7.x | `agent.fetch_paid(url, allowed_origins=…, max_amount_usd=…, daily_amount_usd=…)`; use explicit `chain` and the chain's native gas cap for another network, or a pinned stablecoin `asset`. `agent.recover_paid(journal_path)` recovers the original transaction. |
 
 The client descriptors below are shared by the target cohort. They do not
 activate a deployment, enroll a merchant or prove a completed payment.
@@ -166,12 +166,70 @@ or event log alone does not prove a valid paid request.
 
 # AiFinPay agent workflow
 
-Use the tools actually returned by MCP tools/list. MCP 2.8.0 exposes
+Use the tools actually returned by MCP tools/list. MCP 2.11.0 exposes
 agent_address, agent_reload, agent_claim_self, agent_history, agent_quota,
-agent_passport_resolve, settlement_routes, settlement_invoice and
-deployment_info; `payable_fetch` appears when the owner has enabled payments.
-With AIFINPAY_MODE=dev it also exposes dev_payment_quote. Never tell a user a
-payment was sent because a quote or invoice was created.
+agent_passport_resolve, settlement_routes, settlement_invoice,
+deployment_info, `payment_setup_status` and `payable_fetch`. `payable_fetch`
+is listed from the first start; until the owner has enabled payments and set
+every limit it returns the same checklist as `payment_setup_status` and signs
+nothing. With AIFINPAY_MODE=dev it also exposes dev_payment_quote. Never tell
+a user a payment was sent because a quote or invoice was created.
+
+`settlement_routes` lists the AIFP-1 v1.4 routes first (Polygon and Base,
+`live: true` when served) and the older splitter v1.3 routes under
+`legacy_v13`. Only the v1.4 section says whether `payable_fetch` can pay; a
+v1.3 route marked not live does not mean the network is disabled.
+
+## First payment in five steps
+
+A fresh install reaches its first payment in five steps. Each one is a
+single tool call or command; signing happens only in step 5, and only after
+the owner has set every limit in step 4. Do not improvise around a missing
+step — no key handling of your own, no funding of an ephemeral address.
+
+1. **Read the price.** `GET` the resource. The `402` names the merchant
+   (`merchant_id`), the price per request and the smallest batch (for
+   example `$0.10` for 200 standard requests).
+2. **Check the setup.** Call `payment_setup_status`. It returns the wallet
+   (`persistent` or ephemeral), `payments_enabled`, which owner limits are
+   set, the balance when the RPC answers, `funding` (what a persistent wallet
+   needs, priced now), `ready`, and `next_step` — the one thing still
+   missing. Follow `next_step`; do not skip ahead.
+3. **Persistent wallet.** If `wallet.persistent` is false, run the exact
+   command in `next_step` (it is `npx @aifinpay/mcp init`, prefixed with
+   `AIFINPAY_HOME=…` when the server uses its own wallet directory — keep
+   that prefix, or the server will not see the keystore). Without a terminal
+   init does not prompt: it generates the passphrase, writes the keystore and
+   prints one JSON document with `addresses` and an `env` block. Put that
+   `env` into the `aifinpay` server entry of the MCP client config (the
+   passphrase is only there — the output is a secret, and a second run never
+   reprints it), then call `agent_reload`: it reads the keystore and switches
+   this server to the persistent wallet. If init answers that a keystore
+   already exists and cannot be opened, do not delete or replace it: follow
+   its `next_step` and start a new wallet directory. Never fund an ephemeral
+   address.
+4. **Fund and enable.** Tell the owner `addresses.evm` and the amount: the
+   batch price in the pay chain's native currency at today's rate plus the
+   gas cap. Take it from `payment_setup_status` — its `funding` field prices
+   the smallest batch now and adds the owner's gas cap into `amount`. The
+   rate moves (on 2026-10-19 one `$0.10` batch was 1.08 POL), so never
+   quote a remembered number; if `funding` has a `rate_error` and no
+   `amount`, ask the owner to fund "the batch price in POL at today's rate
+   plus the gas cap" and name no number. When the owner confirms funding,
+   they add the payment settings from "Paying with payable_fetch" below —
+   with their real origin, and USD values that are a ceiling they will not
+   need to revisit (the working limits are set in the dashboard, see "After
+   creating a wallet") — to the same `env`. **Limits are read only when the server starts**:
+   `agent_reload` re-reads the keystore and nothing else, so after the env
+   changes the client has to restart the `aifinpay` MCP server (restart the
+   client, or disable and re-enable the server in it). Until that restart
+   `payment_setup_status` keeps reporting `payments_enabled: false`; that is
+   expected, not a refusal — say so, ask the owner for the restart, and stop.
+   After it, `payment_setup_status` reports `ready: true`. Funding, origins
+   and limits are the owner's decisions; never choose them yourself.
+5. **Pay.** `payable_fetch({"url":"<origin><path>"})` (add
+   `"scope":"merchant"` for a site-wide batch) buys the batch and returns the
+   content with the receipt summary. Later requests reuse the batch.
 
 ## "Buy access for this site"
 
@@ -193,13 +251,15 @@ into ratersapp.com", "купи доступ до цього сайту". Handle 
    the same $0.10 is 200 standard or 20 premium requests in any mix. Gas is
    separate, in the selected network's native currency. Use the display rules
    in "Transaction display" below.
-4. **Check readiness.** `payable_fetch` must be in your tools and the origin
-   must be in `AIFINPAY_GATEWAY_ORIGINS`; the tool names a refused origin. If
-   either is missing, show the owner the exact change — the environment block
-   in the next section with this origin added, and
-   `AIFINPAY_GATEWAY_PATH_MODE=direct` when the 402 comes from the site itself
-   — and stop. Adding a site, raising a limit and funding the wallet are the
-   owner's decisions; never make them on your own initiative.
+4. **Check readiness.** Call `payment_setup_status`. If it is not `ready`,
+   follow its `next_step` through "First payment in five steps" above: a
+   persistent wallet first, then the owner's funding and environment block
+   with this origin in `AIFINPAY_GATEWAY_ORIGINS` (and
+   `AIFINPAY_GATEWAY_PATH_MODE=direct` when the 402 comes from the site
+   itself) — and stop until the owner has done their part. Env changes take
+   effect only after the client restarts the `aifinpay` server; `agent_reload`
+   does not read them. Adding a site, raising a limit and funding the wallet
+   are the owner's decisions; never make them on your own initiative.
 5. **Buy.** `payable_fetch({"url":"<origin><path>","scope":"merchant"})`, where
    the path is what the owner wants to read, or a standard resource from the
    discovery document.
@@ -218,21 +278,28 @@ default `scope`.
 
 ## Paying with payable_fetch
 
-The owner configures these MCP environment values (example limits only):
+The owner configures these MCP environment values once (example values; the
+USD ones are a ceiling, not a budget):
 
 ```json
 {
   "AIFINPAY_PAYMENTS_ENABLED": "1",
   "AIFINPAY_GATEWAY_ORIGINS": "https://merchant.example",
   "AIFINPAY_GATEWAY_PATH_MODE": "direct",
-  "AIFINPAY_MAX_USD": "0.15",
-  "AIFINPAY_DAILY_USD": "1.00",
+  "AIFINPAY_MAX_USD": "5",
+  "AIFINPAY_DAILY_USD": "20",
   "AIFINPAY_MAX_GAS_POL": "0.3"
 }
 ```
 
-The smallest batch is **$0.10 plus gas** on **Polygon**; keep `AIFINPAY_MAX_USD`
-a little above the batch you expect to buy. The gas cap has to cover the
+`AIFINPAY_MAX_USD` and `AIFINPAY_DAILY_USD` are the ceiling the SDK requires
+before it signs with the owner's key: set once, high enough not to need
+revisiting, and left alone. The day-to-day limits — per-payment cap, daily
+cap, pause, allowed sites — are the dashboard **Controls** once the agent is
+claimed (see "After creating a wallet" below); the backend enforces them on
+every quote and payment, with no env change and no server restart. A payment
+has to pass both. The smallest batch is **$0.10 plus gas** on **Polygon**;
+`AIFINPAY_MAX_USD` only has to be at or above the batch. The gas cap has to cover the
 worst-case fee: at ~280 gwei that is about 0.10 POL for a POL payment and
 0.21 POL for USDC, and a lower cap refuses before anything is signed. The fee
 charged is usually a fraction of that, but the wallet must hold the batch plus
@@ -241,10 +308,13 @@ To pay in **USDC** instead, the owner also sets `"AIFINPAY_PAY_ASSET": "USDC"`:
 the wallet then needs USDC for the batch plus POL for the worst-case gas (about
 0.21 POL at ~280 gwei), because the tool approves exactly the batch amount and
 then settles — two transactions, both within `AIFINPAY_MAX_GAS_POL`. Use an existing persistent
-wallet or create one with `npx @aifinpay/mcp init` (a passphrase is required,
-and the MCP server's env needs the same `AIFINPAY_WALLET_PASSPHRASE`);
-fund its EVM address on Polygon with POL, or with USDC plus some POL. Funding a wallet does not establish
-unlimited spend authority. Use the owner's actual approved limits and origins,
+wallet or create one with `npx @aifinpay/mcp init` (on a terminal it asks for
+a passphrase; without one it generates it and prints the `env` block to put
+into the MCP client config — the server's env needs that same
+`AIFINPAY_WALLET_PASSPHRASE`, or every start mints a new ephemeral wallet);
+fund its EVM address on Polygon with POL, or with USDC plus some POL, in the
+amount `payment_setup_status` prices. Funding a wallet does not establish
+unlimited spend authority. Use the owner's actual approved origins and ceiling,
 then call `payable_fetch({"url":"https://merchant.example/api/data"})`.
 
 For another network, the owner sets `AIFINPAY_PAY_CHAIN` to an exact name in
@@ -315,10 +385,16 @@ at https://dash.aifinpay.io → My Agents:
   `agent.sign_dashboard_claim(challenge)` (Python). These sign only
   `AiFinPay-claim:polygon:<own address>:<nonce>`.
 
-Keep local owner spending limits in the agent's configuration (`AIFINPAY_MAX_USD`,
-`AIFINPAY_DAILY_USD`). Claimed-wallet controls in the dashboard are additional
-backend restrictions on quotes and gateway access; they do not replace local
-limits or control transactions sent directly outside AiFinPay.
+Once the agent is claimed, the dashboard is where the owner manages its
+working limits: **Controls** on the agent's page sets the per-payment cap, the
+daily cap, pause and the allowed sites, and the backend enforces that policy
+on every `/v1/quote` and `/v1/pay` for the claimed agent — no env change, no
+server restart. The env values (`AIFINPAY_MAX_USD`, `AIFINPAY_DAILY_USD`, the
+gas cap, the origins) stay as the ceiling the SDK requires before it signs;
+they do not replace the dashboard, and the dashboard does not replace them —
+a payment has to pass both. Dashboard controls do not reach transactions sent
+directly outside AiFinPay. After `agent_claim_self`, point the owner at
+Controls rather than at the config file when they want to change a limit.
 
 Discover routes on the exact requested origin: `/.well-known/x402.json` and any
 API catalog linked by that site. A dev hostname does not imply testnet. If a

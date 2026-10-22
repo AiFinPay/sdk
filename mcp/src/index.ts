@@ -4,8 +4,8 @@
  *
  * Tools: public addresses, history, quotas, passport resolution, non-signing
  * settlement invoices, local wallet reload, and opt-in dev batch quoting.
- * The one signing tool, payable_fetch, is registered only when the owner
- * enables payments with every limit set.
+ * The one signing tool, payable_fetch, is always listed and on by default; it
+ * signs only from a persistent wallet, within the built-in $5 / $20 ceiling.
  *
  * Quick start (stdio transport for Claude Desktop / MCP-aware runtimes):
  *

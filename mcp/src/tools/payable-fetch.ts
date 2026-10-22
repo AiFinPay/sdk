@@ -14,6 +14,8 @@ import { validatePaymentConfig } from "../config.js";
 import { PaymentStateError, type PaymentState } from "../payment-state.js";
 import { independentNativeUsd } from "../native-price.js";
 import { payChain, type PayChain } from "../pay-chains.js";
+import { paymentSetupStatus } from "./payment-setup-status.js";
+import { assertVerifiedMerchantSite, UnverifiedMerchantSiteError } from "../merchant-site.js";
 
 // "prefix" is left out on purpose: it needs a resource to anchor to, and the
 // owner's two real requests are "this endpoint" and "this site".
@@ -22,16 +24,23 @@ type PayableScope = (typeof SCOPES)[number];
 // Real ids are "mrch_" plus hex. A 402's merchant id is unauthenticated, so
 // only an id this plain is ever repeated to the model.
 const MERCHANT_ID = /^[A-Za-z0-9_.:-]{1,64}$/;
+// The hosted gateway addresses merchants by slug; every other origin is a site
+// running its own paywall, whose AIFP-1 resource is the full request path.
+const HOSTED_GATEWAY_ORIGIN = "https://gateway.aifinpay.io";
 
 export function payableFetchTool() {
   return {
     name: "payable_fetch",
     description:
-      'Fetch a GET resource from an owner-approved AiFinPay merchant. Buys a prepaid batch through verified v1.4 on the chain the owner set in AIFINPAY_PAY_CHAIN (Polygon by default; other supported networks require explicit owner selection) — in its native currency (POL, SOL, ETH, AVAX, BNB or XRP), or in the stablecoin the owner set in AIFINPAY_PAY_ASSET (e.g. USDC; gas is still native) — within owner limits, then reuses its receipt. With scope "merchant" one batch covers every path on the site. Pending payments are recovered without sending another transaction. Other payment protocols are unsupported.',
+      'Fetch a GET resource from an AiFinPay merchant, paying its AIFP-1 402 when needed. Always listed: until a persistent wallet exists (npx @aifinpay/mcp init, then agent_reload) it signs nothing and returns the payment_setup_status checklist with the one next step. Payments are on by default within a built-in ceiling of $5 per payment and $20 per 24 hours (the owner can only lower it in env; the working limits are the dashboard Controls after agent_claim_self) and only ever reach a merchant registered with AiFinPay, through a quote signed by the AiFinPay backend; a 402 never chooses who is paid. Without AIFINPAY_GATEWAY_ORIGINS it pays only a merchant whose site AiFinPay reports as DNS-verified, on that very site (or through the AiFinPay hosted gateway); with it, only the origins the owner listed; AIFINPAY_PAYMENTS_ENABLED=0 turns payments off.  Buys a prepaid batch through verified v1.4 on the chain the owner set in AIFINPAY_PAY_CHAIN (Polygon by default; other supported networks require explicit owner selection) — in its native currency (POL, SOL, ETH, AVAX, BNB or XRP), or in the stablecoin the owner set in AIFINPAY_PAY_ASSET (e.g. USDC; gas is still native) — within owner limits, then reuses its receipt. With scope "merchant" one batch covers every path on the site. Pending payments are recovered without sending another transaction. Other payment protocols are unsupported.',
     inputSchema: {
       type: "object",
       properties: {
-        url: { type: "string", description: "HTTPS resource on an owner-configured exact gateway origin." },
+        url: {
+          type: "string",
+          description:
+            "HTTPS resource to fetch. Without AIFINPAY_GATEWAY_ORIGINS, payment goes only to a merchant that verified this site with AiFinPay; with it, only to the origins the owner listed.",
+        },
         max_amount_usd: {
           type: "number",
           exclusiveMinimum: 0,
@@ -62,6 +71,16 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
   let state: PaymentState | undefined;
   let chain: PayChain | undefined;
   try {
+    const store = ctx.paymentState;
+    // Not set up: say exactly what is missing instead of refusing in one line.
+    // Nothing below runs, so nothing is quoted, signed or sent. The journal
+    // exists only for the persistent wallet the server started with.
+    if (!ctx.config.paymentsEnabled || !store || store.address !== ctx.agent.evmAddress.toLowerCase()) {
+      const status = await paymentSetupStatus(ctx, { readBalance: false });
+      return errorResult(
+        JSON.stringify({ error: "payable_fetch is not set up yet; nothing was signed or paid.", ...status }, null, 2)
+      );
+    }
     let feeCap: bigint;
     try {
       feeCap = validatePaymentConfig(ctx.config);
@@ -69,9 +88,6 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
     } catch (error) {
       return errorResult((error as Error).message);
     }
-    const store = ctx.paymentState;
-    if (!store || store.address !== ctx.agent.evmAddress.toLowerCase())
-      return errorResult("A persistent matching wallet is required for payments.");
     if (Object.keys(args).some((k) => !["url", "max_amount_usd", "scope", "expected_merchant_id"].includes(k)))
       return errorResult(
         "Only url, max_amount_usd, scope and expected_merchant_id are supported; no facilitator fallback."
@@ -88,13 +104,18 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
       return errorResult("expected_merchant_id must be a merchant id such as mrch_0123abcd.");
     const url = new URL(args.url);
     if (url.protocol !== "https:" || url.username || url.password || url.hash)
-      return errorResult("The URL must use an owner-approved exact HTTPS origin without credentials or fragment.");
-    // The agent cannot approve a site itself: a page asking to be paid is not
-    // the owner asking to pay it. Name the origin so the owner can decide.
-    if (!ctx.config.gatewayOrigins!.includes(url.origin))
+      return errorResult("The URL must be an https resource without credentials or fragment.");
+    // Unset, the allowlist is the origin of this very URL: whoever answers its
+    // 402 is still only paid if the AiFinPay backend quotes them as a
+    // registered merchant. Set, it is the owner's word on which sites may be
+    // paid at all, and the agent cannot add to it: a page asking to be paid is
+    // not the owner asking to pay it. Name the origin so the owner can decide.
+    const origins = ctx.config.gatewayOrigins ?? [url.origin];
+    if (!origins.includes(url.origin))
       return errorResult(
         `${url.origin} is not an owner-approved site. Nothing was paid. The owner can add it to AIFINPAY_GATEWAY_ORIGINS and reconnect this server; the agent cannot approve a site itself.`
       );
+    const pathMode = ctx.config.gatewayPathMode ?? (url.origin === HOSTED_GATEWAY_ORIGIN ? "gateway" : "direct");
     if (
       args.max_amount_usd !== undefined &&
       (typeof args.max_amount_usd !== "number" || !Number.isFinite(args.max_amount_usd) || args.max_amount_usd <= 0)
@@ -104,7 +125,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
       ctx.config.maxAmountUsd!,
       typeof args.max_amount_usd === "number" ? args.max_amount_usd : Infinity
     );
-    const parsed = parseGatewayUrl(url.href, ctx.config.gatewayOrigins, ctx.config.gatewayPathMode);
+    const parsed = parseGatewayUrl(url.href, origins, pathMode);
     const pay = chain;
     const payAsset = ctx.config.payAsset ?? pay.native;
     const rpc = ctx.config.rpcUrl ?? pay.defaultRpc;
@@ -193,6 +214,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
         const paid = await ctx.agent
           .recoverPaidPayment(recovery, {
             paymentIssuer: configuredApi,
+            ...(ctx.framework ? { framework: ctx.framework } : {}),
             ...(pay.name === "solana"
               ? {
                   solanaNetwork: ctx.config.solanaNetwork!,
@@ -226,6 +248,18 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
       const spent = store.spent24h(state);
       const priorReceiptIds = new Set(state.receipts.map((entry) => entry.receiptId));
       let price: { usd: number; observedAtMs: number } | undefined;
+      // No owner allowlist: pay only the verified owner of the site being used
+      // (see ../merchant-site.ts). With one, the owner already chose the sites.
+      const confirmPayee = async (merchantId: string) => {
+        if (ctx.config.gatewayOrigins !== undefined) return;
+        await assertVerifiedMerchantSite({
+          fetchImpl: (input, init) => ctx.agent.inner.fetchImpl(input, init),
+          apiBase: (ctx.config.baseUrl ?? "https://api.aifinpay.io").replace(/\/+$/, ""),
+          merchantId,
+          url,
+          pathMode,
+        });
+      };
       const persistPrepared = (prepared: Aifp1PaymentRecovery, usd: number, serializedTransaction?: `0x${string}`) => {
         if (state!.pending) throw new Error("A payment is already pending");
         if (
@@ -236,9 +270,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
         )
           throw new Error("Owner spending limit reached");
         const site =
-          ctx.config.gatewayPathMode === "direct"
-            ? `direct:${JSON.stringify([url.origin, prepared.quote.merchant_id])}`
-            : parsed.site;
+          pathMode === "direct" ? `direct:${JSON.stringify([url.origin, prepared.quote.merchant_id])}` : parsed.site;
         state!.pending = {
           recovery: prepared,
           ...(serializedTransaction ? { serializedTransaction } : {}),
@@ -256,10 +288,11 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
           {
             apiBaseUrl: ctx.config.baseUrl,
             paymentIssuer: ctx.config.baseUrl ?? "https://api.aifinpay.io",
-            gatewayOrigins: ctx.config.gatewayOrigins,
-            resourcePathMode: ctx.config.gatewayPathMode,
+            gatewayOrigins: origins,
+            resourcePathMode: pathMode,
             scope,
             ...(expectedMerchantId !== undefined ? { expectedMerchantId } : {}),
+            ...(ctx.framework ? { framework: ctx.framework } : {}),
             // A pending Solana quote pins this owner limit across restarts and
             // rollover. Fresh daily allowance is checked again in persistPrepared
             // under the operation lock, before any broadcast.
@@ -293,6 +326,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
                         prepared.asset !== payAsset
                       )
                         throw new Error("Prepared Solana payment disagrees with the owner configuration");
+                      await confirmPayee(prepared.quote.merchant_id);
                       if (!price || Date.now() - price.observedAtMs > 60_000 || price.observedAtMs > Date.now())
                         throw new Error("Independent SOL price expired before preparation");
                       const native = prepared.quote.native_settlement as { total_lamports?: string } | undefined;
@@ -320,6 +354,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
                     ...(payAsset !== pay.native ? { asset: payAsset } : {}),
                     maxGasWei: feeCap,
                     onPrepared: async (prepared) => {
+                      await confirmPayee(prepared.quote.merchant_id);
                       let usd: number;
                       if (payAsset !== pay.native) {
                         if (prepared.asset !== payAsset)
@@ -409,6 +444,11 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
               (MERCHANT_ID.test(error.merchantId)
                 ? `, and only then retry with expected_merchant_id "${error.merchantId}".`
                 : ". This merchant id cannot be confirmed through this tool.")
+      );
+    }
+    if (!state?.pending && error instanceof UnverifiedMerchantSiteError) {
+      return errorResult(
+        `${error.message} Without an owner allowlist, payable_fetch pays only a merchant that verified its site with AiFinPay, on that site. Tell the owner; the agent cannot approve this payee itself.`
       );
     }
     if (!state?.pending && error instanceof Aifp1GatewayRetiredError) {

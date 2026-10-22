@@ -259,6 +259,25 @@ key already names the merchant. A slug the gateway retired answers
 (`code: "AIFP1_GATEWAY_RETIRED"`) after one request; do not retry it. Batches
 already held are kept.
 
+### Name the AI client that pays
+
+Set `framework` to the AI client the agent runs in, and every request of the
+payment flow carries `AIFP-Agent-Framework: <value>`: the first request that
+may answer 402, `/v1/quote`, `/v1/pay` and the paid retry (and the generic
+x402 `pay()`). The merchant dashboard then shows which AI client paid.
+
+```ts
+const agent = await AiFinPayAgent.fromEnvironment({ framework: "claude" });
+```
+
+Accepted values (`AGENT_FRAMEWORKS`): `chatgpt`, `claude`, `perplexity`,
+`gemini`, `cursor`, `openai-agents`, `windsurf`, `codex`, `custom`. Anything
+else throws
+`AiFinPayError` when the agent is constructed. Leave it unset and no header is
+sent; the SDK never guesses. A host that learns its client after constructing
+the agent passes it per call: `fetchPaid(url, init, { framework })` or
+`recoverPaidPayment(recovery, { framework })`.
+
 ### Payment history
 
 ```ts

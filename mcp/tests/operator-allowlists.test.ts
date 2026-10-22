@@ -28,7 +28,7 @@ describe("gateway origins", () => {
     }
   };
 
-  it("is undefined when unset, so the SDK default still applies", () => {
+  it("is undefined when unset, so payable_fetch accepts the origin of each URL", () => {
     // undefined and [] are different downstream: [] would mean "no origin is
     // payable at all", which is not what an unset variable asks for.
     expect(withEnv(undefined, () => loadConfigFromEnv().gatewayOrigins)).toBeUndefined();
@@ -56,13 +56,19 @@ describe("gateway origins", () => {
 });
 
 describe("gateway path mode", () => {
-  it("defaults to gateway and accepts direct", () => {
+  it("is unset by default, so payable_fetch infers it from each URL, and accepts both values", () => {
+    // Before 2.12.1 the default was "gateway", which meant a site running its
+    // own paywall needed one more variable before its first payment.
     const previous = process.env.AIFINPAY_GATEWAY_PATH_MODE;
     try {
       delete process.env.AIFINPAY_GATEWAY_PATH_MODE;
-      expect(loadConfigFromEnv().gatewayPathMode).toBe("gateway");
+      expect(loadConfigFromEnv().gatewayPathMode).toBeUndefined();
+      process.env.AIFINPAY_GATEWAY_PATH_MODE = "";
+      expect(loadConfigFromEnv().gatewayPathMode).toBeUndefined();
       process.env.AIFINPAY_GATEWAY_PATH_MODE = "direct";
       expect(loadConfigFromEnv().gatewayPathMode).toBe("direct");
+      process.env.AIFINPAY_GATEWAY_PATH_MODE = "gateway";
+      expect(loadConfigFromEnv().gatewayPathMode).toBe("gateway");
     } finally {
       if (previous === undefined) delete process.env.AIFINPAY_GATEWAY_PATH_MODE;
       else process.env.AIFINPAY_GATEWAY_PATH_MODE = previous;

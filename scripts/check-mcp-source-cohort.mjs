@@ -18,34 +18,36 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // Registry lock refreshed onto the published cohort (agent 2.6.4, skill 2.9.0,
-// ee4b3b4); it keeps MCP SDK 1.31.0 and proxy-addr 2.0.8, which fix
-// GHSA-6qxp-vccf-f47h / GHSA-jqcg-44mw-7w3h. Keep the bootstrap immutable.
-export const BASE = "ee4b3b450af3fec988c6520e1033c25868065df0";
+// ee4b3b4), since moved to agent 2.9.0 and skill 2.10.2. Moved again to bda78b7
+// (2026-10-22) for MCP SDK 1.32.1, which fixes GHSA-22jm-h49p-29qw (high) and
+// GHSA-6prh-2h8m-c8cw; 1.31.0 had kept proxy-addr 2.0.8 for GHSA-6qxp-vccf-f47h /
+// GHSA-jqcg-44mw-7w3h. Keep the bootstrap immutable between such refreshes.
+export const BASE = "bda78b76ec744beda7aba7fc3373070d455864c9";
 export const COHORT = {
-  mcp: "2.9.0",
-  agent: "2.7.0",
-  python: "2.6.1",
-  skill: "2.9.0",
+  mcp: "2.12.1",
+  agent: "2.9.0",
+  python: "2.7.1",
+  skill: "2.10.2",
 };
 // Real CLI subprocess tests retain their default five-second limit. Serialize
 // the complete suite to avoid competing compiler/import workers starving them.
 export const MCP_TEST_ARGS = ["test", "--", "--maxWorkers=1"];
 // Parent-reviewed canonical reporting producer; no moving branch or registry
 // artifact stands in for its committed tree and actual source pack.
-export const SKILL_COMMIT = "b3fe28285befe0a1fb48a047fe5733bff975e854";
-export const SKILL_TREE = "45e976f453dff5052f0063a972c6b441b0255666";
+export const SKILL_COMMIT = "48285cf68f119a584886cf77f89ccdc4129fae76";
+export const SKILL_TREE = "ef5c2a4b6845f288fe742c73bc765ef3ff0169a1";
 export const SKILL_SHA =
-  "f3cc00429c126593622fd8f488080535fd83f7069d3224d6dcaefef0b217a8ee";
+  "4c390de04b1912c6bc7e823ab28d8c5567dbabf4da48a5e46db5046c439c0cfb";
 export const SKILL_PACK = {
-  sha256: "91afabce5cecc5262a2a956a01b02e53ede151d7c8aaa8f248dc3122cc2375df",
+  sha256: "3b03cdc7cea1232880cac7d04b148db9da27cc217a0a11d8c0d9cebe9a085d62",
   integrity:
-    "sha512-BoesNrlmiDvhij+qOD8Apxji1BPjPFzgCo/hfT//msseGzsALYmDBckW6Ery+ky4yNARSGfMOntVYQCACrbLzA==",
+    "sha512-LlDBmCjcYCL5rq1WbvYGGGy4x449IdIrCHFQmYTZXL4U/gt/6X0RstaoRrO9jMy2FGpm16URokGgtc05Antmlg==",
 };
 export const BASE_HASHES = {
   "package.json":
-    "4d6225033308cca95444fd4a0d671d69d221db19add88f9cfc9e30f5afb85ec2",
+    "325711e2bd41af101a547839e92f594578c7c68392ab44806266dfc1eb57702e",
   "package-lock.json":
-    "7cb72539d0dc17b885a89a73f9be91870449a578811eb61c3c492ea576f0cdc8",
+    "429d7adaeae773713fc2bd9264483dae2125b48e4c3326151cd810e84b3dee08",
 };
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const json = (path) => JSON.parse(readFileSync(path, "utf8"));

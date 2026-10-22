@@ -1,4 +1,4 @@
-import { AiFinPayAgent, PAYMENT_CHAINS } from "@aifinpay/agent";
+import { AiFinPayAgent, PAYMENT_CHAINS, type AgentFramework } from "@aifinpay/agent";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
@@ -18,6 +18,7 @@ import { makeSafeFetch } from "./safe-fetch.js";
 import { loadConfigFromEnv, validatePaymentConfig } from "./config.js";
 import { PaymentStateStore } from "./payment-state.js";
 import { payableFetchTool, runPayableFetch } from "./tools/payable-fetch.js";
+import { initCommand, paymentSetupStatusTool, runPaymentSetupStatus } from "./tools/payment-setup-status.js";
 import {
   agentPassportResolveTool,
   runAgentPassportResolve,
@@ -32,6 +33,7 @@ import {
 } from "./tools/production-control.js";
 import { deploymentInfoTool, runDeploymentInfo } from "./tools/supported-chains.js";
 import { payChain } from "./pay-chains.js";
+import { clientFrameworkLine, frameworkForClient } from "./client-framework.js";
 
 // Every backend/public request made by this server goes through safeFetch.
 // Public deployments never lift private-network protection; local development
@@ -43,8 +45,13 @@ const safeFetch = makeSafeFetch({
   trustedHosts: loadConfigFromEnv().trustedHosts,
 });
 
-/** Read-only by default. Explicit owner configuration enables the reviewed
- * family-specific v1.4 payable_fetch path; legacy signing tools stay retired. */
+const RELOAD_ENV_NOTE =
+  "Payments are off: AIFINPAY_PAYMENTS_ENABLED=0 (or a programmatic config without payments). Env is read only when this server starts; agent_reload re-reads the keystore and nothing else. If the owner has changed it since, have the client restart the aifinpay MCP server (restart the client, or disable and re-enable the server), then call payment_setup_status.";
+
+/** Payments are on by default (2.12.1) within the built-in ceiling, and only a
+ * persistent wallet signs: a server that started ephemeral opens its payment
+ * journal at agent_reload after init, without a restart. Legacy signing tools
+ * stay retired; payable_fetch is the one reviewed v1.4 path. */
 export async function createServer(config: McpConfig = {}) {
   const log = config.logFn ?? defaultLog;
   assertInjectedWalletChain(config);
@@ -83,13 +90,21 @@ export async function createServer(config: McpConfig = {}) {
   if (!configured)
     log(
       "warn",
-      "[aifinpay-mcp] EPHEMERAL wallet — DO NOT FUND. Run `npx @aifinpay/mcp init`, then agent_reload in this connection."
+      `[aifinpay-mcp] EPHEMERAL wallet — DO NOT FUND. Run \`${initCommand(config.walletHome)}\`, then agent_reload in this connection; no restart is needed to pay.`
     );
+  // The journal exists only for a persistent wallet: an ephemeral one cannot
+  // pay, and payable_fetch explains instead. A refused setting stops a server
+  // whose owner asked for payments by name; with payments on by default it
+  // starts read-only and payment_setup_status repeats the refusal.
   let paymentState: PaymentStateStore | undefined;
   if (config.paymentsEnabled) {
-    validatePaymentConfig(config);
-    if (!configured) throw new Error("Payments require a persistent configured wallet; run init first");
-    paymentState = new PaymentStateStore(agent.evmAddress, config.walletHome);
+    try {
+      validatePaymentConfig(config);
+      if (configured) paymentState = new PaymentStateStore(agent.evmAddress, config.walletHome);
+    } catch (error) {
+      if (!config.paymentsByDefault) throw error;
+      log("warn", `[aifinpay-mcp] payments stay off until the owner fixes a setting: ${(error as Error).message}`);
+    }
   }
   // Keep the legacy agent budget configured even though this RC exposes no
   // signing tool. It remains an additional defence for downstream/private code
@@ -108,6 +123,10 @@ export async function createServer(config: McpConfig = {}) {
     },
     { capabilities: { tools: {}, resources: {} } }
   );
+  // The client names itself at initialize. Logging it is how an unlisted name
+  // gets found: the 2026-10-19 Codex payment showed as "Independent" because
+  // "codex-mcp-client" was not in the table and nothing said what was sent.
+  server.oninitialized = () => log("info", clientFrameworkLine(server.getClientVersion()?.name));
 
   server.setRequestHandler(ListResourcesRequestSchema, async () => ({
     resources: [
@@ -141,11 +160,15 @@ export async function createServer(config: McpConfig = {}) {
       {
         name: "agent_reload",
         description:
-          "Reload the configured local wallet files after init or a file update, without starting a new conversation. Returns public addresses only. Shell environment changes still require reconnecting the MCP process.",
+          "Reload the configured local wallet files after init or a file update, without starting a new conversation. Returns public addresses only. With payments on (the default) it also opens the payment journal for the loaded wallet, so a server that started with an ephemeral wallet can pay right after init, without a restart. Env changes (owner overrides, AIFINPAY_PAYMENTS_ENABLED=0) take effect only after the client restarts the aifinpay MCP server; agent_reload does not read them.",
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       },
-      ...(paymentState ? [payableFetchTool()] : []),
+      // Always listed. Without the owner's setup it returns the same checklist
+      // as payment_setup_status and signs nothing; a fresh install used to show
+      // no payment tool at all, and agents stopped there.
+      paymentSetupStatusTool(),
+      payableFetchTool(),
       agentQuotaTool(),
       agentHistoryTool(),
       ...(config.devMode ? [devPaymentQuoteTool()] : []),
@@ -160,7 +183,9 @@ export async function createServer(config: McpConfig = {}) {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    const ctx = { agent, config, log, paymentState };
+    // The client named itself at initialize; unknown clients send no framework.
+    const framework = frameworkForClient(server.getClientVersion()?.name);
+    const ctx = { agent, config, log, paymentState, framework, walletSource: identitySource };
     switch (name) {
       case "agent_reload":
         try {
@@ -175,6 +200,17 @@ export async function createServer(config: McpConfig = {}) {
               "Reconnect to switch payment wallets; pending state must remain associated with its original wallet"
             );
           }
+          // init ran after this server started ephemeral: open the journal for
+          // the wallet it just loaded. The env is still the one read at start.
+          let refusal: string | undefined;
+          if (!paymentState && config.paymentsEnabled) {
+            try {
+              validatePaymentConfig(config);
+              paymentState = new PaymentStateStore(replacement.loaded.evmAddress, config.walletHome);
+            } catch (error) {
+              refusal = `Payments stay off: ${(error as Error).message}. Env is read only when this server starts; once the owner fixes it, have the client restart the aifinpay MCP server, then call payment_setup_status.`;
+            }
+          }
           agent = replacement.loaded;
           identitySource = replacement.source;
           return {
@@ -187,6 +223,14 @@ export async function createServer(config: McpConfig = {}) {
                   evm: agent.evmAddress,
                   casper: agent.casperAddress,
                   reloaded: true,
+                  // A reload that succeeds while payments stay off read as "the
+                  // env was not picked up", and an agent stopped there
+                  // (2026-10-19): config is fixed at start, so say so.
+                  payments_enabled: Boolean(config.paymentsEnabled),
+                  // Whether this connection can sign now: the journal is open
+                  // for the loaded wallet.
+                  payments_ready: Boolean(paymentState),
+                  ...(config.paymentsEnabled ? (refusal ? { env_note: refusal } : {}) : { env_note: RELOAD_ENV_NOTE }),
                 }),
               },
             ],
@@ -199,6 +243,8 @@ export async function createServer(config: McpConfig = {}) {
         }
       case "payable_fetch":
         return runPayableFetch(ctx, args ?? {});
+      case "payment_setup_status":
+        return runPaymentSetupStatus(ctx, args ?? {});
       case "agent_address":
         return runAgentAddress(ctx, args ?? {});
       case "agent_claim_self":
@@ -266,6 +312,10 @@ export interface ToolContext {
   agent: AiFinPayAgent;
   config: McpConfig;
   paymentState?: PaymentStateStore;
+  /** AIFP-Agent-Framework for this connection's payments; unset sends none. */
+  framework?: AgentFramework;
+  /** Which identity the server loaded: "ephemeral", "legacy-keystore", "SEED_HASH", "agents.json" or "AIFINPAY_AGENT_SECRET". */
+  walletSource?: string;
   log: (level: "info" | "warn" | "error", msg: string) => void;
 }
 

@@ -24,6 +24,94 @@ from the corresponding CI or payment artifacts.
   agent 2.5.2, Node gate 0.4.1, Python gate 0.1.4, wallet 1.5.1 and
   deployments 1.1.5. Version changes do not assert registry publication.
 
+## MCP 2.12.1 — payments on by default, $5 / $20 ceiling, limits in the dashboard
+
+- 2.12.0 (merged, never published) carried only the switch and refused to
+  start without env; 2.12.1 is the first release of the change.
+- `payable_fetch` is on unless `AIFINPAY_PAYMENTS_ENABLED=0`, signs only from a
+  persistent wallet, and never above a built-in $5 per payment / $20 per 24 h;
+  env can only lower that ceiling. `AIFINPAY_GATEWAY_ORIGINS` is an optional
+  allowlist (unset: the https origin of the fetched URL; the backend-signed
+  quote decides who is paid), the path mode is inferred per URL, and Polygon
+  has a 0.3 POL default gas cap. `agent_reload` after `init` enables payments
+  without a restart. `payment_setup_status` and `init` no longer ask for env.
+- `payment_setup_status` returns `dashboard`: the owner's Controls read with
+  the agent's own signature from `GET /v1/agents/<address>/policy`, or an
+  offer to link the agent when no owner has claimed it. Paused or expired
+  Controls stop the checklist. Needs the backend route from aifinpay-web#277;
+  before it is deployed the field reads `unknown` and blocks nothing.
+
+## Python 2.7.1 — Codex is a framework
+
+- `aifinpay-agent` 2.7.1 adds `codex` to `AGENT_FRAMEWORKS`, the same value as
+  Node 2.9.0 and the backend whitelist.
+
+## MCP 2.11.4 — published agent 2.9.0 and skill 2.10.2
+
+- MCP 2.11.3 was never published; 2.11.4 carries its changes on the published
+  `@aifinpay/agent` 2.9.0 and `@aifinpay/skill` 2.10.2, with the lock and cohort
+  pins refreshed.
+
+## MCP 2.11.3 / Node 2.9.0 — Codex named, funding priced, limits in the dashboard
+
+- `@aifinpay/agent` 2.9.0 adds `codex` to `AGENT_FRAMEWORKS`. The MCP maps
+  Codex's `clientInfo.name` `codex-mcp-client` to it and logs every client's
+  name at initialize, so the merchant dashboard no longer shows a Codex agent
+  as "Independent".
+- `payment_setup_status` returns `funding`: the smallest batch at today's rate
+  plus the gas cap, before payments are enabled; no fixed POL rate remains in
+  the MCP README or tool text. When no rate can be read it says so and names
+  no number.
+- The env USD limits are documented as a one-time ceiling; the working limits
+  are the dashboard Controls after `agent_claim_self`. No enforcement change.
+- Publish order: agent 2.9.0 first, then the MCP lock bump (with skill 2.10.2),
+  then MCP 2.11.3.
+
+## MCP 2.11.2 — env changes need a server restart; skill 2.10.1
+
+- 2.11.1 was merged without these two changes and was never published; 2.11.2
+  is the first release with AIFINPAY_HOME handling (the 2.11.1 changes below).
+- `agent_reload` reports `payments_enabled` and says that owner limits need a
+  server restart, not a reload; `payment_setup_status` says the same while
+  payments are off. `@aifinpay/mcp` depends on `@aifinpay/skill` 2.10.1.
+  Signing conditions are unchanged.
+
+## MCP 2.11.1 — init and payment_setup_status agree on where the wallet is
+
+- `payment_setup_status` names `AIFINPAY_HOME=<path> npx @aifinpay/mcp init`
+  when the server runs with `AIFINPAY_HOME`, and `init` puts that
+  `AIFINPAY_HOME` into the printed `env`. An existing encrypted keystore without
+  its passphrase is still never touched; init's exit-2 JSON and
+  `payment_setup_status` now both point at a new, empty `AIFINPAY_HOME`.
+  Signing conditions are unchanged.
+
+## MCP 2.11.0 — a fresh agent reaches its first payment in five steps
+
+- `@aifinpay/mcp` always lists `payable_fetch`; without the owner's setup it
+  signs nothing and returns the new read-only `payment_setup_status` checklist
+  with one `next_step`. `settlement_routes` reports splitter v1.4 (Polygon,
+  Base) as live first and the v1.3 routes under `legacy_v13`. `init` without a
+  terminal generates the passphrase, encrypts the keystore and prints JSON with
+  the env block for the MCP client config. Signing conditions are unchanged.
+
+## MCP 2.10.0 — payable_fetch names the connected AI client
+
+- `@aifinpay/mcp` maps the MCP client's `clientInfo.name` from initialize to
+  `AIFP-Agent-Framework` through an explicit, exact-name table and passes it to
+  the agent's purchase and pending-payment recovery. Unknown clients send no
+  header. Requires `@aifinpay/agent` 2.8.0; the release-input guard refuses MCP
+  publication until 2.8.0 is published and the lock refreshed.
+
+## Node 2.8.0 / Python 2.7.0 — AIFP-Agent-Framework names the AI client that pays
+
+- `@aifinpay/agent` and `aifinpay-agent` take an optional `framework`
+  (`chatgpt`, `claude`, `perplexity`, `gemini`, `cursor`, `openai-agents`,
+  `windsurf`, `custom`) and send it as `AIFP-Agent-Framework` on every request
+  of the payment flow, so the merchant dashboard can attribute revenue to the
+  AI client instead of "unknown". Any other value is refused at construction;
+  unset sends nothing. The MCP source-cohort guard follows both versions.
+  Nothing is published.
+
 ## Analytics 0.1.0 — new opt-in telemetry package (unreleased)
 
 - Add `@aifinpay/analytics`: opt-in SDK telemetry, off by default, zero runtime

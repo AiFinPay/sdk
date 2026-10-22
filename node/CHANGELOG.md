@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.9.0 — `codex` as an AI client
+
+- `AGENT_FRAMEWORKS` gains `codex`, so an agent running in OpenAI Codex can
+  send `AIFP-Agent-Framework: codex`. The MCP server maps Codex's
+  `clientInfo.name` (`codex-mcp-client`) to it; Codex is not ChatGPT. No other
+  value, validation or request changes.
+
+## 2.8.0 — name the AI client that pays
+
+- New `framework` option (`AgentOptions`, so also `AiFinPayAgentOptions`). When
+  set, the first request that may answer 402, `/v1/quote`, `/v1/pay`, the paid
+  retry, the generic x402 `pay()` and every other request carrying the SDK
+  user-agent send `AIFP-Agent-Framework: <value>`. Unset sends no header.
+- Accepted values are exported as `AGENT_FRAMEWORKS` (type `AgentFramework`):
+  `chatgpt`, `claude`, `perplexity`, `gemini`, `cursor`, `openai-agents`,
+  `windsurf`, `custom`. Anything else throws `AiFinPayError` at construction.
+- `fetchPaid` and `recoverPaidPayment` take a per-call `framework` that replaces
+  the agent's own, validated the same way, before any request.
+- `Agent.pay()` now replaces a caller's own `User-Agent` / `AIFP-Agent-Framework`
+  header in any letter case instead of sending both values.
+- `fromEnvironment` reports an invalid `framework` as such, not as an invalid
+  wallet.
+- No payment, fee, receipt or settlement change.
+
 ## 2.7.0 — gateway sites keep the merchant they were first paid as
 
 - `fetchPaid` pins each gateway site (origin + slug) to the merchant it was

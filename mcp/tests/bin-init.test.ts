@@ -21,19 +21,25 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, existsSync, statSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer } from "../src/server.js";
-import { loadConfigFromEnv } from "../src/config.js";
+import { DEFAULT_DAILY_USD, DEFAULT_MAX_GAS_POL, DEFAULT_MAX_USD, loadConfigFromEnv } from "../src/config.js";
 
 const BIN = fileURLToPath(new URL("../bin/aifinpay-mcp.js", import.meta.url));
 const README = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 
 let home: string;
+// Vitest runs the bin with stdin piped, which is exactly an agent's subprocess.
+// Tests of the human path (prompts for a passphrase, prose output) make stdin
+// report a terminal; the non-interactive tests below run the bin as it is.
+let ttyStdin: string;
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), "aifp-mcp-"));
+  ttyStdin = join(home, "tty-stdin-fixture.mjs");
+  writeFileSync(ttyStdin, "Object.defineProperty(process.stdin, 'isTTY', { value: true });\n", { mode: 0o600 });
 });
 afterEach(() => {
   rmSync(home, { recursive: true, force: true });
@@ -61,7 +67,7 @@ function isolatedEnv(extraEnv: Record<string, string> = {}): NodeJS.ProcessEnv {
   return { ...env, ...extraEnv };
 }
 
-function run(args: string[], extraEnv: Record<string, string> = {}, nodeArgs: string[] = []): string {
+function runRaw(args: string[], extraEnv: Record<string, string> = {}, nodeArgs: string[] = []) {
   const r = spawnSync(process.execPath, [...nodeArgs, BIN, ...args], {
     encoding: "utf8",
     timeout: 60_000,
@@ -70,10 +76,28 @@ function run(args: string[], extraEnv: Record<string, string> = {}, nodeArgs: st
     env: isolatedEnv(extraEnv),
   });
   if (r.error) throw r.error;
+  return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+}
+
+/** The human path: stdin reports a terminal. */
+function run(args: string[], extraEnv: Record<string, string> = {}, nodeArgs: string[] = []): string {
+  const r = runRaw(args, extraEnv, ["--import", ttyStdin, ...nodeArgs]);
   if (r.status !== 0) {
     throw Object.assign(new Error(`exited ${r.status}: ${r.stderr}`), { status: r.status });
   }
-  return (r.stdout ?? "") + (r.stderr ?? "");
+  return r.stdout + r.stderr;
+}
+
+/** The agent path: stdin is a pipe. stdout must be one JSON document; stderr is kept apart. */
+function runJson(args: string[], extraEnv: Record<string, string> = {}) {
+  const r = runRaw(args, extraEnv);
+  let json: any;
+  try {
+    json = JSON.parse(r.stdout);
+  } catch {
+    throw new Error(`stdout is not one JSON document (exit ${r.status}): ${r.stdout}\n${r.stderr}`);
+  }
+  return { ...r, json };
 }
 
 const EVM = /0x[a-fA-F0-9]{40}/;
@@ -173,7 +197,7 @@ syncBuiltinESMExports();
       );
       const children: ReturnType<typeof spawn>[] = [];
       const launch = (writer: string) => {
-        const child = spawn(process.execPath, ["--import", barrier, BIN, "init", "--plaintext"], {
+        const child = spawn(process.execPath, ["--import", ttyStdin, "--import", barrier, BIN, "init", "--plaintext"], {
           cwd: home,
           env: isolatedEnv({
             AIFP_TEST_WRITER: writer,
@@ -224,6 +248,162 @@ syncBuiltinESMExports();
   );
 });
 
+// ── init without a terminal ────────────────────────────────────────────
+//
+// An agent runs `npx @aifinpay/mcp init` as a subprocess with stdin piped. On
+// 2026-10-19 such a run waited 167 s for a passphrase nobody could type, and
+// the agent then invented its own key handling. Without a terminal init must
+// decide everything itself and print one JSON document the agent can act on.
+
+describe("aifinpay-mcp init without a terminal", () => {
+  const PASSPHRASE = /^[A-Za-z0-9_-]{32}$/; // 24 random bytes, base64url
+
+  it("creates an encrypted wallet with a generated passphrase and prints the env block", () => {
+    const r = runJson(["init"]);
+    expect(r.status).toBe(0);
+    const keystore = join(home, "agent.json");
+    expect(r.json).toMatchObject({ keystore, created: true, encrypted: true, source: "legacy-keystore" });
+    expect(r.json.addresses.evm).toMatch(EVM);
+    expect(r.json.addresses.solana).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
+    expect(r.json.addresses.casper).toMatch(/^account-hash-[a-f0-9]{64}$/);
+    // The keystore is under this AIFINPAY_HOME, so the server must be told it too.
+    expect(Object.keys(r.json.env)).toEqual(["AIFINPAY_HOME", "AIFINPAY_WALLET_PASSPHRASE"]);
+    expect(r.json.env.AIFINPAY_HOME).toBe(home);
+    const passphrase = r.json.env.AIFINPAY_WALLET_PASSPHRASE;
+    expect(passphrase).toMatch(PASSPHRASE);
+    // The passphrase is in the env block and nowhere else: not twice, not on stderr.
+    expect(r.stdout.split(passphrase)).toHaveLength(2);
+    expect(r.stderr).not.toContain(passphrase);
+    expect(r.json.passphrase_note).toContain("AIFINPAY_WALLET_PASSPHRASE");
+    expect(r.json.next_step).toContain("payment_setup_status");
+    // Payments need no env: the JSON says so and lists only optional overrides.
+    expect(r.json.payments).toContain("on by default");
+    expect(r.json.payments).toContain("$5 per payment and $20 per 24 hours");
+    expect(Object.keys(r.json.optional_env_example)).toEqual(["AIFINPAY_GATEWAY_ORIGINS", "AIFINPAY_MAX_GAS_POL"]);
+    expect(r.json.payment_env_example).toBeUndefined();
+    expect(r.json.next_step).toContain("without a restart");
+    const store = JSON.parse(readFileSync(keystore, "utf8"));
+    expect(store.enc).toBe("scrypt-aes-256-gcm");
+    expect(store.secretB58).toBeUndefined();
+    expect(statSync(keystore).mode & 0o077).toBe(0);
+    // No secret anywhere in the output: no long base58 run.
+    expect(r.stdout + r.stderr).not.toMatch(/[1-9A-HJ-NP-Za-km-z]{80,}/);
+    // The printed env opens the wallet: the server starts on it with the same address.
+    const server = run([], r.json.env);
+    expect(server).not.toMatch(/EPHEMERAL/);
+    expect(server).toContain(r.json.addresses.evm);
+  });
+
+  it("AIFINPAY_NONINTERACTIVE=1 selects the same path on a terminal", () => {
+    const r = runRaw(["init"], { AIFINPAY_NONINTERACTIVE: "1" }, ["--import", ttyStdin]);
+    expect(r.status).toBe(0);
+    const json = JSON.parse(r.stdout);
+    expect(json.created).toBe(true);
+    expect(json.env.AIFINPAY_WALLET_PASSPHRASE).toMatch(PASSPHRASE);
+  });
+
+  it("keeps an existing wallet, never reprints its passphrase, and says in one line when the env is missing", () => {
+    const first = runJson(["init"]);
+    const passphrase = first.json.env.AIFINPAY_WALLET_PASSPHRASE;
+    const before = readFileSync(join(home, "agent.json"), "utf8");
+
+    const again = runJson(["init"], { AIFINPAY_WALLET_PASSPHRASE: passphrase });
+    expect(again.status).toBe(0);
+    expect(again.json).toMatchObject({ created: false, encrypted: true });
+    expect(again.json.addresses.evm).toBe(first.json.addresses.evm);
+    expect(again.stdout).not.toContain(passphrase);
+    expect(again.json.env.AIFINPAY_WALLET_PASSPHRASE).toContain("already set");
+    expect(again.json.passphrase_note).toBeUndefined();
+
+    const missing = runJson(["init"]);
+    expect(missing.status).toBe(2);
+    expect(missing.stdout.trim().split("\n")).toHaveLength(1);
+    expect(missing.json).toMatchObject({
+      keystore: join(home, "agent.json"),
+      missing_env: "AIFINPAY_WALLET_PASSPHRASE",
+    });
+    expect(missing.json.error).toContain("AIFINPAY_WALLET_PASSPHRASE");
+    expect(readFileSync(join(home, "agent.json"), "utf8")).toBe(before);
+  });
+
+  // 2.11.0 stopped here: exit 2, a refusal, and no move left that did not touch
+  // the keystore. The agent must get one, and the keystore must stay byte-equal.
+  it("an existing encrypted keystore without its passphrase: exit 2, untouched, and a new AIFINPAY_HOME as next_step", () => {
+    const first = runJson(["init"]);
+    const keystore = join(home, "agent.json");
+    const before = readFileSync(keystore);
+
+    const locked = runJson(["init"]);
+    expect(locked.status).toBe(2);
+    expect(locked.json).toMatchObject({ keystore, missing_env: "AIFINPAY_WALLET_PASSPHRASE" });
+    expect(readFileSync(keystore).equals(before)).toBe(true);
+    expect(locked.json.next_step).toContain(keystore);
+    expect(locked.json.next_step).toMatch(/Do not delete, move or overwrite it/);
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const command = locked.json.next_step.match(/`(AIFINPAY_HOME='([^']+)' npx @aifinpay\/mcp init)`/);
+    expect(command, locked.json.next_step).not.toBeNull();
+    const fresh = command[2];
+    expect(fresh).toBe(join(homedir(), ".aifinpay", `agent-${today}`));
+    // Suggested, not created: init that refused writes nothing anywhere.
+    expect(existsSync(fresh)).toBe(false);
+
+    // Following the advice reaches a wallet the server opens, the old one untouched.
+    try {
+      const created = runJson(["init"], { AIFINPAY_HOME: fresh });
+      expect(created.status).toBe(0);
+      expect(created.json).toMatchObject({ keystore: join(fresh, "agent.json"), created: true });
+      expect(created.json.env.AIFINPAY_HOME).toBe(fresh);
+      expect(created.json.addresses.evm).not.toBe(first.json.addresses.evm);
+      const server = run([], created.json.env);
+      expect(server).not.toMatch(/EPHEMERAL/);
+      expect(server).toContain(created.json.addresses.evm);
+      expect(readFileSync(keystore).equals(before)).toBe(true);
+    } finally {
+      rmSync(fresh, { recursive: true, force: true });
+    }
+  });
+
+  it("without AIFINPAY_HOME, env does not invent one", () => {
+    // HOME moves to this test's directory so the default ~/.aifinpay is private to it.
+    const r = runJson(["init"], { AIFINPAY_HOME: "", HOME: home });
+    expect(r.status).toBe(0);
+    expect(r.json.keystore).toBe(join(home, ".aifinpay", "agent.json"));
+    expect(Object.keys(r.json.env)).toEqual(["AIFINPAY_WALLET_PASSPHRASE"]);
+  });
+
+  it("with --plaintext prints the same JSON with an empty env", () => {
+    const r = runJson(["init", "--plaintext"]);
+    expect(r.status).toBe(0);
+    expect(r.json).toMatchObject({ created: true, encrypted: false });
+    expect(r.json.env).toEqual({ AIFINPAY_HOME: home });
+    expect(r.stdout).not.toContain(JSON.parse(readFileSync(join(home, "agent.json"), "utf8")).secretB58);
+  });
+
+  it("with a configured seed reports it as JSON and creates nothing", () => {
+    const r = runJson(["init"], { SEED_HASH: "11".repeat(32) });
+    expect(r.status).toBe(0);
+    expect(r.json).toMatchObject({ keystore: null, created: false, source: "SEED_HASH" });
+    expect(r.json.env).toEqual({ AIFINPAY_HOME: home });
+    expect(r.json.addresses.evm).toMatch(EVM);
+    expect(existsSync(join(home, "agent.json"))).toBe(false);
+  });
+
+  it("on a terminal, the human path is unchanged: refuses without a passphrase and prints prose", () => {
+    const r = runRaw(["init"], {}, ["--import", ttyStdin]);
+    expect(r.status).toBe(2);
+    expect(r.stdout).toBe("");
+    expect(r.stderr).toMatch(/AIFINPAY_WALLET_PASSPHRASE/);
+    expect(r.stderr).toMatch(/--plaintext/);
+    expect(existsSync(join(home, "agent.json"))).toBe(false);
+    const missing = run(["init"], { AIFINPAY_WALLET_PASSPHRASE: "pw" });
+    expect(missing).toContain("ENCRYPTED");
+    const line = runRaw(["init"], {}, ["--import", ttyStdin]);
+    expect(line.status).toBe(2);
+    expect(line.stderr.trim().split("\n")).toHaveLength(1);
+    expect(line.stderr).toContain("AIFINPAY_WALLET_PASSPHRASE");
+  });
+});
+
 describe("aifinpay-mcp server", () => {
   it("loads the keystore without AIFINPAY_AGENT_SECRET being set", () => {
     const init = run(["init", "--plaintext"]);
@@ -238,8 +418,23 @@ describe("aifinpay-mcp server", () => {
   });
 
   it("still says so plainly when there is no wallet at all", () => {
+    // With payments on by default the ephemeral start must still come up
+    // (it signs nothing) and say the one way forward, which needs no restart.
     const out = run([], { AIFINPAY_AGENT_SECRET: "" });
+    expect(out).toMatch(/EPHEMERAL wallet — DO NOT FUND/);
     expect(out).toMatch(/npx @aifinpay\/mcp init/);
+    expect(out).toContain("no restart is needed to pay");
+  });
+
+  it("refuses to start when an env limit is above the built-in ceiling, naming the dashboard", () => {
+    const r = runRaw([], { AIFINPAY_MAX_USD: "6" });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain(
+      "AIFINPAY_MAX_USD can only lower the built-in ceiling of 5; set the working limits in the dashboard"
+    );
+    const daily = runRaw([], { AIFINPAY_DAILY_USD: "21" });
+    expect(daily.status).not.toBe(0);
+    expect(daily.stderr).toContain("AIFINPAY_DAILY_USD can only lower the built-in ceiling of 20");
   });
 });
 
@@ -380,12 +575,19 @@ const PAYMENT_KEYS = [
   "AIFINPAY_MAX_USD",
   "AIFINPAY_DAILY_USD",
   "AIFINPAY_MAX_GAS_POL",
+  "AIFINPAY_MAX_GAS",
+  "AIFINPAY_PAY_CHAIN",
   "AIFINPAY_PAY_ASSET",
   "AIFINPAY_MODE",
 ];
 
-/** Tool names a server configured with exactly this env lists. */
-async function toolsWith(env: Record<string, string>): Promise<string[]> {
+/** A server configured with exactly this env: its tool names, the payable_fetch
+ *  answer and whether the call got past the setup gate to a (stubbed) purchase.
+ *  The purchase is stubbed so nothing here touches the network. */
+async function serverWith(
+  env: Record<string, string>,
+  url = "https://other.example/x"
+): Promise<{ tools: string[]; payable: any; purchase?: any }> {
   vi.unstubAllEnvs();
   for (const name of [...PAYMENT_KEYS, "AIFINPAY_WALLET_PASSPHRASE"]) vi.stubEnv(name, undefined);
   for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
@@ -397,55 +599,150 @@ async function toolsWith(env: Record<string, string>): Promise<string[]> {
     walletHome: home,
     logFn: () => {},
   });
+  const purchase = vi.spyOn(active.agent, "fetchPaid").mockRejectedValue(new Error("stub: no network"));
   const client = new Client({ name: "init-output-test", version: "1" });
   const [left, right] = InMemoryTransport.createLinkedPair();
   await active.server.connect(right);
   await client.connect(left);
   try {
-    return (await client.listTools()).tools.map((tool) => tool.name);
+    const tools = (await client.listTools()).tools.map((tool) => tool.name);
+    const result = await client.callTool({ name: "payable_fetch", arguments: { url } });
+    const text = String((result.content as Array<{ text: string }>)[0].text);
+    return { tools, payable: { isError: result.isError, text }, purchase: purchase.mock.calls[0]?.[2] };
   } finally {
     await client.close();
     await active.server.close();
   }
 }
 
+// 2.12.1 (owner decision 2026-10-20): payments are on by default with a
+// built-in $5 / $20 ceiling; the config init prints is all a first payment
+// needs, and every env variable is an optional override that only narrows.
 describe("aifinpay-mcp init payment settings", () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it("registers payable_fetch once its payment block is added to the printed env", async () => {
-    const [config, payment] = printed(run(["init", "--plaintext"]));
+  it("pays straight from the config init prints: no payment block, any https site, within the ceiling", async () => {
+    const [config] = printed(run(["init", "--plaintext"]));
     const env = config.mcpServers.aifinpay.env;
-    expect(await toolsWith(env)).not.toContain("payable_fetch");
-    expect(await toolsWith({ ...env, ...payment })).toContain("payable_fetch");
+    expect(Object.keys(env)).toEqual(["AIFINPAY_HOME"]);
+    const paying = await serverWith(env);
+    expect(paying.tools).toContain("payable_fetch");
+    expect(paying.tools).toContain("payment_setup_status");
+    // Past the setup gate, to the purchase: nothing asked the owner to edit env.
+    expect(paying.purchase).toBeDefined();
+    expect(paying.purchase).toMatchObject({
+      maxAmountUsd: DEFAULT_MAX_USD,
+      gatewayOrigins: ["https://other.example"],
+      resourcePathMode: "direct",
+      paymentIssuer: "https://api.aifinpay.io",
+    });
+    expect(paying.purchase.v14.maxGasWei).toBe(3n * 10n ** 17n);
   });
 
-  it("leaves room above the smallest batch and for the worst-case gas at ~280 gwei", () => {
-    const [, payment] = printed(run(["init", "--plaintext"]));
-    expect(Number(payment.AIFINPAY_MAX_USD)).toBeGreaterThan(0.1);
-    expect(Number(payment.AIFINPAY_MAX_GAS_POL)).toBeGreaterThanOrEqual(0.21);
+  it("with no env at all, payments are on", () => {
+    vi.stubEnv("AIFINPAY_PAYMENTS_ENABLED", undefined);
+    vi.stubEnv("AIFINPAY_MAX_USD", undefined);
+    vi.stubEnv("AIFINPAY_DAILY_USD", undefined);
+    vi.stubEnv("AIFINPAY_GATEWAY_ORIGINS", undefined);
+    expect(loadConfigFromEnv()).toMatchObject({
+      paymentsEnabled: true,
+      paymentsByDefault: true,
+      maxAmountUsd: 5,
+      dailyAmountUsd: 20,
+      gatewayOrigins: undefined,
+      ownerOverrides: [],
+    });
+  });
+
+  it("an ephemeral wallet still cannot pay: the checklist, no purchase", async () => {
+    const ephemeral = await serverWith({});
+    expect(ephemeral.purchase).toBeUndefined();
+    expect(ephemeral.payable.isError).toBe(true);
+    const status = JSON.parse(ephemeral.payable.text);
+    expect(status.payments_enabled).toBe(true);
+    expect(status.wallet.persistent).toBe(false);
+    expect(status.next_step).toContain("npx @aifinpay/mcp init");
+    expect(status.error).toContain("nothing was signed or paid");
+  });
+
+  it("AIFINPAY_PAYMENTS_ENABLED=0 turns payments off: the checklist names it, no purchase", async () => {
+    const [config] = printed(run(["init", "--plaintext"]));
+    const off = await serverWith({ ...config.mcpServers.aifinpay.env, AIFINPAY_PAYMENTS_ENABLED: "0" });
+    expect(off.tools).toContain("payable_fetch");
+    expect(off.purchase).toBeUndefined();
+    const status = JSON.parse(off.payable.text);
+    expect(status.payments_enabled).toBe(false);
+    expect(status.next_step).toContain("AIFINPAY_PAYMENTS_ENABLED=0");
+  });
+
+  it("env lowers the ceiling, and the lower number is what the purchase may spend", async () => {
+    const [config] = printed(run(["init", "--plaintext"]));
+    const lower = await serverWith({
+      ...config.mcpServers.aifinpay.env,
+      AIFINPAY_MAX_USD: "2",
+      AIFINPAY_DAILY_USD: "3",
+    });
+    expect(lower.purchase).toMatchObject({ maxAmountUsd: 2 });
+  });
+
+  it("env above the ceiling is refused with the dashboard hint, never clipped", async () => {
+    const [config] = printed(run(["init", "--plaintext"]));
+    await expect(serverWith({ ...config.mcpServers.aifinpay.env, AIFINPAY_MAX_USD: "6" })).rejects.toThrow(
+      "AIFINPAY_MAX_USD can only lower the built-in ceiling of 5; set the working limits in the dashboard"
+    );
+    await expect(serverWith({ ...config.mcpServers.aifinpay.env, AIFINPAY_DAILY_USD: "100" })).rejects.toThrow(
+      "AIFINPAY_DAILY_USD can only lower the built-in ceiling of 20"
+    );
+  });
+
+  it("an owner origin allowlist narrows: an unlisted site is refused by name before any purchase", async () => {
+    const [config] = printed(run(["init", "--plaintext"]));
+    const env = { ...config.mcpServers.aifinpay.env, AIFINPAY_GATEWAY_ORIGINS: "https://listed.example" };
+    const refused = await serverWith(env);
+    expect(refused.purchase).toBeUndefined();
+    expect(refused.payable.text).toContain("https://other.example is not an owner-approved site");
+    const listed = await serverWith(env, "https://listed.example/x");
+    expect(listed.purchase).toMatchObject({ gatewayOrigins: ["https://listed.example"] });
+  });
+
+  it("the optional block init prints leaves room for the worst-case gas at ~280 gwei", () => {
+    const [, overrides] = printed(run(["init", "--plaintext"]));
+    expect(Object.keys(overrides)).toEqual(["AIFINPAY_GATEWAY_ORIGINS", "AIFINPAY_MAX_GAS_POL"]);
+    expect(Number(overrides.AIFINPAY_MAX_GAS_POL)).toBeGreaterThanOrEqual(0.21);
+    expect(overrides.AIFINPAY_MAX_GAS_POL).toBe(DEFAULT_MAX_GAS_POL);
+    expect(DEFAULT_MAX_USD).toBeGreaterThan(0.1);
+    expect(DEFAULT_DAILY_USD).toBeGreaterThanOrEqual(DEFAULT_MAX_USD);
+  });
+
+  it("init's prose says payments are on and asks for no env", () => {
+    const out = run(["init", "--plaintext"]);
+    expect(out).toContain("Payments are on");
+    expect(out).toContain("none of it is needed for a first payment");
+    expect(out).not.toContain("As printed it cannot pay");
+    expect(out).not.toContain('"AIFINPAY_PAYMENTS_ENABLED": "1"');
   });
 
   it("gives an encrypted wallet's config the passphrase variable, never the passphrase", () => {
     const pass = { AIFINPAY_WALLET_PASSPHRASE: "fixture-passphrase" };
     for (const out of [run(["init"], pass), run(["init"], pass)]) {
       const [config] = printed(out);
-      expect(Object.keys(config.mcpServers.aifinpay.env)).toEqual(["AIFINPAY_WALLET_PASSPHRASE"]);
+      expect(Object.keys(config.mcpServers.aifinpay.env)).toEqual(["AIFINPAY_HOME", "AIFINPAY_WALLET_PASSPHRASE"]);
       expect(out.includes(pass.AIFINPAY_WALLET_PASSPHRASE)).toBe(false);
     }
   });
 
   it("gives a plaintext wallet's config no passphrase", () => {
     const [config] = printed(run(["init", "--plaintext"]));
-    expect(config.mcpServers.aifinpay.env).toEqual({});
+    expect(config.mcpServers.aifinpay.env).toEqual({ AIFINPAY_HOME: home });
   });
 });
 
 describe("README, as npm shows it", () => {
-  it("shows the payment block init prints", () => {
-    const section = README.slice(README.indexOf("## Enable native paid GET requests"));
+  it("shows the optional override block init prints", () => {
+    const section = README.slice(README.indexOf("## Optional payment overrides"));
     const block = section.match(/```json\n([\s\S]*?)\n```/);
-    expect(block, "README lost its payment example").not.toBeNull();
-    const [, payment] = printed(run(["init", "--plaintext"]));
-    expect(JSON.parse(block![1])).toEqual(payment);
+    expect(block, "README lost its override example").not.toBeNull();
+    const [, overrides] = printed(run(["init", "--plaintext"]));
+    expect(JSON.parse(block![1])).toEqual(overrides);
   });
 });

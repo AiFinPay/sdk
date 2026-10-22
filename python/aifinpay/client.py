@@ -28,6 +28,18 @@ from .facilitators.base import canonical_origin
 DEFAULT_BASE_URL = "https://aifinpay.io"
 DEFAULT_TIMEOUT = 30  # seconds
 
+#: The AI clients the AiFinPay backend records for ``AIFP-Agent-Framework``.
+AGENT_FRAMEWORKS = ("chatgpt", "claude", "perplexity", "gemini", "cursor", "openai-agents", "windsurf", "codex", "custom")
+
+
+def _agent_framework(value: Any) -> str | None:
+    """``None`` stays unset; any value outside :data:`AGENT_FRAMEWORKS` raises. Never guessed."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or value not in AGENT_FRAMEWORKS:
+        raise AiFinPayError(f"framework must be one of {', '.join(AGENT_FRAMEWORKS)}; got {value!r}")
+    return value
+
 
 def _user_agent() -> str:
     """``aifinpay-agent-py/<version>`` — the User-Agent every request from this package sends.
@@ -94,13 +106,17 @@ class Agent:
         signing_key: nacl.signing.SigningKey,
         base_url: str = DEFAULT_BASE_URL,
         timeout: int = DEFAULT_TIMEOUT,
+        framework: str | None = None,
     ):
+        self.framework = _agent_framework(framework)
         self._sk = signing_key
         self._vk = signing_key.verify_key
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self._session = requests.Session()
         self._session.headers["User-Agent"] = _user_agent()
+        if self.framework:
+            self._session.headers["AIFP-Agent-Framework"] = self.framework
 
     # ── Constructors ────────────────────────────────────────────────────────
 

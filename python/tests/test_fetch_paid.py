@@ -76,7 +76,7 @@ def test_a_pay_error_points_at_its_journal_and_recovery_resumes_it(agent, tmp_pa
 
     submitted = {}
 
-    def submit(session, account, recovery, agent_id=None):
+    def submit(session, account, recovery, agent_id=None, framework=None):
         submitted.update(recovery=recovery, account=account)
         return {"receipt": "h.p.s", "expires_at": "2099-01-01T00:00:00.000Z", "scope": "prefix",
                 "resource": "/", "receipt_id": "rcpt_1", "unit_quota": 200, "merchant_id": "mrch_acme"}
@@ -218,3 +218,70 @@ def test_the_legacy_agent_session_carries_the_same_user_agent():
     from aifinpay import Agent
 
     assert Agent.new()._session.headers["User-Agent"] == f"aifinpay-agent-py/{aifinpay.__version__}"
+
+
+# ── AIFP-Agent-Framework ────────────────────────────────────────────────────
+
+
+def test_the_framework_goes_to_the_flow_on_fetch_paid_and_recover_paid(tmp_path, monkeypatch):
+    agent = AiFinPayAgent.new(framework="openai-agents")
+    seen = {}
+    monkeypatch.setattr(a, "aifp1_fetch", lambda url, **kw: seen.update(kw) or "ok")
+    agent.fetch_paid("https://shop.example/x", allowed_origins=["https://shop.example"],
+                     max_amount_usd=1, daily_amount_usd=1, journal_dir=str(tmp_path))
+    assert seen["framework"] == "openai-agents"
+
+    journal = tmp_path / "rec.json"
+    journal.write_text(json.dumps({"api_base": "https://api.aifinpay.io", "issuer": "https://api.aifinpay.io",
+                                   "quote": {"quote_id": "qt_9"}, "tx_ref": "0x" + "cd" * 32, "asset": "POL"}))
+    submitted = {}
+
+    def submit(session, account, recovery, agent_id=None, framework=None):
+        submitted["framework"] = framework
+        return {"receipt": "h.p.s", "expires_at": "2099-01-01T00:00:00.000Z", "scope": "prefix",
+                "resource": "/", "receipt_id": "rcpt_1", "unit_quota": 200, "merchant_id": "mrch_acme"}
+
+    monkeypatch.setattr(a, "submit_payment", submit)
+    agent.recover_paid(str(journal))
+    assert submitted["framework"] == "openai-agents"
+
+
+def test_the_first_request_names_the_framework_and_an_unset_one_sends_nothing(tmp_path):
+    for framework, expected in (("gemini", "gemini"), (None, None)):
+        agent = AiFinPayAgent.new(framework=framework)
+        session = RecordingSession([(200, None)])
+        agent._aifp1_session = session
+        agent.fetch_paid("https://shop.example/x", allowed_origins=["https://shop.example"],
+                         max_amount_usd=1, daily_amount_usd=1, journal_dir=str(tmp_path))
+        assert session.sent[0].headers.get("AIFP-Agent-Framework") == expected
+
+
+def test_the_legacy_agent_session_names_the_framework_only_when_set():
+    from aifinpay import Agent
+
+    assert Agent.new(framework="perplexity")._session.headers["AIFP-Agent-Framework"] == "perplexity"
+    assert "AIFP-Agent-Framework" not in Agent.new()._session.headers
+
+
+def test_exactly_the_backend_values_are_accepted():
+    assert aifinpay.AGENT_FRAMEWORKS == (
+        "chatgpt", "claude", "perplexity", "gemini", "cursor", "openai-agents", "windsurf", "codex", "custom",
+    )
+    for framework in aifinpay.AGENT_FRAMEWORKS:
+        assert AiFinPayAgent.from_seed("11" * 32, framework=framework).framework == framework
+
+
+@pytest.mark.parametrize("value", ["Claude", "claude-code", "openai", " claude", "codex-mcp-client", "", 1, True])
+def test_any_other_framework_is_refused_at_construction(value):
+    from aifinpay import Agent, AiFinPayError
+
+    message = "framework must be one of chatgpt, claude, perplexity, gemini, cursor, openai-agents, windsurf, codex, custom"
+    secret = AiFinPayAgent.from_seed("11" * 32).inner.secret_b58
+    for build in (
+        lambda: AiFinPayAgent.new(framework=value),
+        lambda: AiFinPayAgent.from_seed("11" * 32, framework=value),
+        lambda: AiFinPayAgent.from_solana_secret(secret, framework=value),
+        lambda: Agent.new(framework=value),
+    ):
+        with pytest.raises(AiFinPayError, match=message):
+            build()
