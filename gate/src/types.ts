@@ -8,6 +8,7 @@
 // and greps for the same word in both. A translation layer buys ergonomics
 // once and costs a support round-trip on every incident after that.
 // ──────────────────────────────────────────────────────────────────────────
+import type { GateOperator, UaClass } from "./agents.js";
 
 /** The three merchant-selectable price settings. There are no custom prices. */
 export type Tier = "standard" | "complex" | "premium";
@@ -162,6 +163,14 @@ export interface GateEvent {
    *  site). Kept as a flag rather than a kind: consumers counting serves
    *  should count these, consumers counting REVENUE serves must filter. */
   exempt?: boolean;
+  /** Who asked, normalised (see classifyAgent). The gate sets all three on
+   *  every event kind; they are optional so that hand-built events and older
+   *  consumers stay valid. Never the raw User-Agent, IP or headers. */
+  operator?: GateOperator;
+  ua_class?: UaClass;
+  /** True only when this request's AIFP receipt verified. A User-Agent or an
+   *  AIFP-Agent-Id header alone is never verified. */
+  verified?: boolean;
 }
 
 /** Public view of a merchant, as `GET /v1/merchants/:id` returns it. Loosely

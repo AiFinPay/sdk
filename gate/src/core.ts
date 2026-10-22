@@ -20,6 +20,7 @@ import { createVerifier } from "./verify.js";
 import { buildChallenge } from "./challenge.js";
 import { scopeCovers } from "./scope.js";
 import { TIER_WEIGHTS, weightForTier } from "./pricing.js";
+import { classifyAgent, type AgentIdentity } from "./agents.js";
 import type { ResourceRegistry } from "./registry.js";
 import type { GateReporterV2, ReportingContext } from "./reporter.js";
 
@@ -163,40 +164,47 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     }
   };
 
-  // `effectiveTier` is passed in per request, never taken from the closure. In
-  // registry mode the weight comes from the MATCHED resource while the tier used
-  // to come from the mount, so a premium route quoted unit_price_usd $0.0005 and
-  // then metered 10 units — the agent was told one price and charged another.
-  // Whatever tier is advertised here must be the one `weight` was derived from.
-  const challenge = (resource: string, weight: number, effectiveTier: Tier, detail?: string): GateResult => {
-    emit({ kind: "402", resource, weight, detail });
-    return {
-      ok: false,
-      status: 402,
-      headers: { "Content-Type": "application/json" },
-      body: buildChallenge({
-        merchantId,
-        resource,
-        tier: effectiveTier,
-        weight,
-        detail,
-        apiBase: options.apiBase,
-      }),
-    };
-  };
-
-  const forbid = (resource: string, weight: number, detail: string): GateResult => {
-    emit({ kind: "403", resource, weight, detail });
-    return {
-      ok: false,
-      status: 403,
-      headers: { "Content-Type": "application/json" },
-      body: { error: "AIFP-403", detail },
-    };
-  };
-
   const decide = async function gate(req: GateRequest, resolved?: (resource: string) => void): Promise<GateResult> {
     const path = req.path;
+
+    // Who the request says it is: normalised enums, never the raw User-Agent,
+    // IP or headers. Stamped on every event this request emits, and upgraded
+    // to verified only once the receipt checks out in step 4 — a User-Agent
+    // or an AIFP-Agent-Id header is a claim, and scanners make that claim.
+    let who: AgentIdentity = classifyAgent(req);
+    const note = (e: GateEvent) => emit({ ...e, ...who });
+
+    // `effectiveTier` is passed in per request, never taken from the closure. In
+    // registry mode the weight comes from the MATCHED resource while the tier used
+    // to come from the mount, so a premium route quoted unit_price_usd $0.0005 and
+    // then metered 10 units — the agent was told one price and charged another.
+    // Whatever tier is advertised here must be the one `weight` was derived from.
+    const challenge = (resource: string, weight: number, effectiveTier: Tier, detail?: string): GateResult => {
+      note({ kind: "402", resource, weight, detail });
+      return {
+        ok: false,
+        status: 402,
+        headers: { "Content-Type": "application/json" },
+        body: buildChallenge({
+          merchantId,
+          resource,
+          tier: effectiveTier,
+          weight,
+          detail,
+          apiBase: options.apiBase,
+        }),
+      };
+    };
+
+    const forbid = (resource: string, weight: number, detail: string): GateResult => {
+      note({ kind: "403", resource, weight, detail });
+      return {
+        ok: false,
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+        body: { error: "AIFP-403", detail },
+      };
+    };
 
     // ── 1. What is this path, and what does it cost? ──────────────────────
     let matched: AifpResource | null = null;
@@ -208,7 +216,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       // Refusing to price is the honest answer; a partner who prefers
       // availability over correct billing can opt in explicitly.
       if (options.registry.neverLoaded && options.registryUnavailable !== "mount-default") {
-        emit({
+        note({
           kind: "pricing_unavailable",
           resource: path,
           weight: 0,
@@ -260,7 +268,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       ) {
         return forbid(resource, weight, "blocked by merchant policy");
       }
-      emit({ kind: "serve", resource, weight, agent: agentHeader });
+      note({ kind: "serve", resource, weight, agent: agentHeader });
       return {
         ok: true,
         status: 200,
@@ -309,7 +317,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
         ) {
           return forbid(resource, weight, "blocked by merchant policy");
         }
-        emit({ kind: "serve", resource, weight, agent: agentHeader, exempt: true });
+        note({ kind: "serve", resource, weight, agent: agentHeader, exempt: true });
         return {
           ok: true,
           status: 200,
@@ -340,7 +348,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
         // Fail CLOSED. Failing open would turn a partner's paid API into a free
         // one for the length of our outage, which is a worse failure than a
         // 503 the agent will retry.
-        emit({ kind: "meter_error", resource, weight, detail: v.reason });
+        note({ kind: "meter_error", resource, weight, detail: v.reason });
         return {
           ok: false,
           status: 503,
@@ -354,6 +362,11 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       return forbid(resource, weight, DETAIL_VERIFY_FAILED);
     }
     const payload = v.payload;
+    // Signature, issuer and audience verified: this is an AIFP agent, proven.
+    // Everything that follows — a scope refusal, an exhausted batch, a serve —
+    // is reported as verified, because the identity question is settled even
+    // when the spend is refused.
+    who = { operator: "aifinpay", ua_class: "aifp_agent", verified: true };
 
     // ── 5. Receipt TYPE — a valid signature is not a licence to spend ─────
     // The issuer signs more than one kind of token with this key AND this
@@ -473,7 +486,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       return challenge(resource, weight, effectiveTier, DETAIL_QUOTA_EXHAUSTED);
     }
 
-    emit({ kind: "serve", resource, weight, agent: payload.sub, receipt_id: payload.receipt_id });
+    note({ kind: "serve", resource, weight, agent: payload.sub, receipt_id: payload.receipt_id });
     const aifp: AifpContext = {
       agent: payload.sub ?? null,
       receipt_id: payload.receipt_id,
@@ -493,7 +506,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
 
     function storeFailure(e: unknown): GateResult {
       const detail = e instanceof Error ? e.message : String(e);
-      emit({ kind: "meter_error", resource, weight, detail });
+      note({ kind: "meter_error", resource, weight, detail });
       if (onStoreError === "open") {
         // Explicitly chosen availability over metering. The call is served and
         // NOT counted; the units it should have cost are simply not collected.

@@ -16,6 +16,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Protocol, Sequence
 
+from .agents import classify_agent
 from .challenge import build_challenge
 from .pricing import weight_for_tier
 from .reporter import GateReporter, GateReporterV2, _context, _utc_now
@@ -231,11 +232,11 @@ class Gate:
         except Exception:
             pass
 
-    def _emit(self, event: Dict[str, Any]) -> None:
+    def _emit(self, event: Dict[str, Any], who: Dict[str, Any]) -> None:
         if self.on_event is None:
             return
         try:
-            self.on_event(event)
+            self.on_event({**event, **who})
         except Exception:  # noqa: BLE001 — observability is never load-bearing
             pass
 
@@ -247,13 +248,14 @@ class Gate:
         except Exception:  # noqa: BLE001 — a throwing veto is "no opinion"
             return True
 
-    def _challenge(self, resource: str, weight: int, tier: str, detail: Optional[str] = None) -> GateResult:
-        self._emit({"kind": "402", "resource": resource, "weight": weight, "detail": detail})
+    def _challenge(self, resource: str, weight: int, tier: str, detail: Optional[str] = None, *,
+                   who: Dict[str, Any]) -> GateResult:
+        self._emit({"kind": "402", "resource": resource, "weight": weight, "detail": detail}, who)
         body = build_challenge(self.merchant_id, resource, tier, weight, detail=detail, api_base=self.api_base)
         return GateResult(False, 402, _json_headers(), body=body)
 
-    def _forbid(self, resource: str, weight: int, detail: str) -> GateResult:
-        self._emit({"kind": "403", "resource": resource, "weight": weight, "detail": detail})
+    def _forbid(self, resource: str, weight: int, detail: str, *, who: Dict[str, Any]) -> GateResult:
+        self._emit({"kind": "403", "resource": resource, "weight": weight, "detail": detail}, who)
         return GateResult(False, 403, _json_headers(), body={"error": "AIFP-403", "detail": detail})
 
     def _free(self, resource: str, agent: Optional[str], mode: str, paywall_header: str) -> GateResult:
@@ -267,6 +269,10 @@ class Gate:
     def decide(self, req: GateRequest) -> Optional[GateResult]:
         """``None`` means this gate does not cover the path (routes mode only)."""
         path = req.path
+        # Who the request says it is: normalised values, never the raw
+        # User-Agent, IP or headers. Upgraded to verified only once the receipt
+        # checks out — a User-Agent or AIFP-Agent-Id header is a claim.
+        who = classify_agent(req)
         if self.routes is not None:
             route = self.route_for(path, getattr(req, "method", None))
             if route is None:
@@ -284,8 +290,8 @@ class Gate:
         if route is not None and not route.paywall:
             if not self._allowed({"path": path, "resource": resource, "weight": weight,
                                   "agent": agent_header, "receipt_id": None}):
-                return self._forbid(resource, weight, "blocked by merchant policy")
-            self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": agent_header})
+                return self._forbid(resource, weight, "blocked by merchant policy", who=who)
+            self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": agent_header}, who)
             return self._free(resource, agent_header, "open", "off")
 
         # WHO pays — before the missing-receipt challenge, or a human reader
@@ -298,53 +304,59 @@ class Gate:
             if not charge:
                 if not self._allowed({"path": path, "resource": resource, "weight": weight,
                                       "agent": agent_header, "receipt_id": None}):
-                    return self._forbid(resource, weight, "blocked by merchant policy")
+                    return self._forbid(resource, weight, "blocked by merchant policy", who=who)
                 self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": agent_header,
-                            "exempt": True})
+                            "exempt": True}, who)
                 return self._free(resource, agent_header, "exempt", "exempt")
 
         token = req.header("AIFP-Receipt")
         if not token:
-            return self._challenge(resource, weight, tier)
+            return self._challenge(resource, weight, tier, who=who)
 
         kind, payload = self.verify(token)
         if kind != "ok":
             if kind == "expired":
-                return self._challenge(resource, weight, tier, DETAIL_RECEIPT_EXPIRED)
+                return self._challenge(resource, weight, tier, DETAIL_RECEIPT_EXPIRED, who=who)
             if kind == "jwks_unavailable":
                 # Fail CLOSED: failing open would make a paid API free for the
                 # length of an AiFinPay outage.
-                self._emit({"kind": "meter_error", "resource": resource, "weight": weight, "detail": payload})
+                self._emit({"kind": "meter_error", "resource": resource, "weight": weight, "detail": payload}, who)
                 return GateResult(False, 503, _json_headers(**{"Retry-After": "30"}), body={
                     "error": "AIFP-503-METER",
                     "detail": "receipt verification is temporarily unavailable — retry shortly",
                 })
-            return self._forbid(resource, weight, DETAIL_VERIFY_FAILED)
+            return self._forbid(resource, weight, DETAIL_VERIFY_FAILED, who=who)
+
+        # Signature, issuer and audience verified: an AIFP agent, proven. What
+        # follows — a refusal, an exhausted batch, a serve — reports verified.
+        who = {"operator": "aifinpay", "ua_class": "aifp_agent", "verified": True}
 
         # A valid signature is not a licence to spend: only quota receipts buy
         # calls. Allow-list, so a token kind added later is refused today.
         typ = payload.get("typ_aifp")
         if typ is not None and typ != "quota":
             return self._forbid(
-                resource, weight, f'receipt type "{typ}" is not spendable — this endpoint needs a quota receipt'
+                resource, weight, f'receipt type "{typ}" is not spendable — this endpoint needs a quota receipt',
+                who=who,
             )
         receipt_id = payload.get("receipt_id")
         if not isinstance(receipt_id, str) or receipt_id == "":
-            return self._forbid(resource, weight, "receipt carries no receipt_id and cannot be metered")
+            return self._forbid(resource, weight, "receipt carries no receipt_id and cannot be metered", who=who)
 
         if not scope_covers(payload.get("scope"), payload.get("resource"), scope_path):
             return self._forbid(
                 resource, weight,
                 f"receipt is scoped to {payload.get('resource')} ({payload.get('scope') or 'exact'}), not {scope_path}",
+                who=who,
             )
 
         sub = payload.get("sub")
         if self.require_agent_match and agent_header and sub and agent_header != sub:
-            return self._forbid(resource, weight, "AIFP-Agent-Id does not match the receipt subject")
+            return self._forbid(resource, weight, "AIFP-Agent-Id does not match the receipt subject", who=who)
 
         if not self._allowed({"path": path, "resource": resource, "weight": weight,
                               "agent": sub, "receipt_id": receipt_id}):
-            return self._forbid(resource, weight, "blocked by merchant policy")
+            return self._forbid(resource, weight, "blocked by merchant policy", who=who)
 
         # Limit in billing units; a legacy request `quota` converts at the tier
         # weight it was priced for.
@@ -357,7 +369,7 @@ class Gate:
         # everything, so "used > limit" would never refuse and the batch would
         # never run out.
         if not (limit == limit and math.isfinite(limit)) or limit <= 0:
-            return self._forbid(resource, weight, "receipt carries no usable unit_quota")
+            return self._forbid(resource, weight, "receipt carries no usable unit_quota", who=who)
         # The counter dies with the receipt — never later, never earlier. The
         # receipt lives until the verifier stops accepting it, exp plus the clock
         # tolerance; a counter ending at exp let a spent batch start again from
@@ -368,14 +380,14 @@ class Gate:
         if self.replay == "always" or (self.replay == "auto" and limit <= 1):
             nonce = payload.get("nonce")
             if not isinstance(nonce, str) or nonce == "":
-                return self._forbid(resource, weight, "single-use receipt carries no nonce")
+                return self._forbid(resource, weight, "single-use receipt carries no nonce", who=who)
             nonce_key = f"{self.key_prefix}nonce:{nonce}"
             try:
                 seen = self.store.incr_by(nonce_key, 1, ttl_ms)
             except Exception as e:  # noqa: BLE001
-                return self._store_failure(e, resource, weight, payload, limit)
+                return self._store_failure(e, resource, weight, payload, limit, who=who)
             if seen > 1:
-                return self._forbid(resource, weight, "receipt already spent (single-use)")
+                return self._forbid(resource, weight, "receipt already spent (single-use)", who=who)
 
         used_key = f"{self.key_prefix}used:{receipt_id}"
         try:
@@ -386,7 +398,7 @@ class Gate:
             # Open, the call is served, so the nonce stays spent.
             if self.on_store_error != "open":
                 self._undo(nonce_key, 1)
-            return self._store_failure(e, resource, weight, payload, limit)
+            return self._store_failure(e, resource, weight, payload, limit, who=who)
 
         # Post-increment compare: whichever request crosses the limit is the one
         # refused, exactly once. The refused call then takes back its own
@@ -396,9 +408,9 @@ class Gate:
         if used > limit:
             self._undo(used_key, weight)
             self._undo(nonce_key, 1)
-            return self._challenge(resource, weight, tier, DETAIL_QUOTA_EXHAUSTED)
+            return self._challenge(resource, weight, tier, DETAIL_QUOTA_EXHAUSTED, who=who)
 
-        self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": sub, "receipt_id": receipt_id})
+        self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": sub, "receipt_id": receipt_id}, who)
         remaining = _int_if_whole(limit - used)
         return GateResult(True, 200, {HEADER_QUOTA_REMAINING: str(remaining)}, aifp={
             "agent": sub, "receipt_id": receipt_id, "resource": resource, "weight": weight,
@@ -406,8 +418,8 @@ class Gate:
         })
 
     def _store_failure(self, e: Exception, resource: str, weight: int, payload: Dict[str, Any],
-                       limit: float) -> GateResult:
-        self._emit({"kind": "meter_error", "resource": resource, "weight": weight, "detail": str(e)})
+                       limit: float, *, who: Dict[str, Any]) -> GateResult:
+        self._emit({"kind": "meter_error", "resource": resource, "weight": weight, "detail": str(e)}, who)
         if self.on_store_error == "open":
             # Availability chosen over metering: served and NOT counted.
             return GateResult(True, 200, {"AIFP-Meter": "degraded"}, aifp={

@@ -5,7 +5,7 @@ receipt verification against the AiFinPay JWKS, the same post-increment quota
 metering. See README.md.
 """
 
-from .agents import AI_AGENT_UA_MARKERS, known_ai_agent
+from .agents import AI_AGENT_UA_MARKERS, AI_AGENT_UA_TABLE, GATE_OPERATORS, UA_CLASSES, classify_agent, known_ai_agent
 from .asgi import AifpGateMiddleware
 from .challenge import build_challenge
 from .core import (
@@ -26,12 +26,12 @@ from .stores import REDIS_INCRBY_SCRIPT, MemoryStore, RedisStore, StoreCapacityE
 from .verify import Verifier
 from .wsgi import AifpGateWSGI
 
-__version__ = "0.1.3"
+__version__ = "0.2.0"
 
 __all__ = [
-    "AI_AGENT_UA_MARKERS", "AifpGateMiddleware", "AifpGateWSGI", "DETAIL_QUOTA_EXHAUSTED", "DETAIL_RECEIPT_EXPIRED",
-    "DETAIL_VERIFY_FAILED", "Gate", "GateResult", "GateReporter", "GateReporterV2", "ReportingFlow", "HEADER_QUOTA_REMAINING", "MemoryStore", "REDIS_INCRBY_SCRIPT",
-    "RedisStore", "Route", "SimpleRequest", "StoreCapacityError", "TIER_WEIGHTS", "UNIT_PRICE_USD", "Verifier",
-    "build_challenge", "build_discovery_document", "known_ai_agent", "min_requests_for_tier", "pattern_covers",
+    "AI_AGENT_UA_MARKERS", "AI_AGENT_UA_TABLE", "AifpGateMiddleware", "AifpGateWSGI", "DETAIL_QUOTA_EXHAUSTED", "DETAIL_RECEIPT_EXPIRED",
+    "DETAIL_VERIFY_FAILED", "GATE_OPERATORS", "Gate", "GateResult", "GateReporter", "GateReporterV2", "ReportingFlow", "HEADER_QUOTA_REMAINING", "MemoryStore", "REDIS_INCRBY_SCRIPT",
+    "RedisStore", "Route", "SimpleRequest", "StoreCapacityError", "TIER_WEIGHTS", "UA_CLASSES", "UNIT_PRICE_USD", "Verifier",
+    "build_challenge", "build_discovery_document", "classify_agent", "known_ai_agent", "min_requests_for_tier", "pattern_covers",
     "scope_covers", "unit_price_usd", "weight_for_tier",
 ]

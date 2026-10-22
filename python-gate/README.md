@@ -114,7 +114,7 @@ and expires with the receipt.
 | `require_agent_match` | `False` | Refuse when `AIFP-Agent-Id` differs from the receipt subject (anti-accident, not anti-theft). |
 | `replay` | `"auto"` | Single-use receipts get a one-shot nonce check. |
 | `jwks` | fetched | Pin the key set and skip network I/O (redeploy on key rotation). |
-| `on_event(e)` | — | `402` / `serve` / `403` / `meter_error` events for your metrics. |
+| `on_event(e)` | — | `402` / `serve` / `403` / `meter_error` events for your metrics. Each carries who asked: `operator`, `ua_class`, `verified` (true only once the receipt verified — a User-Agent is a claim), from `AI_AGENT_UA_TABLE` / `classify_agent`; never the raw User-Agent, IP or headers. |
 | `refund_on_error` (adapters) | `False` | Give the units back when your handler answers 5xx. |
 
 ## What it guarantees
@@ -130,7 +130,7 @@ Not included, on purpose: free allowances, daily caps and per-agent blocks live
 in the AiFinPay dashboard, so there is one source of truth for each rule.
 
 
-## Opt-in dashboard request reporting (0.1.2)
+## Opt-in dashboard request reporting (0.1.2, identity since 0.2.0)
 
 Use one `GateReporter` per merchant per worker, created **after worker fork**.
 It uses only Python's standard library. Add its callback to your existing gate;
@@ -163,11 +163,15 @@ Keep the merchant secret server-side. Share the reporter across mounts; do not
 report the same event through multiple reporters or through both hosted and
 self-hosted analytics. If you already have a callback, compose the two hooks.
 
-Only `402` and gate-admitted `serve` events are reported; exempt humans and
-other event kinds are excluded. `serve` is admission **before your handler**,
-not proof of successful HTTP response or delivered content. The payload has
-only UUID, kind, registered path and UTC timestamp; no headers, receipts,
-payer IDs, IPs or customer content. This populates request counters, not
+Only `402` and gate-admitted `serve` events are reported, each with the
+normalised `operator`, `ua_class` and `verified`; a `serve` that
+`should_charge` exempted is sent as `exempt: true` only when the caller was an
+AI crawler, agent browser or AIFP agent — human reads and other event kinds are
+excluded. `serve` is admission **before your handler**, not proof of successful
+HTTP response or delivered content. The payload has only UUID, kind, registered
+path, UTC timestamp and those enum values; no headers, User-Agents, receipts,
+payer IDs, IPs or customer content. Against an API without the identity fields
+the reporter falls back to the four-field shape instead of stopping. This populates request counters, not
 geographic/user-agent charts or general website visits. Settlements still
 supply payments/revenue; purchased quota is never backfilled as actual usage.
 

@@ -12,6 +12,25 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from .agents import GATE_OPERATORS, UA_CLASSES
+
+# Exempt serves forwarded at all: agents the merchant chose to serve free. A
+# human reader's page view stays local, as it always has — forwarding every page
+# view of a content site would crowd the bounded queue out of the agent traffic
+# it exists to report.
+_FORWARDED_EXEMPT_CLASSES = ("ai_crawler", "ai_agent_browser", "aifp_agent")
+_LEGACY_KEYS = ("id", "kind", "resource", "at")
+_DOWNGRADE = "downgrade"
+
+
+def _identity(event):
+    """The identity triple only when every part is a value the ingest accepts;
+    a hand-built event with a free-text operator goes out without it."""
+    operator, ua_class, verified = event.get("operator"), event.get("ua_class"), event.get("verified")
+    if operator in GATE_OPERATORS and ua_class in UA_CLASSES and type(verified) is bool:
+        return {"operator": operator, "ua_class": ua_class, "verified": verified}
+    return None
+
 
 class _RedirectBlocked(Exception):
     pass
@@ -66,6 +85,11 @@ class GateReporter:
         self._flush_attempted = set()
         self._closed = False
         self._stopped = False
+        # Set once a backend refuses the identity fields (one that predates them
+        # accepts exactly at/id/kind/resource). From then on events go out in
+        # that shape and exempt serves are dropped: an old backend would count
+        # them as ordinary serves.
+        self._legacy_only = False
         self._terminate = False
         self._delivered = 0
         self._dropped = 0
@@ -98,10 +122,16 @@ class GateReporter:
                 and not any(segment in (".", "..") for segment in value.split("/")))
 
     def on_event(self, event):
-        """Gate callback: copy only kind and registered path, never request data."""
+        """Gate callback: copy only kind, registered path and the normalised
+        identity (operator, ua_class, verified), never request data."""
         if os.getpid() != self._pid:
             return  # Never acquire a possibly inherited locked mutex after fork.
-        if not isinstance(event, dict) or event.get("exempt") or event.get("kind") not in ("402", "serve"):
+        if not isinstance(event, dict) or event.get("kind") not in ("402", "serve"):
+            return
+        identity = None if self._legacy_only else _identity(event)
+        exempt = event.get("exempt") is True
+        if exempt and (event["kind"] != "serve" or identity is None
+                       or identity["ua_class"] not in _FORWARDED_EXEMPT_CLASSES):
             return
         with self._condition:
             if self._closed or self._stopped:
@@ -121,6 +151,10 @@ class GateReporter:
             now = time.monotonic()
             wire = {"id": str(uuid.uuid4()), "kind": event["kind"], "resource": event["resource"],
                     "at": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")}
+            if identity is not None:
+                wire.update(identity)
+                if exempt:
+                    wire["exempt"] = True
             self._queue.append({"event": wire, "created": now, "attempts": 0, "next_at": now + self.DELAY})
             self._condition.notify_all()
 
@@ -149,7 +183,7 @@ class GateReporter:
                 if status in (401, 403):
                     return "auth", True
                 if 400 <= status < 500 and status not in (408, 429):
-                    return "rejected", True
+                    return "rejected", self._refusal(status, batch)
                 if not 200 <= status < 300:
                     return "server", False
                 # Bounded body; only aggregate counts are accepted. No error
@@ -173,13 +207,22 @@ class GateReporter:
             if code in (401, 403):
                 return "auth", True
             if 400 <= code < 500 and code not in (408, 429):
-                return "rejected", True
+                return "rejected", self._refusal(code, batch)
             return "server", False
         except (TimeoutError, URLError) as error:
             reason = error.reason if isinstance(error, URLError) else error
             return ("timeout" if isinstance(reason, TimeoutError) else "network"), False
         except Exception:
             return "invalid_response", False
+
+    def _refusal(self, status, batch):
+        """A 400 for a batch carrying identity fields is retried once in the
+        legacy shape; if that is refused too, the 400 was about something else
+        and stops the reporter as before."""
+        if status == 400 and not self._legacy_only and any(
+                "operator" in item["event"] or "exempt" in item["event"] for item in batch):
+            return _DOWNGRADE
+        return True
 
     def _run(self):
         while True:
@@ -215,7 +258,19 @@ class GateReporter:
                 ids = {item["event"]["id"] for item in batch}
                 if self._flush_ids is not None:
                     self._flush_attempted.update(ids)
-                if permanent:
+                if permanent == _DOWNGRADE:
+                    self._legacy_only = True
+                    self._last_error = error
+                    kept = []
+                    for item in self._queue:
+                        if item["event"].get("exempt"):
+                            self._dropped += 1
+                            continue
+                        item["event"] = {key: item["event"][key] for key in _LEGACY_KEYS}
+                        item["next_at"] = min(item["next_at"], time.monotonic())
+                        kept.append(item)
+                    self._queue = kept
+                elif permanent:
                     self._stopped = True
                     self._last_error = error
                     self._dropped += len(self._queue)

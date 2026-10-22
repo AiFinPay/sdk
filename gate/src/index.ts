@@ -38,7 +38,15 @@ export type { AifpMerchantOptions } from "./management.js";
 export { ResourceRegistry } from "./registry.js";
 export type { ResourceRegistryOptions } from "./registry.js";
 
-export { knownAiAgent, AI_AGENT_UA_MARKERS } from "./agents.js";
+export {
+  knownAiAgent,
+  classifyAgent,
+  AI_AGENT_UA_MARKERS,
+  AI_AGENT_UA_TABLE,
+  GATE_OPERATORS,
+  UA_CLASSES,
+} from "./agents.js";
+export type { AgentIdentity, AiAgentUaEntry, GateOperator, UaClass } from "./agents.js";
 export { scopeCovers } from "./scope.js";
 export { matchResource } from "./match.js";
 export { buildChallenge } from "./challenge.js";

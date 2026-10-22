@@ -23,6 +23,9 @@ def test_constants_match_the_node_package():
     assert g.DETAIL_VERIFY_FAILED == C["DETAIL_VERIFY_FAILED"]
     assert g.HEADER_QUOTA_REMAINING == C["HEADER_QUOTA_REMAINING"]
     assert list(g.AI_AGENT_UA_MARKERS) == C["AI_AGENT_UA_MARKERS"]
+    assert [list(row) for row in g.AI_AGENT_UA_TABLE] == C["AI_AGENT_UA_TABLE"]
+    assert list(g.GATE_OPERATORS) == C["GATE_OPERATORS"]
+    assert list(g.UA_CLASSES) == C["UA_CLASSES"]
     assert g.TIER_WEIGHTS == C["TIER_WEIGHTS"]
     assert g.UNIT_PRICE_USD == C["UNIT_PRICE_USD"]
     assert {t: g.min_requests_for_tier(t) for t in C["min_requests"]} == C["min_requests"]
@@ -55,5 +58,7 @@ def test_every_node_scenario_replays_identically(scenario):
         should_charge=g.known_ai_agent if o.get("shouldCharge") == "known" else None,
     )
     for i, r in enumerate(scenario["requests"]):
-        got = gate.decide(g.SimpleRequest(r["path"], r["headers"])).as_dict()
+        request = g.SimpleRequest(r["path"], r["headers"])
+        assert g.classify_agent(request) == r["identity"], f"request {i} identity"
+        got = gate.decide(request).as_dict()
         assert got == r["result"], f"request {i}"

@@ -1,3 +1,13 @@
+## Gate 0.5.0 / Python gate 0.2.0 — gate events say who asked
+
+- `@aifinpay/gate` and `aifinpay-gate` stamp `operator`, `ua_class` and
+  `verified` on every gate event from one shared marker table (operator ids
+  `openai, anthropic, perplexity, google, microsoft, meta, bytedance, apple,
+  amazon, commoncrawl, aifinpay, unknown`). `verified` only after the receipt
+  verified; never a raw User-Agent, IP or header. Reporters forward the fields
+  to `POST /v1/merchants/:id/gate-events`, which the backend reads back as
+  `by_operator` in the merchant funnel.
+
 ## MCP HTTP 2.0.5 — patched MCP SDK behind mcp.aifinpay.io
 
 - `@modelcontextprotocol/sdk` floor raised to `^1.32.1` (locked 1.32.1) for
