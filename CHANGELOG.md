@@ -1,3 +1,16 @@
+## MCP HTTP 2.0.5 — patched MCP SDK behind mcp.aifinpay.io
+
+- `@modelcontextprotocol/sdk` floor raised to `^1.32.1` (locked 1.32.1) for
+  GHSA-46jr-4wx8-v453 (one request could exhaust server memory during
+  validation), GHSA-22jm-h49p-29qw (experimental tasks not bound to their
+  session), GHSA-6prh-2h8m-c8cw and GHSA-rvq5-wwqv-78pq. `hono` is locked at
+  4.13.13 (GHSA-5r4p-p66f-jhc7).
+- The lock was out of sync with `package.json` on main (`npm ci` refused it):
+  it still resolved `@aifinpay/mcp` 2.2.2 and `@aifinpay/agent` 2.1.2 under
+  ranges that require 2.7.1 and 2.5.1. Regenerated, it resolves the published
+  `@aifinpay/mcp` 2.12.2 and `@aifinpay/agent` 2.9.0, so a deploy from this
+  lock serves the 2.12.2 tool set.
+
 ## MCP 2.12.3 — a 2FA account links by the one-time URL too
 
 - `agent_claim_self` drops the "use the signed message" answer for an account
