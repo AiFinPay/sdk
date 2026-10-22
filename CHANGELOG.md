@@ -5,6 +5,8 @@
   flow, instead of a GET that the backend redeems only without browser
   `Sec-Fetch-*` headers. Falls back to the GET only on a backend without the
   route.
+- Bundles the published skill 2.11.0, so the payer guide inside the package
+  matches payments on by default and the verified-site rule.
 
 ## MCP 2.12.1 — payments on by default, $5 / $20 ceiling, limits in the dashboard
 

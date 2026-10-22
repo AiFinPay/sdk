@@ -15,6 +15,10 @@
   the signed message in My Agents. Every request now refuses redirects.
 - The tool description says the URL must be passed to the tool, not opened
   in a browser tool.
+- Bundles the published skill 2.11.0 (AiFinPay/skill 0490615): payments on by
+  default, no env block to fill, and pay only a merchant that verified the very
+  site being fetched. 2.12.1 shipped with the 2.10.2 text, which still told the
+  owner to set the env limits and origins.
 
 ## 2.12.1 — payments on by default, a $5 / $20 ceiling, limits in the dashboard
 

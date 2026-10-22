@@ -27,21 +27,21 @@ export const COHORT = {
   mcp: "2.12.2",
   agent: "2.9.0",
   python: "2.7.1",
-  skill: "2.10.2",
+  skill: "2.11.0",
 };
 // Real CLI subprocess tests retain their default five-second limit. Serialize
 // the complete suite to avoid competing compiler/import workers starving them.
 export const MCP_TEST_ARGS = ["test", "--", "--maxWorkers=1"];
 // Parent-reviewed canonical reporting producer; no moving branch or registry
 // artifact stands in for its committed tree and actual source pack.
-export const SKILL_COMMIT = "48285cf68f119a584886cf77f89ccdc4129fae76";
-export const SKILL_TREE = "ef5c2a4b6845f288fe742c73bc765ef3ff0169a1";
+export const SKILL_COMMIT = "0490615171ad52881f0934350f474b3d09f65557";
+export const SKILL_TREE = "b39f69acd2e21a31ecc38d9ceb0f17f6df0ca95d";
 export const SKILL_SHA =
-  "4c390de04b1912c6bc7e823ab28d8c5567dbabf4da48a5e46db5046c439c0cfb";
+  "f3e8ad181498906dbf6eea68628142bd1718af0e53fdbfe471e580a4846785d9";
 export const SKILL_PACK = {
-  sha256: "3b03cdc7cea1232880cac7d04b148db9da27cc217a0a11d8c0d9cebe9a085d62",
+  sha256: "1b471b6e7e590bde35074f68383551149faf7ba473b522d79b516c78c789622d",
   integrity:
-    "sha512-LlDBmCjcYCL5rq1WbvYGGGy4x449IdIrCHFQmYTZXL4U/gt/6X0RstaoRrO9jMy2FGpm16URokGgtc05Antmlg==",
+    "sha512-yx6PaV2hLWuy3YXu69lhQs1MDvmo4FY3jkBLwAE3RByHWlIRQKj4oUVpQvC00L5Fs99zI4pPznGsqG1QZrRG4A==",
 };
 export const BASE_HASHES = {
   "package.json":

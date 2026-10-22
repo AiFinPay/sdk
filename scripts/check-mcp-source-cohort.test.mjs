@@ -62,13 +62,13 @@ test("reporting source target refuses every stale package version without claimi
     mcp: "2.12.2",
     agent: "2.9.0",
     python: "2.7.1",
-    skill: "2.10.2",
+    skill: "2.11.0",
   });
   for (const [name, oldVersion] of Object.entries({
     mcp: "2.12.0",
     agent: "2.8.0",
     python: "2.7.0",
-    skill: "2.10.1",
+    skill: "2.10.2",
   })) {
     assert.throws(
       () => verifyCohortVersions({ ...COHORT, [name]: oldVersion }),
@@ -89,10 +89,10 @@ test("MCP candidate metadata preserves the real registry lock of the published c
   assert.equal(lock.version, COHORT.mcp);
   assert.equal(lock.packages[""].version, COHORT.mcp);
   assert.deepEqual(lock.packages[""].dependencies, manifest.dependencies);
-  // The skill follows the published 2.10.1 (2026-10-19, AiFinPay/skill
-  // b8d2309), whose registry tarball is byte-identical to the pinned source
+  // The skill follows the published 2.11.0 (2026-10-22, AiFinPay/skill
+  // 0490615), whose registry tarball is byte-identical to the pinned source
   // pack. As with the agent, the registry identity is the only change.
-  const registrySkill = "2.10.2";
+  const registrySkill = "2.11.0";
   assert.equal(manifest.dependencies["@aifinpay/skill"], `^${registrySkill}`);
   {
     const { version, resolved, integrity, ...skillEdges } =
@@ -137,7 +137,7 @@ test("MCP candidate metadata preserves the real registry lock of the published c
     },
   );
   assert.deepEqual(agentEdges, baselineEdges);
-  // With agent 2.9.0 and skill 2.10.2 published and locked, the release
+  // With agent 2.9.0 and skill 2.11.0 published and locked, the release
   // metadata check must accept the lock. It also verifies the installed
   // package, so it needs `npm ci` in mcp/; CI runs this file before any mcp
   // install (it then installs the cohort in a disposable directory and runs
