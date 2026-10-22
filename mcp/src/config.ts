@@ -59,10 +59,11 @@ export interface McpConfig {
   /** Optional allowlist of gateway origins this agent may settle against.
    *
    *  Unset (the default since 2.12.1), payable_fetch accepts the https origin
-   *  of the URL it is given. That is safe because the 402 never decides who is
-   *  paid: the SDK takes only the merchant id from it and asks the configured
-   *  AiFinPay backend for a signed quote, so money can only reach a registered
-   *  merchant, within the ceiling below and the owner's dashboard Controls.
+   *  of the URL it is given, and pays only if the merchant in the backend-signed
+   *  quote has a DNS-verified site that is that origin's host (any verified
+   *  merchant on the AiFinPay hosted gateway) — see ../merchant-site.ts. The
+   *  402 never decides who is paid; the ceiling below and the owner's dashboard
+   *  Controls still apply.
    *  Before 2.12.1 this variable was required, and an unlisted origin was
    *  refused by name (observed in an external E2E run on 2026-08-27).
    *

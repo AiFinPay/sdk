@@ -509,6 +509,12 @@ describe("payable_fetch without AIFINPAY_GATEWAY_ORIGINS", () => {
   });
   it("records the pending payment under the direct site identity of that origin", async () => {
     const f = open();
+    // Without an allowlist the quoted merchant must have verified this site.
+    f.price.mockImplementation(async (input: string) =>
+      String(input).includes("/v1/merchants/mrch_other")
+        ? Response.json({ merchant_id: "mrch_other", site_url: "https://other.example", site_verified: true })
+        : Response.json({ data: { base: "POL", currency: "USD", amount: "0.1" } })
+    );
     f.fetchPaid.mockImplementation(async (_url, _init, options) => {
       await options.nativeUsdPrice();
       await options.v14.onPrepared({ ...prepared, quote: { ...prepared.quote, merchant_id: "mrch_other" } });

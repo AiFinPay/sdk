@@ -16,11 +16,17 @@ nobody edits the MCP client config to turn payments on.
   `AIFINPAY_MAX_USD` / `AIFINPAY_DAILY_USD` can only lower it; a higher value
   stops the start with a message that points to the dashboard, never a silent
   clip. The working limits are the dashboard Controls after `agent_claim_self`.
-- **No origin list needed.** `AIFINPAY_GATEWAY_ORIGINS` is an optional
-  allowlist. Unset, `payable_fetch` accepts the https origin of the URL it is
-  given: who is paid is decided by the backend-signed quote for a registered
-  merchant, never by the 402. Set, an unlisted origin is refused by name as
-  before.
+- **No origin list needed, verified sites only.** `AIFINPAY_GATEWAY_ORIGINS` is
+  an optional allowlist. Unset, `payable_fetch` accepts the https origin of the
+  URL it is given and pays only if the merchant in the backend-signed quote has
+  a DNS-verified site (`GET /v1/merchants/:id` → `site_verified`) whose host is
+  that origin's host; on the AiFinPay hosted gateway, verification alone. The
+  check runs in `onPrepared`, before the journal or any broadcast, so a refusal
+  pays nothing (owner decision 2026-10-22: without it, a page the agent was
+  steered to could name any registered merchant). Set, an unlisted origin is
+  refused by name as before, and the owner's list decides.
+- **@modelcontextprotocol/sdk 1.32.1** for GHSA-22jm-h49p-29qw (high) and
+  GHSA-6prh-2h8m-c8cw; the source-cohort bootstrap lock moves with it.
 - **Path mode inferred.** Unset `AIFINPAY_GATEWAY_PATH_MODE` means `gateway`
   (slug) for `https://gateway.aifinpay.io` and `direct` (full path) for any
   other origin; before, a site with its own paywall needed the variable.

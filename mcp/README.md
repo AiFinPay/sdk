@@ -69,11 +69,12 @@ the defaults allow. `init` prints the same reference block:
 ```
 
 - `AIFINPAY_GATEWAY_ORIGINS`: exact HTTPS origins the agent may pay,
-  comma-separated, no wildcards. Unset, any https site is accepted, because the
-  402 never decides who is paid: the SDK takes only the merchant id from it
-  and asks the AiFinPay backend for a signed quote, so money can only reach a
-  registered merchant. Set, an unlisted origin is refused by name and only the
-  owner can add it.
+  comma-separated, no wildcards. Unset, the agent pays only a merchant whose
+  site AiFinPay reports as DNS-verified, on that very site (or through the
+  AiFinPay hosted gateway): the payee comes from the backend-signed quote, never
+  from the 402, and is refused before anything is signed if its verified site is
+  not the host being fetched. Set, an unlisted origin is refused by name and
+  only the owner can add it; the list then decides.
 - `AIFINPAY_MAX_GAS_POL`: worst-case network fee of one payment on Polygon,
   checked before signing; default `0.3` POL. At ~280 gwei the worst case is
   ~0.10 POL paying in POL and ~0.21 POL in USDC. Another chain needs
@@ -450,7 +451,7 @@ snapshot. Verify `agent_address` against the wallet you intend to use.
 | `AIFINPAY_PAYMENTS_ENABLED`  | on                    | Optional override: `0` turns payments off.                                            |
 | `AIFINPAY_MAX_USD`           | `5`                   | Optional override: lowers the per-payment ceiling; a higher value is refused.         |
 | `AIFINPAY_DAILY_USD`         | `20`                  | Optional override: lowers the 24-hour ceiling; a higher value is refused.             |
-| `AIFINPAY_GATEWAY_ORIGINS`   | any https origin      | Optional allowlist: comma-separated exact HTTPS origins the agent may pay.            |
+| `AIFINPAY_GATEWAY_ORIGINS`   | verified merchant sites | Optional allowlist: comma-separated exact HTTPS origins the agent may pay. |
 | `AIFINPAY_GATEWAY_PATH_MODE` | inferred per URL      | `gateway` (merchant slug) or `direct` (full path); unset: the hosted gateway by slug. |
 | `AIFINPAY_MAX_GAS_POL`       | `0.3`                 | Optional override: gas cap per payment on Polygon, in POL.                            |
 | `AIFINPAY_PAY_CHAIN`         | `polygon`             | Owner-selected payment chain; see the2.8.1 source capability list.                    |
