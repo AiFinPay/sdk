@@ -2,7 +2,7 @@
 #    uv pip compile pyproject.toml --python-version 3.13 -o requirements.txt
 aiohappyeyeballs==2.7.1
     # via aiohttp
-aiohttp==3.14.3
+aiohttp==3.14.5
     # via web3
 aiosignal==1.4.0
     # via aiohttp
@@ -14,7 +14,7 @@ base58==2.1.1
     # via aifinpay-agent (pyproject.toml)
 bitarray==3.11.0
     # via eth-account
-certifi==2026.7.22
+certifi==2026.10.19
     # via requests
 cffi==2.1.1
     # via pynacl
@@ -134,5 +134,5 @@ web3==8.0.0
     # via aifinpay-agent (pyproject.toml)
 websockets==17.1
     # via web3
-yarl==1.24.5
+yarl==1.25.1
     # via aiohttp
