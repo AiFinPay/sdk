@@ -19,4 +19,6 @@ export {
 export type { AgentIdentity, AiAgentUaEntry, GateOperator, UaClass } from "./agents.js";
 export { matchResource } from "./match.js";
 export { scopeCovers } from "./scope.js";
-export type { AifpResource, GateMode, GateRequest } from "./types.js";
+export { decideOperator, normalizeOperatorPolicy, OPERATOR_ACTIONS, OPERATOR_DEFAULT } from "./operator-policy.js";
+export type { OperatorDecision } from "./operator-policy.js";
+export type { AifpResource, GateMode, GateRequest, OperatorAction, OperatorPolicy, OperatorRule } from "./types.js";

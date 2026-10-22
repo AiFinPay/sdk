@@ -49,6 +49,8 @@ export {
   UA_CLASSES,
 } from "./agents.js";
 export type { AgentIdentity, AiAgentUaEntry, GateOperator, UaClass } from "./agents.js";
+export { decideOperator, normalizeOperatorPolicy, OPERATOR_ACTIONS, OPERATOR_DEFAULT } from "./operator-policy.js";
+export type { OperatorDecision } from "./operator-policy.js";
 export { scopeCovers } from "./scope.js";
 export { matchResource } from "./match.js";
 export { buildChallenge } from "./challenge.js";
@@ -84,6 +86,9 @@ export type {
   GateMode,
   GateRequest,
   GateResult,
+  OperatorAction,
+  OperatorPolicy,
+  OperatorRule,
   ShadowOutcome,
   MerchantPublicView,
   MerchantStats,

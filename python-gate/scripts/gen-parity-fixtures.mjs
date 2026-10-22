@@ -35,6 +35,8 @@ const hs256 = `${b64({ alg: "HS256", typ: "JWT", kid: "fixture-1" })}.${b64(base
 const none = `${b64({ alg: "none", typ: "JWT" })}.${b64(base)}.`;
 const t = async (over, opts) => sign({ ...base, ...over }, opts);
 
+const OP_POLICY = { operator_rules: [{ operator: "openai", action: "allow" }, { operator: "anthropic", action: "block" }], operator_default: "charge" };
+const OP_VERIFIED = { operator_rules: [{ operator: "aifinpay", action: "allow", verified_only: true }, { ua_class: "aifp_agent", action: "block" }], operator_default: "charge" };
 const scenarios = [
   { name: "no receipt → 402", opts: { resource: "/paid" }, reqs: [{ path: "/paid", headers: {} }] },
   { name: "batch of 3 drains then 402", opts: { resource: "/paid" }, reqs: Array(4).fill({ path: "/paid", headers: { "AIFP-Receipt": await t({}) } }) },
@@ -81,6 +83,24 @@ const scenarios = [
   { name: "shadow: agent mismatch served, would-be 403", opts: { resource: "/paid", mode: "shadow", requireAgentMatch: true },
     reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({ receipt_id: "rcpt_0000000000000005" }), "AIFP-Agent-Id": "0xsomeoneelse" } }] },
   { name: "explicit enforce is the default", opts: { resource: "/paid", mode: "enforce" }, reqs: [{ path: "/paid", headers: {} }] },
+  // Operator policy: allow / charge / block per operator, the same decision
+  // and event in both ports; verified_only decided after the receipt verified.
+  { name: "operator policy: openai allowed, served exempt", opts: { resource: "/paid", shouldCharge: "known", operatorPolicy: OP_POLICY },
+    reqs: [{ path: "/paid", headers: { "User-Agent": "Mozilla/5.0 (compatible; GPTBot/1.1)" } }] },
+  { name: "operator policy: anthropic blocked", opts: { resource: "/paid", shouldCharge: "known", operatorPolicy: OP_POLICY },
+    reqs: [{ path: "/paid", headers: { "User-Agent": "Mozilla/5.0 (compatible; ClaudeBot/1.0)" } }] },
+  { name: "operator policy: perplexity charged as before", opts: { resource: "/paid", shouldCharge: "known", operatorPolicy: OP_POLICY },
+    reqs: [{ path: "/paid", headers: { "User-Agent": "Mozilla/5.0 (compatible; PerplexityBot/1.0)" } }] },
+  { name: "operator policy: default block never reaches a reader", opts: { resource: "/paid", shouldCharge: "known", operatorPolicy: { operator_rules: [], operator_default: "block" } },
+    reqs: [{ path: "/paid", headers: { "User-Agent": "Mozilla/5.0 (Macintosh) Safari/605.1.15" } }, { path: "/paid", headers: {} }] },
+  { name: "operator policy: verified_only allow serves a verified receipt free, blocks a claim", opts: { resource: "/paid", operatorPolicy: OP_VERIFIED },
+    reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({ receipt_id: "rcpt_0000000000000006" }) } },
+           { path: "/paid", headers: { "AIFP-Agent-Id": "0xclaimed" } },
+           { path: "/paid", headers: { "AIFP-Receipt": await t({ aud: "mrch_other" }) } }] },
+  { name: "operator policy: no rules is today's gate", opts: { resource: "/paid", shouldCharge: "known", operatorPolicy: { operator_rules: [], operator_default: "charge" } },
+    reqs: [{ path: "/paid", headers: { "User-Agent": "Mozilla/5.0 (compatible; GPTBot/1.1)" } }, { path: "/paid", headers: { "User-Agent": "Mozilla/5.0 (Macintosh) Safari/605.1.15" } }] },
+  { name: "shadow: operator block served, would-be 403, same event", opts: { resource: "/paid", mode: "shadow", shouldCharge: "known", operatorPolicy: OP_POLICY },
+    reqs: [{ path: "/paid", headers: { "User-Agent": "Mozilla/5.0 (compatible; ClaudeBot/1.0)" } }, { path: "/paid", headers: { "User-Agent": "Mozilla/5.0 (compatible; GPTBot/1.1)" } }] },
 ];
 
 const results = [];
@@ -92,7 +112,7 @@ for (const s of scenarios) {
   let events = [];
   const gate = G.createGate({
     merchantId: MID, jwks: { keys: [pubJwk] }, resource: s.opts.resource, tier: s.opts.tier, weight: s.opts.weight,
-    requireAgentMatch: s.opts.requireAgentMatch, apiBase: s.opts.apiBase, mode: s.opts.mode,
+    requireAgentMatch: s.opts.requireAgentMatch, apiBase: s.opts.apiBase, mode: s.opts.mode, operatorPolicy: s.opts.operatorPolicy,
     onEvent: (e) => events.push(e),
     ...(s.opts.shouldCharge === "known" ? { shouldCharge: G.knownAiAgent } : {}),
   });

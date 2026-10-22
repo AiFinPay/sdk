@@ -417,17 +417,35 @@ genuinely more expensive than its tier.
 
 ### Options worth knowing
 
-| Option              | Default       | Why you would change it                                                                                                           |
-| ------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `mode`              | `"enforce"`   | `"shadow"` observes: same decisions and events, every request served, nothing refused or metered for a would-be refusal. See §1a. |
-| `store`             | `MemoryStore` | Anything beyond one process. See §3.                                                                                              |
-| `registry`          | —             | Path-matched pricing from your registered endpoints.                                                                              |
-| `onStoreError`      | `"closed"`    | `"open"` trades metering for availability, visibly.                                                                               |
-| `onEvent`           | —             | `402` / `serve` / `403` / `meter_error` / `pricing_unavailable` for your own metrics; each carries who asked (below).             |
-| `allow`             | —             | Your own veto, evaluated **before** any unit is metered, so a refused call costs the agent nothing.                               |
-| `jwks`              | fetched       | Pin the key set; removes all runtime network dependency on us.                                                                    |
-| `requireAgentMatch` | `false`       | Compares `AIFP-Agent-Id` to the receipt subject. Anti-accident, not anti-theft — the header is not authenticated.                 |
-| `refundOnError`     | `false`       | Give the call's units back on a 5xx (Express adapter). Read the warning below first.                                              |
+| Option              | Default       | Why you would change it                                                                                                               |
+| ------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `mode`              | `"enforce"`   | `"shadow"` observes: same decisions and events, every request served, nothing refused or metered for a would-be refusal. See §1a.     |
+| `store`             | `MemoryStore` | Anything beyond one process. See §3.                                                                                                  |
+| `registry`          | —             | Path-matched pricing from your registered endpoints, and the operator rules saved on the dashboard (below).                           |
+| `operatorPolicy`    | from registry | The merchant's allow / charge / block per operator for a gate without a registry; an object, or a function returning the current one. |
+| `onStoreError`      | `"closed"`    | `"open"` trades metering for availability, visibly.                                                                                   |
+| `onEvent`           | —             | `402` / `serve` / `403` / `meter_error` / `pricing_unavailable` for your own metrics; each carries who asked (below).                 |
+| `allow`             | —             | Your own veto, evaluated **before** any unit is metered, so a refused call costs the agent nothing.                                   |
+| `jwks`              | fetched       | Pin the key set; removes all runtime network dependency on us.                                                                        |
+| `requireAgentMatch` | `false`       | Compares `AIFP-Agent-Id` to the receipt subject. Anti-accident, not anti-theft — the header is not authenticated.                     |
+| `refundOnError`     | `false`       | Give the call's units back on a 5xx (Express adapter). Read the warning below first.                                                  |
+
+**Operator rules.** Once a site sees which operators read it, the owner
+decides per operator on the dashboard (Access rules → Operators): `allow` —
+served free, unmetered, `req.aifp.mode === "exempt"`; `charge` — the gate's
+own decision below, `shouldCharge` and then the receipt; `block` — 403
+`AIFP-403`. The gate reads the rules from the public merchant view on every
+registry refresh and applies them right after classifying the request, before
+`shouldCharge`. Precedence: the rule for the caller's operator, then the rule
+for its class (`ua_class`), then the default for everyone else — which is
+`charge` until the owner changes it, so a site with no rules is the site it
+was. A `verified_only` rule applies only once this request's AIFP receipt
+verified; a User-Agent, an `AIFP-Agent-Id`, a receipt that did not verify are
+claims and fall through to the next rule. Readers (`ua_class: human`) are
+never matched: who pays on a page with human readers is your `shouldCharge`.
+Every decision is in the event `detail` — `operator policy: block
+(operator=openai)` — in shadow as in enforce, which is how the dashboard says
+what a shadow gate would have done.
 
 Every event also says **who asked**, normalised: `operator` (`openai`,
 `anthropic`, `perplexity`, `google`, `microsoft`, `meta`, `bytedance`, `apple`,
@@ -450,11 +468,14 @@ and understand that you are trading exact metering for generosity.
 
 - **It does not hold money or keys.** No custody, no funds movement. Agents
   settle on-chain to your own wallet; this package verifies a receipt and counts.
-- **It does not enforce merchant policies.** Free-unit allowances, per-agent
-  daily caps, blocklists and unlimited-access rules are evaluated by the hosted
-  AiFinPay gateway. A second implementation of a rule you edit in our dashboard
-  would be a second source of truth, and the two would disagree on the day it
-  mattered. Use `allow` for rules that are genuinely yours.
+- **It does not enforce per-agent merchant policies.** Free-unit allowances,
+  per-agent daily caps, blocklists and unlimited-access rules are evaluated by
+  the hosted AiFinPay gateway. A second implementation of a rule you edit in our
+  dashboard would be a second source of truth, and the two would disagree on
+  the day it mattered. The one exception is the per-operator allow / charge /
+  block policy (§4), which only this gate can apply — it is read from the
+  control plane, never re-stated here. Use `allow` for rules that are
+  genuinely yours.
 - **Self-hosted request counters need explicit reporting.** Wire the opt-in
   `createGateReporter` below to `onEvent` to populate the dashboard's request
   counters. It does not report geography, user agents or general website visits;

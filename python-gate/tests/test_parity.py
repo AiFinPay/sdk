@@ -64,7 +64,7 @@ def test_every_node_scenario_replays_identically(scenario):
     gate = g.Gate(
         FIXTURE["merchant_id"], jwks=FIXTURE["jwks"], resource=o.get("resource"), tier=o.get("tier") or "standard",
         weight=o.get("weight"), require_agent_match=bool(o.get("requireAgentMatch")), api_base=o.get("apiBase"),
-        mode=o.get("mode") or "enforce", on_event=events.append,
+        mode=o.get("mode") or "enforce", on_event=events.append, operator_policy=o.get("operatorPolicy"),
         should_charge=g.known_ai_agent if o.get("shouldCharge") == "known" else None,
     )
     for i, r in enumerate(scenario["requests"]):

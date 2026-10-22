@@ -1,3 +1,14 @@
+## Gate 0.7.0 / Python gate 0.4.0 — per-operator allow / charge / block
+
+- `@aifinpay/gate` and `aifinpay-gate` apply the merchant's per-operator
+  access policy (dashboard Access rules → Operators): `allow` serves free,
+  `block` answers 403 `AIFP-403`, `charge` is the gate's own decision; the
+  event `detail` names the rule in enforce and shadow alike, and a
+  `verified_only` rule applies only once the receipt verified. The Node
+  `ResourceRegistry` reads the rules from `GET /v1/merchants/:id` on every
+  refresh; both take an `operatorPolicy` / `operator_policy` option. No
+  policy, or one without rules, changes nothing.
+
 ## Gate 0.6.0 / Python gate 0.3.0 — shadow mode and one-step observe installs
 
 - `@aifinpay/gate` and `aifinpay-gate` take `mode: "shadow" | "enforce"`.
