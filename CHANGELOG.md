@@ -1,3 +1,8 @@
+## MCP 2.12.3 — a 2FA account links by the one-time URL too
+
+- `agent_claim_self` drops the "use the signed message" answer for an account
+  with 2FA on: the backend redeems its claim URL like any other.
+
 ## MCP 2.12.2 — agent_claim_self redeems the one-time URL by POST
 
 - The token of the owner's one-time URL goes in a POST body to

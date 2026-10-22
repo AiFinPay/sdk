@@ -154,13 +154,10 @@ function claimToken(url: string): string | null {
 }
 
 /** Why the link gave no grant, without echoing the token or server text. */
-function linkRefused(status: number, code: string | null) {
+function linkRefused(status: number) {
   const text =
-    code === "claim_link_2fa_account"
-      ? "This AiFinPay account has two-factor sign-in on, so a one-time URL cannot link an agent. " +
-        "Ask the owner to link this wallet by signed message in My Agents (call agent_address for the address)."
-      : `The one-time URL gave no claim grant (HTTP ${status}). It works once and for 15 minutes; ` +
-        "ask the owner for a new one in My Agents → Link an agent → Claim via MCP.";
+    `The one-time URL gave no claim grant (HTTP ${status}). It works once and for 15 minutes; ` +
+    "ask the owner for a new one in My Agents → Link an agent → Claim via MCP.";
   return { isError: true, content: [{ type: "text", text }] };
 }
 
@@ -211,19 +208,10 @@ export async function runAgentClaimSelf(ctx: ToolContext, args: Record<string, u
       // A backend from before /api/auth/claim: the URL itself is the claim.
       const legacy = await fetch(magicLinkUrl, { redirect: "manual" });
       setCookie = legacy.headers.get("set-cookie");
-      if (!setCookie) return linkRefused(legacy.status, null);
+      if (!setCookie) return linkRefused(legacy.status);
     } else {
       setCookie = res.headers.get("set-cookie");
-      if (!res.ok || !setCookie) {
-        let code: string | null = null;
-        try {
-          const body = (await res.json()) as { error?: unknown };
-          code = typeof body?.error === "string" ? body.error : null;
-        } catch {
-          /* not JSON */
-        }
-        return linkRefused(res.status, code);
-      }
+      if (!res.ok || !setCookie) return linkRefused(res.status);
     }
   } catch {
     return {

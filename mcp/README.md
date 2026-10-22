@@ -4,7 +4,7 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Version **2.12.2** is prepared in this checkout, on the published agent 2.9.0
+Version **2.12.3** is prepared in this checkout, on the published agent 2.9.0
 and canonical skill 2.11.0 (AiFinPay/skill 0490615, published 2026-10-22). The separate canonical producer's final immutable
 source pin is a required handoff, not a moving-branch substitution.
 The published baseline checked2026-10-04 was MCP2.5.0. Package publication and
@@ -231,7 +231,8 @@ https://dash.aifinpay.io → My Agents. There, **Link an agent → Claim via MCP
 generates a one-time URL; pass it to `agent_claim_self`, which redeems it with
 a POST to `/api/auth/claim`. Opening the URL in a browser, or pasting it into a
 chat that has no AiFinPay MCP, links nothing; such an agent is linked by signed
-message in My Agents instead, as is an account with 2FA on. The tool contacts
+message in My Agents instead. An account with 2FA on links the same way: the
+URL was made in a session that already passed the second factor. The tool contacts
 only AiFinPay origins, signs only the claim challenge for this agent's own
 address, and moves no funds. The owner-selected payment family must be confirmed successfully;
 the second wallet is best-effort. Use the selected wallet's Fund panel for

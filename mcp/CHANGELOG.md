@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.12.3 — a 2FA account links by the one-time URL too
+
+- The backend now redeems a claim URL for an account with 2FA on (aifinpay-web,
+  same release), for the same ten-minute agent-claim grant. `agent_claim_self`
+  no longer tells such an owner to use the signed message: every refusal asks
+  for a fresh URL from My Agents → Link an agent → Claim via MCP, without
+  echoing server text.
+
 ## 2.12.2 — agent_claim_self redeems the one-time URL by POST
 
 - `agent_claim_self` sends the token of the owner's one-time URL in a POST

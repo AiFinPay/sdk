@@ -207,14 +207,17 @@ describe("redeeming the one-time URL", () => {
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("tells a 2FA account to use the signed message, and asks for no challenge", async () => {
+  // The backend redeems the URL for an account with 2FA on too, so no refusal
+  // sends the owner to the signed message instead of a fresh URL.
+  it("answers any refusal with a fresh URL, not the signed message, and echoes no server text", async () => {
     globalThis.fetch = vi.fn(async () =>
       Response.json({ error: "claim_link_2fa_account", hint: "server text" }, { status: 403 })
     ) as typeof fetch;
     const r = await runAgentClaimSelf(ctx(), { magic_link_url: link });
     expect(r).toHaveProperty("isError", true);
-    expect(output(r)).toMatch(/two-factor sign-in on/);
-    expect(output(r)).toMatch(/signed message in My Agents/);
+    expect(output(r)).toMatch(/HTTP 403/);
+    expect(output(r)).toMatch(/new one in My Agents/);
+    expect(output(r)).not.toMatch(/two-factor|2FA|signed message/);
     expect(output(r)).not.toContain("server text");
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
