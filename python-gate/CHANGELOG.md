@@ -1,3 +1,13 @@
+## 0.2.0 — unreleased
+
+- Port of `@aifinpay/gate` 0.5.0: every event carries `operator`, `ua_class`
+  and `verified` from the shared marker table (`AI_AGENT_UA_TABLE`,
+  `GATE_OPERATORS`, `UA_CLASSES`, `classify_agent`); `verified` only after the
+  receipt verified. The parity fixture now holds the table and the
+  classification of every recorded request equal to Node's.
+- `GateReporter` sends the fields, forwards agent-class exempt serves as
+  `exempt: true`, and falls back to the legacy shape on a 400 for the new one.
+
 ## 0.1.3 — unreleased
 
 - Add explicit reporting-v2 producer, bounded flow mint/event/health transport,

@@ -1,5 +1,21 @@
 # Changelog
 
+## @aifinpay/gate 0.5.0 — unreleased
+
+- Every gate event says who asked: `operator`, `ua_class` and `verified`,
+  normalised from one marker table (`AI_AGENT_UA_TABLE`, exported with
+  `GATE_OPERATORS`, `UA_CLASSES` and `classifyAgent`). `AI_AGENT_UA_MARKERS`
+  is now derived from that table, so charging and attribution cannot disagree.
+- `verified` is true only after the request's receipt verified; a User-Agent
+  or `AIFP-Agent-Id` header alone never is. No raw User-Agent, IP or header
+  reaches an event.
+- Markers added: `claude-searchbot`, `claude-user` (Anthropic's current
+  fetchers). Both are now charged by `knownAiAgent` on content sites.
+- The reporter sends the three fields, forwards an exempt `serve` for AI
+  crawler / agent-browser / AIFP-agent callers as `exempt: true` (human reads
+  stay local), and falls back to the legacy four-field shape when the API
+  answers 400 to the new one instead of stopping for the process lifetime.
+
 ## @aifinpay/gate 0.4.0 — unreleased source candidate
 
 - Add separate explicit reporting.v2.20261009 producer with strict flow/event/

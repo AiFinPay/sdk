@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { GATE_OPERATORS, UA_CLASSES, type AgentIdentity, type GateOperator, type UaClass } from "./agents.js";
 import type { GateEvent } from "./types.js";
 import type {
   Ack,
@@ -79,12 +80,45 @@ export interface GateReporter {
   readonly stats: GateReporterStats;
 }
 
+/** The wire event. The identity triple travels all-or-nothing; `exempt` only
+ *  ever as `true`, only on a "serve", and only with an identity. */
+interface WireEvent {
+  id: string;
+  kind: "402" | "serve";
+  resource: string;
+  at: string;
+  operator?: GateOperator;
+  ua_class?: UaClass;
+  verified?: boolean;
+  exempt?: true;
+}
+
 interface Pending {
-  event: { id: string; kind: "402" | "serve"; resource: string; at: string };
+  event: WireEvent;
   created: number;
   attempts: number;
   nextAt: number;
 }
+
+/** Exempt serves forwarded at all: agents the merchant chose to serve free.
+ *  A human reader's page view stays local, as it always has — forwarding every
+ *  page view of a content site would crowd the bounded queue out of the agent
+ *  traffic it exists to report. */
+const FORWARDED_EXEMPT_CLASSES: ReadonlySet<UaClass> = new Set(["ai_crawler", "ai_agent_browser", "aifp_agent"]);
+
+/** The identity triple only when every part is a value the ingest accepts. A
+ *  hand-built event with a free-text operator goes out without it rather than
+ *  getting the whole batch refused. */
+function identityOf(event: GateEvent): AgentIdentity | null {
+  const { operator, ua_class, verified } = event;
+  return (GATE_OPERATORS as readonly unknown[]).includes(operator) &&
+    (UA_CLASSES as readonly unknown[]).includes(ua_class) &&
+    typeof verified === "boolean"
+    ? { operator: operator as GateOperator, ua_class: ua_class as UaClass, verified }
+    : null;
+}
+
+const extended = (event: WireEvent) => event.operator !== undefined || event.exempt !== undefined;
 
 const MAX_QUEUE = 1000;
 const MAX_BATCH = 50;
@@ -143,6 +177,11 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
   let closing: Promise<GateReporterStats> | undefined;
   let stopped = false;
   let closed = false;
+  // Set once a backend refuses the identity fields (one that predates them
+  // accepts exactly at/id/kind/resource). From then on events go out in that
+  // shape and exempt serves are dropped, since an old backend would count them
+  // as ordinary serves.
+  let legacyOnly = false;
   let delivered = 0;
   let dropped = 0;
   let retries = 0;
@@ -204,6 +243,7 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
       const timeout = setTimeout(() => controller.abort(), TIMEOUT);
       let failure: GateReporterError | null = null;
       let permanent = false;
+      let downgrade = false;
       try {
         const response = await fetch(endpoint, {
           method: "POST",
@@ -218,6 +258,11 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
         } else if (response.status === 401 || response.status === 403) {
           failure = "auth";
           permanent = true;
+        } else if (response.status === 400 && !legacyOnly && batch.some((entry) => extended(entry.event))) {
+          // Not permanent yet: retried once in the legacy shape. If that is
+          // refused too, the 400 was about something else and stops as before.
+          failure = "rejected";
+          downgrade = true;
         } else if (response.status >= 400 && response.status < 500 && ![408, 429].includes(response.status)) {
           failure = "rejected";
           permanent = true;
@@ -278,6 +323,20 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
         clearTimer();
         return;
       }
+      if (downgrade) {
+        legacyOnly = true;
+        lastError = failure;
+        const now = Date.now();
+        queue = queue.flatMap((entry) => {
+          if (entry.event.exempt) {
+            dropped++;
+            return [];
+          }
+          const { id, kind, resource, at } = entry.event;
+          return [{ ...entry, event: { id, kind, resource, at }, nextAt: Math.min(entry.nextAt, now) }];
+        });
+        return;
+      }
       const batchIds = new Set(batch.map((entry) => entry.event.id));
       if (!failure) {
         delivered += batch.length;
@@ -329,7 +388,10 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
   return {
     onEvent(event) {
       if (!event || typeof event !== "object") return;
-      if (event.exempt || (event.kind !== "402" && event.kind !== "serve")) return;
+      if (event.kind !== "402" && event.kind !== "serve") return;
+      const identity = legacyOnly ? null : identityOf(event);
+      const exempt = event.exempt === true;
+      if (exempt && (event.kind !== "serve" || !identity || !FORWARDED_EXEMPT_CLASSES.has(identity.ua_class))) return;
       if (closed || stopped) {
         dropped++;
         if (!stopped) lastError = "closed";
@@ -348,7 +410,14 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
       }
       const now = Date.now();
       queue.push({
-        event: { id: randomUUID(), kind: event.kind, resource: event.resource, at: new Date(now).toISOString() },
+        event: {
+          id: randomUUID(),
+          kind: event.kind,
+          resource: event.resource,
+          at: new Date(now).toISOString(),
+          ...identity,
+          ...(exempt ? { exempt: true as const } : {}),
+        },
         created: now,
         attempts: 0,
         nextAt: now + DELAY,

@@ -363,11 +363,21 @@ genuinely more expensive than its tier.
 | `store`             | `MemoryStore` | Anything beyond one process. See §3.                                                                              |
 | `registry`          | —             | Path-matched pricing from your registered endpoints.                                                              |
 | `onStoreError`      | `"closed"`    | `"open"` trades metering for availability, visibly.                                                               |
-| `onEvent`           | —             | `402` / `serve` / `403` / `meter_error` / `pricing_unavailable` for your own metrics.                             |
+| `onEvent`           | —             | `402` / `serve` / `403` / `meter_error` / `pricing_unavailable` for your own metrics; each carries who asked (below). |
 | `allow`             | —             | Your own veto, evaluated **before** any unit is metered, so a refused call costs the agent nothing.               |
 | `jwks`              | fetched       | Pin the key set; removes all runtime network dependency on us.                                                    |
 | `requireAgentMatch` | `false`       | Compares `AIFP-Agent-Id` to the receipt subject. Anti-accident, not anti-theft — the header is not authenticated. |
 | `refundOnError`     | `false`       | Give the call's units back on a 5xx (Express adapter). Read the warning below first.                              |
+
+Every event also says **who asked**, normalised: `operator` (`openai`,
+`anthropic`, `perplexity`, `google`, `microsoft`, `meta`, `bytedance`, `apple`,
+`amazon`, `commoncrawl`, `aifinpay`, `unknown`), `ua_class` (`ai_crawler`,
+`ai_agent_browser`, `aifp_agent`, `human`, `unknown`) and `verified`. The
+mapping is `AI_AGENT_UA_TABLE` in `agents.ts` — the same table `knownAiAgent`
+charges from, exported with `classifyAgent(req)`. `verified` is **true only
+when the request's AIFP receipt verified**; a User-Agent is a claim, and
+vulnerability scanners send `ChatGPT-User` and `Claude-SearchBot` to look
+trusted. The raw User-Agent, IP and headers never appear in an event.
 
 `refundOnError` fires after your response has already gone out. If the agent
 received a body, the refunded units are units it got served for free — a slow
@@ -432,13 +442,21 @@ The discovery file lists resource prices and scopes. A fresh quote supplies
 settlement terms; discovery is neither a receipt nor proof that a particular
 client can execute the offered route.
 
-## Opt-in dashboard request reporting (0.3.6)
+## Opt-in dashboard request reporting (0.3.6, identity since 0.5.0)
 
 The reporter sends `402` challenges and gate-admitted `serve` events to the
-merchant analytics API. A `serve` is emitted before your route handler runs;
-it does **not** prove a successful response or delivered content. Exempt human
-requests, errors, receipt JWTs, payer IDs, IPs, headers and customer content are
-excluded. Payments and revenue continue to come from confirmed settlements.
+merchant analytics API, each with the normalised `operator`, `ua_class` and
+`verified` above — so the dashboard can say which operators hit your site and
+whether they paid. Since 0.5.0 a `serve` that `shouldCharge` exempted is also
+sent, flagged `exempt: true`, when the exempted caller was an AI crawler,
+agent browser or AIFP agent (a merchant serving agents free still wants to see
+them); a human reader's page view is never sent. A `serve` is emitted before
+your route handler runs; it does **not** prove a successful response or
+delivered content. Errors, receipt JWTs, payer IDs, IPs, User-Agents, headers
+and customer content are excluded. Payments and revenue continue to come from
+confirmed settlements. Against an API that predates the identity fields the
+reporter falls back to the four-field shape (and stops sending exempt serves)
+instead of stopping.
 
 ```ts
 import { createGateReporter, aifpGate, redisStore } from "@aifinpay/gate";

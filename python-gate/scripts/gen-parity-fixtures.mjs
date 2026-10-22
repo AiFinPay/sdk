@@ -79,8 +79,9 @@ for (const s of scenarios) {
   const reqs = [];
   for (const r of s.reqs) {
     const lower = Object.fromEntries(Object.entries(r.headers).map(([k, v]) => [k.toLowerCase(), v]));
-    const res = await gate({ path: r.path, header: (n) => lower[n.toLowerCase()] });
-    reqs.push({ ...r, result: res });
+    const request = { path: r.path, header: (n) => lower[n.toLowerCase()] };
+    const res = await gate(request);
+    reqs.push({ ...r, result: res, identity: G.classifyAgent(request) });
   }
   results.push({ name: s.name, opts: s.opts, requests: reqs });
 }
@@ -99,7 +100,10 @@ const fixture = {
   constants: {
     DETAIL_QUOTA_EXHAUSTED: G.DETAIL_QUOTA_EXHAUSTED, DETAIL_RECEIPT_EXPIRED: G.DETAIL_RECEIPT_EXPIRED,
     DETAIL_VERIFY_FAILED: G.DETAIL_VERIFY_FAILED, HEADER_QUOTA_REMAINING: G.HEADER_QUOTA_REMAINING,
-    AI_AGENT_UA_MARKERS: G.AI_AGENT_UA_MARKERS, TIER_WEIGHTS: G.TIER_WEIGHTS, UNIT_PRICE_USD: G.UNIT_PRICE_USD,
+    AI_AGENT_UA_MARKERS: G.AI_AGENT_UA_MARKERS,
+    AI_AGENT_UA_TABLE: G.AI_AGENT_UA_TABLE.map((row) => [row.marker, row.operator, row.ua_class]),
+    GATE_OPERATORS: G.GATE_OPERATORS, UA_CLASSES: G.UA_CLASSES,
+    TIER_WEIGHTS: G.TIER_WEIGHTS, UNIT_PRICE_USD: G.UNIT_PRICE_USD,
     min_requests: Object.fromEntries(tiers.map((t) => [t, G.minRequestsForTier(t)])),
     REDIS_INCRBY_SCRIPT: G.REDIS_INCRBY_SCRIPT,
   },
