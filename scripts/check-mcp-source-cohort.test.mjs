@@ -171,7 +171,7 @@ test("immutable bootstrap uses the existing patched registry lock without source
   assert.deepEqual(lock.packages[""].dependencies, manifest.dependencies);
   assert.deepEqual(lock.packages[""].devDependencies, manifest.devDependencies);
   for (const [name, version] of [
-    ["@modelcontextprotocol/sdk", "1.31.0"],
+    ["@modelcontextprotocol/sdk", "1.32.1"],
     ["proxy-addr", "2.0.8"],
   ]) {
     const entry = lock.packages[`node_modules/${name}`];

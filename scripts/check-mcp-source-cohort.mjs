@@ -18,9 +18,11 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // Registry lock refreshed onto the published cohort (agent 2.6.4, skill 2.9.0,
-// ee4b3b4), since moved to agent 2.9.0 and skill 2.10.2; it keeps MCP SDK 1.31.0 and proxy-addr 2.0.8, which fix
-// GHSA-6qxp-vccf-f47h / GHSA-jqcg-44mw-7w3h. Keep the bootstrap immutable.
-export const BASE = "ee4b3b450af3fec988c6520e1033c25868065df0";
+// ee4b3b4), since moved to agent 2.9.0 and skill 2.10.2. Moved again to bda78b7
+// (2026-10-22) for MCP SDK 1.32.1, which fixes GHSA-22jm-h49p-29qw (high) and
+// GHSA-6prh-2h8m-c8cw; 1.31.0 had kept proxy-addr 2.0.8 for GHSA-6qxp-vccf-f47h /
+// GHSA-jqcg-44mw-7w3h. Keep the bootstrap immutable between such refreshes.
+export const BASE = "bda78b76ec744beda7aba7fc3373070d455864c9";
 export const COHORT = {
   mcp: "2.12.1",
   agent: "2.9.0",
@@ -43,9 +45,9 @@ export const SKILL_PACK = {
 };
 export const BASE_HASHES = {
   "package.json":
-    "4d6225033308cca95444fd4a0d671d69d221db19add88f9cfc9e30f5afb85ec2",
+    "325711e2bd41af101a547839e92f594578c7c68392ab44806266dfc1eb57702e",
   "package-lock.json":
-    "7cb72539d0dc17b885a89a73f9be91870449a578811eb61c3c492ea576f0cdc8",
+    "429d7adaeae773713fc2bd9264483dae2125b48e4c3326151cd810e84b3dee08",
 };
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const json = (path) => JSON.parse(readFileSync(path, "utf8"));
