@@ -170,7 +170,23 @@ describe("persistent wallet identity", () => {
       await active.server.close();
     }
     await expect(createServer({ ...config, dailyAmountUsd: undefined })).rejects.toThrow(/DAILY_USD/);
-    await expect(createServer({ ...config, seedHash: undefined })).rejects.toThrow(/persistent/);
+    // With payments on by default, a refused setting leaves the server up and read-only.
+    const warned: string[] = [];
+    const lenient = await createServer({
+      ...config,
+      dailyAmountUsd: undefined,
+      paymentsByDefault: true,
+      logFn: (_level, msg) => warned.push(msg),
+    });
+    await lenient.server.close();
+    expect(warned.join("\n")).toMatch(/payments stay off until the owner fixes a setting: AIFINPAY_DAILY_USD/);
+    // An ephemeral wallet no longer stops the server; it simply gets no payment journal.
+    const ephemeral = await createServer({ ...config, seedHash: undefined, walletHome: fixture().home });
+    try {
+      expect(existsSync(join(f.home, "payments", ephemeral.agent.evmAddress.toLowerCase()))).toBe(false);
+    } finally {
+      await ephemeral.server.close();
+    }
   });
 
   it("reads SEED_HASH from the process configuration", () => {
@@ -408,6 +424,82 @@ describe("persistent wallet identity", () => {
     }
   });
 
+  // 2.12.1: the design note's "no restart" step. A server that started with an
+  // ephemeral wallet, payments on by default, can pay right after init and
+  // agent_reload in the same connection: the reload opens the journal.
+  it("after init, agent_reload makes a default-on server able to pay without a restart", async () => {
+    const f = fixture();
+    const active = await createServer({
+      walletHome: f.home,
+      paymentsEnabled: true,
+      paymentsByDefault: true,
+      maxAmountUsd: 5,
+      dailyAmountUsd: 20,
+      logFn: () => {},
+    });
+    const expected = await AiFinPayAgent.fromSeed(seedA);
+    const client = new Client({ name: "init-reload-pay-test", version: "1" });
+    const [left, right] = InMemoryTransport.createLinkedPair();
+    await active.server.connect(right);
+    await client.connect(left);
+    try {
+      const before = await client.callTool({ name: "payable_fetch", arguments: { url: "https://merchant.example/x" } });
+      expect(JSON.parse((before.content as Array<{ text: string }>)[0].text).wallet.persistent).toBe(false);
+      writeFileSync(
+        join(f.home, "agent.json"),
+        JSON.stringify({ secretB58: (expected as unknown as { inner: { secretB58: string } }).inner.secretB58 }),
+        { mode: 0o600 }
+      );
+      const reload = await client.callTool({ name: "agent_reload", arguments: {} });
+      const reloaded = JSON.parse((reload.content as Array<{ text: string }>)[0].text);
+      expect(reloaded).toMatchObject({ reloaded: true, payments_enabled: true, payments_ready: true });
+      expect(reloaded.env_note).toBeUndefined();
+      expect(existsSync(join(f.home, "payments", expected.evmAddress.toLowerCase()))).toBe(true);
+      // Past the setup gate: the next refusal is the stubbed purchase, not the checklist.
+      const paid = vi.spyOn(active.agent, "fetchPaid").mockRejectedValue(new Error("stub: no network"));
+      const after = await client.callTool({ name: "payable_fetch", arguments: { url: "https://merchant.example/x" } });
+      expect(after.isError).toBe(true);
+      expect(paid).toHaveBeenCalledTimes(1);
+      expect(paid.mock.calls[0][2]).toMatchObject({ maxAmountUsd: 5, gatewayOrigins: ["https://merchant.example"] });
+    } finally {
+      await client.close();
+      await active.server.close();
+    }
+  });
+
+  it("after init, agent_reload does not open the journal when a setting is refused, and says why", async () => {
+    const f = fixture();
+    const active = await createServer({
+      walletHome: f.home,
+      paymentsEnabled: true,
+      paymentsByDefault: true,
+      maxAmountUsd: 5,
+      dailyAmountUsd: undefined,
+      logFn: () => {},
+    });
+    const expected = await AiFinPayAgent.fromSeed(seedA);
+    const client = new Client({ name: "init-reload-refused-test", version: "1" });
+    const [left, right] = InMemoryTransport.createLinkedPair();
+    await active.server.connect(right);
+    await client.connect(left);
+    try {
+      writeFileSync(
+        join(f.home, "agent.json"),
+        JSON.stringify({ secretB58: (expected as unknown as { inner: { secretB58: string } }).inner.secretB58 }),
+        { mode: 0o600 }
+      );
+      const reload = await client.callTool({ name: "agent_reload", arguments: {} });
+      const reloaded = JSON.parse((reload.content as Array<{ text: string }>)[0].text);
+      expect(reloaded).toMatchObject({ reloaded: true, payments_enabled: true, payments_ready: false });
+      expect(reloaded.env_note).toMatch(/^Payments stay off: AIFINPAY_DAILY_USD/);
+      expect(reloaded.env_note).toContain("restart the aifinpay MCP server");
+      expect(existsSync(join(f.home, "payments", expected.evmAddress.toLowerCase()))).toBe(false);
+    } finally {
+      await client.close();
+      await active.server.close();
+    }
+  });
+
   it("picks up a newly initialized keystore without reconnecting", async () => {
     const f = fixture();
     const active = await createServer({ walletHome: f.home, logFn: () => {} });
@@ -430,6 +522,7 @@ describe("persistent wallet identity", () => {
       // The keystore is new; the env is still the one the server started with.
       const reloaded = JSON.parse((reload.content as Array<{ text: string }>)[0].text);
       expect(reloaded.payments_enabled).toBe(false);
+      expect(reloaded.payments_ready).toBe(false);
       expect(reloaded.env_note).toContain("restart the aifinpay MCP server");
       expect(reloaded.env_note).toContain("agent_reload re-reads the keystore and nothing else");
     } finally {

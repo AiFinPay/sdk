@@ -1,6 +1,6 @@
 name: aifinpay
 displayName: AiFinPay
-description: Payment infrastructure for AI agents. A persistent non-custodial agent wallet, Agent Passport resolution, route discovery and non-signing settlement invoices; with owner-set limits, payable_fetch buys prepaid access to AIFP-1 merchants on Polygon or Base, in POL/ETH or a pinned stablecoin.
+description: Payment infrastructure for AI agents. A persistent non-custodial agent wallet, Agent Passport resolution, route discovery and non-signing settlement invoices; within a built-in $5 / $20 ceiling and the owner's dashboard Controls, payable_fetch buys prepaid access to AIFP-1 merchants on Polygon or Base, in POL/ETH or a pinned stablecoin.
 version: 2.5.0
 license: MIT
 homepage: https://aifinpay.io
@@ -66,25 +66,24 @@ configSchema:
       description: Passphrase for an encrypted agent.json keystore. Without it an encrypted keystore cannot be opened and the server does not start.
     AIFINPAY_PAYMENTS_ENABLED:
       type: string
-      title: Enable payments
-      description: Set to "1" to register payable_fetch. Requires a persistent wallet and AIFINPAY_MAX_USD, AIFINPAY_DAILY_USD, AIFINPAY_GATEWAY_ORIGINS and a gas cap (AIFINPAY_MAX_GAS, or AIFINPAY_MAX_GAS_POL on Polygon); the server refuses to start if any is missing. Unset or "0" keeps the server read-only.
+      title: Payments switch
+      description: Payments are on unless set to "0". Only a persistent wallet (npx @aifinpay/mcp init) signs, within the built-in ceiling of $5 per payment and $20 per 24 hours and only to merchants registered with AiFinPay; an unfunded wallet spends nothing. "0" keeps the server read-only.
     AIFINPAY_MAX_USD:
       type: string
       title: Max USD per payment
-      description: Per-payment cap for payable_fetch. Required when payments are enabled; there is no default. A tool argument can lower it for one call, never raise it.
+      description: Lowers the built-in $5 per-payment ceiling of payable_fetch (default 5); a higher value is refused. The working limits are the dashboard Controls. A tool argument can lower it for one call, never raise it.
     AIFINPAY_DAILY_USD:
       type: string
       title: Max USD per 24 hours
-      description: Rolling 24-hour spending cap for payable_fetch. Required when payments are enabled.
+      description: Lowers the built-in $20 rolling 24-hour ceiling of payable_fetch (default 20); a higher value is refused.
     AIFINPAY_GATEWAY_ORIGINS:
       type: string
       title: Payable origins
-      description: Comma-separated exact HTTPS origins the agent may pay (no wildcards). Required when payments are enabled.
+      description: Optional allowlist of comma-separated exact HTTPS origins the agent may pay (no wildcards). Unset, any https site; who is paid is decided by the AiFinPay-signed quote, never by the 402.
     AIFINPAY_GATEWAY_PATH_MODE:
       type: string
       title: Gateway path mode
-      description: "Use gateway for merchant-slug identity or direct for full request-path identity."
-      default: gateway
+      description: "Use gateway for merchant-slug identity or direct for full request-path identity. Unset, inferred per URL: gateway.aifinpay.io by slug, any other site by path."
     AIFINPAY_PAY_CHAIN:
       type: string
       title: Payment chain

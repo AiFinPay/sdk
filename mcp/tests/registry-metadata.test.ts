@@ -108,7 +108,7 @@ describe("smithery.yaml and server.json describe this server", () => {
     for (const { name } of serverJsonEnv) expect(read, `server.json environmentVariables ${name}`).toContain(name);
   });
 
-  it("document every limit an owner must set before payable_fetch is registered", () => {
+  it("document every payment variable an owner may set", () => {
     for (const name of [
       "AIFINPAY_PAYMENTS_ENABLED",
       "AIFINPAY_MAX_USD",
@@ -127,14 +127,32 @@ describe("smithery.yaml and server.json describe this server", () => {
     }
   });
 
-  it("give AIFINPAY_MAX_USD no default, because the server has none", () => {
-    // validatePaymentConfig refuses to start payments without an explicit
-    // owner value; a catalog default would put a number in an owner's config
-    // that the owner never chose.
-    expect(smitheryProperty("AIFINPAY_MAX_USD")).not.toMatch(/^\s*default:/m);
-    const maxUsd = serverJsonEnv.find((v) => v.name === "AIFINPAY_MAX_USD");
-    expect(maxUsd?.description).not.toMatch(/default/i);
-    expect(maxUsd?.description).not.toMatch(/agent_call/);
+  it("describe AIFINPAY_MAX_USD and AIFINPAY_DAILY_USD as lowering the built-in ceiling", () => {
+    // 2.12.1: the server has a built-in $5 / $20 ceiling and the env can only
+    // lower it. A catalog that still said "required" would send owners to set
+    // variables nobody needs; one that offered a higher default would be refused.
+    expect(smitheryProperty("AIFINPAY_MAX_USD")).toMatch(/built-in \$5/);
+    expect(smitheryProperty("AIFINPAY_DAILY_USD")).toMatch(/built-in \$20/);
+    for (const name of [
+      "AIFINPAY_MAX_USD",
+      "AIFINPAY_DAILY_USD",
+      "AIFINPAY_GATEWAY_ORIGINS",
+      "AIFINPAY_PAYMENTS_ENABLED",
+    ]) {
+      expect(smitheryProperty(name), `smithery.yaml ${name}`).not.toMatch(/required/i);
+      const entry = serverJsonEnv.find((v) => v.name === name);
+      expect(entry?.description, `server.json ${name}`).not.toMatch(/required/i);
+    }
+    expect(serverJsonEnv.find((v) => v.name === "AIFINPAY_MAX_USD")?.description).toMatch(/\$5/);
+    expect(serverJsonEnv.find((v) => v.name === "AIFINPAY_MAX_USD")?.description).not.toMatch(/agent_call/);
+    // Any default a catalog prints must be one the server accepts: never above the ceiling.
+    for (const [name, ceiling] of [
+      ["AIFINPAY_MAX_USD", 5],
+      ["AIFINPAY_DAILY_USD", 20],
+    ] as const) {
+      const value = smitheryProperty(name).match(/^\s*default:\s*"?([0-9.]+)"?\s*$/m)?.[1];
+      if (value !== undefined) expect(Number(value)).toBeLessThanOrEqual(ceiling);
+    }
   });
 
   it("do not promise settlement this server cannot perform", () => {

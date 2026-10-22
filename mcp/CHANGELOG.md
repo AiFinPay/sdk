@@ -1,6 +1,53 @@
 # Changelog
 
-## 2.12.0 — payment_setup_status shows the owner's dashboard Controls
+## 2.12.1 — payments on by default, a $5 / $20 ceiling, limits in the dashboard
+
+2.12.0 was merged (AiFinPay/sdk#124) with only the `config.ts` switch and was
+never published: with no env it refused to start, because origins were still
+required. 2.12.1 is the first release of the change. Owner decision 2026-10-20. A first payment is now init → fund → link → pay;
+nobody edits the MCP client config to turn payments on.
+
+- **On by default.** `payable_fetch` signs unless the owner sets
+  `AIFINPAY_PAYMENTS_ENABLED=0`. Only a persistent wallet signs: an ephemeral
+  one still returns the setup checklist, and an unfunded one has nothing to
+  spend.
+- **Built-in ceiling.** $5 per payment and $20 per rolling 24 hours, checked
+  in the local journal under the operation lock before any broadcast.
+  `AIFINPAY_MAX_USD` / `AIFINPAY_DAILY_USD` can only lower it; a higher value
+  stops the start with a message that points to the dashboard, never a silent
+  clip. The working limits are the dashboard Controls after `agent_claim_self`.
+- **No origin list needed, verified sites only.** `AIFINPAY_GATEWAY_ORIGINS` is
+  an optional allowlist. Unset, `payable_fetch` accepts the https origin of the
+  URL it is given and pays only if the merchant in the backend-signed quote has
+  a DNS-verified site (`GET /v1/merchants/:id` → `site_verified`) whose host is
+  that origin's host; on the AiFinPay hosted gateway, verification alone. The
+  check runs in `onPrepared`, before the journal or any broadcast, so a refusal
+  pays nothing (owner decision 2026-10-22: without it, a page the agent was
+  steered to could name any registered merchant). Set, an unlisted origin is
+  refused by name as before, and the owner's list decides.
+- **@modelcontextprotocol/sdk 1.32.1** for GHSA-22jm-h49p-29qw (high) and
+  GHSA-6prh-2h8m-c8cw; the source-cohort bootstrap lock moves with it.
+- **Path mode inferred.** Unset `AIFINPAY_GATEWAY_PATH_MODE` means `gateway`
+  (slug) for `https://gateway.aifinpay.io` and `direct` (full path) for any
+  other origin; before, a site with its own paywall needed the variable.
+- **Gas cap default.** 0.3 POL on Polygon. Another chain still needs
+  `AIFINPAY_MAX_GAS` in its own currency.
+- **No restart after init.** A server that started with an ephemeral wallet
+  opens the payment journal at `agent_reload`, which now also returns
+  `payments_ready`. A refused setting with payments on by default leaves the
+  server running read-only (`payment_setup_status` names it); an explicit
+  `AIFINPAY_PAYMENTS_ENABLED=1` or a programmatic `paymentsEnabled` still
+  refuses to start, as before.
+- **`payment_setup_status`** reports `ceiling`, each limit's `source`
+  (`default` or `env`), and a `next_step` that no longer asks for env: fund,
+  then link the dashboard, then pay. With payments off it names
+  `AIFINPAY_PAYMENTS_ENABLED=0` and the restart.
+- **`init`** prints that payments are on and the optional overrides as a
+  reference (`optional_env_example`, plus `payments` in its JSON); the old
+  `payment_env_example` is gone. `--help`, README, `server.json` and
+  `smithery.yaml` describe the variables as optional overrides.
+
+## 2.12.0 — payment_setup_status shows the owner's dashboard Controls (never published)
 
 - For a persistent EVM wallet, `payment_setup_status` reads the owner's
   dashboard Controls through the new backend route
@@ -14,7 +61,7 @@
 - Merchant ids from the response are repeated to the model only when they are
   plain identifiers; a malformed policy is reported as unknown.
 - No read on `payable_fetch`'s refusal path (it still contacts nothing), for
-  an ephemeral wallet, or on Solana. No change to signing, limits or env.
+  an ephemeral wallet, or on Solana.
 
 ## 2.11.4 — the 2.11.3 changes on the published agent 2.9.0 and skill 2.10.2
 

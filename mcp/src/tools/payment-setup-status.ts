@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import type { ToolContext } from "../server.js";
-import { validatePaymentConfig, type McpConfig } from "../config.js";
+import { DEFAULT_DAILY_USD, DEFAULT_MAX_GAS_POL, DEFAULT_MAX_USD, validatePaymentConfig, type McpConfig } from "../config.js";
 import { independentNativeUsd } from "../native-price.js";
 import { payChain, type PayChain } from "../pay-chains.js";
 import { dashboardRefusal, dashboardSentence, readDashboardPolicy, type DashboardStatus } from "../dashboard-policy.js";
@@ -22,26 +22,26 @@ import { dashboardRefusal, dashboardSentence, readDashboardPolicy, type Dashboar
 /** The smallest AIFP-1 batch the backend sells, in USD. */
 export const SMALLEST_BATCH_USD = 0.1;
 
-// The owner settings that let payable_fetch sign, as init prints them. README
-// "Enable native paid GET requests" shows the same block; a test keeps the two
-// equal and starts a server with it. The USD values are a ceiling the owner
-// sets once, not the budget: the working limits (per-payment cap, daily cap,
-// pause, allowed sites) live in the dashboard Controls once the agent is
-// claimed, and the backend enforces those on every quote and payment. The gas
-// cap is a worst case at the current Polygon gas price, not the fee: 0.05 POL
-// refused every payment at ~280 gwei.
-export const PAYMENT_ENV = Object.freeze({
-  AIFINPAY_PAYMENTS_ENABLED: "1",
+// Optional env the owner may add to narrow the defaults; none of it is needed
+// for a first payment. init prints it as a reference and README "Optional
+// overrides" shows the same block; a test keeps the two equal. The gas cap is a
+// worst case at the current Polygon gas price, not the fee: 0.05 POL refused
+// every payment at ~280 gwei, so the default is 0.3 POL.
+export const PAYMENT_OVERRIDES = Object.freeze({
   AIFINPAY_GATEWAY_ORIGINS: "https://merchant.example",
-  AIFINPAY_GATEWAY_PATH_MODE: "direct",
-  AIFINPAY_MAX_USD: "5",
-  AIFINPAY_DAILY_USD: "20",
   AIFINPAY_MAX_GAS_POL: "0.3",
 });
 
+/** How payments work with nothing set, for init's output and the tool text. */
+export const PAYMENTS_DEFAULT_NOTE =
+  `Payments are on by default within a built-in ceiling of $${DEFAULT_MAX_USD} per payment and $${DEFAULT_DAILY_USD} per 24 hours, ` +
+  "only through a persistent wallet, only to merchants registered with AiFinPay via a quote signed by its backend; an unfunded wallet spends nothing. " +
+  "AIFINPAY_MAX_USD and AIFINPAY_DAILY_USD can only lower that ceiling; AIFINPAY_PAYMENTS_ENABLED=0 turns payments off; " +
+  "AIFINPAY_GATEWAY_ORIGINS, when set, is the only list of payable sites.";
+
 /** Where the owner manages the working limits once the agent is claimed. */
 export const CONTROLS_NOTE =
-  "The USD env values are a ceiling the owner sets once, not the budget: after agent_claim_self the owner sets the working limits (per-payment cap, daily cap, pause, allowed sites) in the dashboard Controls at https://dash.aifinpay.io, and the backend enforces them on every quote and payment.";
+  "The working limits are the dashboard Controls: once the agent is linked with agent_claim_self, the owner sets the per-payment cap, daily cap, pause and allowed merchants at https://dash.aifinpay.io, and AiFinPay enforces them on every quote and payment; this server's ceiling applies underneath.";
 
 export const INIT_COMMAND = "npx @aifinpay/mcp init";
 
@@ -98,8 +98,11 @@ function lockedKeystore(config: McpConfig): string | undefined {
 
 interface Limit {
   env: string;
+  /** A value applies (built in or the owner's); false when nothing bounds this. */
   set: boolean;
   value?: string | number | string[];
+  /** "default": the built-in value; "env": the owner lowered or set it. */
+  source?: "default" | "env";
 }
 
 export interface PaymentSetupStatus {
@@ -108,6 +111,8 @@ export interface PaymentSetupStatus {
   payments_enabled: boolean;
   pay_chain: string;
   pay_asset: string;
+  /** The built-in ceiling; the env limits below can only lower it. */
+  ceiling: { max_usd: number; daily_usd: number };
   limits: { max_usd: Limit; daily_usd: Limit; gas_cap: Limit; origins: Limit };
   /** The first owner setting the server would refuse, if payments were enabled now. */
   config_error?: string;
@@ -144,10 +149,10 @@ export function paymentSetupStatusTool() {
   return {
     name: "payment_setup_status",
     description:
-      "Read-only checklist for paying with payable_fetch: wallet (persistent or ephemeral), whether the owner enabled payments, which owner limits are set, the wallet's native balance on the pay chain when readable, and next_step — exactly one instruction for the first unmet item. " +
-      "First payment in five steps: (1) GET the resource and read its 402 (merchant, price, smallest batch); (2) call payment_setup_status; (3) no persistent wallet: run `npx @aifinpay/mcp init` without a terminal, put its printed env into the MCP client config, reconnect, agent_reload; (4) tell the owner the address and the amount in `funding` (the smallest batch at today's rate plus the gas cap; if no rate could be read, ask for the batch price in the native currency at today's rate plus the gas cap and name no number), and have the owner add the payment env (AIFINPAY_PAYMENTS_ENABLED=1, origins, a USD ceiling, gas cap) and restart the server; (5) payable_fetch the URL. " +
-      "The env USD values are a one-time ceiling; after agent_claim_self the owner manages the working limits in the dashboard Controls, and this tool reads them back in `dashboard`. " +
-      "Moves nothing and signs no payment: for a persistent wallet it signs one short AiFinPay read statement to fetch the owner's Controls. Never asks the owner's limits from the model.",
+      "Read-only checklist for paying with payable_fetch: wallet (persistent or ephemeral), whether payments are on, the ceiling and each limit with its source (built-in default or the owner's env), the wallet's native balance on the pay chain when readable, the owner's dashboard Controls in `dashboard`, and next_step — exactly one instruction for the first unmet item. " +
+      "First payment in five steps: (1) GET the resource and read its 402 (merchant, price, smallest batch); (2) call payment_setup_status; (3) no persistent wallet: run `npx @aifinpay/mcp init` without a terminal, put its printed env into the MCP client config, then call agent_reload (no restart: payments are on by default); (4) tell the owner the address and the amount in `funding` (the smallest batch at today's rate plus the gas cap; if no rate could be read, ask for the batch price in the native currency at today's rate plus the gas cap and name no number), and offer the dashboard link so the owner can claim the agent (agent_claim_self) and set the working limits in Controls; (5) payable_fetch the URL. " +
+      PAYMENTS_DEFAULT_NOTE +
+      " Moves nothing and signs no payment: for a persistent wallet it signs one short AiFinPay read statement to fetch the owner's Controls. Never asks the owner's limits from the model.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: { readOnlyHint: true, openWorldHint: true, destructiveHint: false },
   };
@@ -162,20 +167,29 @@ function limit(env: string, value: string | number | string[] | undefined): Limi
   return value === undefined ? { env, set: false } : { env, set: true, value };
 }
 
-function gasLimit(config: McpConfig, chain: PayChain): Limit {
-  if (chain.name === "solana") return limit("AIFINPAY_MAX_FEE_LAMPORTS", config.maxFeeLamports);
-  if (config.maxGas !== undefined) return limit("AIFINPAY_MAX_GAS", config.maxGas);
-  return limit(chain.name === "polygon" ? "AIFINPAY_MAX_GAS_POL" : "AIFINPAY_MAX_GAS", config.maxGasPol);
+/** A USD limit with its source: the owner's env when they set it, otherwise the
+ *  built-in ceiling (a programmatic value equal to the ceiling counts as it). */
+function usdLimit(config: McpConfig, env: string, value: number | undefined, ceiling: number): Limit {
+  if (value === undefined) return { env, set: false };
+  const source = config.ownerOverrides?.includes(env) || value !== ceiling ? "env" : "default";
+  return { env, set: true, value, source };
 }
 
-/** The example block, with the owner's real origins kept when they already set some. */
-export function paymentEnvFor(config: McpConfig): Record<string, string> {
-  return {
-    ...PAYMENT_ENV,
-    ...(config.gatewayOrigins?.length ? { AIFINPAY_GATEWAY_ORIGINS: config.gatewayOrigins.join(",") } : {}),
-    ...(config.maxAmountUsd !== undefined ? { AIFINPAY_MAX_USD: String(config.maxAmountUsd) } : {}),
-    ...(config.dailyAmountUsd !== undefined ? { AIFINPAY_DAILY_USD: String(config.dailyAmountUsd) } : {}),
-  };
+function gasLimit(config: McpConfig, chain: PayChain): Limit {
+  if (chain.name === "solana") return limit("AIFINPAY_MAX_FEE_LAMPORTS", config.maxFeeLamports);
+  if (config.maxGas !== undefined) return { ...limit("AIFINPAY_MAX_GAS", config.maxGas), source: "env" };
+  if (config.maxGasPol !== undefined) return { ...limit("AIFINPAY_MAX_GAS_POL", config.maxGasPol), source: "env" };
+  // validatePaymentConfig applies the same default on Polygon; another chain names its own cap.
+  if (chain.name === "polygon") return { env: "AIFINPAY_MAX_GAS_POL", set: true, value: DEFAULT_MAX_GAS_POL, source: "default" };
+  return limit("AIFINPAY_MAX_GAS", undefined);
+}
+
+/** "the built-in ceiling" or which part of it the owner lowered. */
+function ceilingWords(limits: PaymentSetupStatus["limits"]): string {
+  const lowered = [limits.max_usd, limits.daily_usd].filter((l) => l.source === "env").map((l) => l.env);
+  return lowered.length
+    ? `the built-in $${DEFAULT_MAX_USD} / $${DEFAULT_DAILY_USD} ceiling, lowered by the owner's ${lowered.join(" and ")}`
+    : "the built-in ceiling";
 }
 
 export async function paymentSetupStatus(
@@ -195,8 +209,8 @@ export async function paymentSetupStatus(
     return unready(ctx, source, chain, (error as Error).message);
   }
   const limits = {
-    max_usd: limit("AIFINPAY_MAX_USD", config.maxAmountUsd),
-    daily_usd: limit("AIFINPAY_DAILY_USD", config.dailyAmountUsd),
+    max_usd: usdLimit(config, "AIFINPAY_MAX_USD", config.maxAmountUsd, DEFAULT_MAX_USD),
+    daily_usd: usdLimit(config, "AIFINPAY_DAILY_USD", config.dailyAmountUsd, DEFAULT_DAILY_USD),
     gas_cap: gasLimit(config, chain),
     origins: limit("AIFINPAY_GATEWAY_ORIGINS", config.gatewayOrigins),
   };
@@ -214,6 +228,7 @@ export async function paymentSetupStatus(
     payments_enabled: Boolean(config.paymentsEnabled),
     pay_chain: chain.name,
     pay_asset: config.payAsset ?? chain.native,
+    ceiling: { max_usd: DEFAULT_MAX_USD, daily_usd: DEFAULT_DAILY_USD },
     limits,
     ...(configError ? { config_error: configError } : {}),
     balance: "unknown",
@@ -228,10 +243,10 @@ export async function paymentSetupStatus(
         : `Run \`${initCommand(config.walletHome)}\` (without a terminal it prints JSON; copy its "env" into this server's env in the MCP client config), reconnect the server, then call agent_reload and payment_setup_status again.`);
     return status;
   }
-  // The amount to fund is answered before payments are enabled too: step 4
-  // ("tell the owner the address and the amount") happens with payments still
-  // off, and the 2026-10-19 quote priced $0.10 at 1.08 POL while the guide
-  // still said 0.5 — no fixed rate survives, so the tool reads one now.
+  // The amount to fund is answered whatever the env says: step 4 ("tell the
+  // owner the address and the amount") must not wait on it, and the 2026-10-19
+  // quote priced $0.10 at 1.08 POL while the guide still said 0.5 — no fixed
+  // rate survives, so the tool reads one now.
   const gasCap =
     status.limits.gas_cap.set && Number(status.limits.gas_cap.value) > 0 ? String(status.limits.gas_cap.value) : undefined;
   const rpc = config.rpcUrl ?? chain.defaultRpc;
@@ -243,20 +258,21 @@ export async function paymentSetupStatus(
   }
   const withDashboard = (text: string) =>
     status.dashboard ? `${text} ${dashboardSentence(status.dashboard)}` : text;
-  if (!config.paymentsEnabled || configError) {
-    const block = JSON.stringify(paymentEnvFor(config));
+  // The env is read once, at start. An agent that saw agent_reload succeed and
+  // payments stay off concluded the settings were lost, and stopped: say what
+  // the owner changes and that the client must restart the server after.
+  const restart =
+    "Env is read only when the server starts and agent_reload does not read it: once the owner has saved the change, have the client restart the aifinpay MCP server (restart the client, or disable and re-enable the server), then call payment_setup_status again.";
+  if (!config.paymentsEnabled) {
     status.next_step = withDashboard(
-      (configError && config.paymentsEnabled
-        ? `Owner setting refused: ${configError}. `
-        : `Payments are off until the owner enables them. `) +
-      (status.funding ? `${status.funding.advice} ` : "") +
-      `Have the owner add this to the server's env in the MCP client config (their real site origin, not the example; ${CONTROLS_NOTE}), then reconnect: ${block}` +
-      (configError && !config.paymentsEnabled ? ` Currently missing: ${configError}` : "") +
-      // The env is read once, at start. An agent that saw agent_reload succeed
-      // and payments stay off concluded the settings were lost, and stopped.
-      (config.paymentsEnabled
-        ? ""
-        : ` If the owner has already saved these settings, this server has not been restarted since: agent_reload does not read env. Have the client restart the aifinpay MCP server, then call payment_setup_status again.`)
+      `Payments are off: the owner set AIFINPAY_PAYMENTS_ENABLED=0 for this server (they are on by default, within ${ceilingWords(limits)}). ` +
+        `To turn them on, the owner removes that variable from the server's env in the MCP client config. ${restart} ${CONTROLS_NOTE}`
+    );
+    return status;
+  }
+  if (configError) {
+    status.next_step = withDashboard(
+      `Owner setting refused: ${configError}. The owner fixes it in the server's env in the MCP client config. ` + restart
     );
     return status;
   }
@@ -284,9 +300,12 @@ export async function paymentSetupStatus(
     }
   }
   status.ready = true;
+  const sites = config.gatewayOrigins?.length
+    ? `on ${config.gatewayOrigins.join(" or ")}`
+    : "on any https site (the owner can narrow this with AIFINPAY_GATEWAY_ORIGINS)";
   status.next_step = withDashboard(
-    `Ready. Call payable_fetch({"url": "<HTTPS resource on ${config.gatewayOrigins!.join(" or ")}>"}); ` +
-      `it pays at most $${config.maxAmountUsd} per call and $${config.dailyAmountUsd} per 24 hours, with gas capped at ${status.limits.gas_cap.value} ${chain.native}. ` +
+    `Ready. Call payable_fetch({"url": "<HTTPS resource ${sites}>"}); ` +
+      `it pays at most $${config.maxAmountUsd} per call and $${config.dailyAmountUsd} per 24 hours (${ceilingWords(limits)}), with gas capped at ${status.limits.gas_cap.value} ${chain.native}, and only merchants registered with AiFinPay are ever paid. ` +
       CONTROLS_NOTE +
       (status.balance === "unknown"
         ? ` The wallet must hold the batch price plus up to the gas cap in ${chain.native} on ${chain.label}` +
@@ -355,9 +374,10 @@ function unready(ctx: ToolContext, source: string, chain: PayChain, error: strin
     payments_enabled: Boolean(ctx.config.paymentsEnabled),
     pay_chain: String(ctx.config.payChain),
     pay_asset: ctx.config.payAsset ?? chain.native,
+    ceiling: { max_usd: DEFAULT_MAX_USD, daily_usd: DEFAULT_DAILY_USD },
     limits: {
-      max_usd: limit("AIFINPAY_MAX_USD", ctx.config.maxAmountUsd),
-      daily_usd: limit("AIFINPAY_DAILY_USD", ctx.config.dailyAmountUsd),
+      max_usd: usdLimit(ctx.config, "AIFINPAY_MAX_USD", ctx.config.maxAmountUsd, DEFAULT_MAX_USD),
+      daily_usd: usdLimit(ctx.config, "AIFINPAY_DAILY_USD", ctx.config.dailyAmountUsd, DEFAULT_DAILY_USD),
       gas_cap: limit("AIFINPAY_MAX_GAS", ctx.config.maxGas),
       origins: limit("AIFINPAY_GATEWAY_ORIGINS", ctx.config.gatewayOrigins),
     },
