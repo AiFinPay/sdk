@@ -4,7 +4,7 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Version **2.12.1** is prepared in this checkout, on the published agent 2.9.0
+Version **2.12.2** is prepared in this checkout, on the published agent 2.9.0
 and canonical skill 2.10.2 (AiFinPay/skill 48285cf, published 2026-10-19). The separate canonical producer's final immutable
 source pin is a required handoff, not a moving-branch substitution.
 The published baseline checked2026-10-04 was MCP2.5.0. Package publication and
@@ -227,10 +227,13 @@ client missing from this table can be reported with its exact name.
 ## Link the agent to its owner's dashboard
 
 The owner sees the agent's balance, payments and receipts at
-https://dash.aifinpay.io → My Agents. There, **Claim via MCP** generates a
-one-time URL; pass it to `agent_claim_self`. The tool contacts only AiFinPay
-origins, signs only the claim challenge for this agent's own address, and moves
-no funds. The owner-selected payment family must be confirmed successfully;
+https://dash.aifinpay.io → My Agents. There, **Link an agent → Claim via MCP**
+generates a one-time URL; pass it to `agent_claim_self`, which redeems it with
+a POST to `/api/auth/claim`. Opening the URL in a browser, or pasting it into a
+chat that has no AiFinPay MCP, links nothing; such an agent is linked by signed
+message in My Agents instead, as is an account with 2FA on. The tool contacts
+only AiFinPay origins, signs only the claim challenge for this agent's own
+address, and moves no funds. The owner-selected payment family must be confirmed successfully;
 the second wallet is best-effort. Use the selected wallet's Fund panel for
 available networks and assets; binding does not activate a disabled network.
 Offer this to the owner after `init` (step 4 above): from then on the owner

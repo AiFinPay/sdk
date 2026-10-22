@@ -6,16 +6,24 @@ import { payChain } from "../pay-chains.js";
  * autonomously by signing a claim challenge with its own key.
  *
  * Flow (executed inside the tool, no copy-paste between UIs):
- *   1. User signs in to /login on aifinpay.io → gets a magic-link
- *      email with URL like `https://aifinpay.io/api/auth/verify?token=…`
- *   2. User pastes that URL to the agent: "claim yourself on my account
- *      using this magic link"
- *   3. Agent calls this tool with the magic_link_url
- *   4. Tool hits the magic link → server issues session cookie
+ *   1. The owner opens dash.aifinpay.io → My Agents → Link an agent →
+ *      Claim via MCP and generates a one-time URL (POST /api/me/claim-url),
+ *      e.g. `https://dash.aifinpay.io/api/auth/verify?token=…`
+ *   2. The owner gives that URL to the agent: "link yourself to my account"
+ *   3. Agent calls this tool with the URL as magic_link_url
+ *   4. Tool POSTs the token to /api/auth/claim → server answers with a
+ *      ten-minute agent-claim grant cookie (not a session)
  *   5. Tool requests a challenge for the owner-selected payment family
  *   6. Tool signs only that address's claim (EIP-191 or Ed25519)
  *   7. Tool POSTs to /api/me/agents/claim → server verifies signature →
  *      agent attached to user's watchlist
+ *
+ * Step 4 used to GET the URL. The backend redeems a claim link on that GET
+ * only when the request carries no browser Sec-Fetch headers, so a runtime
+ * whose fetch adds them was sent to the confirm page and linked nothing.
+ * The POST route is told apart by its own path and the link's flow. A
+ * backend without it (404/405) still gets the GET, so this works against any
+ * deployment.
  *
  * Optional `label` field gives the agent a friendly name in the user's UI.
  *
@@ -32,8 +40,9 @@ export function agentClaimSelfTool() {
     description:
       "Link this agent to its owner's AiFinPay dashboard, so the owner sees the agent's " +
       "balance, payments and receipts. Offer this after creating a wallet. The owner " +
-      "generates a one-time URL at https://dash.aifinpay.io → My Agents → Claim via MCP " +
-      "and pastes it here; the tool signs only an AiFinPay claim challenge for this " +
+      "generates a one-time URL at https://dash.aifinpay.io → My Agents → Link an agent → " +
+      "Claim via MCP and gives it to you; pass it here. Do not open the URL in a browser " +
+      "tool: that links nothing. The tool signs only an AiFinPay claim challenge for this " +
       "agent's own address and moves no funds.",
     inputSchema: {
       type: "object",
@@ -41,7 +50,7 @@ export function agentClaimSelfTool() {
         magic_link_url: {
           type: "string",
           description:
-            "The one-time URL from My Agents → Claim via MCP. Looks like " +
+            "The one-time URL from My Agents → Link an agent → Claim via MCP. Looks like " +
             "https://dash.aifinpay.io/api/auth/verify?token=… — single use, " +
             "expires 15 minutes after it was generated.",
         },
@@ -125,17 +134,48 @@ function challengeIsWellFormed(message: unknown, address: string): boolean {
   return /^[0-9a-f]{32}$/.test(message.slice(prefix.length));
 }
 
+/**
+ * The token of a one-time claim URL. Accepts the shape the dashboard hands
+ * out (`/api/auth/verify?token=<hex>`) and `/api/auth/claim/<hex>`. The token
+ * is sent in a POST body, never back in a URL.
+ */
+function claimToken(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  const fromQuery =
+    parsed.pathname.replace(/\/+$/, "") === "/api/auth/verify" ? parsed.searchParams.get("token") : null;
+  const fromPath = parsed.pathname.match(/^\/api\/auth\/claim\/([^/]+)\/?$/)?.[1] ?? null;
+  const token = fromQuery ?? fromPath;
+  return token && /^[A-Za-z0-9_-]{1,256}$/.test(token) ? token : null;
+}
+
+/** Why the link gave no grant, without echoing the token or server text. */
+function linkRefused(status: number, code: string | null) {
+  const text =
+    code === "claim_link_2fa_account"
+      ? "This AiFinPay account has two-factor sign-in on, so a one-time URL cannot link an agent. " +
+        "Ask the owner to link this wallet by signed message in My Agents (call agent_address for the address)."
+      : `The one-time URL gave no claim grant (HTTP ${status}). It works once and for 15 minutes; ` +
+        "ask the owner for a new one in My Agents → Link an agent → Claim via MCP.";
+  return { isError: true, content: [{ type: "text", text }] };
+}
+
 export async function runAgentClaimSelf(ctx: ToolContext, args: Record<string, unknown>) {
   const magicLinkUrl = typeof args.magic_link_url === "string" ? args.magic_link_url : "";
   const label = typeof args.label === "string" ? args.label : null;
 
-  if (!magicLinkUrl || !magicLinkUrl.includes("/api/auth/verify?token=")) {
+  const token = claimToken(magicLinkUrl);
+  if (!magicLinkUrl || !token) {
     return {
       isError: true,
       content: [
         {
           type: "text",
-          text: "magic_link_url required — should look like https://aifinpay.io/api/auth/verify?token=…",
+          text: "magic_link_url required — should look like https://dash.aifinpay.io/api/auth/verify?token=…",
         },
       ],
     };
@@ -158,26 +198,37 @@ export async function runAgentClaimSelf(ctx: ToolContext, args: Record<string, u
     };
   }
 
-  // ── 1. Establish session by hitting the magic link ─────────────────
+  // ── 1. Redeem the link for a claim grant ───────────────────────────
   let setCookie: string | null = null;
   try {
-    const res = await fetch(magicLinkUrl, { redirect: "manual" });
-    setCookie = res.headers.get("set-cookie");
-    if (!setCookie) {
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: `Magic link did not return a session cookie (HTTP ${res.status}). Link may be expired or already used.`,
-          },
-        ],
-      };
+    const res = await fetch(`${apiBase}/api/auth/claim`, {
+      method: "POST",
+      redirect: "error", // a redirect would leave the origin we vetted
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+    if (res.status === 404 || res.status === 405) {
+      // A backend from before /api/auth/claim: the URL itself is the claim.
+      const legacy = await fetch(magicLinkUrl, { redirect: "manual" });
+      setCookie = legacy.headers.get("set-cookie");
+      if (!setCookie) return linkRefused(legacy.status, null);
+    } else {
+      setCookie = res.headers.get("set-cookie");
+      if (!res.ok || !setCookie) {
+        let code: string | null = null;
+        try {
+          const body = (await res.json()) as { error?: unknown };
+          code = typeof body?.error === "string" ? body.error : null;
+        } catch {
+          /* not JSON */
+        }
+        return linkRefused(res.status, code);
+      }
     }
   } catch {
     return {
       isError: true,
-      content: [{ type: "text", text: "Failed to fetch magic link; no claim was completed." }],
+      content: [{ type: "text", text: "Failed to reach AiFinPay to redeem the link; no claim was completed." }],
     };
   }
   // Some setups split multiple cookies; grab the session one we care about.
