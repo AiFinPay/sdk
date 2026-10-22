@@ -46,6 +46,65 @@ costs money if you get it wrong.
 
 ---
 
+## 1a. Start in shadow — see the traffic before you charge for it
+
+The first step should not touch the money path. Add one option and the gate
+**observes**: it classifies every request, emits the same events it would in
+enforce — who asked, which route, what the answer would have been — and then
+serves the request anyway. No 402, no 403, no 503, nothing metered for a call
+it would have refused. With the reporter wired (below), the dashboard shows
+which operators hit your site within minutes; when the numbers say it is worth
+it, flip the one word.
+
+```js
+app.use(
+  "/articles",
+  aifpGate({
+    merchantId: process.env.AIFP_MERCHANT_ID,
+    registry,
+    shouldCharge: knownAiAgent,
+    mode: "shadow", // → "enforce" when you are ready to charge
+    onEvent: reporter.onEvent,
+  })
+);
+```
+
+What shadow changes, exactly:
+
+- A request the gate **would refuse** is served with `AIFP-Mode: shadow` and
+  `AIFP-Shadow-Status: 402` (or `403`, `503`); your handler gets
+  `req.aifp.mode === "shadow"` and the refusal in `req.aifp.shadow`
+  (`status`, `error`, `detail`, the `weight` it would have cost).
+- A request the gate **would serve** — a valid receipt, an open route, an
+  exempt human reader — is served exactly as in enforce, metered and all,
+  plus the `AIFP-Mode: shadow` header. Shadow only turns refusals into
+  pass-throughs.
+- The event stream is **identical** to enforce, request for request (the test
+  suite runs the same script through both and compares). The reporter sends
+  the same `402` / `serve` events to the same endpoint, so the Funnel and the
+  per-operator counts mean the same thing in both modes.
+- **Omitting `mode` is enforce.** Nothing in this version changes what an
+  existing install answers; a typo (`"Shadow"`, `"observe"`) throws at
+  construction instead of guessing.
+
+Not on Node, or not ready to touch the app? The same observe-only step exists
+as a [Cloudflare Worker](../examples/cloudflare-worker-shadow) and as an
+[nginx log shipper](../examples/nginx-shadow), both built on
+`@aifinpay/gate/edge` — the dependency-free part of this package
+(`classifyAgent`, `matchResource`, `scopeCovers`) for runtimes without Node
+built-ins. Reporting v2 observes actual HTTP outcomes and therefore records no
+challenge for a shadow pass-through; shadow reports through `onEvent` and
+`createGateReporter`.
+
+**On Cloudflare?** Since 2026-09-15 a zone that ticks "I monetize pages that
+serve ads" gets _AI Agents: Block on pages with ads_ by default. A blocked
+agent never reaches the gate, so the shadow report under-counts and, later, a
+paying agent is refused at the edge before it can see your 402. Set the AI
+Crawl Control policy to _Allow_ for the sections you observe or charge; our
+own agents identify as `aifinpay-agent` and must not be blocked either.
+
+---
+
 ## 1b. Next.js, and the two ways it silently earns you nothing
 
 Next.js runs middleware only on paths matched by `config.matcher`, and the gate
@@ -358,16 +417,17 @@ genuinely more expensive than its tier.
 
 ### Options worth knowing
 
-| Option              | Default       | Why you would change it                                                                                           |
-| ------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `store`             | `MemoryStore` | Anything beyond one process. See §3.                                                                              |
-| `registry`          | —             | Path-matched pricing from your registered endpoints.                                                              |
-| `onStoreError`      | `"closed"`    | `"open"` trades metering for availability, visibly.                                                               |
-| `onEvent`           | —             | `402` / `serve` / `403` / `meter_error` / `pricing_unavailable` for your own metrics; each carries who asked (below). |
-| `allow`             | —             | Your own veto, evaluated **before** any unit is metered, so a refused call costs the agent nothing.               |
-| `jwks`              | fetched       | Pin the key set; removes all runtime network dependency on us.                                                    |
-| `requireAgentMatch` | `false`       | Compares `AIFP-Agent-Id` to the receipt subject. Anti-accident, not anti-theft — the header is not authenticated. |
-| `refundOnError`     | `false`       | Give the call's units back on a 5xx (Express adapter). Read the warning below first.                              |
+| Option              | Default       | Why you would change it                                                                                                           |
+| ------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `mode`              | `"enforce"`   | `"shadow"` observes: same decisions and events, every request served, nothing refused or metered for a would-be refusal. See §1a. |
+| `store`             | `MemoryStore` | Anything beyond one process. See §3.                                                                                              |
+| `registry`          | —             | Path-matched pricing from your registered endpoints.                                                                              |
+| `onStoreError`      | `"closed"`    | `"open"` trades metering for availability, visibly.                                                                               |
+| `onEvent`           | —             | `402` / `serve` / `403` / `meter_error` / `pricing_unavailable` for your own metrics; each carries who asked (below).             |
+| `allow`             | —             | Your own veto, evaluated **before** any unit is metered, so a refused call costs the agent nothing.                               |
+| `jwks`              | fetched       | Pin the key set; removes all runtime network dependency on us.                                                                    |
+| `requireAgentMatch` | `false`       | Compares `AIFP-Agent-Id` to the receipt subject. Anti-accident, not anti-theft — the header is not authenticated.                 |
+| `refundOnError`     | `false`       | Give the call's units back on a 5xx (Express adapter). Read the warning below first.                                              |
 
 Every event also says **who asked**, normalised: `operator` (`openai`,
 `anthropic`, `perplexity`, `google`, `microsoft`, `meta`, `bytedance`, `apple`,

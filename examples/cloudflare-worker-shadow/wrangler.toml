@@ -1,0 +1,24 @@
+# AiFinPay shadow worker — observe AI-agent traffic, change nothing.
+#
+#   npm install
+#   npx wrangler secret put AIFP_MERCHANT_ID       # mrch_…
+#   npx wrangler secret put AIFP_MERCHANT_SECRET   # the server-side merchant secret
+#   npx wrangler deploy
+#
+# Then add a route below (or in the Cloudflare dashboard) so the worker runs in
+# front of the pages you want to observe.
+name = "aifinpay-shadow"
+main = "src/worker.mjs"
+compatibility_date = "2026-10-01"
+
+# routes = [
+#   { pattern = "www.example.com/*", zone_name = "example.com" },
+# ]
+
+[vars]
+# Comma-separated registered patterns, exactly as they appear in Resources in
+# the AiFinPay dashboard. "/*" is one pattern covering the whole site; register
+# it there too, or list the sections you care about ("/articles/*,/api/*").
+# Requests outside every pattern are not reported.
+AIFP_RESOURCES = "/*"
+# AIFP_API_BASE = "https://api.aifinpay.io"

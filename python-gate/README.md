@@ -104,10 +104,41 @@ The store increments atomically and compares **after** the increment, so
 concurrent requests can never overspend a batch; the counter's TTL is set once
 and expires with the receipt.
 
+## Start in shadow — see the traffic before you charge for it
+
+`Gate(..., mode="shadow")` makes exactly the decisions enforce makes and emits
+exactly the events enforce emits — who asked, which route, what the answer
+would have been — and then serves the request anyway: no 402, no 403, no 503,
+nothing metered for a call it would have refused. Wire a `GateReporter` and
+the dashboard shows which operators hit your site; flip to `mode="enforce"`
+when the numbers say it is worth it.
+
+```python
+gate = Gate("mrch_…", routes=[Route("/articles/*")], should_charge=known_ai_agent,
+            mode="shadow", on_event=reporter.on_event)   # → "enforce" when ready
+```
+
+- A request the gate **would refuse** is served with `AIFP-Mode: shadow` and
+  `AIFP-Shadow-Status: 402` (or `403`, `503`); the app sees
+  `aifp["mode"] == "shadow"` and the refusal in `aifp["shadow"]` (`status`,
+  `error`, `detail`, the `weight` it would have cost).
+- A request the gate **would serve** — a valid receipt, an open route, an
+  exempt human reader — is served exactly as in enforce, metered and all,
+  plus the `AIFP-Mode: shadow` header.
+- The event stream is identical to enforce, request for request; the parity
+  fixture records both the responses and the events of every Node scenario.
+- Omitting `mode` is enforce; an unknown value raises at construction.
+
+Not on Python, or not ready to touch the app? See the Cloudflare Worker and
+nginx log-shipper templates in `examples/` of the SDK repository. On
+Cloudflare, check the zone's AI Crawl Control policy first: the 2026-09-15
+default *Block on pages with ads* cuts agents off before they reach a gate.
+
 ## Options
 
 | Option | Default | |
 |---|---|---|
+| `mode` | `"enforce"` | `"shadow"` observes: same decisions and events, every request served, nothing refused or metered for a would-be refusal. |
 | `should_charge` | everyone pays | `known_ai_agent` for content sites: human browsers read free and never see a 402; self-identifying AI crawlers and anything speaking AIFP pay. A predicate that raises charges. |
 | `allow(ctx)` | — | Your veto after verification, before metering (a refused call costs nothing). Return `False` → 403. |
 | `on_store_error` | `"closed"` | `"open"` serves un-metered calls when the store is down (`AIFP-Meter: degraded`). |

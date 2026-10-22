@@ -28,6 +28,12 @@ DETAIL_QUOTA_EXHAUSTED = "quota exhausted — prepay the next batch"
 DETAIL_RECEIPT_EXPIRED = "receipt expired — prepay a new batch"
 DETAIL_VERIFY_FAILED = "receipt verification failed (signature/issuer/audience)"
 HEADER_QUOTA_REMAINING = "AIFP-Quota-Remaining"
+# On every response from a gate in shadow mode. Enforce sends no such header —
+# its 402 says what it is.
+HEADER_MODE = "AIFP-Mode"
+# On a shadow response the gate would have refused: the status it decided on.
+HEADER_SHADOW_STATUS = "AIFP-Shadow-Status"
+MODES = ("shadow", "enforce")
 TIERS = ("standard", "complex", "premium")
 
 
@@ -120,6 +126,7 @@ class Gate:
         resource: Optional[str] = None,
         tier: str = "standard",
         weight: Optional[int] = None,
+        mode: str = "enforce",
         routes: Optional[Sequence[Route]] = None,
         store: Any = None,
         issuer: str = DEFAULT_ISSUER,
@@ -151,6 +158,11 @@ class Gate:
             raise ValueError("replay must be auto, always or off")
         if on_store_error not in ("closed", "open"):
             raise ValueError("on_store_error must be closed or open")
+        # "Shadow" with a capital, "observe", "off": a mode the gate does not
+        # know must not silently become enforce (a 402 to traffic the merchant
+        # meant to watch) or shadow (a paywall that stops charging).
+        if mode not in MODES:
+            raise ValueError(f'mode must be "shadow" or "enforce": {mode!r}')
         # As Route does: an unknown tier would price the mount as standard.
         if tier not in TIERS:
             raise ValueError(f"tier must be one of {TIERS}: {tier!r}")
@@ -158,6 +170,13 @@ class Gate:
         self.resource = resource
         self.tier = tier
         self.mount_weight = weight if isinstance(weight, int) and weight > 0 else weight_for_tier(tier)
+        # "enforce" (the default, and what every install without a mode has
+        # always done) answers 402 / 403 / 503. "shadow" makes exactly the same
+        # decision and emits exactly the same event, then serves the request
+        # anyway: the money path is untouched, so a site can watch its agent
+        # traffic in the dashboard before it charges. Nothing flips a live
+        # paywall into shadow.
+        self.mode = mode
         self.routes: Optional[List[Route]] = list(routes) if routes is not None else None
         self.store = store if store is not None else MemoryStore()
         self.key_prefix = key_prefix
@@ -248,15 +267,34 @@ class Gate:
         except Exception:  # noqa: BLE001 — a throwing veto is "no opinion"
             return True
 
+    def _refuse(self, resource: str, weight: int, result: GateResult, agent: Optional[str]) -> GateResult:
+        """Shadow: by the time a refusal is built its event has already been
+        emitted, so the refusal is kept as ``aifp["shadow"]`` and the request
+        is served instead. Same event stream as enforce; a 200 wherever
+        enforce would have sent 402, 403 or 503. Nothing is metered — a call
+        enforce refuses never consumed a unit either."""
+        if self.mode != "shadow":
+            return result
+        body = result.body or {}
+        return GateResult(True, 200, {HEADER_MODE: "shadow", HEADER_SHADOW_STATUS: str(result.status)}, aifp={
+            "agent": agent, "receipt_id": "", "resource": resource, "weight": 0,
+            "unit_quota": 0, "used": 0, "remaining": 0, "mode": "shadow",
+            "shadow": {"status": result.status, "error": body.get("error"), "detail": body.get("detail"),
+                       "weight": weight},
+        })
+
     def _challenge(self, resource: str, weight: int, tier: str, detail: Optional[str] = None, *,
-                   who: Dict[str, Any]) -> GateResult:
+                   who: Dict[str, Any], agent: Optional[str] = None) -> GateResult:
         self._emit({"kind": "402", "resource": resource, "weight": weight, "detail": detail}, who)
         body = build_challenge(self.merchant_id, resource, tier, weight, detail=detail, api_base=self.api_base)
-        return GateResult(False, 402, _json_headers(), body=body)
+        return self._refuse(resource, weight, GateResult(False, 402, _json_headers(), body=body), agent)
 
-    def _forbid(self, resource: str, weight: int, detail: str, *, who: Dict[str, Any]) -> GateResult:
+    def _forbid(self, resource: str, weight: int, detail: str, *, who: Dict[str, Any],
+                agent: Optional[str] = None) -> GateResult:
         self._emit({"kind": "403", "resource": resource, "weight": weight, "detail": detail}, who)
-        return GateResult(False, 403, _json_headers(), body={"error": "AIFP-403", "detail": detail})
+        return self._refuse(resource, weight,
+                            GateResult(False, 403, _json_headers(), body={"error": "AIFP-403", "detail": detail}),
+                            agent)
 
     def _free(self, resource: str, agent: Optional[str], mode: str, paywall_header: str) -> GateResult:
         return GateResult(True, 200, {"AIFP-Paywall": paywall_header}, aifp={
@@ -268,6 +306,15 @@ class Gate:
 
     def decide(self, req: GateRequest) -> Optional[GateResult]:
         """``None`` means this gate does not cover the path (routes mode only)."""
+        result = self._decide(req)
+        # Every answer from a shadow gate says so — a served call as much as a
+        # would-be refusal — so a site owner, and the AiFinPay site check, can
+        # tell "gate installed, observing" from "no gate" on a 200.
+        if result is not None and result.ok and self.mode == "shadow":
+            result.headers = {**result.headers, HEADER_MODE: "shadow"}
+        return result
+
+    def _decide(self, req: GateRequest) -> Optional[GateResult]:
         path = req.path
         # Who the request says it is: normalised values, never the raw
         # User-Agent, IP or headers. Upgraded to verified only once the receipt
@@ -290,7 +337,7 @@ class Gate:
         if route is not None and not route.paywall:
             if not self._allowed({"path": path, "resource": resource, "weight": weight,
                                   "agent": agent_header, "receipt_id": None}):
-                return self._forbid(resource, weight, "blocked by merchant policy", who=who)
+                return self._forbid(resource, weight, "blocked by merchant policy", who=who, agent=agent_header)
             self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": agent_header}, who)
             return self._free(resource, agent_header, "open", "off")
 
@@ -304,28 +351,28 @@ class Gate:
             if not charge:
                 if not self._allowed({"path": path, "resource": resource, "weight": weight,
                                       "agent": agent_header, "receipt_id": None}):
-                    return self._forbid(resource, weight, "blocked by merchant policy", who=who)
+                    return self._forbid(resource, weight, "blocked by merchant policy", who=who, agent=agent_header)
                 self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": agent_header,
                             "exempt": True}, who)
                 return self._free(resource, agent_header, "exempt", "exempt")
 
         token = req.header("AIFP-Receipt")
         if not token:
-            return self._challenge(resource, weight, tier, who=who)
+            return self._challenge(resource, weight, tier, who=who, agent=agent_header)
 
         kind, payload = self.verify(token)
         if kind != "ok":
             if kind == "expired":
-                return self._challenge(resource, weight, tier, DETAIL_RECEIPT_EXPIRED, who=who)
+                return self._challenge(resource, weight, tier, DETAIL_RECEIPT_EXPIRED, who=who, agent=agent_header)
             if kind == "jwks_unavailable":
                 # Fail CLOSED: failing open would make a paid API free for the
                 # length of an AiFinPay outage.
                 self._emit({"kind": "meter_error", "resource": resource, "weight": weight, "detail": payload}, who)
-                return GateResult(False, 503, _json_headers(**{"Retry-After": "30"}), body={
+                return self._refuse(resource, weight, GateResult(False, 503, _json_headers(**{"Retry-After": "30"}), body={
                     "error": "AIFP-503-METER",
                     "detail": "receipt verification is temporarily unavailable — retry shortly",
-                })
-            return self._forbid(resource, weight, DETAIL_VERIFY_FAILED, who=who)
+                }), agent_header)
+            return self._forbid(resource, weight, DETAIL_VERIFY_FAILED, who=who, agent=agent_header)
 
         # Signature, issuer and audience verified: an AIFP agent, proven. What
         # follows — a refusal, an exhausted batch, a serve — reports verified.
@@ -337,26 +384,26 @@ class Gate:
         if typ is not None and typ != "quota":
             return self._forbid(
                 resource, weight, f'receipt type "{typ}" is not spendable — this endpoint needs a quota receipt',
-                who=who,
+                who=who, agent=agent_header,
             )
         receipt_id = payload.get("receipt_id")
         if not isinstance(receipt_id, str) or receipt_id == "":
-            return self._forbid(resource, weight, "receipt carries no receipt_id and cannot be metered", who=who)
+            return self._forbid(resource, weight, "receipt carries no receipt_id and cannot be metered", who=who, agent=agent_header)
 
         if not scope_covers(payload.get("scope"), payload.get("resource"), scope_path):
             return self._forbid(
                 resource, weight,
                 f"receipt is scoped to {payload.get('resource')} ({payload.get('scope') or 'exact'}), not {scope_path}",
-                who=who,
+                who=who, agent=agent_header,
             )
 
         sub = payload.get("sub")
         if self.require_agent_match and agent_header and sub and agent_header != sub:
-            return self._forbid(resource, weight, "AIFP-Agent-Id does not match the receipt subject", who=who)
+            return self._forbid(resource, weight, "AIFP-Agent-Id does not match the receipt subject", who=who, agent=agent_header)
 
         if not self._allowed({"path": path, "resource": resource, "weight": weight,
                               "agent": sub, "receipt_id": receipt_id}):
-            return self._forbid(resource, weight, "blocked by merchant policy", who=who)
+            return self._forbid(resource, weight, "blocked by merchant policy", who=who, agent=agent_header)
 
         # Limit in billing units; a legacy request `quota` converts at the tier
         # weight it was priced for.
@@ -369,7 +416,7 @@ class Gate:
         # everything, so "used > limit" would never refuse and the batch would
         # never run out.
         if not (limit == limit and math.isfinite(limit)) or limit <= 0:
-            return self._forbid(resource, weight, "receipt carries no usable unit_quota", who=who)
+            return self._forbid(resource, weight, "receipt carries no usable unit_quota", who=who, agent=agent_header)
         # The counter dies with the receipt — never later, never earlier. The
         # receipt lives until the verifier stops accepting it, exp plus the clock
         # tolerance; a counter ending at exp let a spent batch start again from
@@ -380,14 +427,14 @@ class Gate:
         if self.replay == "always" or (self.replay == "auto" and limit <= 1):
             nonce = payload.get("nonce")
             if not isinstance(nonce, str) or nonce == "":
-                return self._forbid(resource, weight, "single-use receipt carries no nonce", who=who)
+                return self._forbid(resource, weight, "single-use receipt carries no nonce", who=who, agent=agent_header)
             nonce_key = f"{self.key_prefix}nonce:{nonce}"
             try:
                 seen = self.store.incr_by(nonce_key, 1, ttl_ms)
             except Exception as e:  # noqa: BLE001
-                return self._store_failure(e, resource, weight, payload, limit, who=who)
+                return self._store_failure(e, resource, weight, payload, limit, who=who, agent=agent_header)
             if seen > 1:
-                return self._forbid(resource, weight, "receipt already spent (single-use)", who=who)
+                return self._forbid(resource, weight, "receipt already spent (single-use)", who=who, agent=agent_header)
 
         used_key = f"{self.key_prefix}used:{receipt_id}"
         try:
@@ -398,7 +445,7 @@ class Gate:
             # Open, the call is served, so the nonce stays spent.
             if self.on_store_error != "open":
                 self._undo(nonce_key, 1)
-            return self._store_failure(e, resource, weight, payload, limit, who=who)
+            return self._store_failure(e, resource, weight, payload, limit, who=who, agent=agent_header)
 
         # Post-increment compare: whichever request crosses the limit is the one
         # refused, exactly once. The refused call then takes back its own
@@ -408,7 +455,7 @@ class Gate:
         if used > limit:
             self._undo(used_key, weight)
             self._undo(nonce_key, 1)
-            return self._challenge(resource, weight, tier, DETAIL_QUOTA_EXHAUSTED, who=who)
+            return self._challenge(resource, weight, tier, DETAIL_QUOTA_EXHAUSTED, who=who, agent=agent_header)
 
         self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": sub, "receipt_id": receipt_id}, who)
         remaining = _int_if_whole(limit - used)
@@ -418,7 +465,7 @@ class Gate:
         })
 
     def _store_failure(self, e: Exception, resource: str, weight: int, payload: Dict[str, Any],
-                       limit: float, *, who: Dict[str, Any]) -> GateResult:
+                       limit: float, *, who: Dict[str, Any], agent: Optional[str] = None) -> GateResult:
         self._emit({"kind": "meter_error", "resource": resource, "weight": weight, "detail": str(e)}, who)
         if self.on_store_error == "open":
             # Availability chosen over metering: served and NOT counted.
@@ -427,9 +474,9 @@ class Gate:
                 "weight": weight, "unit_quota": _int_if_whole(limit), "used": 0,
                 "remaining": _int_if_whole(limit), "mode": "paid",
             })
-        return GateResult(False, 503, _json_headers(**{"Retry-After": "5"}), body={
+        return self._refuse(resource, weight, GateResult(False, 503, _json_headers(**{"Retry-After": "5"}), body={
             "error": "AIFP-503-METER", "detail": "quota store unavailable — retry shortly",
-        })
+        }), agent)
 
     def refund(self, aifp: Dict[str, Any]) -> None:
         """Give back the units a call consumed after the handler failed. Best effort."""

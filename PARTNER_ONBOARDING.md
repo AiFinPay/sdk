@@ -19,6 +19,38 @@ revenue-share bookkeeping, no contracts to sign, no custodial arrangement.
 > [`aifinpay-gate`](./python-gate/README.md) (Python). Solana settlement is
 > disabled in the current deployment registry.
 
+## Start in shadow — the step that does not touch the money path
+
+Before anything is charged, see who is already coming. **Shadow mode**
+classifies every request, reports gate events to your dashboard (which
+operators — OpenAI, Anthropic, Perplexity, … — hit which sections, how often)
+and serves every request exactly as today: no 402, no 403, nothing blocked,
+nothing metered. Pick the one-step install for your stack; all of them are
+shadow by default, and switching to charging is one explicit change later.
+
+| Your stack | One step | Where |
+|---|---|---|
+| Node / Express | `aifpGate({ …, mode: "shadow", onEvent: reporter.onEvent })` | [`@aifinpay/gate` §1a](./gate/README.md#1a-start-in-shadow--see-the-traffic-before-you-charge-for-it) |
+| Python (FastAPI, Flask, Django) | `Gate(…, mode="shadow", on_event=reporter.on_event)` | [`aifinpay-gate`](./python-gate/README.md#start-in-shadow--see-the-traffic-before-you-charge-for-it) |
+| Site on Cloudflare | `wrangler deploy` of the observe-only worker | [`examples/cloudflare-worker-shadow`](./examples/cloudflare-worker-shadow) |
+| nginx in front of anything | a second `access_log` + a log shipper | [`examples/nginx-shadow`](./examples/nginx-shadow) |
+| Drupal on Acquia | the AiFinPay module's **Shadow** setting | module documentation |
+| WordPress | not packaged yet — use the nginx or Cloudflare path in front of the site | follow-up |
+
+Register the merchant (`POST /v1/merchants`), register the pattern(s) you
+observe in the dashboard (`/*` is the whole site), and within a day the
+report is there. Enforce is the same install with one word changed — and, for
+the Worker / nginx paths, the gate package in the application.
+
+**If the site is on Cloudflare, check the zone's bot policy first.** Since
+2026-09-15 a zone that ticks "I monetize pages that serve ads" gets *AI
+Agents: Block on pages with ads* and *AI Training: Disallow* by default. A
+blocked agent never reaches the worker or the gate: the shadow report
+under-counts, and later a paying agent is refused at the edge before it can
+see the 402. In **Security → Bots → AI Crawl Control** set the sections you
+observe or charge to *Allow*; AiFinPay's own agents send `aifinpay-agent` in
+the User-Agent and must not be blocked either.
+
 ## What you need from your side
 
 | Item | Why |

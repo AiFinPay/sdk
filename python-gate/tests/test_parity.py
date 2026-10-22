@@ -22,6 +22,8 @@ def test_constants_match_the_node_package():
     assert g.DETAIL_RECEIPT_EXPIRED == C["DETAIL_RECEIPT_EXPIRED"]
     assert g.DETAIL_VERIFY_FAILED == C["DETAIL_VERIFY_FAILED"]
     assert g.HEADER_QUOTA_REMAINING == C["HEADER_QUOTA_REMAINING"]
+    assert g.HEADER_MODE == C["HEADER_MODE"]
+    assert g.HEADER_SHADOW_STATUS == C["HEADER_SHADOW_STATUS"]
     assert list(g.AI_AGENT_UA_MARKERS) == C["AI_AGENT_UA_MARKERS"]
     assert [list(row) for row in g.AI_AGENT_UA_TABLE] == C["AI_AGENT_UA_TABLE"]
     assert list(g.GATE_OPERATORS) == C["GATE_OPERATORS"]
@@ -49,16 +51,26 @@ def test_scope_coverage_matches_on_every_case():
     assert not wrong
 
 
+def _present(event):
+    """Node leaves an unset field undefined, which JSON drops; this port sets
+    None. Compare what both actually say."""
+    return {k: v for k, v in event.items() if v is not None}
+
+
 @pytest.mark.parametrize("scenario", FIXTURE["scenarios"], ids=lambda s: s["name"])
 def test_every_node_scenario_replays_identically(scenario):
     o = scenario["opts"]
+    events = []
     gate = g.Gate(
         FIXTURE["merchant_id"], jwks=FIXTURE["jwks"], resource=o.get("resource"), tier=o.get("tier") or "standard",
         weight=o.get("weight"), require_agent_match=bool(o.get("requireAgentMatch")), api_base=o.get("apiBase"),
+        mode=o.get("mode") or "enforce", on_event=events.append,
         should_charge=g.known_ai_agent if o.get("shouldCharge") == "known" else None,
     )
     for i, r in enumerate(scenario["requests"]):
         request = g.SimpleRequest(r["path"], r["headers"])
         assert g.classify_agent(request) == r["identity"], f"request {i} identity"
+        events.clear()
         got = gate.decide(request).as_dict()
         assert got == r["result"], f"request {i}"
+        assert [_present(e) for e in events] == [_present(e) for e in r["events"]], f"request {i} events"
