@@ -78,7 +78,7 @@ describe("origins outside the allowlist", () => {
     await runAgentClaimSelf(ctx, {
       magic_link_url: "https://aifinpay.io/api/auth/verify?token=x",
     });
-    expect(fetchCalls[0]).toContain("https://aifinpay.io/api/auth/verify");
+    expect(fetchCalls[0]).toBe("https://aifinpay.io/api/auth/claim");
   });
 
   it("honours an origin an operator added deliberately", async () => {

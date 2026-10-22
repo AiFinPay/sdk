@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.12.2 — agent_claim_self redeems the one-time URL by POST
+
+- `agent_claim_self` sends the token of the owner's one-time URL in a POST
+  body to `/api/auth/claim` (aifinpay-web, same release) instead of GETting
+  the URL. The backend redeems that GET only for a request without browser
+  `Sec-Fetch-*` headers, so a runtime whose fetch adds them was sent to the
+  confirm page and linked nothing. The POST route is told apart by its path
+  and the link's flow. Against a backend without the route (404/405) the tool
+  still GETs the URL as before; any other refusal is final.
+- Accepts both `…/api/auth/verify?token=…` (what the dashboard hands out) and
+  `…/api/auth/claim/<token>`. The token never goes back into a URL.
+- A 2FA account is told plainly that a one-time URL cannot link it and to use
+  the signed message in My Agents. Every request now refuses redirects.
+- The tool description says the URL must be passed to the tool, not opened
+  in a browser tool.
+- Bundles the published skill 2.11.0 (AiFinPay/skill 0490615): payments on by
+  default, no env block to fill, and pay only a merchant that verified the very
+  site being fetched. 2.12.1 shipped with the 2.10.2 text, which still told the
+  owner to set the env limits and origins.
+
 ## 2.12.1 — payments on by default, a $5 / $20 ceiling, limits in the dashboard
 
 2.12.0 was merged (AiFinPay/sdk#124) with only the `config.ts` switch and was

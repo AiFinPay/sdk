@@ -33,6 +33,13 @@ beforeEach(() => {
   globalThis.fetch = vi.fn(async (input, init = {}) => {
     const url = String(input);
     const body = init.body ? JSON.parse(String(init.body)) : {};
+    if (url.endsWith("/api/auth/claim")) {
+      requests.push({ url, init });
+      return Response.json(
+        { ok: true, grant: "agent_claim", expires_in: 600 },
+        { headers: { "set-cookie": "__aifinpay_agent_claim=synthetic-cookie; Path=/api/me/agents" } }
+      );
+    }
     if (url.includes("/api/auth/verify")) {
       requests.push({ url, init });
       return new Response("", { status: 302, headers: { "set-cookie": "sid=synthetic-cookie" } });
@@ -108,7 +115,7 @@ describe("owner-selected claim family", () => {
   it("refuses wrong-case Solana challenge before signing and secondary fallback", async () => {
     challenges[sol] = { challenge_id: sol, message: `AiFinPay-claim:solana:${sol.toLowerCase()}:${"a".repeat(32)}` };
     expect(await runAgentClaimSelf(ctx("solana"), { magic_link_url: link })).toHaveProperty("isError", true);
-    expect(requests.some((x) => x.url.endsWith("/claim"))).toBe(false);
+    expect(requests.some((x) => x.url.endsWith("/api/me/agents/claim"))).toBe(false);
     expect(requests.some((x) => x.address === evm)).toBe(false);
   });
   it("allows only EVM confirmation case folding", async () => {
@@ -128,9 +135,87 @@ describe("owner-selected claim family", () => {
     expect(r).toHaveProperty("isError", true);
     for (const secret of ["synthetic-private-token", "synthetic-cookie"]) expect(output(r)).not.toContain(secret);
   });
-  it("keeps authentication manual and refuses redirects during challenge and claim", async () => {
+  it("refuses redirects on every request: redeem, challenge and claim", async () => {
     await runAgentClaimSelf(ctx("solana"), { magic_link_url: link });
-    expect(requests[0].init.redirect).toBe("manual");
-    expect(requests.slice(1).every((x) => x.init.redirect === "error")).toBe(true);
+    expect(requests[0].url).toBe("https://dash.aifinpay.io/api/auth/claim");
+    expect(requests.every((x) => x.init.redirect === "error")).toBe(true);
+  });
+});
+
+// Owner review 2026-10-22: the claim link used to be redeemed by GETting it,
+// and the backend redeems that GET only without browser Sec-Fetch headers, so
+// a runtime whose fetch sends them linked nothing. The token now goes in a
+// POST body to /api/auth/claim, a route told apart by its path and flow.
+describe("redeeming the one-time URL", () => {
+  it("POSTs the token in the body to /api/auth/claim on the link's own origin, never GETs the URL", async () => {
+    const r = await runAgentClaimSelf(ctx(), { magic_link_url: link });
+    expect(r).not.toHaveProperty("isError");
+    const redeem = requests[0];
+    expect(redeem.url).toBe("https://dash.aifinpay.io/api/auth/claim");
+    expect(redeem.init.method).toBe("POST");
+    expect(JSON.parse(String(redeem.init.body))).toEqual({ token: "synthetic-private-token" });
+    expect(requests.some((x) => x.url.includes("/api/auth/verify"))).toBe(false);
+    expect(requests.some((x) => x.url.includes("synthetic-private-token"))).toBe(false);
+    // The grant cookie the redeem returned is what the challenge carries.
+    const challenge = requests.find((x) => x.url.endsWith("/challenge"))!;
+    expect((challenge.init.headers as Record<string, string>).cookie).toBe("__aifinpay_agent_claim=synthetic-cookie");
+  });
+
+  it("accepts the /api/auth/claim/<token> shape too", async () => {
+    const r = await runAgentClaimSelf(ctx(), {
+      magic_link_url: "https://dash.aifinpay.io/api/auth/claim/synthetic-private-token",
+    });
+    expect(r).not.toHaveProperty("isError");
+    expect(JSON.parse(String(requests[0].init.body))).toEqual({ token: "synthetic-private-token" });
+  });
+
+  for (const bad of [
+    "https://dash.aifinpay.io/login?token=synthetic-private-token",
+    "https://dash.aifinpay.io/api/auth/verify",
+    "https://dash.aifinpay.io/api/auth/verify?token=",
+    "https://dash.aifinpay.io/api/auth/verify?token=has%20space",
+    "not a url",
+  ])
+    it(`refuses ${bad} without a request`, async () => {
+      const r = await runAgentClaimSelf(ctx(), { magic_link_url: bad });
+      expect(r).toHaveProperty("isError", true);
+      expect(requests).toEqual([]);
+    });
+
+  it("falls back to the GET only when the backend has no claim route", async () => {
+    const fallback = globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>;
+    const seen: { url: string; init: RequestInit }[] = [];
+    globalThis.fetch = vi.fn(async (input, init = {}) => {
+      const url = String(input);
+      seen.push({ url, init });
+      if (url.endsWith("/api/auth/claim")) return new Response("not found", { status: 404 });
+      return fallback(url, init);
+    }) as typeof fetch;
+    const r = await runAgentClaimSelf(ctx(), { magic_link_url: link });
+    expect(r).not.toHaveProperty("isError");
+    expect(seen[0].url).toBe("https://dash.aifinpay.io/api/auth/claim");
+    expect(seen[1].url).toBe(link);
+    expect(seen[1].init.redirect).toBe("manual");
+  });
+
+  it("does not fall back to the GET when the claim route refuses the link", async () => {
+    globalThis.fetch = vi.fn(async () => Response.json({ error: "link_expired" }, { status: 410 })) as typeof fetch;
+    const r = await runAgentClaimSelf(ctx(), { magic_link_url: link });
+    expect(r).toHaveProperty("isError", true);
+    expect(output(r)).toMatch(/HTTP 410/);
+    expect(output(r)).toMatch(/new one in My Agents/);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("tells a 2FA account to use the signed message, and asks for no challenge", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      Response.json({ error: "claim_link_2fa_account", hint: "server text" }, { status: 403 })
+    ) as typeof fetch;
+    const r = await runAgentClaimSelf(ctx(), { magic_link_url: link });
+    expect(r).toHaveProperty("isError", true);
+    expect(output(r)).toMatch(/two-factor sign-in on/);
+    expect(output(r)).toMatch(/signed message in My Agents/);
+    expect(output(r)).not.toContain("server text");
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 });

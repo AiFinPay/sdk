@@ -1,3 +1,13 @@
+## MCP 2.12.2 — agent_claim_self redeems the one-time URL by POST
+
+- The token of the owner's one-time URL goes in a POST body to
+  `/api/auth/claim`, a backend route told apart by its path and the link's
+  flow, instead of a GET that the backend redeems only without browser
+  `Sec-Fetch-*` headers. Falls back to the GET only on a backend without the
+  route.
+- Bundles the published skill 2.11.0, so the payer guide inside the package
+  matches payments on by default and the verified-site rule.
+
 ## MCP 2.12.1 — payments on by default, $5 / $20 ceiling, limits in the dashboard
 
 - 2.12.0 (merged, never published) carried only the switch and refused to
@@ -5,8 +15,8 @@
 - `payable_fetch` is on unless `AIFINPAY_PAYMENTS_ENABLED=0`, signs only from a
   persistent wallet, and never above a built-in $5 per payment / $20 per 24 h;
   env can only lower that ceiling. `AIFINPAY_GATEWAY_ORIGINS` is an optional
-  allowlist (unset: the https origin of the fetched URL; the backend-signed
-  quote decides who is paid), the path mode is inferred per URL, and Polygon
+  allowlist (unset: only a merchant whose DNS-verified site is the host being
+  fetched, or verified at all on the hosted gateway, is paid), the path mode is inferred per URL, and Polygon
   has a 0.3 POL default gas cap. `agent_reload` after `init` enables payments
   without a restart. `payment_setup_status` and `init` no longer ask for env.
 - `payment_setup_status` returns `dashboard`: the owner's Controls read with
