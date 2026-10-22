@@ -78,7 +78,7 @@
   "dependencies": {
     "@aifinpay/agent": "^2.9.0",
     "@aifinpay/skill": "^2.10.2",
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "bs58": "^6.0.0",
     "tweetnacl": "^1.0.3"
   },
