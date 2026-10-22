@@ -59,7 +59,7 @@ test("canonical mirror and both CI refs bind the reviewed reporting producer; wr
 });
 test("reporting source target refuses every stale package version without claiming registry availability", () => {
   verifyCohortVersions({
-    mcp: "2.12.1",
+    mcp: "2.12.2",
     agent: "2.9.0",
     python: "2.7.1",
     skill: "2.10.2",

@@ -24,7 +24,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // GHSA-jqcg-44mw-7w3h. Keep the bootstrap immutable between such refreshes.
 export const BASE = "bda78b76ec744beda7aba7fc3373070d455864c9";
 export const COHORT = {
-  mcp: "2.12.1",
+  mcp: "2.12.2",
   agent: "2.9.0",
   python: "2.7.1",
   skill: "2.10.2",
