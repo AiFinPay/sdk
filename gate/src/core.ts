@@ -13,7 +13,16 @@
 // merchant edits in our dashboard would be a second source of truth for the
 // same rule, and the two would disagree on the day it mattered.
 // ──────────────────────────────────────────────────────────────────────────
-import type { AifpContext, AifpResource, GateEvent, GateMode, GateRequest, GateResult, Tier } from "./types.js";
+import type {
+  AifpContext,
+  AifpResource,
+  GateEvent,
+  GateMode,
+  GateRequest,
+  GateResult,
+  OperatorPolicy,
+  Tier,
+} from "./types.js";
 import { MemoryStore } from "./stores/memory.js";
 import type { GateStore } from "./stores/types.js";
 import { createVerifier } from "./verify.js";
@@ -21,6 +30,7 @@ import { buildChallenge } from "./challenge.js";
 import { scopeCovers } from "./scope.js";
 import { TIER_WEIGHTS, weightForTier } from "./pricing.js";
 import { classifyAgent, type AgentIdentity } from "./agents.js";
+import { decideOperator, type OperatorDecision } from "./operator-policy.js";
 import type { ResourceRegistry } from "./registry.js";
 import type { GateReporterV2, ReportingContext } from "./reporter.js";
 
@@ -73,6 +83,21 @@ export interface GateOptions {
    *  "mount-default" to keep serving and accept the mis-pricing. Once one fetch
    *  has succeeded the last good snapshot is used and this no longer applies. */
   registryUnavailable?: "error" | "mount-default";
+  /**
+   * The merchant's per-operator access policy — allow / charge / block for
+   * OpenAI, Anthropic, verified AIFP agents… — as saved on the dashboard
+   * (Access rules → Operators). A gate with a `registry` reads it from the
+   * public merchant view on every refresh and needs nothing here; pass the
+   * object for a static install, or a function that returns the current one.
+   *
+   * Applied after classification and before `shouldCharge`: `allow` serves
+   * free (`req.aifp.mode === "exempt"`, a `serve` event with `exempt: true`),
+   * `block` answers 403 `AIFP-403` (a `403` event), `charge` is the gate's own
+   * decision below. The event `detail` names the rule in enforce and shadow
+   * alike. No policy, or one with no rules, leaves every decision exactly as
+   * it was. See operator-policy.ts for the precedence.
+   */
+  operatorPolicy?: OperatorPolicy | null | (() => OperatorPolicy | null | undefined);
   /** "auto" (default) gives single-use receipts (unit_quota <= 1) a one-shot
    *  nonce check. Multi-use batches are metered by the counter and need no
    *  replay check — spending them twice is just spending them. */
@@ -196,6 +221,15 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     }
   };
 
+  // The operator policy in force for this request: the option when given
+  // (explicitly null meaning none), else whatever the registry last read.
+  const policyFor = (): OperatorPolicy | null => {
+    const own = typeof options.operatorPolicy === "function" ? options.operatorPolicy() : options.operatorPolicy;
+    if (own !== undefined) return own ?? null;
+    const registry = options.registry as { operatorPolicy?: () => OperatorPolicy | null } | undefined;
+    return typeof registry?.operatorPolicy === "function" ? (registry.operatorPolicy() ?? null) : null;
+  };
+
   const decide = async function gate(req: GateRequest, resolved?: (resource: string) => void): Promise<GateResult> {
     const path = req.path;
 
@@ -256,8 +290,11 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       });
     };
 
-    const forbid = (resource: string, weight: number, detail: string): GateResult => {
-      note({ kind: "403", resource, weight, detail });
+    // `eventDetail` is what the dashboard reads; it differs from the body only
+    // for an operator rule, where the caller is told "merchant policy" and the
+    // event names the rule.
+    const forbid = (resource: string, weight: number, detail: string, eventDetail: string = detail): GateResult => {
+      note({ kind: "403", resource, weight, detail: eventDetail });
       return refuse(resource, weight, {
         ok: false,
         status: 403,
@@ -355,6 +392,63 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // knownAiAgent returns true for anything carrying AIFP-Receipt or
     // AIFP-Agent-Id, so a PAYING agent is never exempted into unmetered
     // service by a browser-looking User-Agent.
+    // Served free, unmetered: the merchant's `allow` veto still has the last
+    // word. Shared by the shouldCharge exemption and an operator rule that
+    // says allow — the one difference is the `detail` naming the rule.
+    const serveExempt = async (detail?: string, agent: string | null = agentHeader): Promise<GateResult> => {
+      if (
+        options.allow &&
+        !(await safeAllow(options.allow, {
+          path,
+          resource,
+          weight,
+          agent,
+          receipt_id: null,
+        }))
+      ) {
+        return forbid(resource, weight, "blocked by merchant policy");
+      }
+      note({ kind: "serve", resource, weight, agent, exempt: true, ...(detail !== undefined ? { detail } : {}) });
+      return {
+        ok: true,
+        status: 200,
+        headers: { "AIFP-Paywall": "exempt" },
+        aifp: {
+          agent,
+          receipt_id: "",
+          resource,
+          weight: 0,
+          unit_quota: 0,
+          used: 0,
+          remaining: 0,
+          mode: "exempt",
+        },
+      };
+    };
+
+    // ── 2a. The merchant's operator rules ─────────────────────────────────
+    // allow / charge / block per operator, as saved on the dashboard. Decided
+    // on what the request CLAIMS to be — a User-Agent, an AIFP-Agent-Id — with
+    // one exception: when a verified_only rule would answer differently once
+    // this request's receipt verifies, the decision waits for step 4, where
+    // `verified` is settled. `charge` falls through to everything below, so a
+    // policy with no rules changes nothing.
+    const operatorPolicy = policyFor();
+    const claimed = decideOperator(operatorPolicy, who);
+    const onceVerified = req.header("AIFP-Receipt")
+      ? decideOperator(operatorPolicy, { ...who, verified: true })
+      : claimed;
+    const operatorPending = claimed.action !== onceVerified.action || claimed.matched !== onceVerified.matched;
+    const applyOperator = (d: OperatorDecision, agent?: string | null): Promise<GateResult> | GateResult | null => {
+      if (d.action === "block") return forbid(resource, weight, "blocked by merchant policy (operator rule)", d.detail);
+      if (d.action === "allow") return serveExempt(d.detail, agent);
+      return null;
+    };
+    if (!operatorPending) {
+      const decided = applyOperator(claimed);
+      if (decided) return decided;
+    }
+
     if (options.shouldCharge) {
       let charge = true;
       try {
@@ -362,36 +456,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       } catch {
         charge = true;
       }
-      if (!charge) {
-        if (
-          options.allow &&
-          !(await safeAllow(options.allow, {
-            path,
-            resource,
-            weight,
-            agent: agentHeader,
-            receipt_id: null,
-          }))
-        ) {
-          return forbid(resource, weight, "blocked by merchant policy");
-        }
-        note({ kind: "serve", resource, weight, agent: agentHeader, exempt: true });
-        return {
-          ok: true,
-          status: 200,
-          headers: { "AIFP-Paywall": "exempt" },
-          aifp: {
-            agent: agentHeader,
-            receipt_id: "",
-            resource,
-            weight: 0,
-            unit_quota: 0,
-            used: 0,
-            remaining: 0,
-            mode: "exempt",
-          },
-        };
-      }
+      if (!charge) return serveExempt();
     }
 
     // ── 3. No receipt → the 402 that teaches an agent how to pay ──────────
@@ -401,6 +466,13 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // ── 4. Verify locally ─────────────────────────────────────────────────
     const v = await verify(token);
     if (!v.ok) {
+      // The receipt did not verify, so the caller is what it claimed and a
+      // pending operator decision is taken on the claim — before the
+      // receipt's own refusal, which is the lesser statement.
+      if (operatorPending) {
+        const decided = applyOperator(claimed);
+        if (decided) return decided;
+      }
       if (v.kind === "expired") return challenge(resource, weight, effectiveTier, DETAIL_RECEIPT_EXPIRED);
       if (v.kind === "jwks_unavailable") {
         // Fail CLOSED. Failing open would turn a partner's paid API into a free
@@ -425,6 +497,12 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // is reported as verified, because the identity question is settled even
     // when the spend is refused.
     who = { operator: "aifinpay", ua_class: "aifp_agent", verified: true };
+    // A verified_only rule now has its answer. An `allow` here is served free
+    // without spending the receipt: the merchant said this caller does not pay.
+    if (operatorPending) {
+      const decided = applyOperator(onceVerified, payload.sub ?? null);
+      if (decided) return decided;
+    }
 
     // ── 5. Receipt TYPE — a valid signature is not a licence to spend ─────
     // The issuer signs more than one kind of token with this key AND this

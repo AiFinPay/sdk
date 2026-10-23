@@ -1,6 +1,7 @@
 import { matchResource } from "./match.js";
 import type { AifpMerchant } from "./management.js";
-import type { AifpResource, Tier } from "./types.js";
+import { normalizeOperatorPolicy } from "./operator-policy.js";
+import type { AifpResource, OperatorPolicy, Tier } from "./types.js";
 
 export interface ResourceRegistryOptions {
   merchant: AifpMerchant;
@@ -38,6 +39,12 @@ export class ResourceRegistry {
   private warnedNeverLoaded = false;
   /** Last refresh failure, or null after any success. Exposed on snapshot(). */
   private lastError: unknown = null;
+  /** The merchant's operator rules as last read from the public merchant
+   *  view, null until the first successful read. Same contract as the
+   *  resources: a failed read keeps the last good copy, and "never loaded"
+   *  leaves the gate deciding as it always has — a rule that is not applied
+   *  yet costs the merchant nothing it was not already paying. */
+  private policy: OperatorPolicy | null = null;
 
   constructor(opts: ResourceRegistryOptions) {
     this.merchant = opts.merchant;
@@ -61,6 +68,11 @@ export class ResourceRegistry {
         this.resources = next;
         this.fetchedAt = new Date().toISOString();
       }
+      // The operator rules ride on the public merchant view, read on the same
+      // cadence so a rule saved on the dashboard reaches the gate as fast as
+      // a price change does. Only after the resources came back: the two
+      // share a transport and a key, and one failure is one failure.
+      this.policy = normalizeOperatorPolicy(await this.merchant.merchant());
     } catch (err) {
       // Keep the last good snapshot (see the class comment) but never swallow
       // the reason. A revoked API key raises here exactly like a network blip,
@@ -88,12 +100,20 @@ export class ResourceRegistry {
     return matchResource(this.resources, path);
   }
 
+  /** The merchant's operator rules (allow / charge / block per operator) as
+   *  last read, or null before the first successful read. The gate reads
+   *  this on every request; see GateOptions.operatorPolicy. */
+  operatorPolicy(): OperatorPolicy | null {
+    return this.policy;
+  }
+
   snapshot(): {
     resources: AifpResource[];
     fetched_at: string | null;
     stale: boolean;
     never_loaded: boolean;
     last_error: unknown;
+    operator_policy: OperatorPolicy | null;
   } {
     const stale = this.fetchedAt == null || Date.now() - Date.parse(this.fetchedAt) > this.refreshMs * 3;
     return {
@@ -102,6 +122,7 @@ export class ResourceRegistry {
       stale,
       never_loaded: this.neverLoaded,
       last_error: this.lastError,
+      operator_policy: this.policy,
     };
   }
 

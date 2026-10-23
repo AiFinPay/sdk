@@ -1,3 +1,19 @@
+## 0.4.0 — unreleased
+
+- Port of `@aifinpay/gate` 0.7.0: `Gate(operator_policy=...)` — the merchant's
+  allow / charge / block per operator, as saved on the dashboard, applied after
+  classification and before `should_charge`. `allow` serves free (`mode
+  "exempt"`, a `serve` event with `exempt: True`), `block` answers 403
+  `AIFP-403` (a `403` event), `charge` is the gate's own decision; the event
+  `detail` names the rule in enforce and shadow alike. A `verified_only` rule
+  applies only once the receipt verified. Pass the dict from
+  `GET /v1/merchants/:id` (`normalize_operator_policy` reduces it to what this
+  gate can apply) or a callable returning the current one. `decide_operator`,
+  `normalize_operator_policy`, `OPERATOR_ACTIONS`, `OPERATOR_DEFAULT` exported.
+  No policy, or one without rules, changes nothing.
+- The parity fixture records operator-policy scenarios; `test_parity.py`
+  replays them.
+
 ## 0.3.0 — unreleased
 
 - Port of `@aifinpay/gate` 0.6.0: `Gate(mode="shadow" | "enforce")`. Shadow

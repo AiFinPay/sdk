@@ -139,6 +139,7 @@ default *Block on pages with ads* cuts agents off before they reach a gate.
 | Option | Default | |
 |---|---|---|
 | `mode` | `"enforce"` | `"shadow"` observes: same decisions and events, every request served, nothing refused or metered for a would-be refusal. |
+| `operator_policy` | — | The merchant's allow / charge / block per operator from `GET /v1/merchants/:id` (`operator_rules`, `operator_default`), as a dict or a callable returning the current one. Applied after classification, before `should_charge`: `allow` serves free (`mode` `"exempt"`), `block` answers 403, `charge` is the gate's own decision. A `verified_only` rule applies only once the receipt verified; readers are never matched. Without it, or without rules, nothing changes. |
 | `should_charge` | everyone pays | `known_ai_agent` for content sites: human browsers read free and never see a 402; self-identifying AI crawlers and anything speaking AIFP pay. A predicate that raises charges. |
 | `allow(ctx)` | — | Your veto after verification, before metering (a refused call costs nothing). Return `False` → 403. |
 | `on_store_error` | `"closed"` | `"open"` serves un-metered calls when the store is down (`AIFP-Meter: degraded`). |
@@ -158,7 +159,10 @@ default *Block on pages with ads* cuts agents off before they reach a gate.
   or without a usable `unit_quota`, is refused.
 
 Not included, on purpose: free allowances, daily caps and per-agent blocks live
-in the AiFinPay dashboard, so there is one source of truth for each rule.
+in the AiFinPay dashboard, so there is one source of truth for each rule. The
+per-operator allow / charge / block policy is the exception: only this gate can
+apply it, so it is read from the control plane (`operator_policy`), never
+re-stated here.
 
 
 ## Opt-in dashboard request reporting (0.1.2, identity since 0.2.0)

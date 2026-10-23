@@ -1,5 +1,5 @@
 {
- "generated_from": "@aifinpay/gate 0.6.0",
+ "generated_from": "@aifinpay/gate 0.7.0",
  "jwks": {
   "keys": [
    {
@@ -3828,6 +3828,629 @@
        "weight": 1,
        "operator": "unknown",
        "ua_class": "unknown",
+       "verified": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "operator policy: openai allowed, served exempt",
+   "opts": {
+    "resource": "/paid",
+    "shouldCharge": "known",
+    "operatorPolicy": {
+     "operator_rules": [
+      {
+       "operator": "openai",
+       "action": "allow"
+      },
+      {
+       "operator": "anthropic",
+       "action": "block"
+      }
+     ],
+     "operator_default": "charge"
+    }
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Mozilla/5.0 (compatible; GPTBot/1.1)"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Paywall": "exempt"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "exempt"
+      }
+     },
+     "identity": {
+      "operator": "openai",
+      "ua_class": "ai_crawler",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": null,
+       "exempt": true,
+       "detail": "operator policy: allow (operator=openai)",
+       "operator": "openai",
+       "ua_class": "ai_crawler",
+       "verified": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "operator policy: anthropic blocked",
+   "opts": {
+    "resource": "/paid",
+    "shouldCharge": "known",
+    "operatorPolicy": {
+     "operator_rules": [
+      {
+       "operator": "openai",
+       "action": "allow"
+      },
+      {
+       "operator": "anthropic",
+       "action": "block"
+      }
+     ],
+     "operator_default": "charge"
+    }
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Mozilla/5.0 (compatible; ClaudeBot/1.0)"
+     },
+     "result": {
+      "ok": false,
+      "status": 403,
+      "headers": {
+       "Content-Type": "application/json"
+      },
+      "body": {
+       "error": "AIFP-403",
+       "detail": "blocked by merchant policy (operator rule)"
+      }
+     },
+     "identity": {
+      "operator": "anthropic",
+      "ua_class": "ai_crawler",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "operator policy: block (operator=anthropic)",
+       "operator": "anthropic",
+       "ua_class": "ai_crawler",
+       "verified": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "operator policy: perplexity charged as before",
+   "opts": {
+    "resource": "/paid",
+    "shouldCharge": "known",
+    "operatorPolicy": {
+     "operator_rules": [
+      {
+       "operator": "openai",
+       "action": "allow"
+      },
+      {
+       "operator": "anthropic",
+       "action": "block"
+      }
+     ],
+     "operator_default": "charge"
+    }
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Mozilla/5.0 (compatible; PerplexityBot/1.0)"
+     },
+     "result": {
+      "ok": false,
+      "status": 402,
+      "headers": {
+       "Content-Type": "application/json"
+      },
+      "body": {
+       "error": "AIFP-402",
+       "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+       "protocol": "AIFP-1",
+       "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+       "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+       "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+       "merchant_id": "mrch_parity",
+       "resource": "/paid",
+       "tier": "standard",
+       "unit_weight": 1,
+       "unit_price_usd": "0.0005",
+       "min_requests": 200,
+       "scope": "exact",
+       "protocol_fee_bps": 100,
+       "no_minimum_fee": true,
+       "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+       "how_to_pay": [
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":200,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+        "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+        "retry this request with header: AIFP-Receipt: <receipt JWT>"
+       ],
+       "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+      }
+     },
+     "identity": {
+      "operator": "perplexity",
+      "ua_class": "ai_crawler",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "operator": "perplexity",
+       "ua_class": "ai_crawler",
+       "verified": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "operator policy: default block never reaches a reader",
+   "opts": {
+    "resource": "/paid",
+    "shouldCharge": "known",
+    "operatorPolicy": {
+     "operator_rules": [],
+     "operator_default": "block"
+    }
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Mozilla/5.0 (Macintosh) Safari/605.1.15"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Paywall": "exempt"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "exempt"
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "human",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": null,
+       "exempt": true,
+       "operator": "unknown",
+       "ua_class": "human",
+       "verified": false
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {},
+     "result": {
+      "ok": false,
+      "status": 403,
+      "headers": {
+       "Content-Type": "application/json"
+      },
+      "body": {
+       "error": "AIFP-403",
+       "detail": "blocked by merchant policy (operator rule)"
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "unknown",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "operator policy: block (default)",
+       "operator": "unknown",
+       "ua_class": "unknown",
+       "verified": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "operator policy: verified_only allow serves a verified receipt free, blocks a claim",
+   "opts": {
+    "resource": "/paid",
+    "operatorPolicy": {
+     "operator_rules": [
+      {
+       "operator": "aifinpay",
+       "action": "allow",
+       "verified_only": true
+      },
+      {
+       "ua_class": "aifp_agent",
+       "action": "block"
+      }
+     ],
+     "operator_default": "charge"
+    }
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwNiIsIm5vbmNlIjoibi0xIn0.IhOBakXLkGbPEXdfchNYfrtJLbNIvIyCZF-e7KzuK0eW_KRhVkotjJzMZ3uMk8lt3Gc_reQk8u_ZPqZSqIiiAw"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Paywall": "exempt"
+      },
+      "aifp": {
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "exempt"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "exempt": true,
+       "detail": "operator policy: allow (operator=aifinpay)",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Agent-Id": "0xclaimed"
+     },
+     "result": {
+      "ok": false,
+      "status": 403,
+      "headers": {
+       "Content-Type": "application/json"
+      },
+      "body": {
+       "error": "AIFP-403",
+       "detail": "blocked by merchant policy (operator rule)"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "operator policy: block (ua_class=aifp_agent)",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": false
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfb3RoZXIiLCJzdWIiOiIweDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwYTEiLCJpYXQiOjE3NTg3MDAwMDAsImV4cCI6NDEwMjQ0NDgwMCwicmVzb3VyY2UiOiIvcGFpZCIsInNjb3BlIjoiZXhhY3QiLCJhbW91bnQiOiIwLjEiLCJ1bml0X3F1b3RhIjozLCJyZWNlaXB0X2lkIjoicmNwdF8wMDAwMDAwMDAwMDAwMDAxIiwibm9uY2UiOiJuLTEifQ.7hUjG9gZDjvryekPDjgA-62VVWMYnWNHXgaM49w3xNfXMi4MhdrBzXOU8mLaHDTy7nn3v3FuSEeGUsvIuLXmDA"
+     },
+     "result": {
+      "ok": false,
+      "status": 403,
+      "headers": {
+       "Content-Type": "application/json"
+      },
+      "body": {
+       "error": "AIFP-403",
+       "detail": "blocked by merchant policy (operator rule)"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "operator policy: block (ua_class=aifp_agent)",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "operator policy: no rules is today's gate",
+   "opts": {
+    "resource": "/paid",
+    "shouldCharge": "known",
+    "operatorPolicy": {
+     "operator_rules": [],
+     "operator_default": "charge"
+    }
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Mozilla/5.0 (compatible; GPTBot/1.1)"
+     },
+     "result": {
+      "ok": false,
+      "status": 402,
+      "headers": {
+       "Content-Type": "application/json"
+      },
+      "body": {
+       "error": "AIFP-402",
+       "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+       "protocol": "AIFP-1",
+       "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+       "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+       "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+       "merchant_id": "mrch_parity",
+       "resource": "/paid",
+       "tier": "standard",
+       "unit_weight": 1,
+       "unit_price_usd": "0.0005",
+       "min_requests": 200,
+       "scope": "exact",
+       "protocol_fee_bps": 100,
+       "no_minimum_fee": true,
+       "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+       "how_to_pay": [
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":200,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+        "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+        "retry this request with header: AIFP-Receipt: <receipt JWT>"
+       ],
+       "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+      }
+     },
+     "identity": {
+      "operator": "openai",
+      "ua_class": "ai_crawler",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "operator": "openai",
+       "ua_class": "ai_crawler",
+       "verified": false
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Mozilla/5.0 (Macintosh) Safari/605.1.15"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Paywall": "exempt"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "exempt"
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "human",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": null,
+       "exempt": true,
+       "operator": "unknown",
+       "ua_class": "human",
+       "verified": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "shadow: operator block served, would-be 403, same event",
+   "opts": {
+    "resource": "/paid",
+    "mode": "shadow",
+    "shouldCharge": "known",
+    "operatorPolicy": {
+     "operator_rules": [
+      {
+       "operator": "openai",
+       "action": "allow"
+      },
+      {
+       "operator": "anthropic",
+       "action": "block"
+      }
+     ],
+     "operator_default": "charge"
+    }
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Mozilla/5.0 (compatible; ClaudeBot/1.0)"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Mode": "shadow",
+       "AIFP-Shadow-Status": "403"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "shadow",
+       "shadow": {
+        "status": 403,
+        "error": "AIFP-403",
+        "detail": "blocked by merchant policy (operator rule)",
+        "weight": 1
+       }
+      }
+     },
+     "identity": {
+      "operator": "anthropic",
+      "ua_class": "ai_crawler",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "operator policy: block (operator=anthropic)",
+       "operator": "anthropic",
+       "ua_class": "ai_crawler",
+       "verified": false
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Mozilla/5.0 (compatible; GPTBot/1.1)"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Paywall": "exempt",
+       "AIFP-Mode": "shadow"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "exempt"
+      }
+     },
+     "identity": {
+      "operator": "openai",
+      "ua_class": "ai_crawler",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": null,
+       "exempt": true,
+       "detail": "operator policy: allow (operator=openai)",
+       "operator": "openai",
+       "ua_class": "ai_crawler",
        "verified": false
       }
      ]

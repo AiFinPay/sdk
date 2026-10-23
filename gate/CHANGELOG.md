@@ -1,5 +1,31 @@
 # Changelog
 
+## @aifinpay/gate 0.7.0 — unreleased
+
+- Per-operator access policy: the merchant's allow / charge / block per
+  operator (OpenAI, Anthropic, verified AIFP agents…), saved on the dashboard
+  (Access rules → Operators), is applied by the gate after classification and
+  before `shouldCharge`. `allow` serves free (`req.aifp.mode === "exempt"`,
+  a `serve` event with `exempt: true`), `block` answers 403 `AIFP-403` (a
+  `403` event), `charge` is the gate's own decision. The event `detail`
+  names the rule — `operator policy: block (operator=openai)` — in enforce
+  and shadow alike. A `verified_only` rule applies only once the request's
+  receipt verified; a claimed identity falls through to the next rule.
+  Readers (`ua_class: human`) are never matched. Precedence: operator rule →
+  ua_class rule → `operator_default`.
+- `ResourceRegistry` reads the rules from the public merchant view
+  (`GET /v1/merchants/:id` → `operator_rules`, `operator_default`) on every
+  refresh — one more request per refresh — and keeps the last good copy when
+  a refresh fails; `registry.operatorPolicy()` and `snapshot().operator_policy`
+  expose it. New option `operatorPolicy` (object, or a function returning the
+  current one) for installs without a registry; it wins over the registry.
+- No policy, or a policy with no rules, leaves every decision and event
+  exactly as before: the default action is `charge`.
+- Exported: `decideOperator`, `normalizeOperatorPolicy`, `OPERATOR_ACTIONS`,
+  `OPERATOR_DEFAULT`; types `OperatorAction`, `OperatorRule`,
+  `OperatorPolicy`, `OperatorDecision`. All of them from `@aifinpay/gate/edge`
+  too.
+
 ## @aifinpay/gate 0.6.0 — unreleased
 
 - `mode: "shadow" | "enforce"`. Shadow makes the same decision and emits the

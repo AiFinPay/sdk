@@ -18,6 +18,7 @@ from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Pro
 
 from .agents import classify_agent
 from .challenge import build_challenge
+from .operator_policy import decide_operator, normalize_operator_policy
 from .pricing import weight_for_tier
 from .reporter import GateReporter, GateReporterV2, _context, _utc_now
 from .scope import pattern_covers, scope_covers
@@ -143,6 +144,7 @@ class Gate:
         reporting_context: Optional[Callable[[GateRequest], Dict[str, Any]]] = None,
         allow: Optional[Callable[[Dict[str, Any]], bool]] = None,
         should_charge: Optional[Callable[[GateRequest], bool]] = None,
+        operator_policy: Any = None,
         now: Callable[[], float] = time.time,
     ):
         if not merchant_id:
@@ -189,6 +191,12 @@ class Gate:
         self.reporting_context = reporting_context
         self.allow = allow
         self.should_charge = should_charge
+        # The merchant's allow / charge / block per operator, as the public
+        # merchant view carries it (GET /v1/merchants/:id → operator_rules,
+        # operator_default): a dict, or a callable returning the current one.
+        # Applied after classification and before should_charge; see
+        # operator_policy.py. None, or a policy without rules, changes nothing.
+        self.operator_policy = operator_policy
         self._now = now
         self.verify = Verifier(issuer, merchant_id, clock_tolerance_s, jwks_uri, jwks, now=now)
 
@@ -290,8 +298,12 @@ class Gate:
         return self._refuse(resource, weight, GateResult(False, 402, _json_headers(), body=body), agent)
 
     def _forbid(self, resource: str, weight: int, detail: str, *, who: Dict[str, Any],
-                agent: Optional[str] = None) -> GateResult:
-        self._emit({"kind": "403", "resource": resource, "weight": weight, "detail": detail}, who)
+                agent: Optional[str] = None, event_detail: Optional[str] = None) -> GateResult:
+        # ``event_detail`` is what the dashboard reads; it differs from the body
+        # only for an operator rule, where the caller is told "merchant policy"
+        # and the event names the rule.
+        self._emit({"kind": "403", "resource": resource, "weight": weight,
+                    "detail": detail if event_detail is None else event_detail}, who)
         return self._refuse(resource, weight,
                             GateResult(False, 403, _json_headers(), body={"error": "AIFP-403", "detail": detail}),
                             agent)
@@ -301,6 +313,37 @@ class Gate:
             "agent": agent, "receipt_id": "", "resource": resource, "weight": 0,
             "unit_quota": 0, "used": 0, "remaining": 0, "mode": mode,
         })
+
+    def _operator_policy(self) -> Optional[Dict[str, Any]]:
+        """The policy in force for this request, as the control plane shaped
+        it: a callable is read per request, so a rule saved on the dashboard
+        applies without a restart."""
+        raw = self.operator_policy() if callable(self.operator_policy) else self.operator_policy
+        return normalize_operator_policy(raw)
+
+    def _serve_exempt(self, resource: str, weight: int, path: str, *, who: Dict[str, Any],
+                      agent: Optional[str], detail: Optional[str] = None) -> GateResult:
+        """Served free, unmetered: the merchant's ``allow`` veto still has the
+        last word. Shared by the should_charge exemption and an operator rule
+        that says allow — the one difference is the ``detail`` naming the rule."""
+        if not self._allowed({"path": path, "resource": resource, "weight": weight,
+                              "agent": agent, "receipt_id": None}):
+            return self._forbid(resource, weight, "blocked by merchant policy", who=who, agent=agent)
+        event = {"kind": "serve", "resource": resource, "weight": weight, "agent": agent, "exempt": True}
+        if detail is not None:
+            event["detail"] = detail
+        self._emit(event, who)
+        return self._free(resource, agent, "exempt", "exempt")
+
+    def _apply_operator(self, decision: Dict[str, Any], resource: str, weight: int, path: str, *,
+                        who: Dict[str, Any], agent: Optional[str]) -> Optional[GateResult]:
+        """``None`` for charge: the gate's own decision follows."""
+        if decision["action"] == "block":
+            return self._forbid(resource, weight, "blocked by merchant policy (operator rule)", who=who,
+                                agent=agent, event_detail=decision["detail"])
+        if decision["action"] == "allow":
+            return self._serve_exempt(resource, weight, path, who=who, agent=agent, detail=decision["detail"])
+        return None
 
     # ── the decision ────────────────────────────────────────────────────────
 
@@ -341,6 +384,24 @@ class Gate:
             self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": agent_header}, who)
             return self._free(resource, agent_header, "open", "off")
 
+        # The merchant's operator rules: allow / charge / block per operator, as
+        # saved on the dashboard. Decided on what the request CLAIMS to be — a
+        # User-Agent, an AIFP-Agent-Id — with one exception: when a
+        # verified_only rule would answer differently once this request's
+        # receipt verifies, the decision waits for verification, where
+        # ``verified`` is settled. ``charge`` falls through to everything below,
+        # so a policy with no rules changes nothing.
+        operator_policy = self._operator_policy()
+        claimed = decide_operator(operator_policy, who)
+        once_verified = (decide_operator(operator_policy, {**who, "verified": True})
+                         if req.header("AIFP-Receipt") else claimed)
+        operator_pending = (claimed["action"] != once_verified["action"]
+                            or claimed["matched"] != once_verified["matched"])
+        if not operator_pending:
+            decided = self._apply_operator(claimed, resource, weight, path, who=who, agent=agent_header)
+            if decided is not None:
+                return decided
+
         # WHO pays — before the missing-receipt challenge, or a human reader
         # would meet the 402. A predicate that raises charges.
         if self.should_charge is not None:
@@ -349,12 +410,7 @@ class Gate:
             except Exception:  # noqa: BLE001
                 charge = True
             if not charge:
-                if not self._allowed({"path": path, "resource": resource, "weight": weight,
-                                      "agent": agent_header, "receipt_id": None}):
-                    return self._forbid(resource, weight, "blocked by merchant policy", who=who, agent=agent_header)
-                self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": agent_header,
-                            "exempt": True}, who)
-                return self._free(resource, agent_header, "exempt", "exempt")
+                return self._serve_exempt(resource, weight, path, who=who, agent=agent_header)
 
         token = req.header("AIFP-Receipt")
         if not token:
@@ -362,6 +418,13 @@ class Gate:
 
         kind, payload = self.verify(token)
         if kind != "ok":
+            # The receipt did not verify, so the caller is what it claimed and a
+            # pending operator decision is taken on the claim — before the
+            # receipt's own refusal, which is the lesser statement.
+            if operator_pending:
+                decided = self._apply_operator(claimed, resource, weight, path, who=who, agent=agent_header)
+                if decided is not None:
+                    return decided
             if kind == "expired":
                 return self._challenge(resource, weight, tier, DETAIL_RECEIPT_EXPIRED, who=who, agent=agent_header)
             if kind == "jwks_unavailable":
@@ -377,6 +440,13 @@ class Gate:
         # Signature, issuer and audience verified: an AIFP agent, proven. What
         # follows — a refusal, an exhausted batch, a serve — reports verified.
         who = {"operator": "aifinpay", "ua_class": "aifp_agent", "verified": True}
+        # A verified_only rule now has its answer. An allow here is served free
+        # without spending the receipt: the merchant said this caller does not pay.
+        if operator_pending:
+            decided = self._apply_operator(once_verified, resource, weight, path, who=who,
+                                           agent=payload.get("sub"))
+            if decided is not None:
+                return decided
 
         # A valid signature is not a licence to spend: only quota receipts buy
         # calls. Allow-list, so a token kind added later is refused today.

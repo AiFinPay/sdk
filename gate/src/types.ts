@@ -193,6 +193,32 @@ export interface GateEvent {
   verified?: boolean;
 }
 
+/** What the merchant decided for one operator or class of client (see
+ *  operator-policy.ts): served free, charged as the gate would anyway, or
+ *  refused with a 403. */
+export type OperatorAction = "allow" | "charge" | "block";
+
+/** One rule of the merchant's operator policy, field-for-field what
+ *  backend/aifp/policy.js stores and the public merchant view carries: exactly
+ *  one of `operator` / `ua_class`, never `ua_class: "human"`. The owner's
+ *  `note` stays on the control plane. */
+export interface OperatorRule {
+  operator?: GateOperator;
+  ua_class?: UaClass;
+  action: OperatorAction;
+  /** Only for a caller whose AIFP receipt verified; a claimed identity falls
+   *  through to the next rule. */
+  verified_only?: boolean;
+}
+
+/** The operator section of a merchant's access policy. `operator_default`
+ *  answers for every operator without a rule; "charge" is what a gate does
+ *  without any policy at all. */
+export interface OperatorPolicy {
+  operator_rules: OperatorRule[];
+  operator_default: OperatorAction;
+}
+
 /** Public view of a merchant, as `GET /v1/merchants/:id` returns it. Loosely
  *  typed on purpose — the control plane may add fields, and a strict interface
  *  here would make a server-side addition look like a client-side break. */
@@ -201,6 +227,10 @@ export interface MerchantPublicView {
   name?: string;
   pay_to?: Record<string, string>;
   unit_prices?: Record<string, string | number>;
+  /** The merchant's operator rules, without notes. Absent on a control plane
+   *  that predates them; the gate then decides as it always has. */
+  operator_rules?: OperatorRule[];
+  operator_default?: OperatorAction;
   [k: string]: unknown;
 }
 
