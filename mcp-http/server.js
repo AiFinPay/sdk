@@ -5,6 +5,8 @@
 // mcp.so, LobeHub MCP) that require an HTTP endpoint can list us. The
 // underlying tools are the same as the stdio @aifinpay/mcp package —
 // payable_fetch, agent_address, agent_quote, pay_with_split, quote_split.
+// AIFINPAY_MCP_PROFILE=directory serves the read-only directory server
+// instead (OpenAI ChatGPT App Directory, mcp.aifinpay.io/directory/mcp).
 //
 // Per-session model: each MCP client connection gets its own ephemeral
 // Agent identity unless the client passes ?secret=<base58> on the
@@ -20,23 +22,58 @@ import rateLimit from "express-rate-limit";
 import { randomUUID } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { createServer } from "@aifinpay/mcp";
+import { createServer, createDirectoryServer } from "@aifinpay/mcp";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
 const PORT = process.env.PORT || 3010;
 const PUBLIC_URL = process.env.MCP_PUBLIC_URL || "https://mcp.aifinpay.io/mcp";
+
+// Profile selects WHICH MCP server this process serves:
+//   connector (default) — full BYO-MCP server (createServer), payment execution,
+//                         OAuth-gateable. Lives at mcp.aifinpay.io/mcp.
+//   directory           — read-only server (createDirectoryServer): public tools,
+//                         NO agent identity, NO auth. The surface submitted to the
+//                         OpenAI ChatGPT App Directory (mcp.aifinpay.io/directory/mcp).
+// Anything else refuses to start: a typo must not serve the connector at the
+// directory URL.
+const MCP_PROFILE = (process.env.AIFINPAY_MCP_PROFILE || "connector").toLowerCase();
+if (MCP_PROFILE !== "connector" && MCP_PROFILE !== "directory") {
+  throw new Error(`AIFINPAY_MCP_PROFILE must be "connector" or "directory", got "${MCP_PROFILE}"`);
+}
+const IS_DIRECTORY = MCP_PROFILE === "directory";
+
+// Build the per-session MCP server for the active profile. Directory has no agent.
+async function buildMcpServer(opts) {
+  if (IS_DIRECTORY) {
+    const { server } = await createDirectoryServer({ log: opts.logFn });
+    return { server, agent: null };
+  }
+  return createServer(opts); // { server, agent }
+}
 
 // ── OAuth 2.1 config (ChatGPT Apps linking flow, RFC 9728 / 8414) ──────────
 // Discovery lives on THIS server; the authorization server is your IdP
 // (WorkOS / Clerk / Stytch / Auth0 / Scalekit). AUTH_REQUIRED stays OFF until
 // an IdP is wired, so existing anonymous BYO-MCP connectors keep working.
 const ISSUER = process.env.AIFINPAY_OAUTH_ISSUER || ""; // e.g. https://auth.aifinpay.io
-const RESOURCE = process.env.MCP_RESOURCE_URL || PUBLIC_URL; // token `aud` must equal this
+const RESOURCE = process.env.MCP_RESOURCE_URL || PUBLIC_URL;
+// Default to standard OIDC scopes the IdP (Stytch) actually supports. Custom
+// scopes (aifinpay.read/pay) are NOT registered in the IdP and caused "invalid
+// scope" — re-add them only once they're registered AND enforced server-side.
 const SCOPES = (process.env.AIFINPAY_OAUTH_SCOPES ||
-  "openid email profile aifinpay.read aifinpay.pay").split(/\s+/).filter(Boolean);
-const AUTH_REQUIRED = process.env.AIFINPAY_AUTH_REQUIRED === "true";
+  "openid profile email offline_access").split(/\s+/).filter(Boolean);
+// Directory profile is ALWAYS anonymous (read-only public data) — force auth off
+// regardless of env so the OpenAI reviewer can call every tool with no login.
+const AUTH_REQUIRED = process.env.AIFINPAY_AUTH_REQUIRED === "true" && !IS_DIRECTORY;
 const PRM_URL = RESOURCE.replace(/\/mcp$/, "") + "/.well-known/oauth-protected-resource";
 const REQUIRED_SCOPE = process.env.AIFINPAY_REQUIRED_SCOPE || ""; // e.g. "aifinpay.read"
+// Accepted token audiences (comma-separated). IdPs differ: Stytch sets `aud` to
+// the project_id, others to the resource URL (RFC 8707) or the client_id. We
+// verify signature+iss+exp via jose, then check aud against this allow-list
+// ourselves. Set AIFINPAY_OAUTH_AUDIENCE to your Stytch project_id (+ optionally
+// the resource URL). Defaults to the resource URL.
+const AUDIENCES = (process.env.AIFINPAY_OAUTH_AUDIENCE || RESOURCE)
+  .split(",").map((x) => x.trim()).filter(Boolean);
 
 const app = express();
 app.set("trust proxy", 1);
@@ -132,7 +169,7 @@ async function getJwks() {
 // Bearer gate. OFF unless AIFINPAY_AUTH_REQUIRED=true (keeps anonymous BYO-MCP
 // connectors working). When ON, a missing/invalid token returns 401 +
 // WWW-Authenticate — exactly what triggers ChatGPT's account-linking UI.
-// Real verification: JWT signature (IdP JWKS) + iss + aud(===RESOURCE) + exp + scope.
+// Real verification: JWT signature (IdP JWKS) + iss + exp, then aud ∈ AUDIENCES + scope.
 async function maybeAuth(req, res, next) {
   if (!AUTH_REQUIRED) return next();
   const challenge = (msg) => {
@@ -149,10 +186,19 @@ async function maybeAuth(req, res, next) {
   if (!token) return challenge();
   try {
     const jwks = await getJwks();
+    // Verify signature + issuer + expiry first; audience is checked below against
+    // AUDIENCES, because IdPs disagree on what they put in `aud`.
     const { payload } = await jwtVerify(token, jwks, {
       issuer: ISSUER || undefined,
-      audience: RESOURCE, // ChatGPT mints the token with aud = our resource URL
     });
+    const tokenAuds = Array.isArray(payload.aud) ? payload.aud : payload.aud ? [payload.aud] : [];
+    if (!tokenAuds.some((a) => AUDIENCES.includes(a))) {
+      sessionLog(
+        "warn",
+        `aud mismatch: token aud=${JSON.stringify(payload.aud)} azp=${payload.azp || payload.client_id || ""} sub=${payload.sub || ""} — expected one of ${JSON.stringify(AUDIENCES)}`,
+      );
+      return challenge("invalid_token");
+    }
     if (REQUIRED_SCOPE) {
       const scopes = String(payload.scope || payload.scp || "").split(/\s+/).filter(Boolean);
       if (!scopes.includes(REQUIRED_SCOPE)) return challenge("insufficient_scope");
@@ -172,7 +218,7 @@ async function maybeAuth(req, res, next) {
 let _cachedToolspec = null;
 async function buildToolspec() {
   if (_cachedToolspec) return _cachedToolspec;
-  const { server } = await createServer({ logFn: () => {} });
+  const { server } = await buildMcpServer({ logFn: () => {} });
   // Pull out the registered tool handlers — the Server stores them in
   // a private _requestHandlers map keyed by method name. Easier:
   // invoke ListToolsRequest manually via the registered handler.
@@ -247,7 +293,7 @@ app.post("/mcp", mcpLimiter, maybeAuth, async (req, res) => {
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (id) => {
           sessions.set(id, { transport, server, agent });
-          sessionLog("info", `session init id=${id} agent=${agent.address}`);
+          sessionLog("info", `session init id=${id} agent=${agent ? agent.address : "directory(read-only)"}`);
         },
       });
 
@@ -264,8 +310,10 @@ app.post("/mcp", mcpLimiter, maybeAuth, async (req, res) => {
       // only walk the tool list. End users connecting persistently can
       // pass AIFINPAY_AGENT_SECRET through their MCP client env (this
       // happens via the stdio path; the HTTP path is for listings).
-      // createServer became async in @aifinpay/mcp 0.1.0-alpha.3 — must await
-      const { server, agent } = await createServer({ logFn: sessionLog });
+      // createServer became async in @aifinpay/mcp 0.1.0-alpha.3 — must await.
+      // buildMcpServer picks connector vs directory profile (agent is null for
+      // the read-only directory profile).
+      const { server, agent } = await buildMcpServer({ logFn: sessionLog });
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
       return;
@@ -375,13 +423,13 @@ const _isMain = process.argv[1] &&
   new URL(process.argv[1], "file://").href === import.meta.url.href;
 if (_isMain) {
   app.listen(PORT, () => {
-    sessionLog("info", `listening on :${PORT}, public URL ${PUBLIC_URL}`);
+    sessionLog("info", `listening on :${PORT}, profile=${MCP_PROFILE}, public URL ${PUBLIC_URL}`);
     sessionLog("info", `oauth: required=${AUTH_REQUIRED} issuer=${ISSUER || "(none)"} resource=${RESOURCE}`);
     if (AUTH_REQUIRED && !ISSUER) {
       sessionLog("error", "AIFINPAY_AUTH_REQUIRED=true but AIFINPAY_OAUTH_ISSUER is unset — clients will 401 with nowhere to link.");
     }
     if (AUTH_REQUIRED && ISSUER) {
-      sessionLog("info", `Bearer gate ON — verifying JWT against ${ISSUER} JWKS (aud=${RESOURCE}${REQUIRED_SCOPE ? `, scope=${REQUIRED_SCOPE}` : ""}).`);
+      sessionLog("info", `Bearer gate ON — verifying JWT against ${ISSUER} JWKS (aud ∈ ${JSON.stringify(AUDIENCES)}${REQUIRED_SCOPE ? `, scope=${REQUIRED_SCOPE}` : ""}).`);
     }
   });
 }
