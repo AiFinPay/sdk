@@ -23,3 +23,8 @@ export { createServer } from "./server.js";
 export type { ToolContext } from "./server.js";
 export type { McpConfig } from "./config.js";
 export { loadConfigFromEnv } from "./config.js";
+
+// Read-only directory profile — the surface submitted to the OpenAI ChatGPT App
+// Directory (no agent, no auth, no payment execution). See directory.ts.
+export { createDirectoryServer } from "./directory.js";
+export type { DirectoryServerConfig } from "./directory.js";

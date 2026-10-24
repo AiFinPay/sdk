@@ -21,10 +21,12 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // ee4b3b4), since moved to agent 2.9.0 and skill 2.10.2. Moved again to bda78b7
 // (2026-10-22) for MCP SDK 1.32.1, which fixes GHSA-22jm-h49p-29qw (high) and
 // GHSA-6prh-2h8m-c8cw; 1.31.0 had kept proxy-addr 2.0.8 for GHSA-6qxp-vccf-f47h /
-// GHSA-jqcg-44mw-7w3h. Keep the bootstrap immutable between such refreshes.
-export const BASE = "bda78b76ec744beda7aba7fc3373070d455864c9";
+// GHSA-jqcg-44mw-7w3h. Moved to baff204 (2026-10-24) for zod 4.6.7
+// (GHSA-mrhx-c7xc-m3w5, high) and body-parser 2.4.0 (GHSA-27r3-jxmh-p828, high).
+// Keep the bootstrap immutable between such refreshes.
+export const BASE = "baff2043ca0170bc35e1603f3fa75f81ab54c2ea";
 export const COHORT = {
-  mcp: "2.12.3",
+  mcp: "2.13.0",
   agent: "2.9.0",
   python: "2.7.1",
   skill: "2.11.0",
@@ -45,9 +47,9 @@ export const SKILL_PACK = {
 };
 export const BASE_HASHES = {
   "package.json":
-    "325711e2bd41af101a547839e92f594578c7c68392ab44806266dfc1eb57702e",
+    "cabf85d32e095147a300c3c3730e3f2edfd9b548a24f6e6034545f852fd2e926",
   "package-lock.json":
-    "429d7adaeae773713fc2bd9264483dae2125b48e4c3326151cd810e84b3dee08",
+    "a5956cbab4359f24d262a516981763bc3288c809713dca3c208e384d235275e7",
 };
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const json = (path) => JSON.parse(readFileSync(path, "utf8"));

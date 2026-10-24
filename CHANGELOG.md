@@ -1,3 +1,29 @@
+## MCP HTTP 2.1.0 / MCP 2.13.0 — read-only directory profile on main
+
+- `@aifinpay/mcp` 2.13.0 exports `createDirectoryServer()`: nine read-only
+  tools over public `api.aifinpay.io` GETs (`agent_profile`, `leaderboard`,
+  `list_providers`, `network_stats`, `provider_info`, `provider_status`,
+  `quote_cost`, `service_coverage`, `verify_passport`), each
+  `readOnlyHint: true`, no agent, no auth, no payment tool. It backs the OpenAI
+  ChatGPT App Directory listing at `mcp.aifinpay.io/directory/mcp` and had only
+  lived on the `feat/directory-app` branch.
+- `@aifinpay/mcp-http` 2.1.0 serves it with `AIFINPAY_MCP_PROFILE=directory`
+  (auth always off there); the default `connector` profile is unchanged. Any
+  other profile value refuses to start.
+- The connector's Bearer gate checks `aud` against `AIFINPAY_OAUTH_AUDIENCE`, a
+  comma list (default: the resource URL), after jose verifies signature, issuer
+  and expiry. Stytch puts the project id in `aud`, so the old
+  `aud === resource` check refused every real token. `AIFINPAY_OAUTH_SCOPES`
+  defaults to `openid profile email offline_access`; the unregistered
+  `aifinpay.read` / `aifinpay.pay` broke consent.
+- `mcp-http` takes `@aifinpay/mcp` from `file:../mcp` until 2.13.0 is on npm:
+  build `mcp/` before starting it, and do not publish `mcp-http` with that
+  dependency.
+- Locks only, in both packages: `zod` 4.6.7 (GHSA-mrhx-c7xc-m3w5) and
+  `body-parser` 2.4.0 (GHSA-27r3-jxmh-p828), both high; in `mcp/` also
+  `fast-uri` 3.1.9 and `ip-address` 10.7.4. `npm audit --omit=dev` reports 0
+  in both.
+
 ## Gate 0.7.0 / Python gate 0.4.0 — per-operator allow / charge / block
 
 - `@aifinpay/gate` and `aifinpay-gate` apply the merchant's per-operator

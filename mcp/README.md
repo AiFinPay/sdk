@@ -4,7 +4,7 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Version **2.12.3** is prepared in this checkout, on the published agent 2.9.0
+Version **2.13.0** is prepared in this checkout, on the published agent 2.9.0
 and canonical skill 2.11.0 (AiFinPay/skill 0490615, published 2026-10-22). The separate canonical producer's final immutable
 source pin is a required handoff, not a moving-branch substitution.
 The published baseline checked2026-10-04 was MCP2.5.0. Package publication and
@@ -287,6 +287,23 @@ itself. Once the owner confirms the new merchant, a call with
 the tool says not to retry. `dev_payment_quote` is registered
 only with `AIFINPAY_MODE=dev`. Legacy `agent_call`, `agent_quote`,
 `pay_with_split` and `quote_split` remain unregistered.
+
+### Read-only directory profile
+
+`createDirectoryServer()` is a second, separate server: the one listed in the
+OpenAI ChatGPT App Directory at `https://mcp.aifinpay.io/directory/mcp`. It has
+no agent identity, needs no auth and moves no money. Its nine tools wrap public
+`api.aifinpay.io` GET endpoints (`AIFINPAY_API_BASE` overrides the base), and
+each is `readOnlyHint: true` with an `outputSchema`: `list_providers`,
+`provider_info`, `provider_status`, `service_coverage`, `network_stats`,
+`leaderboard`, `quote_cost` (a fee breakdown, no payment), `verify_passport`
+and `agent_profile`. `@aifinpay/mcp-http` serves it when
+`AIFINPAY_MCP_PROFILE=directory`.
+
+```ts
+import { createDirectoryServer } from "@aifinpay/mcp";
+const { server } = await createDirectoryServer();
+```
 
 ## Persistent wallet selection
 
