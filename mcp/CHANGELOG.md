@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.13.0 — read-only directory profile
+
+- New export `createDirectoryServer()`: the read-only server behind the OpenAI
+  ChatGPT App Directory listing (`mcp.aifinpay.io/directory/mcp`). Nine tools
+  wrap public `api.aifinpay.io` GET endpoints — `list_providers`,
+  `provider_info`, `provider_status`, `service_coverage`, `network_stats`,
+  `leaderboard`, `quote_cost`, `verify_passport`, `agent_profile` — each
+  `readOnlyHint: true` with an `outputSchema` and `structuredContent`. No agent
+  identity, no auth, no payment tool; `createServer()` is unchanged.
+- This code has served the directory listing since June from the
+  `feat/directory-app` branch; it now lives on main.
+- Lock only: `zod` 4.6.7 (GHSA-mrhx-c7xc-m3w5) and `body-parser` 2.4.0
+  (GHSA-27r3-jxmh-p828), both high, plus `fast-uri` 3.1.9 and `ip-address`
+  10.7.4 (moderate). `npm audit --omit=dev` reports 0.
+
 ## 2.12.3 — a 2FA account links by the one-time URL too
 
 - The backend now redeems a claim URL for an account with 2FA on (aifinpay-web,
