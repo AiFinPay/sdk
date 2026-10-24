@@ -59,13 +59,13 @@ test("canonical mirror and both CI refs bind the reviewed reporting producer; wr
 });
 test("reporting source target refuses every stale package version without claiming registry availability", () => {
   verifyCohortVersions({
-    mcp: "2.12.3",
+    mcp: "2.13.0",
     agent: "2.9.0",
     python: "2.7.1",
     skill: "2.11.0",
   });
   for (const [name, oldVersion] of Object.entries({
-    mcp: "2.12.2",
+    mcp: "2.12.3",
     agent: "2.8.0",
     python: "2.7.0",
     skill: "2.10.2",
@@ -173,6 +173,8 @@ test("immutable bootstrap uses the existing patched registry lock without source
   for (const [name, version] of [
     ["@modelcontextprotocol/sdk", "1.32.1"],
     ["proxy-addr", "2.0.8"],
+    ["zod", "4.6.7"],
+    ["body-parser", "2.4.0"],
   ]) {
     const entry = lock.packages[`node_modules/${name}`];
     assert.equal(
