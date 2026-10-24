@@ -20,11 +20,14 @@
  *     ],
  *   }));
  *
- * Serves GET /.well-known/x402.json. Everything else falls through.
+ * Serves GET /.well-known/x402.json. Everything else falls through — and an
+ * HTML page among it leaves with a `Link` header pointing at /llms.txt and at
+ * this document, so an agent that lands on the home page finds both.
  */
 import type { Request, Response, NextFunction, RequestHandler } from "express";
 import type { Tier } from "./types.js";
 import { unitPriceUsd } from "./pricing.js";
+import { discoveryLinkHeader, isHtmlContentType, type DiscoveryLinkSetting } from "./discovery-link.js";
 
 export interface DiscoveryResource {
   resource: string;
@@ -42,6 +45,10 @@ export interface DiscoveryOptions {
   apiBase?: string;
   /** Override the served path. Default "/.well-known/x402.json". */
   path?: string;
+  /** The `Link` header this middleware adds to every HTML response it lets
+   *  through (see discovery-link.ts). On by default, pointing at `/llms.txt`
+   *  and at `path`; `false` switches it off. */
+  discoveryLink?: DiscoveryLinkSetting;
 }
 
 /** The x402 discovery document. Shape follows the x402 well-known convention:
@@ -77,12 +84,41 @@ export function buildDiscoveryDocument(opts: DiscoveryOptions): object {
   };
 }
 
+const linkedResponses = new WeakSet<Response>();
+
+/**
+ * Add the discovery `Link` to `res` if, and only if, it turns out to be an
+ * HTML page. The content type is known only when the headers go out, so the
+ * check runs in `writeHead`, which `res.send`, `res.sendFile` and a bare
+ * `res.end` all reach. Idempotent per response: the gate and the discovery
+ * middleware can both be mounted without sending the header twice.
+ */
+export function linkHtmlResponse(res: Response, value: string | null): void {
+  if (!value || linkedResponses.has(res)) return;
+  linkedResponses.add(res);
+  const writeHead = res.writeHead;
+  res.writeHead = function (this: Response, ...args: unknown[]) {
+    const inline = args.find((a): a is Record<string, unknown> => !!a && typeof a === "object" && !Array.isArray(a));
+    const inlineType = inline && Object.entries(inline).find(([k]) => k.toLowerCase() === "content-type")?.[1];
+    if (isHtmlContentType(String(this.getHeader("content-type") ?? inlineType ?? ""))) {
+      const existing = this.getHeader("link");
+      const current = existing === undefined ? [] : Array.isArray(existing) ? existing : [String(existing)];
+      if (!current.some((v) => v.includes(value))) this.setHeader("link", [...current, value]);
+    }
+    return (writeHead as (...a: unknown[]) => Response).apply(this, args);
+  } as Response["writeHead"];
+}
+
 export function aifpDiscovery(opts: DiscoveryOptions): RequestHandler {
   const path = opts.path ?? "/.well-known/x402.json";
   const doc = buildDiscoveryDocument(opts);
   const body = JSON.stringify(doc);
+  const link = discoveryLinkHeader(opts.discoveryLink === false ? false : { x402: path, ...opts.discoveryLink });
   return function aifpDiscoveryHandler(req: Request, res: Response, next: NextFunction): void {
-    if (req.method !== "GET" || req.path !== path) return next();
+    if (req.method !== "GET" || req.path !== path) {
+      linkHtmlResponse(res, link);
+      return next();
+    }
     res.set("content-type", "application/json");
     // Safe to cache: the document changes only when the merchant changes what it
     // gates, which is a redeploy, not a request.

@@ -117,3 +117,14 @@ test("a line without a usable timestamp is stamped now; a custom API base is hon
   assert.equal(posts[0].body.events[0].at, "2025-10-09T08:53:20.000Z");
   assert.equal(posts[0].body.events[0].resource, "/*");
 });
+
+test("aifp-shadow.conf sends the gate's discovery Link on HTML responses only", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { discoveryLinkHeader } = await import("@aifinpay/gate/edge");
+  const conf = await readFile(new URL("../aifp-shadow.conf", import.meta.url), "utf8");
+  const map = conf.match(/map \$sent_http_content_type \$aifp_discovery_link \{([\s\S]*?)\n\}/);
+  assert.ok(map, "map on $sent_http_content_type");
+  assert.ok(map[1].includes(`'${discoveryLinkHeader()}'`), "the same value as the SDK gate");
+  assert.match(map[1], /default\s+"";/);
+  assert.match(conf, /^add_header Link \$aifp_discovery_link always;$/m);
+});

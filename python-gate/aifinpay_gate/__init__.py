@@ -20,7 +20,7 @@ from .core import (
     Route,
     SimpleRequest,
 )
-from .discovery import build_discovery_document
+from .discovery import LLMS_TXT_PATH, build_discovery_document, discovery_link_header, is_html_content_type
 from .operator_policy import OPERATOR_ACTIONS, OPERATOR_DEFAULT, decide_operator, normalize_operator_policy
 from .reporter import GateReporter, GateReporterV2, ReportingFlow
 from .pricing import TIER_WEIGHTS, UNIT_PRICE_USD, min_requests_for_tier, unit_price_usd, weight_for_tier
@@ -29,12 +29,12 @@ from .stores import REDIS_INCRBY_SCRIPT, MemoryStore, RedisStore, StoreCapacityE
 from .verify import Verifier
 from .wsgi import AifpGateWSGI
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
     "AI_AGENT_UA_MARKERS", "AI_AGENT_UA_TABLE", "AifpGateMiddleware", "AifpGateWSGI", "DETAIL_QUOTA_EXHAUSTED", "DETAIL_RECEIPT_EXPIRED",
-    "DETAIL_VERIFY_FAILED", "GATE_OPERATORS", "Gate", "GateResult", "GateReporter", "GateReporterV2", "ReportingFlow", "HEADER_MODE", "HEADER_QUOTA_REMAINING", "HEADER_SHADOW_STATUS", "MemoryStore", "OPERATOR_ACTIONS", "OPERATOR_DEFAULT", "REDIS_INCRBY_SCRIPT",
+    "DETAIL_VERIFY_FAILED", "GATE_OPERATORS", "Gate", "GateResult", "GateReporter", "GateReporterV2", "ReportingFlow", "HEADER_MODE", "HEADER_QUOTA_REMAINING", "HEADER_SHADOW_STATUS", "LLMS_TXT_PATH", "MemoryStore", "OPERATOR_ACTIONS", "OPERATOR_DEFAULT", "REDIS_INCRBY_SCRIPT",
     "RedisStore", "Route", "SimpleRequest", "StoreCapacityError", "TIER_WEIGHTS", "UA_CLASSES", "UNIT_PRICE_USD", "Verifier",
-    "build_challenge", "build_discovery_document", "classify_agent", "decide_operator", "known_ai_agent", "min_requests_for_tier",
+    "build_challenge", "build_discovery_document", "classify_agent", "decide_operator", "discovery_link_header", "is_html_content_type", "known_ai_agent", "min_requests_for_tier",
     "normalize_operator_policy", "pattern_covers", "scope_covers", "unit_price_usd", "weight_for_tier",
 ]

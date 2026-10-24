@@ -23,6 +23,13 @@ User-Agent and a 0/1 flag for "carried an AIFP header" — not the receipt,
 not the IP, not cookies. Add `add_header AIFP-Mode shadow always;` if you
 want the AiFinPay site check to see the gate is observing.
 
+The file also adds a `Link` header to HTML responses only (a `map` on
+`$sent_http_content_type`; an empty value adds nothing), pointing at
+`/llms.txt` and `/.well-known/x402.json`, so an agent that opens your home
+page finds how to pay. Delete the `add_header Link` line to opt out, and
+repeat it in any `location {}` that has its own `add_header` (nginx does not
+inherit them there).
+
 ```bash
 nginx -t && nginx -s reload
 ```
@@ -30,7 +37,7 @@ nginx -t && nginx -s reload
 ## 2. The shipper
 
 ```bash
-npm install        # @aifinpay/gate ≥ 0.6.0, nothing else
+npm install        # @aifinpay/gate ≥ 0.8.0, nothing else
 export AIFP_MERCHANT_ID=mrch_…          # from POST /v1/merchants
 export AIFP_MERCHANT_SECRET=…           # server-side secret, never in a repo
 export AIFP_RESOURCES="/articles/*,/api/*"   # patterns registered in the dashboard; "/*" = whole site

@@ -2,6 +2,8 @@ import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { createGate, refundUnits, type GateOptions } from "./core.js";
 import { MemoryStore } from "./stores/memory.js";
 import type { AifpContext } from "./types.js";
+import { linkHtmlResponse } from "./discovery.js";
+import { discoveryLinkHeader } from "./discovery-link.js";
 import { validReportingContext, type ReportingContext, type ReportedEvent } from "./reporter.js";
 
 // Several mounts sharing a response must never count its terminal event twice.
@@ -37,8 +39,12 @@ export function aifpGate(options: GateOptions): RequestHandler {
   const store = options.store ?? new MemoryStore({ warnIfDefaulted: true });
   const keyPrefix = options.keyPrefix ?? "aifp:";
   const gate = createGate({ ...options, store });
+  const link = discoveryLinkHeader(options.discoveryLink);
 
   return function aifpGateHandler(req: Request, res: Response, next: NextFunction): void {
+    // Only an HTML response carries it, so the gate's own JSON 402 / 403 / 503
+    // and a JSON API behind the gate never do.
+    linkHtmlResponse(res, link);
     void (async () => {
       try {
         const result = await gate({

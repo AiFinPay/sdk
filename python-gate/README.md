@@ -58,6 +58,17 @@ app.wsgi_app = AifpGateWSGI(app.wsgi_app, Gate("mrch_…", routes=[Route("/api/*
 Both adapters also serve `/.well-known/x402.json` so agents discover the paid
 routes before they hit one (`serve_discovery=False` to turn it off).
 
+Every HTML response that passes through either adapter — the home page above
+all — gets one `Link` header pointing at `/llms.txt` (`rel="alternate"`,
+`type="text/markdown"`) and `/.well-known/x402.json` (`rel="describedby"`).
+An agent that opened a page instead of an API, with a User-Agent the gate does
+not charge, reads it before the body and knows where the payment instructions
+are. JSON responses, including the gate's own 402, never carry it; a page's own
+`Link` is kept. Publish an `llms.txt` (the dashboard generates one under
+Integration → Agent instructions). `discovery_link=False` switches the header
+off; `discovery_link={"llms_txt": "/agents.md", "x402": False}` moves or drops
+either link.
+
 ## Any other framework
 
 ```python

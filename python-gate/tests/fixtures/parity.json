@@ -1,5 +1,5 @@
 {
- "generated_from": "@aifinpay/gate 0.7.0",
+ "generated_from": "@aifinpay/gate 0.8.0",
  "jwks": {
   "keys": [
    {
@@ -476,6 +476,86 @@
    ],
    "settlement_terms_from": "https://api.aifinpay.io/v1/quote"
   }
+ },
+ "discovery_link": {
+  "headers": [
+   {
+    "args": true,
+    "header": "</llms.txt>; rel=\"alternate\"; type=\"text/markdown\"; title=\"AI agents: access and payment\", </.well-known/x402.json>; rel=\"describedby\"; type=\"application/json\""
+   },
+   {
+    "args": false,
+    "header": null
+   },
+   {
+    "args": {},
+    "header": "</llms.txt>; rel=\"alternate\"; type=\"text/markdown\"; title=\"AI agents: access and payment\", </.well-known/x402.json>; rel=\"describedby\"; type=\"application/json\""
+   },
+   {
+    "args": {
+     "x402": false
+    },
+    "header": "</llms.txt>; rel=\"alternate\"; type=\"text/markdown\"; title=\"AI agents: access and payment\""
+   },
+   {
+    "args": {
+     "llms_txt": "/agents.md",
+     "x402": false
+    },
+    "header": "</agents.md>; rel=\"alternate\"; type=\"text/markdown\"; title=\"AI agents: access and payment\""
+   },
+   {
+    "args": {
+     "llms_txt": false,
+     "x402": false
+    },
+    "header": null
+   },
+   {
+    "args": {
+     "x402": "/x402.json"
+    },
+    "header": "</llms.txt>; rel=\"alternate\"; type=\"text/markdown\"; title=\"AI agents: access and payment\", </x402.json>; rel=\"describedby\"; type=\"application/json\""
+   }
+  ],
+  "html": [
+   [
+    "text/html",
+    true
+   ],
+   [
+    "text/html; charset=utf-8",
+    true
+   ],
+   [
+    "TEXT/HTML",
+    true
+   ],
+   [
+    " text/html ;q=1",
+    true
+   ],
+   [
+    "application/xhtml+xml",
+    true
+   ],
+   [
+    "application/json",
+    false
+   ],
+   [
+    "text/plain",
+    false
+   ],
+   [
+    "text/htmlx",
+    false
+   ],
+   [
+    "",
+    false
+   ]
+  ]
  },
  "scope_cases": [
   [
