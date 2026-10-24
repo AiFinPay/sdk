@@ -6,7 +6,8 @@
 // table the gate charges from), which registered pattern a path belongs to
 // (matchResource) and what a receipt's scope covers (scopeCovers). No jose,
 // no express, no node:crypto — nothing here verifies a receipt or meters a
-// unit; it only answers the questions an observe-only installation asks.
+// unit; it only answers the questions an observe-only installation asks —
+// and builds the discovery `Link` header an HTML page carries.
 // ──────────────────────────────────────────────────────────────────────────
 export {
   classifyAgent,
@@ -18,6 +19,8 @@ export {
 } from "./agents.js";
 export type { AgentIdentity, AiAgentUaEntry, GateOperator, UaClass } from "./agents.js";
 export { matchResource } from "./match.js";
+export { discoveryLinkHeader, isHtmlContentType, LLMS_TXT_PATH, X402_DISCOVERY_PATH } from "./discovery-link.js";
+export type { DiscoveryLinkOptions, DiscoveryLinkSetting } from "./discovery-link.js";
 export { scopeCovers } from "./scope.js";
 export { decideOperator, normalizeOperatorPolicy, OPERATOR_ACTIONS, OPERATOR_DEFAULT } from "./operator-policy.js";
 export type { OperatorDecision } from "./operator-policy.js";

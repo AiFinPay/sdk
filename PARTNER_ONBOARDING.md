@@ -216,6 +216,13 @@ Before driving real volume through the bridge:
 - [ ] Monitor the bridge's `Payment` events (or our dashboard) — if you
       see your merchant wallet missing receipts, an agent paid but the
       bridge didn't deliver. That's a refund case.
+- [ ] Make your home page point agents at `/llms.txt`, and open that file
+      with the "How to pay" steps. Agents land on the home page, not on a
+      gated path: `@aifinpay/gate` ≥ 0.8.0 / `aifinpay-gate` ≥ 0.5.0 (and the
+      shadow Worker / nginx templates) send a `Link` header on HTML pages;
+      add `<link rel="alternate" type="text/markdown" href="/llms.txt">` to
+      `<head>` and `# AI agents: https://<your-site>/llms.txt` to robots.txt.
+      The dashboard's Integration → Agent discovery block has all three.
 
 ## Questions / changes
 

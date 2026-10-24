@@ -523,6 +523,26 @@ The discovery file lists resource prices and scopes. A fresh quote supplies
 settlement terms; discovery is neither a receipt nor proof that a particular
 client can execute the offered route.
 
+### The home page points at both (0.8.0)
+
+An agent usually lands on your home page, not on a gated API path, and only
+the 402 carries `how_to_pay`. So `aifpGate` and `aifpDiscovery` add one header
+to every **HTML** response they let through:
+
+```
+Link: </llms.txt>; rel="alternate"; type="text/markdown"; title="AI agents: access and payment",
+      </.well-known/x402.json>; rel="describedby"; type="application/json"
+```
+
+JSON responses — your API, the gate's own 402 / 403 / 503 — never carry it, a
+page's own `Link` is kept beside it, and mounting both middlewares sends it
+once. Mount `aifpDiscovery` with `app.use` so it sees the home page too. The
+header is on by default; `discoveryLink: false` switches it off and
+`discoveryLink: { llmsTxt: "/agents.md", x402: false }` moves or drops either
+link. It never changes a decision, a status or a metered unit. Publish the
+`llms.txt` it points at (the dashboard generates one under Integration → Agent
+instructions); put the "How to pay" steps at the top of it.
+
 ## Opt-in dashboard request reporting (0.3.6, identity since 0.5.0)
 
 The reporter sends `402` challenges and gate-admitted `serve` events to the

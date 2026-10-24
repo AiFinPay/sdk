@@ -28,6 +28,8 @@ export {
 export { aifpGate } from "./express.js";
 export { aifpDiscovery, buildDiscoveryDocument } from "./discovery.js";
 export type { DiscoveryOptions, DiscoveryResource } from "./discovery.js";
+export { discoveryLinkHeader, isHtmlContentType, LLMS_TXT_PATH, X402_DISCOVERY_PATH } from "./discovery-link.js";
+export type { DiscoveryLinkOptions, DiscoveryLinkSetting } from "./discovery-link.js";
 
 export { MemoryStore } from "./stores/memory.js";
 export { redisStore, primeRedisStore, REDIS_INCRBY_SCRIPT } from "./stores/redis.js";

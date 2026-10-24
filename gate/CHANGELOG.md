@@ -1,5 +1,25 @@
 # Changelog
 
+## @aifinpay/gate 0.8.0 — unreleased
+
+- Agent discovery from any HTML page. `aifpGate` and `aifpDiscovery` add one
+  `Link` header to every HTML response they let through (content type
+  `text/html` or `application/xhtml+xml`, decided when the headers go out)
+  that points at `/llms.txt` (`rel="alternate"`, `type="text/markdown"`,
+  title "AI agents: access and payment") and at `/.well-known/x402.json`
+  (`rel="describedby"`, `type="application/json"`). An agent that opens the home page — not an API,
+  and with a User-Agent the gate does not charge — now has a pointer to the
+  site's payment instructions. JSON responses, including the gate's own
+  402 / 403 / 503, never carry it; a page's own `Link` is kept and ours is
+  added beside it; mounting both middlewares sends it once.
+- On by default. New option `discoveryLink` on both: `false` switches it off,
+  `{ llmsTxt, x402 }` moves either target or drops it with `false`.
+  `aifpDiscovery` points the x402 link at its own `path`.
+- No decision, status, event or metered unit changes.
+- Exported (also from `@aifinpay/gate/edge`): `discoveryLinkHeader`,
+  `isHtmlContentType`, `LLMS_TXT_PATH`, `X402_DISCOVERY_PATH`; types
+  `DiscoveryLinkOptions`, `DiscoveryLinkSetting`.
+
 ## @aifinpay/gate 0.7.0 — unreleased
 
 - Per-operator access policy: the merchant's allow / charge / block per

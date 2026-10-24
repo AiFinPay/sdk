@@ -1,3 +1,18 @@
+## Gate 0.8.0 / Python gate 0.5.0 — agent discovery from the home page
+
+- `@aifinpay/gate` (`aifpGate`, `aifpDiscovery`) and `aifinpay-gate`
+  (`AifpGateMiddleware`, `AifpGateWSGI`) add a `Link` header to every HTML
+  response they let through, pointing at `/llms.txt` and
+  `/.well-known/x402.json`. On by default, `discoveryLink: false` /
+  `discovery_link=False` switches it off. JSON responses never carry it and no
+  charging decision changes.
+- The Cloudflare Worker and nginx shadow templates add the same header to
+  HTML responses (`AIFP_DISCOVERY_LINK = "off"` / one line removed to opt
+  out). The Worker now needs `@aifinpay/gate` ^0.8.0.
+- Why: an outside tester's agent opened a merchant's home page (an SPA with
+  no word about agents), met no 402 because its User-Agent was not charged,
+  and found no way to pay.
+
 ## MCP HTTP 2.1.0 / MCP 2.13.0 — read-only directory profile on main
 
 - `@aifinpay/mcp` 2.13.0 exports `createDirectoryServer()`: nine read-only

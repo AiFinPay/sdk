@@ -39,6 +39,14 @@ comma-separated: `"/*"` or `"/articles/*,/api/*"`. Requests outside every
 pattern are served and not reported. Set `AIFP_API_BASE` only for a staging
 API.
 
+HTML responses also get a `Link` header pointing at `/llms.txt`
+(`rel="alternate"`, `type="text/markdown"`) and `/.well-known/x402.json`
+(`rel="describedby"`). An agent that opens your home page reads it before the
+page body and knows where the access and payment instructions are, whatever
+its User-Agent. Publish both files on the origin (the dashboard generates
+`llms.txt` under Integration → Agent instructions). Set
+`AIFP_DISCOVERY_LINK = "off"` to drop the header.
+
 ## Before you measure: Cloudflare's own bot settings
 
 Since 2026-09-15 a new Cloudflare zone that ticks **"I monetize pages that
@@ -86,4 +94,4 @@ worker checks no receipts, so it can prove nobody.
 npm test     # node --test, no network: fetch is injected
 ```
 
-Requires `@aifinpay/gate` ≥ 0.6.0 (the `./edge` entry point).
+Requires `@aifinpay/gate` ≥ 0.8.0 (the `./edge` entry point with `discoveryLinkHeader`).
