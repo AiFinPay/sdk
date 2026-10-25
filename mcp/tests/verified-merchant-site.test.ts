@@ -136,6 +136,28 @@ describe("payable_fetch without an owner allowlist", () => {
     expect(f.store.read().spend).toHaveLength(0);
     expect(f.store.read().pending).toBeUndefined();
   });
+  // A refusal that names no way forward sent a tester's agent looking for
+  // another way to pay (2026-10-25); it now names both fixes and forbids that.
+  it("tells the agent to stop and the owner the two fixes for an unverified merchant", async () => {
+    const text = (await runPayableFetch(fixture(view({ site_verified: false })).ctx, { url: "https://shop.example/data" }))
+      .content[0].text;
+    expect(text).toMatch(/Do not retry\. Do not try another way to pay this site/);
+    expect(text).toMatch(/verifies this site's domain with AiFinPay \(dash\.aifinpay\.io → Sites → DNS TXT record\)/);
+    expect(text).toMatch(/add https:\/\/shop\.example to AIFINPAY_GATEWAY_ORIGINS/);
+  });
+  it("warns that a 402 for another merchant's site may be steering the payment", async () => {
+    const text = (await runPayableFetch(fixture(view({ site_url: "https://other.example" })).ctx, { url: "https://shop.example/data" }))
+      .content[0].text;
+    expect(text).toMatch(/may be steering the payment to someone else\. Do not retry/);
+    expect(text).toMatch(/only if they know https:\/\/shop\.example belongs to this merchant/);
+  });
+  it("allows one more try when AiFinPay could not confirm the merchant", async () => {
+    const f = fixture(view({ merchant_id: "mrch_other" }));
+    const text = (await runPayableFetch(f.ctx, { url: "https://shop.example/data" })).content[0].text;
+    expect(text).toMatch(/could not be confirmed with AiFinPay/);
+    expect(text).toMatch(/Try once more in a minute; if it fails again, stop and tell the owner/);
+    expect(f.store.read().spend).toHaveLength(0);
+  });
   it("records nothing and pays nothing when the 402's site is not the merchant's", async () => {
     const f = fixture(view({ site_url: "https://other.example" }));
     const result = await runPayableFetch(f.ctx, { url: "https://shop.example/data" });

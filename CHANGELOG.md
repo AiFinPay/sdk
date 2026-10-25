@@ -1,3 +1,10 @@
+## MCP 2.13.1 — a refusal to pay an unverified site says what to do
+
+- `payable_fetch` refusing an unverified merchant now tells the agent to stop
+  (no retry, no other way to pay) and names the owner's two fixes: the merchant
+  verifies its domain, or the owner adds the site's origin to
+  `AIFINPAY_GATEWAY_ORIGINS`. The checks themselves are unchanged.
+
 ## Gate 0.8.0 / Python gate 0.5.0 — agent discovery from the home page
 
 - `@aifinpay/gate` (`aifpGate`, `aifpDiscovery`) and `aifinpay-gate`

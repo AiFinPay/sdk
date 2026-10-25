@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.13.1 — a refusal to pay an unverified site says what to do
+
+- When `payable_fetch` refuses a merchant whose site is not DNS-verified, the
+  result now tells the agent to stop — no retry, no other tool, SDK call or
+  direct transfer — and names the owner's two fixes: the merchant verifies the
+  domain (dash.aifinpay.io → Sites → DNS TXT record), or the owner, knowing and
+  trusting the site, adds its origin to `AIFINPAY_GATEWAY_ORIGINS` and restarts
+  the client. A merchant verified for another site is reported as a possible
+  steered payment; a failed AiFinPay lookup allows one more try.
+- Why: the old text ("Without an owner allowlist … Tell the owner") named no
+  way forward, and a tester's agent went on trying other ways to pay.
+- Nothing about who may be paid changed: the same checks refuse the same
+  merchants, before anything is signed.
+
 ## 2.13.0 — read-only directory profile
 
 - New export `createDirectoryServer()`: the read-only server behind the OpenAI
