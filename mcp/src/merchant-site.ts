@@ -14,10 +14,17 @@
  * the journal or broadcast — so a refusal pays nothing.
  */
 
+/** "unconfirmed": the lookup failed; "unverified": no DNS proof; "other_site":
+ *  verified, but for a host other than the one being paid for. */
+export type UnverifiedMerchantSiteKind = "unconfirmed" | "unverified" | "other_site";
+
 export class UnverifiedMerchantSiteError extends Error {
   constructor(
     public readonly merchantId: string,
-    public readonly reason: string
+    public readonly reason: string,
+    public readonly kind: UnverifiedMerchantSiteKind,
+    /** Origin of the URL being paid for: what the owner would allowlist. */
+    public readonly origin: string
   ) {
     super(`Not paid: merchant ${merchantId} ${reason}. Nothing was signed or sent.`);
     this.name = "UnverifiedMerchantSiteError";
@@ -58,16 +65,19 @@ export async function assertVerifiedMerchantSite(opts: {
   } catch {
     body = null;
   }
+  const origin = opts.url.origin;
   if (!body || body.merchant_id !== merchantId)
-    throw new UnverifiedMerchantSiteError(merchantId, "could not be confirmed with AiFinPay");
+    throw new UnverifiedMerchantSiteError(merchantId, "could not be confirmed with AiFinPay", "unconfirmed", origin);
   if (body.site_verified !== true)
-    throw new UnverifiedMerchantSiteError(merchantId, "has not verified its site with AiFinPay");
+    throw new UnverifiedMerchantSiteError(merchantId, "has not verified its site with AiFinPay", "unverified", origin);
   if (opts.pathMode === "direct") {
     const site = hostOf(body.site_url);
     if (!site || site !== opts.url.hostname.toLowerCase())
       throw new UnverifiedMerchantSiteError(
         merchantId,
-        `is verified for ${site ?? "no https site"}, not ${opts.url.hostname}`
+        `is verified for ${site ?? "no https site"}, not ${opts.url.hostname}`,
+        "other_site",
+        origin
       );
   }
 }

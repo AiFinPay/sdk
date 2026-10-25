@@ -447,8 +447,16 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
       );
     }
     if (!state?.pending && error instanceof UnverifiedMerchantSiteError) {
+      // Name the ways forward, so neither the agent nor the owner improvises a
+      // third one: another tool, a direct transfer or a retry loop.
+      const noOtherWay = "Do not try another way to pay this site: no other tool, SDK call or direct transfer.";
+      const allowlist = `add ${error.origin} to AIFINPAY_GATEWAY_ORIGINS in this MCP server's env (comma-separated https origins; once it is set, only the listed sites are paid) and restart the MCP client`;
       return errorResult(
-        `${error.message} Without an owner allowlist, payable_fetch pays only a merchant that verified its site with AiFinPay, on that site. Tell the owner; the agent cannot approve this payee itself.`
+        error.kind === "unconfirmed"
+          ? `${error.message} The AiFinPay lookup of this merchant failed. Try once more in a minute; if it fails again, stop and tell the owner. ${noOtherWay}`
+          : error.kind === "other_site"
+            ? `${error.message} The site being paid for is not the one this merchant verified, so this 402 may be steering the payment to someone else. Do not retry. ${noOtherWay} Tell the owner; only if they know ${error.origin} belongs to this merchant should they ${allowlist}.`
+            : `${error.message} Do not retry. ${noOtherWay} Tell the owner there are two fixes: the merchant verifies this site's domain with AiFinPay (dash.aifinpay.io → Sites → DNS TXT record), or, if the owner knows and trusts ${error.origin}, they ${allowlist}. Then retry once.`
       );
     }
     if (!state?.pending && error instanceof Aifp1GatewayRetiredError) {
