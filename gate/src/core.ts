@@ -33,6 +33,7 @@ import { classifyAgent, type AgentIdentity } from "./agents.js";
 import { decideOperator, type OperatorDecision } from "./operator-policy.js";
 import type { ResourceRegistry } from "./registry.js";
 import type { GateReporterV2, ReportingContext } from "./reporter.js";
+import type { DiscoveryLinkSetting } from "./discovery-link.js";
 
 export interface GateOptions {
   /** "mrch_…" — must equal the receipt's `aud`, which is what stops a receipt
@@ -153,6 +154,16 @@ export interface GateOptions {
    * question never arises.
    */
   shouldCharge?: (req: GateRequest) => boolean | Promise<boolean>;
+  /**
+   * The framework adapter (`aifpGate`) adds a `Link` header to every HTML
+   * response that passes through it, pointing at `/llms.txt` and
+   * `/.well-known/x402.json` — how an agent that opened a page, rather than an
+   * API, learns the site takes payments. On by default; `false` switches it
+   * off, `{ llmsTxt, x402 }` moves either target (or drops one with `false`).
+   * Never changes a decision, a status or a metered unit; `createGate` itself
+   * ignores it.
+   */
+  discoveryLink?: DiscoveryLinkSetting;
 }
 
 const DEFAULT_ISSUER = "https://api.aifinpay.io";

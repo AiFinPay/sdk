@@ -15,7 +15,7 @@ import json
 from typing import Any, Dict, Optional
 
 from .core import Gate, GateResult
-from .discovery import DISCOVERY_PATH, build_discovery_document
+from .discovery import DISCOVERY_PATH, build_discovery_document, discovery_link_header, is_html_content_type
 
 
 class _AsgiRequest:
@@ -40,13 +40,33 @@ async def _send_json(send, status: int, headers: Dict[str, str], body: Any) -> N
 
 
 class AifpGateMiddleware:
-    def __init__(self, app, gate: Gate, serve_discovery: bool = True, refund_on_error: bool = False):
+    def __init__(self, app, gate: Gate, serve_discovery: bool = True, refund_on_error: bool = False,
+                 discovery_link=True):
         self.app = app
         self.gate = gate
         self.serve_discovery = serve_discovery
         self.refund_on_error = refund_on_error
         self._discovery = build_discovery_document(gate.merchant_id, gate.discovery_resources(),
                                                    gate.api_base or "https://api.aifinpay.io")
+        # Every HTML response that passes through points at /llms.txt and the
+        # x402 document (see discovery_link_header). False switches it off.
+        link = discovery_link_header(discovery_link)
+        self._link = link.encode("latin-1") if link else None
+
+    def _link_html(self, send):
+        if not self._link:
+            return send
+        link = self._link
+
+        async def linked(message):
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers") or [])
+                ctype = next((v for k, v in headers if k.lower() == b"content-type"), b"")
+                if is_html_content_type(ctype.decode("latin-1")) and not any(
+                        k.lower() == b"link" and link in v for k, v in headers):
+                    message = {**message, "headers": headers + [(b"link", link)]}
+            await send(message)
+        return linked
 
     async def __call__(self, scope, receive, send):
         if scope.get("type") != "http":
@@ -54,6 +74,7 @@ class AifpGateMiddleware:
         req = _AsgiRequest(scope)
         if self.serve_discovery and req.method == "GET" and req.path == DISCOVERY_PATH:
             return await _send_json(send, 200, {"Cache-Control": "public, max-age=300"}, self._discovery)
+        send = self._link_html(send)
         # decide() may block on a JWKS fetch or a Redis round-trip; keep that
         # off the event loop.
         try:

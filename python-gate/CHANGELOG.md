@@ -1,3 +1,18 @@
+## 0.5.0 — unreleased
+
+- Port of `@aifinpay/gate` 0.8.0: `AifpGateMiddleware` and `AifpGateWSGI` add
+  the discovery `Link` header (`</llms.txt>` as `rel="alternate"`,
+  `</.well-known/x402.json>` as `rel="describedby"`) to every HTML response
+  that passes through them, so an agent that opened a page finds the payment
+  instructions. JSON, including the gate's own 402 / 403 / 503, never carries
+  it; a page's own `Link` is kept. On by default; `discovery_link=False`
+  switches it off, `discovery_link={"llms_txt": ..., "x402": ...}` moves
+  either target (or drops it with `False`). No decision, status, event or
+  metered unit changes.
+- `discovery_link_header`, `is_html_content_type` and `LLMS_TXT_PATH`
+  exported; the parity fixture records both helpers and `test_discovery_link.py`
+  replays them.
+
 ## 0.4.0 — unreleased
 
 - Port of `@aifinpay/gate` 0.7.0: `Gate(operator_policy=...)` — the merchant's

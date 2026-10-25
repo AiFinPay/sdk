@@ -12,7 +12,7 @@ import threading
 from typing import Any, Dict, Optional
 
 from .core import Gate
-from .discovery import DISCOVERY_PATH, build_discovery_document
+from .discovery import DISCOVERY_PATH, build_discovery_document, discovery_link_header, is_html_content_type
 
 _STATUS = {200: "200 OK", 402: "402 Payment Required", 403: "403 Forbidden", 503: "503 Service Unavailable"}
 
@@ -81,18 +81,36 @@ class _ReportingIterable:
 
 
 class AifpGateWSGI:
-    def __init__(self, app, gate: Gate, serve_discovery: bool = True, refund_on_error: bool = False):
+    def __init__(self, app, gate: Gate, serve_discovery: bool = True, refund_on_error: bool = False,
+                 discovery_link=True):
         self.app = app
         self.gate = gate
         self.serve_discovery = serve_discovery
         self.refund_on_error = refund_on_error
         self._discovery = build_discovery_document(gate.merchant_id, gate.discovery_resources(),
                                                    gate.api_base or "https://api.aifinpay.io")
+        # Every HTML response that passes through points at /llms.txt and the
+        # x402 document (see discovery_link_header). False switches it off.
+        self._link = discovery_link_header(discovery_link)
+
+    def _link_html(self, start_response):
+        if not self._link:
+            return start_response
+        link = self._link
+
+        def linked(status, headers, exc_info=None):
+            headers = list(headers)
+            ctype = next((v for k, v in headers if k.lower() == "content-type"), "")
+            if is_html_content_type(ctype) and not any(k.lower() == "link" and link in v for k, v in headers):
+                headers.append(("Link", link))
+            return start_response(status, headers, exc_info) if exc_info else start_response(status, headers)
+        return linked
 
     def __call__(self, environ, start_response):
         req = _WsgiRequest(environ)
         if self.serve_discovery and req.method == "GET" and req.path == DISCOVERY_PATH:
             return _json(start_response, 200, {"Cache-Control": "public, max-age=300"}, self._discovery)
+        start_response = self._link_html(start_response)
         try:
             result = self.gate.decide(req)
         except Exception:  # noqa: BLE001 — a bug in this package, not a payment decision

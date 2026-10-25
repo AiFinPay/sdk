@@ -22,3 +22,6 @@ compatibility_date = "2026-10-01"
 # Requests outside every pattern are not reported.
 AIFP_RESOURCES = "/*"
 # AIFP_API_BASE = "https://api.aifinpay.io"
+# HTML responses get `Link: </llms.txt>; rel="alternate" …, </.well-known/x402.json>;
+# rel="describedby" …` so an agent on the home page finds how to pay. "off" drops it.
+# AIFP_DISCOVERY_LINK = "off"

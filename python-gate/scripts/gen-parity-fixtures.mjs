@@ -159,6 +159,18 @@ const fixture = {
     args: { merchant_id: MID, resources: [{ resource: "/api/a" }, { resource: "/api/*", tier: "premium", scope: "prefix", name: "All" }], api_base: "https://api.aifinpay.io/" },
     body: G.buildDiscoveryDocument({ merchantId: MID, resources: [{ resource: "/api/a" }, { resource: "/api/*", tier: "premium", scope: "prefix", name: "All" }], apiBase: "https://api.aifinpay.io/" }),
   },
+  // The Link header both ports add to HTML pages. Args in the Python spelling
+  // (true / false / { llms_txt, x402 }); Node's spelling is llmsTxt.
+  discovery_link: {
+    headers: [true, false, {}, { x402: false }, { llms_txt: "/agents.md", x402: false }, { llms_txt: false, x402: false },
+      { x402: "/x402.json" }].map((args) => ({
+      args,
+      header: G.discoveryLinkHeader(args === true ? undefined : args === false ? false
+        : { ...(args.llms_txt !== undefined ? { llmsTxt: args.llms_txt } : {}), ...(args.x402 !== undefined ? { x402: args.x402 } : {}) }),
+    })),
+    html: ["text/html", "text/html; charset=utf-8", "TEXT/HTML", " text/html ;q=1", "application/xhtml+xml",
+      "application/json", "text/plain", "text/htmlx", ""].map((ct) => [ct, G.isHtmlContentType(ct)]),
+  },
   scope_cases: scopeCases,
   scenarios: results,
 };

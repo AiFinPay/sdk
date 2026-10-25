@@ -2,8 +2,11 @@
 // AiFinPay shadow worker — the first step that does not touch the money path.
 //
 // Every request is passed to your origin unchanged and answered unchanged;
-// the only visible difference is an `AIFP-Mode: shadow` response header (so
-// the AiFinPay site check can tell "observing" from "no gate"). On the way,
+// the only visible differences are an `AIFP-Mode: shadow` response header (so
+// the AiFinPay site check can tell "observing" from "no gate") and, on HTML
+// pages, a `Link` to /llms.txt and /.well-known/x402.json — how an agent that
+// opened the home page finds the payment instructions (AIFP_DISCOVERY_LINK =
+// "off" drops it). On the way,
 // the request is classified from the same marker table `@aifinpay/gate`
 // charges from, and a self-identifying AI crawler or agent becomes one gate
 // event — kind "402", the challenge a gate in enforce would have sent — on
@@ -14,13 +17,14 @@
 // the path itself, the User-Agent, the IP, headers, cookies or the response.
 // What never happens here: a 402, a 403, a receipt check, a metered unit.
 // ──────────────────────────────────────────────────────────────────────────
-import { classifyAgent, matchResource } from "@aifinpay/gate/edge";
+import { classifyAgent, discoveryLinkHeader, isHtmlContentType, matchResource } from "@aifinpay/gate/edge";
 
 const MAX_BATCH = 50;
 const FLUSH_AFTER_MS = 1000;
 const TIMEOUT_MS = 3000;
 const DEFAULT_API_BASE = "https://api.aifinpay.io";
 const MERCHANT = /^mrch_[a-f0-9]{16}$/;
+const DISCOVERY_LINK = discoveryLinkHeader();
 
 /** Registered patterns from the AIFP_RESOURCES var, in the registry's shape. */
 function resourcesOf(env) {
@@ -98,6 +102,12 @@ export function createShadowWorker({ fetch: fetchImpl, now = Date.now, flushAfte
       const upstream = await doFetch(request);
       const response = new Response(upstream.body, upstream);
       response.headers.set("AIFP-Mode", "shadow");
+      if (
+        String(env.AIFP_DISCOVERY_LINK ?? "on").toLowerCase() !== "off" &&
+        isHtmlContentType(response.headers.get("content-type")) &&
+        !(response.headers.get("link") ?? "").includes(DISCOVERY_LINK)
+      )
+        response.headers.append("Link", DISCOVERY_LINK);
 
       const url = new URL(request.url);
       const who = classifyAgent({ path: url.pathname, header: (name) => request.headers.get(name) ?? undefined });

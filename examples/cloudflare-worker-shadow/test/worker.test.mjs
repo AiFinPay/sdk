@@ -163,3 +163,38 @@ test("AIFP_API_BASE and a default AIFP_RESOURCES of /* are honoured", async () =
   assert.equal(posts[0].url, "https://api-staging.example/v1/merchants/mrch_0123456789abcdef/gate-events");
   assert.equal(posts[0].body.events[0].resource, "/*");
 });
+
+const LINK =
+  '</llms.txt>; rel="alternate"; type="text/markdown"; title="AI agents: access and payment", ' +
+  '</.well-known/x402.json>; rel="describedby"; type="application/json"';
+
+test("an HTML page gets the discovery Link, whoever asks; JSON and AIFP_DISCOVERY_LINK=off do not", async () => {
+  const origin = (request) =>
+    new URL(request.url).pathname === "/api/data"
+      ? new Response("{}", { headers: { "Content-Type": "application/json" } })
+      : new Response("<!doctype html>", { headers: { "Content-Type": "text/html; charset=utf-8" } });
+  const fetch = async (input) => (typeof input === "string" ? new Response("{}") : origin(input));
+  const worker = createShadowWorker({ fetch, flushAfterMs: 0 });
+  const ctx = { waitUntil: () => {} };
+  const get = (path, env = ENV, headers = {}) =>
+    worker.fetch(new Request(`https://www.example.com${path}`, { headers }), env, ctx);
+
+  for (const ua of [CHROME, GPTBOT, "python-requests/2.32"]) {
+    const page = await get("/", ENV, { "User-Agent": ua });
+    assert.equal(page.headers.get("Link"), LINK);
+    assert.equal(await page.text(), "<!doctype html>");
+  }
+  assert.equal((await get("/api/data", ENV, { "User-Agent": CHROME })).headers.get("Link"), null);
+  assert.equal((await get("/", { ...ENV, AIFP_DISCOVERY_LINK: "off" })).headers.get("Link"), null);
+});
+
+test("an origin's own Link is kept, and one already naming llms.txt is not repeated", async () => {
+  let link = '</app.css>; rel="preload"; as="style"';
+  const fetch = async (input) =>
+    typeof input === "string" ? new Response("{}") : new Response("<p>", { headers: { "Content-Type": "text/html", Link: link } });
+  const worker = createShadowWorker({ fetch, flushAfterMs: 0 });
+  const get = () => worker.fetch(new Request("https://www.example.com/"), ENV, { waitUntil: () => {} });
+  assert.equal((await get()).headers.get("Link"), `</app.css>; rel="preload"; as="style", ${LINK}`);
+  link = LINK;
+  assert.equal((await get()).headers.get("Link"), LINK);
+});
