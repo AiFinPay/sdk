@@ -20,22 +20,56 @@ import {
 const DEVNET_PROGRAM = "8dty5bD738Z9TzEkDu8vLSnhpJNWtEGMUEcYaKCUTY6y";
 const MAINNET_PROGRAM = "724Ut31i4ecY4dJ25z8HuZetu3A43xtNkPdk4JdbsfdD";
 
+// @aifinpay/deployments 2.1.0 enables both records (founder decision ADR-007).
+// A record the registry disables must still refuse; withDisabled() proves it.
+function withDisabled(network: "devnet" | "mainnet", run: () => void) {
+  const original = SOLANA_V14_DEPLOYMENTS[network];
+  SOLANA_V14_DEPLOYMENTS[network] = {
+    ...original,
+    status: "disabled",
+    settlementEnabled: false,
+    disabledReason: "test quarantine",
+  };
+  try {
+    run();
+  } finally {
+    SOLANA_V14_DEPLOYMENTS[network] = original;
+  }
+}
+
 describe("resolveSolanaDeployment — environment switch", () => {
-  it("recognises devnet but keeps settlement quarantined", () => {
-    expect(() => resolveSolanaDeployment({ environment: "dev", network: "devnet" })).toThrow(
-      SolanaDeploymentDisabledError
-    );
+  it("resolves the enabled devnet program under dev", () => {
+    expect(resolveSolanaDeployment({ environment: "dev", network: "devnet" })).toMatchObject({
+      version: "v1.4",
+      environment: "dev",
+      network: "devnet",
+      programId: DEVNET_PROGRAM,
+    });
   });
 
-  it("recognises mainnet but keeps settlement quarantined", () => {
-    expect(() => resolveSolanaDeployment({ environment: "prod", network: "mainnet" })).toThrow(
-      SolanaDeploymentDisabledError
-    );
+  it("resolves the enabled mainnet program under prod", () => {
+    expect(resolveSolanaDeployment({ environment: "prod", network: "mainnet" })).toMatchObject({
+      version: "v1.4",
+      environment: "prod",
+      network: "mainnet",
+      programId: MAINNET_PROGRAM,
+    });
   });
 
   it("accepts mainnet-beta as an alias for mainnet", () => {
-    expect(() => resolveSolanaDeployment({ environment: "prod", network: "mainnet-beta" })).toThrow(
-      SolanaDeploymentDisabledError
+    expect(resolveSolanaDeployment({ environment: "prod", network: "mainnet-beta" }).programId).toBe(MAINNET_PROGRAM);
+  });
+
+  it("still refuses a record the registry quarantines", () => {
+    withDisabled("mainnet", () =>
+      expect(() => resolveSolanaDeployment({ environment: "prod", network: "mainnet" })).toThrow(
+        SolanaDeploymentDisabledError
+      )
+    );
+    withDisabled("devnet", () =>
+      expect(() => resolveSolanaDeployment({ environment: "dev", network: "devnet" })).toThrow(
+        SolanaDeploymentDisabledError
+      )
     );
   });
 
@@ -66,14 +100,15 @@ describe("resolveSolanaDeployment — environment switch", () => {
 });
 
 describe("resolveSolanaDeployment — explicit version selection", () => {
-  it("explicit v1.4 refuses a quarantined mainnet deployment", () => {
-    expect(() =>
-      resolveSolanaDeployment({
-        environment: "prod",
-        network: "mainnet",
-        version: "v1.4",
-      })
-    ).toThrow(SolanaDeploymentDisabledError);
+  it("explicit v1.4 resolves mainnet and refuses it once quarantined", () => {
+    expect(resolveSolanaDeployment({ environment: "prod", network: "mainnet", version: "v1.4" }).programId).toBe(
+      MAINNET_PROGRAM
+    );
+    withDisabled("mainnet", () =>
+      expect(() => resolveSolanaDeployment({ environment: "prod", network: "mainnet", version: "v1.4" })).toThrow(
+        SolanaDeploymentDisabledError
+      )
+    );
   });
 
   it("explicit v1.4 does NOT silently downgrade — it throws when unavailable", () => {
@@ -107,28 +142,27 @@ describe("resolveSolanaDeployment — explicit version selection", () => {
 
 describe("resolveSolanaDeployment — automatic version selection", () => {
   it("auto refuses quarantined mainnet", () => {
-    expect(() =>
-      resolveSolanaDeployment({
-        environment: "prod",
-        network: "mainnet",
-        version: "auto",
-      })
-    ).toThrow(SolanaDeploymentDisabledError);
+    withDisabled("mainnet", () =>
+      expect(() => resolveSolanaDeployment({ environment: "prod", network: "mainnet", version: "auto" })).toThrow(
+        SolanaDeploymentDisabledError
+      )
+    );
   });
 
   it("auto refuses quarantined devnet", () => {
-    expect(() =>
-      resolveSolanaDeployment({
-        environment: "dev",
-        network: "devnet",
-        version: "auto",
-      })
-    ).toThrow(SolanaDeploymentDisabledError);
+    withDisabled("devnet", () =>
+      expect(() => resolveSolanaDeployment({ environment: "dev", network: "devnet", version: "auto" })).toThrow(
+        SolanaDeploymentDisabledError
+      )
+    );
   });
 
-  it("auto is the fail-closed default when no version is given", () => {
-    expect(() => resolveSolanaDeployment({ environment: "prod", network: "mainnet" })).toThrow(
-      SolanaDeploymentDisabledError
+  it("auto is the default when no version is given", () => {
+    expect(resolveSolanaDeployment({ environment: "prod", network: "mainnet" }).version).toBe("v1.4");
+    withDisabled("mainnet", () =>
+      expect(() => resolveSolanaDeployment({ environment: "prod", network: "mainnet" })).toThrow(
+        SolanaDeploymentDisabledError
+      )
     );
   });
 
@@ -139,23 +173,22 @@ describe("resolveSolanaDeployment — automatic version selection", () => {
 });
 
 describe("isSolanaV14Available", () => {
-  it("is false until settlement verification and governance gates pass", () => {
-    expect(isSolanaV14Available("prod", "mainnet")).toBe(false);
-    expect(isSolanaV14Available("prod", "mainnet-beta")).toBe(false);
-    expect(isSolanaV14Available("dev", "devnet")).toBe(false);
+  it("is true only for the enabled record in its own environment", () => {
+    expect(isSolanaV14Available("prod", "mainnet")).toBe(true);
+    expect(isSolanaV14Available("prod", "mainnet-beta")).toBe(true);
+    expect(isSolanaV14Available("dev", "devnet")).toBe(true);
     expect(isSolanaV14Available("prod", "devnet")).toBe(false);
     expect(isSolanaV14Available("dev", "mainnet")).toBe(false);
+    withDisabled("mainnet", () => expect(isSolanaV14Available("prod", "mainnet")).toBe(false));
   });
 });
 
 describe("resolveSolanaDeployment — input handling", () => {
   it("is case-insensitive on the cluster name", () => {
-    expect(() => resolveSolanaDeployment({ environment: "prod", network: "MAINNET" })).toThrow(
-      SolanaDeploymentDisabledError
-    );
+    expect(resolveSolanaDeployment({ environment: "prod", network: "MAINNET" }).programId).toBe(MAINNET_PROGRAM);
   });
 
-  it("exposes program IDs as metadata without enabling settlement", () => {
+  it("exposes program IDs as metadata", () => {
     expect(SOLANA_V14_DEPLOYMENTS.devnet.programId).toBe(DEVNET_PROGRAM);
     expect(SOLANA_V14_DEPLOYMENTS.mainnet.programId).toBe(MAINNET_PROGRAM);
   });

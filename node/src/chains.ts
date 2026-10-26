@@ -42,3 +42,22 @@ export const robinhood: Chain = defineChain({
     },
   },
 });
+
+// viem ships Arc only from 2.4x; the SDK accepts older viem, so pin it here.
+// Native USDC (18 decimals) is the gas token; payments use the ERC-20 at 0x3600….
+export const arc: Chain = defineChain({
+  id: 5042,
+  name: "Arc",
+  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
+  rpcUrls: { default: { http: ["https://rpc.blockdaemon.mainnet.arc.io", "https://rpc.drpc.mainnet.arc.io"] } },
+  blockExplorers: { default: { name: "Arc Explorer", url: "https://explorer.arc.io" } },
+});
+
+export const arcTestnet: Chain = defineChain({
+  id: 5042002,
+  name: "Arc Testnet",
+  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
+  rpcUrls: { default: { http: ["https://rpc.blockdaemon.testnet.arc.io", "https://rpc.drpc.testnet.arc.io"] } },
+  blockExplorers: { default: { name: "ArcScan", url: "https://testnet.arcscan.app" } },
+  testnet: true,
+});

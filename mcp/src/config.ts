@@ -232,7 +232,14 @@ function ownerCeiling(name: string, raw: string | undefined, ceiling: number): n
 export function validatePaymentConfig(config: McpConfig): bigint {
   if (!config.paymentsEnabled) throw new Error("Payments disabled by the owner (AIFINPAY_PAYMENTS_ENABLED=0)");
   const chain = payChain(config.payChain);
-  if (config.devMode && chain.name !== "solana") throw new Error("MCP receipt payments support live mode only");
+  // A testnet pays only in dev mode and a mainnet only in live mode, so one can
+  // never stand in for the other (Solana checks its cluster the same way below).
+  if (chain.name !== "solana" && (config.devMode === true) !== (chain.testnet === true))
+    throw new Error(
+      chain.testnet
+        ? `${chain.name} is a testnet: set AIFINPAY_MODE=dev to pay on it`
+        : "MCP receipt payments on EVM mainnets support live mode only"
+    );
   if (config.rpcUrl !== undefined) {
     let rpc: URL | undefined;
     try {

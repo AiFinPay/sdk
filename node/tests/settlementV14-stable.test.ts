@@ -156,7 +156,10 @@ async function fixture(network: PaymentChain = "polygon", asset = "USDC", micro 
     estimateGas: vi.fn(async () => 100000n),
     estimateFeesPerGas: vi.fn(async () => ({ maxFeePerGas: 10n, maxPriorityFeePerGas: 1n })),
     getTransactionCount: vi.fn(async () => 7 + sent.length),
-    getBalance: vi.fn(async () => 10_000_000n),
+    // On Arc the native balance is the 18-decimal view of the same USDC.
+    getBalance: vi.fn(async () =>
+      PAYMENT_CHAINS[network].stablecoinOnly ? (state.balanceOf as bigint) * 10n ** 12n : 10_000_000n
+    ),
     sendRawTransaction: vi.fn(async ({ serializedTransaction }: { serializedTransaction: Hex }) => {
       sent.push(serializedTransaction);
       const tx = parseTransaction(serializedTransaction);
@@ -355,6 +358,59 @@ describe("per-network stable approval, exact denomination and gas family", () =>
     const f = await fixture(chain, chain === "robinhood" ? "USDe" : "USDC");
     f.state.decimals = 6;
     await expect(executeV14Settlement(f.call, f.ctx)).rejects.toMatchObject({ code: "V14_TOKEN_DECIMALS" });
+    expect(f.wallet.account.signTransaction).not.toHaveBeenCalled();
+    expect(f.sent).toHaveLength(0);
+  });
+});
+
+describe("Arc: native USDC gas, payment only through the 6-decimal ERC-20", () => {
+  const ARC_USDC = "0x3600000000000000000000000000000000000000";
+  const ARC_EURC = "0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1";
+
+  it.each(["arc", "arctestnet"] as const)(
+    "approves exactly the 6-decimal gross on %s and sends no value",
+    async (chain) => {
+      const f = await fixture(chain, "USDC", 100001n);
+      await executeV14Settlement(f.call, f.ctx);
+      const [approval, settlement] = f.sent.map((raw) => parseTransaction(raw));
+      expect(approval.chainId).toBe(PAYMENT_CHAINS[chain].chainId);
+      expect(approval.to?.toLowerCase()).toBe(ARC_USDC);
+      expect(approval.value ?? 0n).toBe(0n);
+      const approved = decodeFunctionData({ abi: erc20, data: approval.data! });
+      expect(approved.args[0].toLowerCase()).toBe(V14_DEPLOYMENTS[chain].splitter.address.toLowerCase());
+      expect(approved.args[1]).toBe(100001n);
+      expect(settlement.value ?? 0n).toBe(0n);
+      expect(f.onPrepared).toHaveBeenCalledOnce();
+    }
+  );
+
+  it("refuses a native settleNative call on Arc even though its native symbol is USDC", async () => {
+    const f = await fixture("arc", "USDC");
+    f.call.args.quote.token = zero;
+    f.call.function = "settleNative((address,address,address,uint256,address,uint256,bytes32,uint256,bytes32),bytes)";
+    f.call.value_wei = f.call.args.quote.grossAmount;
+    delete f.call.approval;
+    f.ctx.expectedToken = zero;
+    await expect(executeV14Settlement(f.call, f.ctx)).rejects.toMatchObject({ code: "V14_UNSUPPORTED_ASSET" });
+    expect(f.wallet.account.signTransaction).not.toHaveBeenCalled();
+    expect(f.client.sendRawTransaction).not.toHaveBeenCalled();
+  });
+
+  it("refuses EURC, which the registry lists but the SDK does not offer", async () => {
+    const f = await fixture("arc", "USDC");
+    f.call.asset = "EURC";
+    f.call.args.quote.token = ARC_EURC;
+    f.call.approval = { ...f.call.approval!, token: ARC_EURC };
+    f.ctx.expectedToken = ARC_EURC;
+    await expect(executeV14Settlement(f.call, f.ctx)).rejects.toMatchObject({ code: "V14_UNSUPPORTED_ASSET" });
+    expect(f.wallet.account.signTransaction).not.toHaveBeenCalled();
+  });
+
+  it("counts gas against the same USDC balance before signing the approval", async () => {
+    const f = await fixture("arc", "USDC");
+    // Exactly the gross and nothing for gas: the approval would succeed and the settlement revert.
+    f.state.balanceOf = GROSS;
+    await expect(executeV14Settlement(f.call, f.ctx)).rejects.toMatchObject({ code: "V14_INSUFFICIENT_BALANCE" });
     expect(f.wallet.account.signTransaction).not.toHaveBeenCalled();
     expect(f.sent).toHaveLength(0);
   });

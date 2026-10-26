@@ -529,7 +529,10 @@ MIT.
 ## Additional EVM networks in the 2.8.1 source candidate
 
 Owner `AIFINPAY_PAY_CHAIN` accepts polygon, base, optimism, arbitrum, avalanche,
-bnb, unichain, xrplevm and robinhood. `AIFINPAY_MAX_GAS` is in the selected native
+bnb, unichain, xrplevm, robinhood, arc and arctestnet (2.14.0). Arc pays only in
+USDC, which is also its gas: `AIFINPAY_MAX_GAS` is in USDC (e.g. `0.05`), EURC is
+refused, and no price feed is read. `arctestnet` requires `AIFINPAY_MODE=dev`;
+every EVM mainnet requires live mode. `AIFINPAY_MAX_GAS` is in the selected native
 POL/ETH/AVAX/BNB/XRP currency; the legacy POL cap applies only on Polygon. Assets
 must be pinned for that chain, including BNB 18-decimal USDC/USDT and Robinhood
 18-decimal USDe/6-decimal USDG. XRPL EVM has native XRP only. Metadata comes from
@@ -560,8 +563,8 @@ the new bound preparation/recovery/completion hooks; absence refuses payment.
 
 Version2.7 targets NodeSDK2.5 and canonical skill2.8. These are coordinated
 release targets; source integration does not establish npm publication or
-activate a network. The published deployments1.1.3 Solana entries remain
-disabled. `payable_fetch` retains the SDK availability check and cannot
+activate a network. From agent 2.10.0 (deployments 2.1.0) the Solana entries are
+enabled (ADR-007). `payable_fetch` retains the SDK availability check and cannot
 override it.
 
 For a separately accepted and served Solana route, the owner sets

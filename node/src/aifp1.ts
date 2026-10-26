@@ -1852,7 +1852,8 @@ export async function aifp1Fetch(
       (quote.scope !== scope ||
         quote.resource !== (resource ?? "*") ||
         quote.currency !== "USD" ||
-        (quote.network_mode ?? "live") !== (sol?.network === "devnet" ? "test" : "live") ||
+        (quote.network_mode ?? "live") !==
+          ((sol ? sol.network === "devnet" : paymentChain(evmChain)!.testnet) ? "test" : "live") ||
         !Number.isSafeInteger(quote.unit_quota) ||
         quote.unit_quota <= 0)
     ) {
@@ -1977,6 +1978,7 @@ export async function aifp1Fetch(
         if (
           signed.chain !== chain ||
           signed.asset !== nativeAsset ||
+          signed.args.quote.token.toLowerCase() !== "0x0000000000000000000000000000000000000000" ||
           signed.route !== "merchant-aifp1" ||
           signed.args.quote.merchant.toLowerCase() !== merchantWallet?.toLowerCase() ||
           signed.args.quote.grossAmount !== native.total_wei ||
@@ -2322,9 +2324,15 @@ function authorizedV14Chain(chain: Aifp1V14Chain | undefined): Aifp1V14Chain {
   return chain;
 }
 
-/** Native by default; stablecoin symbols must be pinned for the selected chain. */
+/** Native by default; stablecoin symbols must be pinned for the selected chain.
+ * On a stablecoinOnly chain the native symbol names the token, never msg.value. */
 function pinnedStableAsset(asset: string | undefined, chain: Aifp1V14Chain): string | null {
-  if (asset === undefined || asset === paymentChain(chain)!.native) return null;
+  const descriptor = paymentChain(chain)!;
+  if (asset === undefined) {
+    if (!descriptor.stablecoinOnly) return null;
+    throw new Aifp1QuoteError(`${descriptor.label} has no native payment; set v14.asset to a pinned stablecoin`);
+  }
+  if (!descriptor.stablecoinOnly && asset === descriptor.native) return null;
   const pinned = paymentStableAsset(chain, asset);
   if (!pinned) {
     throw new Aifp1QuoteError(`v14.asset "${asset}" is not a stablecoin pinned for ${chain} v1.4`);

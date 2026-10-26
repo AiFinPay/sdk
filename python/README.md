@@ -1,6 +1,6 @@
 # aifinpay-agent (Python)
 
-Version `2.7.1` (source candidate): agent identity (EVM and Solana addresses from one seed), native
+Version `2.8.0` (source candidate): agent identity (EVM and Solana addresses from one seed), native
 request authentication, linking an agent to its owner's dashboard, and paying
 AiFinPay merchants (`fetch_paid`, AIFP-1 on Polygon v1.4 in POL or USDC,
 or explicitly selected EVM v1.4 networks).
@@ -11,9 +11,9 @@ generated locally and never leaves your process.
 
 ## Solana paid access candidate
 
-Canonical Solana records remain disabled. The following owner configuration
-is implemented conditionally in 2.5 source; it refuses before any quote/signature
-when canonical availability is false. It is not a published or enabled route.
+The canonical Solana records are enabled from aifinpay-deployments 2.1.0 (2.8.0;
+founder decision ADR-007). The owner configuration below still refuses before
+any quote/signature if a record is disabled, and the backend must serve the cluster.
 
 ```python
 from aifinpay import AiFinPayAgent, Aifp1FinalizedFailureError
@@ -154,7 +154,12 @@ named USDC on another chain does not authorize a Base payment. Omitting `chain`
 keeps Polygon behavior, even if a merchant advertises another network.
 
 The same `chain` option accepts polygon, base, optimism, arbitrum, avalanche, bnb,
-unichain, xrplevm and robinhood. Every non-Polygon network requires an explicit
+unichain, xrplevm, robinhood, arc and arctestnet. Arc pays only in its 6-decimal
+USDC ERC-20 (`asset="USDC"` is required; there is no native quote, because the
+gas token is the same USDC in 18 decimals; EURC is not offered). Its
+`max_gas_wei` is in native USDC (10**18 = $1) and the balance check counts gas
+beside the gross. `arctestnet` accepts only `network_mode: "test"` quotes.
+Every non-Polygon network requires an explicit
 `max_gas_wei` in that network's native units. Configure other RPCs with constructor
 `evm_rpc_urls={"bnb": "https://..."}`; existing polygon_rpc/base_rpc options remain.
 Native prices use POL/ETH/AVAX/BNB/XRP. OP oracle fees are budgeted separately;

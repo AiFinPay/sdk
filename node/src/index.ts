@@ -76,6 +76,7 @@ export {
 export type { SplitterRoute, SplitterRouteChain, SplitterRouteKey, SplitterRouteDeployment } from "./splitterRoutes.js";
 /** @deprecated botchain is deprecated. Use robinhood instead. */
 export { botchain, robinhood, xrplevm } from "./chains.js";
+export { arc, arcTestnet } from "./chains.js";
 
 // ── Environment & protocol-version resolver (AIFINP-223) ─────────────────
 export {

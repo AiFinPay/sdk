@@ -398,6 +398,18 @@ def _transaction_fee(c: ChainClient, deployment: dict[str, Any], data: bytes, ga
     return cost + ((l1 + operator) * 120 + 99) // 100
 
 
+def _token_gross_as_gas(network: str, token: str, gross: int) -> int:
+    """On a stablecoinOnly chain the token and the gas are one balance (the native
+    balance is its 18-decimal view): gas must fit beside the gross, or the
+    settlement reverts after the approval has already spent gas."""
+    if not PAYMENT_CHAINS.get(network, {}).get("stablecoinOnly") or _lc(token) == ZERO:
+        return 0
+    decimals = pinned_token_decimals(network, token)
+    if decimals is None:
+        _fail("V14_TOKEN_DECIMALS", "token decimals are not pinned")
+    return gross * 10 ** (18 - decimals)
+
+
 def _ensure_exact_approval(ctx: V14ExecutionContext, deployment: Dict[str, Any], token: str,
                            spender: str, gross: int, settlement_data: bytes) -> int:
     """Approve exactly ``gross`` when the allowance is short; return the gas cost committed."""
@@ -427,7 +439,7 @@ def _ensure_exact_approval(ctx: V14ExecutionContext, deployment: Dict[str, Any],
     worst_case = approval_cost + _transaction_fee(c, deployment, settlement_data, STABLE_SETTLE_GAS_BOUND, max_fee)
     if priority < 0 or priority > max_fee or worst_case > ctx.max_gas_wei:
         _fail("V14_GAS_BUDGET_EXCEEDED", "approval plus settlement gas exceeds the operator gas budget")
-    if native < worst_case:
+    if native < worst_case + _token_gross_as_gas(deployment["network"], token, gross):
         _fail("V14_INSUFFICIENT_BALANCE", "native balance cannot cover approval and settlement gas")
     raw = _sign(ctx.account, {
         "type": 2, "chainId": deployment["chainId"], "to": token, "value": 0, "data": data,
@@ -499,7 +511,8 @@ def execute_v14_settlement(call: Dict[str, Any], ctx: V14ExecutionContext) -> Di
     ):
         _fail("V14_CALL_MISMATCH", "route, method or quote field order disagrees with the supported ABI")
     native_asset = "POL" if expected_chain == "amoy" else PAYMENT_CHAINS[expected_chain]["native"]
-    if _lc(q["ipCreator"]) != ZERO or (not stable and call.get("asset") != native_asset):
+    stablecoin_only = expected_chain != "amoy" and PAYMENT_CHAINS[expected_chain].get("stablecoinOnly")
+    if _lc(q["ipCreator"]) != ZERO or (not stable and (stablecoin_only or call.get("asset") != native_asset)):
         _fail("V14_UNSUPPORTED_ASSET", "This executor supports the chain's native asset or a pinned stablecoin, "
                                       "without creator payments")
     if _lc(ctx.expected_token or ZERO) != _lc(q["token"]):
@@ -595,7 +608,7 @@ def execute_v14_settlement(call: Dict[str, Any], ctx: V14ExecutionContext) -> Di
     settlement_cost = _transaction_fee(c, deployment, data, gas, max_fee)
     if priority < 0 or priority > max_fee or approval_cost + settlement_cost > ctx.max_gas_wei:
         _fail("V14_GAS_BUDGET_EXCEEDED", "estimated maximum transaction fee exceeds the operator gas budget")
-    if balance < value + settlement_cost:
+    if balance < value + _token_gross_as_gas(deployment["network"], q["token"], gross) + settlement_cost:
         _fail("V14_INSUFFICIENT_BALANCE", "balance cannot cover authorized gross and maximum gas")
     # Check the deadline again after slow RPCs, before signing or persisting anything.
     validate_v14_settlement_call(call, order_id=ctx.order_id, payer=me, min_seconds_remaining=ctx.min_seconds_remaining)

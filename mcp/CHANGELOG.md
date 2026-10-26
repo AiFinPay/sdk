@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.14.0 — Arc and Arc Testnet
+
+- `AIFINPAY_PAY_CHAIN` accepts `arc` and `arctestnet` (from `@aifinpay/agent`
+  2.10.0). They pay only in USDC, which is also the gas token: the asset is
+  always sent to the SDK so the token path is taken, `AIFINPAY_MAX_GAS` is in
+  USDC, EURC is refused, and the native price is a fixed $1 peg (no feed).
+- `arctestnet` needs `AIFINPAY_MODE=dev`; every EVM mainnet still needs live
+  mode, so a testnet cannot stand in for a mainnet or the reverse.
+- `settlement_routes` lists Arc with `assets: ["USDC"]` (not the gas symbol
+  twice) and never shows the dev-only testnet as an enabled production route.
+- Solana payments become possible once agent 2.10.0 is installed (its
+  deployments 2.1.0 enables the records); the MCP checks are unchanged.
+
 ## 2.13.1 — a refusal to pay an unverified site says what to do
 
 - When `payable_fetch` refuses a merchant whose site is not DNS-verified, the

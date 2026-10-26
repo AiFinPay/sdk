@@ -258,6 +258,11 @@ def _native_asset(chain: str) -> str:
     return PAYMENT_CHAINS[chain]["native"]
 
 
+def _stablecoin_only(chain: str) -> bool:
+    """The native symbol names the pinned token (Arc USDC), never msg.value."""
+    return chain != "solana" and bool(PAYMENT_CHAINS.get(chain, {}).get("stablecoinOnly"))
+
+
 def _merchant_address(quote: dict[str, Any], chain: str) -> str:
     pay_to = quote.get("pay_to") or {}
     if chain == "solana":
@@ -413,6 +418,8 @@ def validate_native_quote(
 ) -> float:
     """Cross-check the selected native asset against its independent price."""
     native_asset = _native_asset(chain)
+    if _stablecoin_only(chain):
+        raise Aifp1QuoteError(f"{chain} has no native payment; pay in a pinned stablecoin")
     call = quote.get("settlement_call") or {}
     if call.get("splitter_version") != "1.4":
         raise Aifp1QuoteError("a native purchase requires a signed v1.4 quote; no legacy fallback")
@@ -431,6 +438,7 @@ def validate_native_quote(
         or call.get("route") != "merchant-aifp1"
         or quote.get("accepted_assets") != [native_asset]
         or q["merchant"].lower() != _merchant_address(quote, chain).lower()
+        or str(q.get("token", "")).lower() != "0x0000000000000000000000000000000000000000"
         or q["grossAmount"] != total
         or int(q["validUntil"]) != expiry_s
         or "token_settlement" in quote
@@ -679,7 +687,7 @@ def submit_payment(
             raise Aifp1QuoteError("Solana recovery requires original family/signature")
         d = inventory("prod" if network == "mainnet" else "dev", network)
         assert_prepared_recovery(call, p, d, account.address, quote["quote_id"])
-    elif asset != native_asset:
+    elif asset != native_asset or _stablecoin_only(chain):
         token = _pinned_stable(asset, chain)
         if str(signed.get("token", "")).lower() != token.lower():
             raise Aifp1QuoteError("recovery token disagrees with the original purchase")
@@ -1428,8 +1436,10 @@ def aifp1_fetch(
     requested_chain = chain
     chain = "polygon" if chain is None else chain
     native_asset = _native_asset(chain)
+    if asset is None and _stablecoin_only(chain):
+        raise Aifp1QuoteError(f"{chain} has no native payment; set asset to a pinned stablecoin")
     asset = native_asset if asset is None else asset
-    stable = asset != native_asset
+    stable = asset != native_asset or _stablecoin_only(chain)
     sol = chain == "solana"
     deployment = None
     if sol:
@@ -1650,7 +1660,8 @@ def aifp1_fetch(
         or quote.get("scope") != scope
         or not scope_covers(scope, want_resource, resource)
         or quote.get("currency") != "USD"
-        or (quote.get("network_mode") or "live") != ("test" if sol and solana_network == "devnet" else "live")
+        or (quote.get("network_mode") or "live")
+        != ("test" if (solana_network == "devnet" if sol else PAYMENT_CHAINS[chain].get("testnet")) else "live")
         or (
             quote.get("payer")
             and (quote["payer"] != account.address if sol else str(quote["payer"]).lower() != account.address.lower())

@@ -122,7 +122,7 @@ The SDK surfaces have different execution status. Do not treat them as interchan
 
 ### Node / TypeScript
 
-`@aifinpay/agent` includes the AIFP-1 `fetchPaid` path. The 2.4.0 source candidate supports Polygon, Base, Optimism, Arbitrum, Avalanche, BNB, Unichain, XRPL EVM and Robinhood. Every non-Polygon rail requires explicit owner selection. Paid execution validates the selected chain, deployment/runtime/signer/profile, pinned token and RPC before signing; native payments require a fresh independent price. Durable bound reservations prevent unresolved payments from resetting the daily cap or buying the same access on another rail. Legacy Polygon v1.3 still requires its separately reviewed settlement pin. Source support does not activate a production route or publish a package.
+`@aifinpay/agent` includes the AIFP-1 `fetchPaid` path. The 2.4.0 source candidate supports Polygon, Base, Optimism, Arbitrum, Avalanche, BNB, Unichain, XRPL EVM and Robinhood; 2.10.0 adds Arc and Arc Testnet (USDC only: Arc's gas token is the same USDC). Every non-Polygon rail requires explicit owner selection. Paid execution validates the selected chain, deployment/runtime/signer/profile, pinned token and RPC before signing; native payments require a fresh independent price. Durable bound reservations prevent unresolved payments from resetting the daily cap or buying the same access on another rail. Legacy Polygon v1.3 still requires its separately reviewed settlement pin. Source support does not activate a production route or publish a package.
 
 See [node/README.md](./node/README.md) and [node/PAYMENT_RECEIPTS.md](./node/PAYMENT_RECEIPTS.md).
 

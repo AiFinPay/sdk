@@ -3,6 +3,12 @@
 Mirrors node/src/paymentChains.ts. Descriptors do not activate production.
 Unknown tokens never inherit six decimals; generated deployments still select
 allowed addresses. BNB/Robinhood decimal read evidence:2026-10-04.
+
+``stablecoinOnly``: the gas token is itself a pinned stablecoin (Arc: native
+USDC is an 18-decimal view of the 6-decimal ERC-20). Payment goes only through
+the pinned token; there is no native quote. Gas is native USDC at $1 per 10**18
+units, so a gas cap in native wei is already a USD amount and no price is read.
+``testnet``: quotes are network_mode "test", never live money.
 """
 from typing import Optional
 
@@ -87,6 +93,27 @@ PAYMENT_CHAINS = {
         "defaultRpc": "https://rpc.mainnet.chain.robinhood.com",
         "coingeckoId": "ethereum",
         "maxSaneUsd": 100000
+    },
+    "arc": {
+        "chainId": 5042,
+        "label": "Arc",
+        "native": "USDC",
+        "gasModel": "evm",
+        "defaultRpc": "https://rpc.blockdaemon.mainnet.arc.io",
+        "coingeckoId": "usd-coin",
+        "maxSaneUsd": 2,
+        "stablecoinOnly": True
+    },
+    "arctestnet": {
+        "chainId": 5042002,
+        "label": "Arc Testnet",
+        "native": "USDC",
+        "gasModel": "evm",
+        "defaultRpc": "https://rpc.blockdaemon.testnet.arc.io",
+        "coingeckoId": "usd-coin",
+        "maxSaneUsd": 2,
+        "stablecoinOnly": True,
+        "testnet": True
     }
 }
 
@@ -121,6 +148,13 @@ TOKEN_DECIMALS = {
     },
     "amoy": {
         "0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582": 6
+    },
+    # ERC-20 decimals() read 2026-10-26. EURC is deliberately not pinned.
+    "arc": {
+        "0x3600000000000000000000000000000000000000": 6
+    },
+    "arctestnet": {
+        "0x3600000000000000000000000000000000000000": 6
     }
 }
 

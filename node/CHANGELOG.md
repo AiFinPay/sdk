@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.10.0 — Arc and Arc Testnet (USDC only); Solana records enabled
+
+- `@aifinpay/deployments` is pinned to exactly 2.1.0 (what the backend pins).
+  It drops `status`/`disabledReason`; the generator derives `status` from
+  `settlementEnabled` so settlement still requires `status: "enabled"`.
+- Solana mainnet and devnet v1.4 now resolve enabled (founder decision ADR-007,
+  single-key upgrade authority accepted). All Solana payment checks are unchanged.
+- `PAYMENT_CHAINS` gains `arc` (5042) and `arctestnet` (5042002), marked
+  `stablecoinOnly`. Arc's gas token is native USDC, an 18-decimal view of the
+  6-decimal ERC-20 at `0x3600…0000`, so Arc is paid only through that token:
+  `v14.asset` is required, `"USDC"` always takes the token path (exact approval,
+  `settleStable`, no value), and the executor refuses `settleNative` there.
+  EURC is in the registry but not offered (USD quotes price a token 1:1).
+- On a stablecoin-only chain the balance check counts gas and the gross against
+  the same USDC balance, so a wallet holding exactly the gross is refused before
+  the approval spends gas.
+- A testnet chain (`arctestnet`) accepts only `network_mode: "test"` quotes and
+  every other EVM chain only live ones. `arctestnet` resolves only under the dev
+  environment (`V14_DEV_NETWORKS` is now generated: amoy, arctestnet).
+- A native quote whose signed call names a token is refused before budget is
+  reserved (it was refused later, by the executor).
+- `arc` and `arcTestnet` viem chains are exported; viem below 2.4x lacks them.
+- The registry's v1.3 Amoy routes are disabled in 2.1.0; testnet opt-in cannot
+  re-enable them. BOT Chain is enabled in 2.1.0 but stays outside the SDK.
+
 ## 2.9.0 — `codex` as an AI client
 
 - `AGENT_FRAMEWORKS` gains `codex`, so an agent running in OpenAI Codex can

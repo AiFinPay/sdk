@@ -183,29 +183,6 @@ export class SettlementConfirmationPendingError extends SettlementProtocolError 
   }
 }
 
-// Chain IDs are read from the generated registry tables — SPLITTER_ROUTES for
-// v1.3 route chains and V14_DEPLOYMENTS for chains that only have a v1.4
-// deployment (robinhood). botchain is deprecated and excluded.
-const CHAIN_ID_ENTRIES: Array<readonly [string, number]> = [
-  ...(Object.keys(SPLITTER_ROUTES) as Array<keyof typeof SPLITTER_ROUTES>)
-    .map((key) => {
-      const entry = SPLITTER_ROUTES[key];
-      return [entry.chain, entry.chainId] as const;
-    })
-    .filter(([chain]) => chain !== "botchain"),
-  ...Object.keys(V14_DEPLOYMENTS)
-    .filter((network) => !(Object.values(SPLITTER_ROUTES) as Array<{ chain: string }>).some((r) => r.chain === network))
-    .filter((network) => network !== "amoy") // amoy already in SPLITTER_ROUTES
-    .map((network): readonly [string, number] => {
-      const entry = V14_DEPLOYMENTS[network];
-      return [entry.network, entry.chainId] as const;
-    }),
-];
-
-const CHAIN_IDS: Record<SettlementEvmNetwork, number> = Object.fromEntries(
-  CHAIN_ID_ENTRIES
-) as Record<SettlementEvmNetwork, number>;
-
 const NATIVE_ASSETS: Record<SettlementEvmNetwork, string> = {
    polygon: "POL",
    amoy: "POL",
@@ -219,6 +196,31 @@ const NATIVE_ASSETS: Record<SettlementEvmNetwork, string> = {
    xrplevm: "XRP",
    botchain: "BOT",
 };
+
+// Chain IDs are read from the generated registry tables — SPLITTER_ROUTES for
+// v1.3 route chains and V14_DEPLOYMENTS for chains that only have a v1.4
+// deployment (robinhood). botchain is deprecated and excluded.
+const CHAIN_ID_ENTRIES: Array<readonly [string, number]> = [
+  ...(Object.keys(SPLITTER_ROUTES) as Array<keyof typeof SPLITTER_ROUTES>)
+    .map((key) => {
+      const entry = SPLITTER_ROUTES[key];
+      return [entry.chain, entry.chainId] as const;
+    })
+    .filter(([chain]) => chain !== "botchain"),
+  ...Object.keys(V14_DEPLOYMENTS)
+    .filter((network) => !(Object.values(SPLITTER_ROUTES) as Array<{ chain: string }>).some((r) => r.chain === network))
+    .filter((network) => network !== "amoy") // amoy already in SPLITTER_ROUTES
+    // Only SettlementEvmNetwork chains; Arc is v1.4-only and has no v1.3 invoice.
+    .filter((network) => Object.hasOwn(NATIVE_ASSETS, network))
+    .map((network): readonly [string, number] => {
+      const entry = V14_DEPLOYMENTS[network];
+      return [entry.network, entry.chainId] as const;
+    }),
+];
+
+const CHAIN_IDS: Record<SettlementEvmNetwork, number> = Object.fromEntries(
+  CHAIN_ID_ENTRIES
+) as Record<SettlementEvmNetwork, number>;
 
 const EXPECTED_BPS: Record<SettlementRouteClass, { treasury: number; creator: number }> = {
   "AIFP-1": { treasury: 100, creator: 0 },
