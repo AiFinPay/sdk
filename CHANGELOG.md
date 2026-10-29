@@ -13,6 +13,8 @@ from the corresponding CI or payment artifacts.
   merchant's website or web search, and to ask for the endpoint URL.
 - Tools that declare an output schema now return `structuredContent`;
   `agent_quota` no longer fails in Claude Desktop.
+- MCP bundles skill 2.12.0; the source cohort guard pins its reviewed commit
+  and pack.
 
 ## Agent 2.11.0 / Python 2.9.0 / MCP 2.15.0 — BOT Chain (USDT only)
 

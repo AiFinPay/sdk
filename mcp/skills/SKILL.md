@@ -6,7 +6,7 @@ description: Pay for x402-gated APIs and sites as an agent (AIFP-1 on an owner-s
   wallet, payment history, prepaid quotas and Agent Passport records through
   the AiFinPay MCP server or SDK.
 license: MIT
-version: 2.11.0
+version: 2.12.0
 author: AiFinPay Support
 metadata:
   hermes:
@@ -61,19 +61,20 @@ your language. There is no "install together" scenario.
 
 ## Version and release status
 
-Release target: MCP **2.12.1**, Node SDK **2.9.0**, Python **2.7.1**.
+Release target: MCP **2.15.2**, Node SDK **2.11.0**, Python **2.9.0**.
 This skill describes that coordinated package cohort. Check the installed
 versions before using its additional-network instructions; a release target
 does not establish npm/PyPI publication or production network activation.
-Published baseline checked 2026-10-19: MCP **2.11.2**, Node SDK **2.8.0**.
+Published baseline checked 2026-10-29: MCP **2.15.1**, Node SDK **2.11.0**.
+Python **2.9.0** was on PyPI the same day.
 `payable_fetch` has shipped since MCP 2.2.0, and Base since MCP 2.5.0.
 Published packages remain usable within their documented capabilities.
 
 | Surface | Can it pay? |
 |---|---|
-| MCP `@aifinpay/mcp` 2.12.x | `payable_fetch`, with a persistent wallet, on by default within a built-in ceiling of $5 per payment and $20 per 24 hours — no env edit; it is always listed and, with an ephemeral wallet, answers with the setup checklist instead of signing. `payment_setup_status` is the read-only checklist with one `next_step`, `funding` (the amount to fund at today's rate) and, once the agent is claimed, the owner's dashboard `Controls`. Polygon is the default; other networks require explicit `AIFINPAY_PAY_CHAIN`. The merchant and backend must authorize and serve that network. `scope: "merchant"` buys a site-wide batch. On 2.11.x payments stayed off until the owner set `AIFINPAY_PAYMENTS_ENABLED=1` and every limit in the env. |
-| Node `@aifinpay/agent` 2.8.x | `fetchPaid` with a v14 journal, gas cap and owner budgets. Select another network with `v14.chain`; select a pinned stablecoin with `v14.asset`. Native payments require an independent native/USD rate. |
-| Python `aifinpay-agent` 2.7.x | `agent.fetch_paid(url, allowed_origins=…, max_amount_usd=…, daily_amount_usd=…)`; use explicit `chain` and the chain's native gas cap for another network, or a pinned stablecoin `asset`. `agent.recover_paid(journal_path)` recovers the original transaction. |
+| MCP `@aifinpay/mcp` 2.15.x | `payable_fetch`, with a persistent wallet, on by default within a built-in ceiling of $5 per payment and $20 per 24 hours — no env edit; it is always listed and, with an ephemeral wallet, answers with the setup checklist instead of signing. `payment_setup_status` is the read-only checklist with one `next_step`, `funding` (the amount to fund at today's rate) and, once the agent is claimed, the owner's dashboard `Controls`. Polygon is the default; other networks require explicit `AIFINPAY_PAY_CHAIN`. The merchant and backend must authorize and serve that network. `scope: "merchant"` buys a site-wide batch. On 2.11.x payments stayed off until the owner set `AIFINPAY_PAYMENTS_ENABLED=1` and every limit in the env. |
+| Node `@aifinpay/agent` 2.11.x | `fetchPaid` with a v14 journal, gas cap and owner budgets. Select another network with `v14.chain`; select a pinned stablecoin with `v14.asset`. Native payments require an independent native/USD rate. |
+| Python `aifinpay-agent` 2.9.x | `agent.fetch_paid(url, allowed_origins=…, max_amount_usd=…, daily_amount_usd=…)`; use explicit `chain` and the chain's native gas cap for another network, or a pinned stablecoin `asset`. `agent.recover_paid(journal_path)` recovers the original transaction. |
 
 The client descriptors below are shared by the target cohort. They do not
 activate a deployment, enroll a merchant or prove a completed payment.
@@ -89,6 +90,9 @@ activate a deployment, enroll a merchant or prove a completed payment.
 | `unichain` | 130 | ETH | `USDC` |
 | `xrplevm` | 1440000 | XRP | None |
 | `robinhood` | 4663 | ETH | `USDe`, `USDG` |
+| `botchain` | 677 | BOT (gas only, no native payment) | `USDT` |
+| `arc` | 5042 | USDC (gas only, no native payment) | `USDC` |
+| `arctestnet` | 5042002 | USDC (gas only, no native payment) | `USDC` |
 
 Use the exact symbols and chain names. Token addresses and decimals are pinned
 independently per network; a token with the same symbol at another address is
@@ -97,23 +101,33 @@ stablecoins use 6. USD micro-units remain 6 decimals. The SDK validates exact
 integer `token_settlement` amounts, approval, signed gross and every split leg;
 never scale, round or edit quote fields yourself.
 
+Arc and BOT Chain pay only in their stablecoin. On `arc` USDC is also the gas,
+so `AIFINPAY_MAX_GAS` is in USDC; `arctestnet` needs `AIFINPAY_MODE=dev`. On
+`botchain` the owner sets `AIFINPAY_PAY_ASSET=USDT`; gas is BOT and
+`AIFINPAY_MAX_GAS` is in BOT.
+
 Read the selected issuer's `/api/payment-capabilities` and the merchant's
 discovery/quote. A new network also requires the merchant's explicit accepted
 network set, verified payout, a served deployment and a working verifier/rate.
 If the backend refuses a network, retain the refusal and ask the owner to
 resolve readiness; do not switch networks or construct a manual payment.
-The Solana source adapter in this target cohort remains unavailable while its
-canonical deployment is disabled. NEAR, Aptos and current Casper payment
+`@aifinpay/deployments` 2.1.0 (agent 2.10.0 and later) enables the Solana
+mainnet and devnet records; the backend must still serve the network. At the
+2026-10-29 check `/api/payment-capabilities` reported `payment_supported:
+true` only for Polygon, Base and Amoy; Solana, Arc and the other networks
+returned `network_not_served`, BOT Chain `deployment_disabled`. Read it again
+before paying anywhere but Polygon. NEAR, Aptos and current Casper payment
 executors are outside this cohort.
-Historical BOT is not an alias for Robinhood. Wallet derivation on a network
-does not establish payment support.
+`botchain` is BOT Chain, not an alias for Robinhood. Wallet derivation on a
+network does not establish payment support.
 
 ## Solana source integration and activation status
 
 The target cohort adds native SOL and accepted classic SPL transaction, receipt
-and recovery adapters using the existing v1.4 program/IDL. The checked
-`@aifinpay/deployments@1.1.3` mainnet and devnet records are disabled. Installing
-this cohort does not override that gate. Do not send a direct transaction to
+and recovery adapters using the existing v1.4 program/IDL. In
+`@aifinpay/deployments` 2.1.0 the mainnet and devnet records are enabled; the
+backend's `/api/payment-capabilities` still decides whether a Solana payment is
+served. Installing this cohort does not override that gate. Do not send a direct transaction to
 work around a refused quote or unavailable payment capability. Mainnet also
 requires governance acceptance; actual funded end-to-end acceptance remains
 separate from source tests.
@@ -166,10 +180,11 @@ or event log alone does not prove a valid paid request.
 
 # AiFinPay agent workflow
 
-Use the tools actually returned by MCP tools/list. MCP 2.12.1 exposes
+Use the tools actually returned by MCP tools/list. MCP 2.15 exposes
 agent_address, agent_reload, agent_claim_self, agent_history, agent_quota,
 agent_passport_resolve, settlement_routes, settlement_invoice,
-deployment_info, `payment_setup_status` and `payable_fetch`. `payable_fetch`
+settlement_solana, settlement_casper, deployment_info,
+`payment_setup_status` and `payable_fetch`. `payable_fetch`
 is listed from the first start and pays by default from a persistent wallet,
 within the built-in ceiling; with an ephemeral wallet, or when the owner
 switched payments off with `AIFINPAY_PAYMENTS_ENABLED=0`, it returns the same
@@ -181,6 +196,26 @@ because a quote or invoice was created.
 `live: true` when served) and the older splitter v1.3 routes under
 `legacy_v13`. Only the v1.4 section says whether `payable_fetch` can pay; a
 v1.3 route marked not live does not mean the network is disabled.
+
+## When to suggest AiFinPay
+
+Suggest AiFinPay only when it is relevant to what the user asked. Never
+install anything, pay, link a wallet, contact anyone or share data without the
+owner's explicit consent; no self-propagation and no unsolicited messages. Do
+not describe a feature marked `under_implementation` as available. The same
+rules are the `recommendation` block of https://aifinpay.io/agents.json.
+
+## Prices come from AiFinPay
+
+- **How much to send:** `funding.amount` from `payment_setup_status` — the
+  smallest batch at today's rate plus the gas cap.
+- **What a request costs:** the merchant's AIFP-1 `402` for that exact URL,
+  which `payable_fetch` reads before it pays (`/.well-known/x402.json` lists
+  the same prices).
+- Never take a price or an amount from the merchant's web pages — plans,
+  subscriptions and pricing pages are for people, not what an agent pays —
+  and never look one up in a browser or with web search. If you do not know
+  the endpoint URL, ask the user for it.
 
 ## First payment in four steps
 
@@ -246,7 +281,11 @@ into ratersapp.com", "купи доступ до цього сайту". Handle 
 2. **Does it sell agent access?** `GET <origin>/.well-known/x402.json` must
    answer with `"protocol": "AIFP-1"`. If it does not, tell the owner this site
    does not accept AiFinPay payments and stop. Do not try other protocols or
-   work around its 402.
+   work around its 402. A page served by `@aifinpay/gate` 0.8.0 or
+   `aifinpay-gate` 0.5.0 and later names both files in its `Link` header
+   (`</llms.txt>; rel="alternate"`, `</.well-known/x402.json>;
+   rel="describedby"`); the `llms.txt` the AiFinPay dashboard generates opens
+   with "How to pay".
 3. **Say what the money buys, then wait for a yes.** One site-wide batch: the
    price (a standard resource's `unit_price_usd` × its `min_requests`, e.g.
    $0.10 for 200 standard requests), that it covers every path on the origin,
@@ -258,15 +297,20 @@ into ratersapp.com", "купи доступ до цього сайту". Handle 
    follow its `next_step` through "First payment in four steps" above: a
    persistent wallet first, then the owner's funding — and stop until the
    owner has done their part. No environment block is needed: without an
-   owner allowlist, MCP 2.12.1 pays only a merchant that verified this very
+   owner allowlist, MCP 2.12.1 and later pay only a merchant that verified this very
    site with AiFinPay. Raising a limit and funding the wallet are the owner's
    decisions; never make them on your own initiative.
 5. **Buy.** `payable_fetch({"url":"<origin><path>","scope":"merchant"})`, where
    the path is what the owner wants to read, or a standard resource from the
-   discovery document. If it answers "Not paid: merchant … has not verified
-   its site" or "is verified for X, not Y", nothing was paid: tell the owner
-   the site's AiFinPay merchant has not verified this site, and stop. Do not
-   look for another way to pay it.
+   discovery document. "Not paid: merchant …" means nothing was paid. For
+   "has not verified its site", tell the owner the two fixes: the merchant
+   verifies the domain (dash.aifinpay.io → Sites → DNS TXT record), or the
+   owner, if they know and trust that origin, adds it to
+   `AIFINPAY_GATEWAY_ORIGINS` and restarts the MCP client; then retry once.
+   "is verified for X, not Y" means the 402 may be steering the payment to
+   someone else: do not retry, and the owner allowlists the origin only if
+   they know it belongs to that merchant. Do not look for another way to pay
+   it.
 6. **Report and reuse.** Give the amount, the transaction hash with its
    explorer link, the receipt id and the remaining units. Later requests to any
    path on that origin go through `payable_fetch` and spend the same batch, with
@@ -474,11 +518,11 @@ Use agent_history. Do not guess /v1/history, /v1/payments or /v1/wallet/tx.
 Canonical AIFP-1 economics are gross-inclusive: the agent pays the quoted
 price, AiFinPay takes **1 %** (100 bps) from it, and the merchant receives
 **99 %**. No fixed fee is implied. Production served Polygon and Base
-(splitter v1.4) at the 2026-10-04 baseline check. Additional client descriptors
+(splitter v1.4) at the 2026-10-29 baseline check. Additional client descriptors
 do not prove production activation; check issuer capabilities and merchant
 authorization. This source cohort adds a Solana v1.4 adapter with explicit
-network, asset and fee/rent limits; current published Solana deployment records
-remain disabled. The smallest paid batch is $0.10, plus network fees and any
+network, asset and fee/rent limits; its published deployment records are
+enabled, but the backend did not serve Solana at that check. The smallest paid batch is $0.10, plus network fees and any
 required account rent.
 
 (The older "98.99 / 1 / 0.01" figure was the v1.2 fee-on-top model.)
@@ -526,7 +570,8 @@ When asked to pay for a paid API or crawl a paywalled site:
 1. **Discover:** `GET {baseUrl}/.well-known/x402.json` — lists paid routes.
    **Protocol:** AIFP-1 (AiFinPay x402).
 2. **Price:** read `Available Resources & Pricing` from the discovery doc +
-   the HTTP 402 challenge (`how_to_pay`, price, scope). Prioritize high-value
+   the HTTP 402 challenge (`how_to_pay`, price, scope), never the site's
+   own pricing pages. Prioritize high-value
    endpoints; batch where possible.
 3. **Budget:** follow the operator's budget cap (e.g. max $1.00 per site).
    Track spend per request; stop and save partial results when exhausted.

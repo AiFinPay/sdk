@@ -10,6 +10,8 @@
   `settlement_*` tools declared an output schema but returned no
   `structuredContent`, so clients that validate it (Claude Desktop) failed
   every call. They now return it; an empty quota is `batches: []`.
+- Bundles `@aifinpay/skill` 2.12.0 (`aifinpay://skill`): the same pricing
+  rule, current networks, consent rules and the unverified-site fixes.
 
 ## 2.15.1 — installs agent 2.11.0, so BOT Chain works
 

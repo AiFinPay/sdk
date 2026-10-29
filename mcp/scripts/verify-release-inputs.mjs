@@ -9,7 +9,7 @@ const manifest = read("package.json");
 const lock = read("package-lock.json");
 if (lock.version !== manifest.version || lock.packages?.[""]?.version !== manifest.version)
   throw new Error("MCP release metadata and real registry lock disagree");
-for (const [name, version] of Object.entries({ "@aifinpay/agent": "2.11.0", "@aifinpay/skill": "2.11.0" })) {
+for (const [name, version] of Object.entries({ "@aifinpay/agent": "2.11.0", "@aifinpay/skill": "2.12.0" })) {
   const entry = lock.packages?.[`node_modules/${name}`];
   if (
     manifest.dependencies?.[name] !== `^${version}` ||
