@@ -25,7 +25,12 @@ const CASPER_CHAINS = new Set(["casper"]);
 const ALL_CHAINS = new Set([...EVM_CHAINS, ...SOLANA_CHAINS, ...CASPER_CHAINS]);
 
 function result(value: unknown) {
-  return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };
+  // outputSchema is an object: wrap anything else.
+  const structured = value && typeof value === "object" && !Array.isArray(value) ? value : { result: value };
+  return {
+    content: [{ type: "text", text: JSON.stringify(value, null, 2) }],
+    structuredContent: structured as Record<string, unknown>,
+  };
 }
 function errorResult(message: string) {
   return { isError: true, content: [{ type: "text", text: message }] };

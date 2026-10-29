@@ -161,13 +161,14 @@ export async function runAgentQuota(ctx: ToolContext, args: Record<string, unkno
       ? "Solana remaining/used/quota are billing units. The number of callable requests depends on each route's server-defined cost_units. Hosted gateway usage is durable; external merchant metering may lag. An empty result means no retained active quota in this selected wallet/network/program."
       : batches.length === 0
         ? merchantFilter
-          ? `no active quota at ${merchantFilter} — a new batch starts with that service's 402 (or agent_quote its URL first)`
+          ? `no active quota at ${merchantFilter} — a new batch starts when payable_fetch pays that service's 402`
           : "no active quota anywhere — pay a service's 402 to start a batch"
         : "`remaining` is authoritative where AiFinPay meters (hosted gateway); a merchant running its own @aifinpay/gate meters locally and our copy can lag behind by their traffic.",
   };
 
   return {
     content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+    structuredContent: payload,
   };
 }
 

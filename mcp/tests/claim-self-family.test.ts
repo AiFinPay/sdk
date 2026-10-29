@@ -73,7 +73,9 @@ describe("owner-selected claim family", () => {
   for (const chain of [undefined, "polygon", "base", "arbitrum"])
     it(`requires EVM for ${chain ?? "default"}`, async () => {
       const c = ctx(chain);
-      const data = JSON.parse(output(await runAgentClaimSelf(c, { magic_link_url: link })));
+      const result = await runAgentClaimSelf(c, { magic_link_url: link });
+      const data = JSON.parse(output(result));
+      expect(result.structuredContent).toEqual(data);
       expect(data).toMatchObject({
         ok: true,
         primary_family: "evm",

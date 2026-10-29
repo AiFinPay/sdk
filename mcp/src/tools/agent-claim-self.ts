@@ -310,27 +310,17 @@ export async function runAgentClaimSelf(ctx: ToolContext, args: Record<string, u
   const evmResult = primarySolana ? secondary : primary;
   const solanaResult = primarySolana ? primary : secondary;
   const primaryAddress = primarySolana ? solAddr : evmAddr;
-  return {
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify(
-          {
-            ok: true,
-            primary_family: primarySolana ? "solana" : "evm",
-            primary_address: primaryAddress,
-            payment_chain: selected.name,
-            polygon_address: evmAddr,
-            polygon_claim: evmResult.ok ? "ok" : `skipped (${evmResult.reason})`,
-            solana_address: solAddr,
-            solana_claim: solanaResult.ok ? "ok" : `skipped (${solanaResult.reason})`,
-            label: label || null,
-            next: `Open https://dash.aifinpay.io/my-agents/${encodeURIComponent(primaryAddress)}. Use Fund to view available payment networks and assets. Wallet binding does not enable payments on a disabled network.`,
-          },
-          null,
-          2
-        ),
-      },
-    ],
+  const claimed = {
+    ok: true,
+    primary_family: primarySolana ? "solana" : "evm",
+    primary_address: primaryAddress,
+    payment_chain: selected.name,
+    polygon_address: evmAddr,
+    polygon_claim: evmResult.ok ? "ok" : `skipped (${evmResult.reason})`,
+    solana_address: solAddr,
+    solana_claim: solanaResult.ok ? "ok" : `skipped (${solanaResult.reason})`,
+    label: label || null,
+    next: `Open https://dash.aifinpay.io/my-agents/${encodeURIComponent(primaryAddress)}. Use Fund to view available payment networks and assets. Wallet binding does not enable payments on a disabled network.`,
   };
+  return { content: [{ type: "text", text: JSON.stringify(claimed, null, 2) }], structuredContent: claimed };
 }
