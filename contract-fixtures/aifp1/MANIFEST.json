@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "files": {
+    "polygon-POL.json": "f1b277d9ac541ea9c6317d2fca86f672e08f82bf458f48c3a94d7e505790a872",
+    "polygon-USDC.json": "f7f71e5fb6262089a022edaad6bd8f460efbe8e0bfb43986829e5463c18db26d",
+    "base-ETH.json": "bcc1f97198152f18052436cc2b91b1a54aed01d0564e262ad239b9c989b271b7",
+    "base-USDC.json": "15c0ef997acaf636fc586f669b5dedaf9af094feae2c4ff708f1cd799996bd84"
+  }
+}

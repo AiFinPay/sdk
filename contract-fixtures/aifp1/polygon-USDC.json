@@ -1,0 +1,225 @@
+{
+  "case": "polygon-USDC",
+  "generated_at": "2026-10-29T16:57:55.694Z",
+  "api_base": "https://api.aifinpay.io",
+  "merchant_origin": "https://merchant.example",
+  "payer": "0xE9D11A899010A7Fb6EBBC721b1FB793E0D7946e8",
+  "quote_signer": "0x9669f5bF720bA7E50C380C68803C7ED5ADC4d636",
+  "issuer_jwk": {
+    "crv": "Ed25519",
+    "x": "RP4QW-IsCiQA1tq_EoquNyg0krRzH15jslpRP5yZFLA",
+    "kty": "OKP",
+    "kid": "contract-fixture",
+    "alg": "EdDSA",
+    "use": "sig"
+  },
+  "challenge_402": {
+    "error": "AIFP-402",
+    "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+    "protocol": "AIFP-1",
+    "merchant_id": "mrch_contract_fixture",
+    "resource": "/api/genres",
+    "tier": "standard",
+    "unit_weight": 1,
+    "unit_price_usd": "0.0005",
+    "min_requests": 200,
+    "scope": "exact",
+    "accepted_chains": [
+      "polygon",
+      "base"
+    ],
+    "accepted_assets": [
+      "USDC",
+      "USDC.e",
+      "USDT",
+      "POL",
+      "ETH"
+    ],
+    "protocol_fee_bps": 100,
+    "no_minimum_fee": true,
+    "how_to_pay": [
+      "POST /v1/quote {\"merchant_id\":\"mrch_contract_fixture\",\"resource\":\"/api/genres\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":200,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+      "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+      "POST /v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+      "retry this request with header: AIFP-Receipt: <receipt JWT>"
+    ],
+    "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md for supported clients and payment availability. Wallet setup alone does not enable settlement."
+  },
+  "quote_request": {
+    "merchant_id": "mrch_contract_fixture",
+    "payer": "0xE9D11A899010A7Fb6EBBC721b1FB793E0D7946e8",
+    "resource": "/api/genres",
+    "scope": "exact",
+    "units": 200,
+    "agent_id": "0xE9D11A899010A7Fb6EBBC721b1FB793E0D7946e8",
+    "asset": "USDC",
+    "settlement_chain": "polygon"
+  },
+  "quote": {
+    "quote_id": "qt_f43fefd9861c2df1",
+    "merchant_id": "mrch_contract_fixture",
+    "resource": "/api/genres",
+    "scope": "exact",
+    "tier": "standard",
+    "unit_price": "0.0005",
+    "requests": 200,
+    "units": 200,
+    "unit_quota": 200,
+    "base_unit_price_usd": "0.0005",
+    "amount": "0.1",
+    "currency": "USD",
+    "accepted_assets": [
+      "USDC"
+    ],
+    "accepted_chains": [
+      "polygon"
+    ],
+    "network_mode": "live",
+    "pay_to": {
+      "evm": "0x2222222222222222222222222222222222222222",
+      "polygon": "0x2222222222222222222222222222222222222222"
+    },
+    "pay_to_note": "Merchant payout destinations for display only. Do not transfer funds directly to pay_to. Pay only using a settlement_call matching the selected chain and asset; if absent, do not send funds.",
+    "fee_bps": 100,
+    "no_minimum_fee": true,
+    "token_settlement": {
+      "asset": "USDC",
+      "token": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+      "decimals": 6,
+      "total_units": "100000",
+      "merchant_units": "99000",
+      "protocol_fee_units": "1000",
+      "creator_units": "0",
+      "settlement_semantics": "gross-inclusive"
+    },
+    "settlement_call": {
+      "chain": "polygon",
+      "contract": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+      "splitter_version": "1.4",
+      "route": "merchant-aifp1",
+      "asset": "USDC",
+      "function": "settleStable((address,address,address,uint256,address,uint256,bytes32,uint256,bytes32),bytes)",
+      "arg_encoding": "struct+signature",
+      "field_order": [
+        "payer",
+        "merchant",
+        "token",
+        "grossAmount",
+        "ipCreator",
+        "validUntil",
+        "orderIdHash",
+        "nonce",
+        "routeId"
+      ],
+      "value_wei": "0",
+      "approval": {
+        "token": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+        "spender": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+        "amount": "100000",
+        "function": "approve(address,uint256)"
+      },
+      "args": {
+        "quote": {
+          "payer": "0xE9D11A899010A7Fb6EBBC721b1FB793E0D7946e8",
+          "merchant": "0x2222222222222222222222222222222222222222",
+          "token": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+          "grossAmount": "100000",
+          "ipCreator": "0x0000000000000000000000000000000000000000",
+          "validUntil": "1793293975",
+          "orderIdHash": "0xab7868a6884571b7e43753c5f3b070604cb70beccbd069ad3008f6f5e0b87820",
+          "nonce": "7",
+          "routeId": "0xb9dbf587b0df69870df1e60b22fba0317f53eb19d78a573abf94fc384a339a89"
+        },
+        "signature": "0xc68ac6e963fa68f1494daaddd41e35fb796a63930445338a1d52d30bbafb589b2d9cde78272dfeccca3206c666b22c6df66a966250e769d7cc91397a65f12a821b"
+      },
+      "bound_to_payer": "0xE9D11A899010A7Fb6EBBC721b1FB793E0D7946e8",
+      "nonce_at_signing": "7",
+      "note": "approve the splitter for exactly approval.amount of USDC, then send settleStable from the payer wallet above with value 0, then POST /v1/pay with the settleStable hash. Gas is paid in the native coin. This signature is valid only for that wallet and only until it settles its next payment."
+    },
+    "settlement": {
+      "batch_units": "100000",
+      "total_units": "100000",
+      "settlement_semantics": "gross-inclusive",
+      "gross_units": "100000",
+      "payer_total_units": "100000",
+      "merchant_units": "99000",
+      "protocol_fee_units": "1000",
+      "creator_units": "0",
+      "breakdown": {
+        "merchant": "99000",
+        "treasury": "1000",
+        "creator": "0"
+      },
+      "fee_on_top": {
+        "provider": "99000",
+        "treasury": "1000",
+        "creator": "0"
+      }
+    },
+    "nonce": "acb124505787be0a67a6f782b5cd8e8a",
+    "expires_at": "2026-10-29T17:12:55.689Z",
+    "recovery_until": "2026-10-30T16:57:55.690Z",
+    "payment_authorization": {
+      "scheme": "wallet-signature-v1",
+      "domain": "https://api.aifinpay.io",
+      "max_age_seconds": 300
+    },
+    "payer": "0xe9d11a899010a7fb6ebbc721b1fb793e0d7946e8",
+    "created_at": "2026-10-29T16:57:55.690Z"
+  },
+  "signed_transaction": "0x02abababababababababababababababababababababababababababababababab",
+  "pay_request": {
+    "quote_id": "qt_f43fefd9861c2df1",
+    "chain": "polygon",
+    "asset": "USDC",
+    "tx_ref": "0xdf34f0b4234b95ae5a9aa5f55c3a03c0a1848f4ffa7fc06bfd9227a52fd1f9bd"
+  },
+  "receipt_jwt_parts": [
+    "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImNvbnRyYWN0LWZpeHR1cmUifQ",
+    "eyJyZXNvdXJjZSI6Ii9hcGkvZ2VucmVzIiwibWV0ZXJpbmdfdmVyc2lvbiI6Miwic2NvcGUiOiJleGFjdCIsInRpZXIiOiJzdGFuZGFyZCIsImFtb3VudCI6IjAuMSIsImN1cnJlbmN5IjoiVVNEIiwiYXNzZXQiOiJVU0RDIiwiY2hhaW4iOiJwb2x5Z29uIiwidHhfcmVmIjoiMHhkZjM0ZjBiNDIzNGI5NWFlNWE5YWE1ZjU1YzNhMDNjMGExODQ4ZjRmZmE3ZmMwNmJmZDkyMjdhNTJmZDFmOWJkIiwicmVjZWlwdF9pZCI6InJjcHRfYzhhYzY3NTc1MWI0NjZmMCIsIm5vbmNlIjoiYWNiMTI0NTA1Nzg3YmUwYTY3YTZmNzgyYjVjZDhlOGEiLCJwYXllciI6IjB4ZTlkMTFhODk5MDEwYTdmYjZlYmJjNzIxYjFmYjc5M2UwZDc5NDZlOCIsInF1b3RhIjoyMDAsInVuaXRfcXVvdGEiOjIwMCwiaXNzIjoiaHR0cHM6Ly9hcGkuYWlmaW5wYXkuaW8iLCJzdWIiOiIweGU5ZDExYTg5OTAxMGE3ZmI2ZWJiYzcyMWIxZmI3OTNlMGQ3OTQ2ZTgiLCJhdWQiOiJtcmNoX2NvbnRyYWN0X2ZpeHR1cmUiLCJpYXQiOjE3OTMyOTMwNzUsImV4cCI6MTc5NTg4NTA3NX0",
+    "shES7aJ-CY-0kG1Y8ofzjHOVWw4l27QyU6gT8UVoaXuGI4lsUtH9MDvEx7EV8geEsIcZcUqiLPjSZLLPxmHLCw"
+  ],
+  "pay_response": {
+    "payer": "0xe9d11a899010a7fb6ebbc721b1fb793e0d7946e8",
+    "metering_version": 2,
+    "network_mode": "live",
+    "exp": 1795885075,
+    "receipt_id": "rcpt_c8ac675751b466f0",
+    "status": "settled",
+    "tx_ref": "0xdf34f0b4234b95ae5a9aa5f55c3a03c0a1848f4ffa7fc06bfd9227a52fd1f9bd",
+    "merchant_id": "mrch_contract_fixture",
+    "resource": "/api/genres",
+    "scope": "exact",
+    "amount": "0.1",
+    "currency": "USD",
+    "tier": "standard",
+    "unit_price": "0.0005",
+    "quota": 200,
+    "unit_quota": 200,
+    "base_unit_price_usd": "0.0005",
+    "asset": "USDC",
+    "chain": "polygon",
+    "fee": {
+      "provider": "99000",
+      "treasury": "1000",
+      "creator": "0"
+    },
+    "settled_at": "2026-10-29T16:57:55.694Z",
+    "expires_at": "2026-11-28T16:57:55.000Z",
+    "settlement": {
+      "chain": "polygon",
+      "network_mode": "live",
+      "tx_ref": "0xdf34f0b4234b95ae5a9aa5f55c3a03c0a1848f4ffa7fc06bfd9227a52fd1f9bd",
+      "block": 12345,
+      "payer": "0xE9D11A899010A7Fb6EBBC721b1FB793E0D7946e8",
+      "merchant": "0x2222222222222222222222222222222222222222",
+      "token": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+      "asset": "USDC",
+      "asset_decimals": 6,
+      "merchant_amount": "99000",
+      "total_amount": "100000",
+      "order_id": "qt_f43fefd9861c2df1",
+      "route_id": "0xb9dbf587b0df69870df1e60b22fba0317f53eb19d78a573abf94fc384a339a89"
+    }
+  }
+}
