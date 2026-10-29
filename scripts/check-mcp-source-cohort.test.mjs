@@ -59,13 +59,13 @@ test("canonical mirror and both CI refs bind the reviewed reporting producer; wr
 });
 test("reporting source target refuses every stale package version without claiming registry availability", () => {
   verifyCohortVersions({
-    mcp: "2.14.0",
+    mcp: "2.14.1",
     agent: "2.10.0",
     python: "2.8.0",
     skill: "2.11.0",
   });
   for (const [name, oldVersion] of Object.entries({
-    mcp: "2.13.1",
+    mcp: "2.14.0",
     agent: "2.9.0",
     python: "2.7.1",
     skill: "2.10.2",
@@ -113,11 +113,10 @@ test("MCP candidate metadata preserves the real registry lock of the published c
     );
     assert.deepEqual(skillEdges, baselineSkillEdges);
   }
-  // The lock still follows the published agent 2.8.0 (2026-10-19); the source
-  // agent is 2.9.0 (adds "codex" to AGENT_FRAMEWORKS) and the lock moves to it
-  // once it is published, as #116 did for 2.8.0. Its registry identity is the
-  // only change: 2.8.0 depends on exactly what 2.7.0 did.
-  const registryAgent = "2.9.0";
+  // The lock follows the published agent 2.10.0 (2026-10-29, Arc and Solana
+  // through @aifinpay/deployments 2.1.0). Besides its registry identity, its one
+  // dependency change from the baseline is that registry: 1.1.4 -> 2.1.0.
+  const registryAgent = "2.10.0";
   assert.equal(manifest.dependencies["@aifinpay/agent"], `^${registryAgent}`);
   const { version, resolved, integrity, ...agentEdges } =
     lock.packages["node_modules/@aifinpay/agent"];
@@ -133,11 +132,24 @@ test("MCP candidate metadata preserves the real registry lock of the published c
       version: registryAgent,
       resolved: `https://registry.npmjs.org/@aifinpay/agent/-/agent-${registryAgent}.tgz`,
       integrity:
-        "sha512-+v58jgYpjK523mFzw8vKEaC5dsFl21h5/HwpAfCFuYSPPK3FyFbJ205jEgIet+ocE9cUglS0WPX/+i1tBjUMGQ==",
+        "sha512-B14otral5yIEF8vhPYOa7QK1i1sK4DFzcZYThsppA1IjORtmjwhHbKcmsGtoiw6vGHMdVqxSkYEb2CG1qObFhg==",
     },
   );
-  assert.deepEqual(agentEdges, baselineEdges);
-  // With agent 2.9.0 and skill 2.11.0 published and locked, the release
+  assert.deepEqual(agentEdges, {
+    ...baselineEdges,
+    dependencies: {
+      ...baselineEdges.dependencies,
+      "@aifinpay/deployments": "2.1.0",
+    },
+  });
+  assert.deepEqual(lock.packages["node_modules/@aifinpay/deployments"], {
+    version: "2.1.0",
+    resolved: "https://registry.npmjs.org/@aifinpay/deployments/-/deployments-2.1.0.tgz",
+    integrity:
+      "sha512-Za7K7I/pmnK68760E1EkySLYPKT2qFUNXuRLWateWOZaJ/Xr7xpaZropythR6y3Bpne6g4LVF/AY2auLzQue1A==",
+    license: "MIT",
+  });
+  // With agent 2.10.0 and skill 2.11.0 published and locked, the release
   // metadata check must accept the lock. It also verifies the installed
   // package, so it needs `npm ci` in mcp/; CI runs this file before any mcp
   // install (it then installs the cohort in a disposable directory and runs
