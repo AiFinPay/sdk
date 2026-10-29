@@ -59,13 +59,13 @@ test("canonical mirror and both CI refs bind the reviewed reporting producer; wr
 });
 test("reporting source target refuses every stale package version without claiming registry availability", () => {
   verifyCohortVersions({
-    mcp: "2.15.0",
+    mcp: "2.15.1",
     agent: "2.11.0",
     python: "2.9.0",
     skill: "2.11.0",
   });
   for (const [name, oldVersion] of Object.entries({
-    mcp: "2.14.2",
+    mcp: "2.15.0",
     agent: "2.10.1",
     python: "2.8.1",
     skill: "2.10.2",
@@ -113,10 +113,9 @@ test("MCP candidate metadata preserves the real registry lock of the published c
     );
     assert.deepEqual(skillEdges, baselineSkillEdges);
   }
-  // The lock follows the published agent 2.10.0 (2026-10-29, Arc and Solana
-  // through @aifinpay/deployments 2.1.0). Besides its registry identity, its one
-  // dependency change from the baseline is that registry: 1.1.4 -> 2.1.0.
-  const registryAgent = "2.10.0";
+  // The lock follows the published agent 2.11.0. Besides its registry identity,
+  // its one dependency change from the baseline is deployments 1.1.4 -> 2.1.0.
+  const registryAgent = "2.11.0";
   assert.equal(manifest.dependencies["@aifinpay/agent"], `^${registryAgent}`);
   const { version, resolved, integrity, ...agentEdges } =
     lock.packages["node_modules/@aifinpay/agent"];
@@ -132,7 +131,7 @@ test("MCP candidate metadata preserves the real registry lock of the published c
       version: registryAgent,
       resolved: `https://registry.npmjs.org/@aifinpay/agent/-/agent-${registryAgent}.tgz`,
       integrity:
-        "sha512-B14otral5yIEF8vhPYOa7QK1i1sK4DFzcZYThsppA1IjORtmjwhHbKcmsGtoiw6vGHMdVqxSkYEb2CG1qObFhg==",
+        "sha512-ktMaAaNmPIMFIPoT4F7/2UOWZfIhrzywTsousk8mJxLJhoNrGa020shyBvP8xTa+T3xlmsPJtbzpIVLRJSebOA==",
     },
   );
   assert.deepEqual(agentEdges, {
@@ -149,7 +148,7 @@ test("MCP candidate metadata preserves the real registry lock of the published c
       "sha512-Za7K7I/pmnK68760E1EkySLYPKT2qFUNXuRLWateWOZaJ/Xr7xpaZropythR6y3Bpne6g4LVF/AY2auLzQue1A==",
     license: "MIT",
   });
-  // With agent 2.10.0 and skill 2.11.0 published and locked, the release
+  // With agent 2.11.0 and skill 2.11.0 published and locked, the release
   // metadata check must accept the lock. It also verifies the installed
   // package, so it needs `npm ci` in mcp/; CI runs this file before any mcp
   // install (it then installs the cohort in a disposable directory and runs
