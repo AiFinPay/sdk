@@ -48,6 +48,12 @@ const safeFetch = makeSafeFetch({
 const RELOAD_ENV_NOTE =
   "Payments are off: AIFINPAY_PAYMENTS_ENABLED=0 (or a programmatic config without payments). Env is read only when this server starts; agent_reload re-reads the keystore and nothing else. If the owner has changed it since, have the client restart the aifinpay MCP server (restart the client, or disable and re-enable the server), then call payment_setup_status.";
 
+// Sent at initialize: where an agent gets prices and amounts to fund.
+const INSTRUCTIONS =
+  "Prices and funding amounts come from AiFinPay, never from browsing the merchant's site or searching the web: a site's plans and subscriptions are for people, not what an agent pays. " +
+  "How much to send: funding.amount from payment_setup_status. What a request costs: the AIFP-1 402 of that exact URL, which payable_fetch reads before it pays. " +
+  "If the endpoint URL is not known, ask the user for it.";
+
 /** Payments are on by default (2.12.1) within the built-in ceiling, and only a
  * persistent wallet signs: a server that started ephemeral opens its payment
  * journal at agent_reload after init, without a restart. Legacy signing tools
@@ -121,7 +127,7 @@ export async function createServer(config: McpConfig = {}) {
       name: "@aifinpay/mcp",
       version: JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version,
     },
-    { capabilities: { tools: {}, resources: {} } }
+    { capabilities: { tools: {}, resources: {} }, instructions: INSTRUCTIONS }
   );
   // The client names itself at initialize. Logging it is how an unlisted name
   // gets found: the 2026-10-19 Codex payment showed as "Independent" because

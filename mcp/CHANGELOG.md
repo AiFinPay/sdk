@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.15.2 — prices from AiFinPay; agent_quota answers in Claude Desktop
+
+- Server `instructions` and the `payment_setup_status` / `payable_fetch`
+  descriptions: how much to send is `funding.amount`, what a request costs is
+  the AIFP-1 402 of that exact URL; never a price from the merchant's site
+  (plans, subscriptions) or web search; ask the user for the endpoint URL.
+- `agent_quota`, `agent_claim_self`, `agent_passport_resolve` and the
+  `settlement_*` tools declared an output schema but returned no
+  `structuredContent`, so clients that validate it (Claude Desktop) failed
+  every call. They now return it; an empty quota is `batches: []`.
+
 ## 2.15.1 — installs agent 2.11.0, so BOT Chain works
 
 - `@aifinpay/agent` ^2.11.0 (lock resolved from the registry). 2.15.0 still

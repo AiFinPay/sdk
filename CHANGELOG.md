@@ -6,6 +6,14 @@ versions from manifests/registries, deployment metadata from
 [the registry](deployments/registry/splitter/INDEX.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## MCP 2.15.2 — prices from AiFinPay; structured tool results
+
+- MCP tells agents to take amounts to fund from `payment_setup_status` and a
+  request's price from the AIFP-1 402 of the exact URL, never from the
+  merchant's website or web search, and to ask for the endpoint URL.
+- Tools that declare an output schema now return `structuredContent`;
+  `agent_quota` no longer fails in Claude Desktop.
+
 ## Agent 2.11.0 / Python 2.9.0 / MCP 2.15.0 — BOT Chain (USDT only)
 
 - BOT Chain (677) is payable in Node, Python and MCP through its pinned USDT
