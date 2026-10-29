@@ -28,6 +28,11 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer } from "../src/server.js";
 import { DEFAULT_DAILY_USD, DEFAULT_MAX_GAS_POL, DEFAULT_MAX_USD, loadConfigFromEnv } from "../src/config.js";
 
+// Each case spawns the init CLI, which derives a scrypt key for the keystore.
+// Alone that takes ~1 s; in the full parallel run it exceeded vitest's 5 s
+// default and failed three cases at random. Give these real processes room.
+vi.setConfig({ testTimeout: 30_000 });
+
 const BIN = fileURLToPath(new URL("../bin/aifinpay-mcp.js", import.meta.url));
 const README = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 

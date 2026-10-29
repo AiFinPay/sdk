@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.14.1 — installs agent 2.10.0, so Arc works
+
+- `@aifinpay/agent` ^2.10.0. 2.14.0 left the lock and the release-input check
+  on 2.9.0, which has no Arc: the Arc tests failed and `npm publish` stopped
+  in `prepublishOnly`, so 2.14.0 was never published. Use 2.14.1.
+
 ## 2.14.0 — Arc and Arc Testnet
 
 - `AIFINPAY_PAY_CHAIN` accepts `arc` and `arctestnet` (from `@aifinpay/agent`
