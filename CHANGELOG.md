@@ -6,6 +6,11 @@ versions from manifests/registries, deployment metadata from
 [the registry](deployments/registry/splitter/INDEX.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## Agent 2.10.1 / Python 2.8.1 / MCP 2.14.2 — dev merged into main
+
+- Documentation-only patches: the `dev` documentation cleanup reached the
+  package READMEs. No code change in these packages.
+
 ## MCP 2.14.1 — installs agent 2.10.0, so Arc works
 
 - MCP 2.14.0 pinned `@aifinpay/agent` 2.9.0 (no Arc) and could not pass
