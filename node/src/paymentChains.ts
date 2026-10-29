@@ -13,10 +13,7 @@ export interface PaymentChainDescriptor {
    *  18-decimal view of the 6-decimal ERC-20). Payment goes only through the
    *  pinned token; there is no native quote, and the native symbol names it. */
   stablecoinOnly?: true;
-  /** The gas token has no independent USD price (BOT Chain: no feed on our
-   *  backend or the public price sources), so there is no native quote to
-   *  cross-check. Payment goes only through a pinned stablecoin; gas is still
-   *  paid in the native token. coingeckoId is empty and never fetched. */
+  /** Gas token has no USD price (BOT Chain): pay only in a pinned stablecoin. */
   noNativePayment?: true;
   /** Test network: quotes are network_mode "test", never live money. */
   testnet?: true;
@@ -104,7 +101,6 @@ const DESCRIPTORS = {
     coingeckoId: "ethereum",
     maxSaneUsd: 100000,
   },
-  // Paid in Bridged USDT only; gas is BOT, which has no USD price source.
   botchain: {
     chainId: 677,
     label: "BOT Chain",
@@ -167,7 +163,6 @@ const TOKEN_DECIMALS: Readonly<Record<string, Readonly<Record<string, 6 | 18>>>>
   unichain: { "0x078d782b760474a361dda0af3839290b0ef57ad6": 6 },
   robinhood: { "0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34": 18, "0x5fc5360d0400a0fd4f2af552add042d716f1d168": 6 },
   amoy: { "0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582": 6 },
-  // Bridged USDT, ERC-20 decimals() read 2026-10-29.
   botchain: { "0xababc7ddc03e501d190c676bf3d92ef0e6e87a3c": 6 },
   // ERC-20 decimals() read 2026-10-26. EURC is deliberately not pinned.
   arc: { "0x3600000000000000000000000000000000000000": 6 },

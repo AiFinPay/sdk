@@ -161,7 +161,8 @@ The current chain names and descriptors are exposed in
 `aifinpay.payment_chains.PAYMENT_CHAINS`; use the installed registry and runtime
 checks to determine payment availability. Every non-Polygon network requires an
 explicit `max_gas_wei` in that network's native units; on a `stablecoinOnly`
-chain (Arc) that is the stablecoin itself and `asset` must name it. Configure RPCs with
+chain (Arc) that is the stablecoin itself and `asset` must name it; on a
+`noNativePayment` chain (BOT Chain) `asset` must name its pinned stablecoin. Configure RPCs with
 `evm_rpc_urls`; existing `polygon_rpc` and `base_rpc` options remain.
 Native prices use POL/ETH/AVAX/BNB/XRP. OP oracle fees are budgeted separately;
 Nitro gas estimates already include parent-data costs. Address/decimal-pinned

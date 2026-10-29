@@ -33,8 +33,6 @@ export const robinhood: Chain = defineChain({
   },
 });
 
-// viem ships Arc only from 2.4x; the SDK accepts older viem, so pin it here.
-// Native USDC (18 decimals) is the gas token; payments use the ERC-20 at 0x3600….
 export const arc: Chain = defineChain({
   id: 5042,
   name: "Arc",

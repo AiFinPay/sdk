@@ -8,11 +8,10 @@ from the corresponding CI or payment artifacts.
 
 ## Agent 2.11.0 / Python 2.9.0 / MCP 2.15.0 — BOT Chain (USDT only)
 
-- BOT Chain (677) is payable in Node, Python and MCP through Bridged USDT only
-  (6 decimals). BOT pays gas but has no USD price source, so there is no native
-  quote: an omitted asset or BOT is refused before quoting, the executor
-  refuses `settleNative` there, and MCP needs `AIFINPAY_PAY_ASSET=USDT`.
-  Owner decision 2026-10-29; the backend serves it from aifinpay-web#309.
+- BOT Chain (677) is payable in Node, Python and MCP through its pinned USDT
+  only. BOT pays gas but has no USD price, so there is no native quote: an
+  omitted asset or BOT is refused before quoting, the executor refuses
+  `settleNative` there, and MCP needs `AIFINPAY_PAY_ASSET=USDT`.
 
 ## Agent 2.10.1 / Python 2.8.1 / MCP 2.14.2 — dev merged into main
 

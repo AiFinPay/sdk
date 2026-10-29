@@ -29,7 +29,9 @@ See [payment configuration and recovery](./PAYMENT_RECEIPTS.md).
 On a `stablecoinOnly` chain (Arc) the gas token is the pinned stablecoin itself:
 set `v14.asset` to it, `maxGasWei` is in its 18-decimal native units, and gas
 and the gross are checked against one balance. A testnet chain accepts only
-`network_mode: "test"` quotes.
+`network_mode: "test"` quotes. On a `noNativePayment` chain (BOT Chain) the
+native token pays gas only and has no price, so `v14.asset` must name its
+pinned stablecoin.
 
 The `solanaV14` option provides owner-selected paid access for SOL and classic
 SPL assets. Network and environment, local Ed25519 payer,

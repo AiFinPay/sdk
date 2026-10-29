@@ -1,7 +1,7 @@
 ## 2.9.0 — BOT Chain (USDT only)
 
-- `fetch_paid(chain="botchain")` pays only in Bridged USDT (6 decimals,
-  `asset="USDT"` required). BOT pays gas but has no USD price source, so an
+- `fetch_paid(chain="botchain")` pays only in its pinned USDT
+  (`asset="USDT"` required). BOT pays gas but has no USD price source, so an
   omitted asset or `asset="BOT"` is refused before quoting, and the executor
   refuses `settleNative` on BOT Chain. Matches `@aifinpay/agent` 2.11.0.
 - `payment_chains.native_payable(chain)`: False on `stablecoinOnly` and

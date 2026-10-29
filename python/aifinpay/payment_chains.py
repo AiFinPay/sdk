@@ -8,10 +8,8 @@ allowed addresses. BNB/Robinhood decimal read evidence:2026-10-04.
 USDC is an 18-decimal view of the 6-decimal ERC-20). Payment goes only through
 the pinned token; there is no native quote. Gas is native USDC at $1 per 10**18
 units, so a gas cap in native wei is already a USD amount and no price is read.
-``noNativePayment``: the gas token has no independent USD price (BOT Chain:
-no feed on our backend or the public price sources), so there is no native
-quote to cross-check. Payment goes only through a pinned stablecoin; gas is
-still paid in the native token. ``coingeckoId`` is empty and never fetched.
+``noNativePayment``: the gas token has no USD price (BOT Chain); payment goes
+only through a pinned stablecoin, gas stays native.
 ``testnet``: quotes are network_mode "test", never live money.
 """
 from typing import Optional
@@ -163,7 +161,6 @@ TOKEN_DECIMALS = {
     "amoy": {
         "0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582": 6
     },
-    # Bridged USDT, ERC-20 decimals() read 2026-10-29.
     "botchain": {
         "0xababc7ddc03e501d190c676bf3d92ef0e6e87a3c": 6
     },
