@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.15.1 — installs agent 2.11.0, so BOT Chain works
+
+- `@aifinpay/agent` ^2.11.0 (lock resolved from the registry). 2.15.0 still
+  locked agent 2.10.0 and was not published; use 2.15.1.
+
 ## 2.15.0 — BOT Chain (USDT only)
 
 - `AIFINPAY_PAY_CHAIN=botchain` (from `@aifinpay/agent` 2.11.0) pays only in
