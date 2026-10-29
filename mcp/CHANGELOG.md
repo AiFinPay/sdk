@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.15.3 — bundles skill 2.12.0
+
+- `@aifinpay/skill` ^2.12.0, and `aifinpay://skill` serves it: the pricing
+  rule, current networks, consent rules and the unverified-site fixes.
+  2.15.2 was published before this lock change and still bundles 2.11.0.
+
 ## 2.15.2 — prices from AiFinPay; agent_quota answers in Claude Desktop
 
 - Server `instructions` and the `payment_setup_status` / `payable_fetch`
@@ -10,8 +16,6 @@
   `settlement_*` tools declared an output schema but returned no
   `structuredContent`, so clients that validate it (Claude Desktop) failed
   every call. They now return it; an empty quota is `batches: []`.
-- Bundles `@aifinpay/skill` 2.12.0 (`aifinpay://skill`): the same pricing
-  rule, current networks, consent rules and the unverified-site fixes.
 
 ## 2.15.1 — installs agent 2.11.0, so BOT Chain works
 

@@ -6,6 +6,11 @@ versions from manifests/registries, deployment metadata from
 [the registry](deployments/registry/splitter/INDEX.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## MCP 2.15.3 — bundles skill 2.12.0
+
+- MCP depends on and serves skill 2.12.0; 2.15.2 was published with 2.11.0.
+  The source cohort guard pins the reviewed skill commit and pack.
+
 ## MCP 2.15.2 — prices from AiFinPay; structured tool results
 
 - MCP tells agents to take amounts to fund from `payment_setup_status` and a
@@ -13,8 +18,6 @@ from the corresponding CI or payment artifacts.
   merchant's website or web search, and to ask for the endpoint URL.
 - Tools that declare an output schema now return `structuredContent`;
   `agent_quota` no longer fails in Claude Desktop.
-- MCP bundles skill 2.12.0; the source cohort guard pins its reviewed commit
-  and pack.
 
 ## Agent 2.11.0 / Python 2.9.0 / MCP 2.15.0 — BOT Chain (USDT only)
 
