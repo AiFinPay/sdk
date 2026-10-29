@@ -113,7 +113,6 @@ interface RawEvmDeployment {
     usdt?: string;
   };
   runtimeCodeHash: string;
-  status: string;
   settlementEnabled: boolean;
 }
 
@@ -174,7 +173,6 @@ export async function grabEvmDeployments(): Promise<Record<string, EvmDeployment
       runtimeCodeHash: data.runtimeCodeHash,
       stablecoins: normalizeStablecoins(data.splitter),
       settlementEnabled: data.settlementEnabled,
-      status: data.status,
       deployedAt: data.timestamp,
       sourceUrl: url,
       abiPath: evmAbiPath(data.network),
@@ -348,7 +346,7 @@ export async function writeSplitRegistries(registry: DeploymentRegistry, outDir:
   const safeMultisigs = await fetchSafeMultisigs(evmNetworks);
 
   const evm14 = {
-    $schema: "./reference/payment-deployments.schema.json",
+    $schema: "../../../../src/reference/payment-deployments.schema.json",
     version: "1.4",
     description: "B2BSplitter v1.4 — Full contract suite deployment",
     schemaVersion: 1,
@@ -393,19 +391,12 @@ export async function writeSplitRegistries(registry: DeploymentRegistry, outDir:
     },
     deployments: Object.values(registry.evm).map((evm) => {
       const isTestnet = evm.network === "amoy" || evm.network.toLowerCase().includes("testnet");
-      const disabledReasonMap: Record<string, string> = {
-        disabled: "Backend v1.4 receipt verification and end-to-end settlement gate are incomplete",
-        invalid: "INVALID: splitter address equals TokenList; Profiles has no runtime code; redeploy required",
-        retired: "Superseded by newer deployment",
-      };
       return {
         chain: evm.network,
         chainId: evm.chainId,
         environment: isTestnet ? "dev" : "prod" as "dev" | "prod",
         testnet: isTestnet,
-        status: evm.status as "enabled" | "disabled" | "invalid" | "retired",
         settlementEnabled: evm.settlementEnabled,
-        disabledReason: evm.status !== "enabled" ? (disabledReasonMap[evm.status] || undefined) : undefined,
         runtimeCodeHash: evm.runtimeCodeHash,
         contracts: {
           splitter: evm.splitterAddress,
@@ -447,7 +438,7 @@ export async function writeSplitRegistries(registry: DeploymentRegistry, outDir:
   };
 
   const solana14 = {
-    $schema: "./reference/payment-deployments.schema.json",
+    $schema: "../../../src/reference/payment-deployments.schema.json",
     version: "1.4",
     description: "Solana Splitter v1.4 — Program deployment",
     schemaVersion: 1,
@@ -463,11 +454,7 @@ export async function writeSplitRegistries(registry: DeploymentRegistry, outDir:
       cluster: solana.cluster,
       environment: solana.cluster === "devnet" ? "dev" : "prod",
       testnet: solana.cluster === "devnet",
-      status: "disabled" as const,
       settlementEnabled: false,
-      disabledReason: solana.cluster === "devnet" 
-        ? "Backend Solana receipt verification is not implemented"
-        : "Backend Solana receipt verification is not implemented and upgrade authority is not multisig",
       programId: solana.programAddress,
       idl: solana.idl ?? {
         name: "splitter",

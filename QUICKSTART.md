@@ -2,11 +2,11 @@
 
 This guide reflects the current v2 package surfaces. It intentionally separates identity/control-plane functions from payment execution so a developer does not mistake a quote or invoice for a completed payment.
 
-## Current package line
+## Check package inputs
 
-- Python SDK: `aifinpay-agent 2.3.0`
-- Node / TypeScript SDK: `@aifinpay/agent 2.3.0`
-- MCP: `@aifinpay/mcp 2.4.1`
+Read source versions from [Node](node/package.json), [MCP](mcp/package.json)
+and [Python](python/pyproject.toml) manifests. Check the package registry for
+published releases and your lockfile for the actual installed dependency.
 
 ## Path 1 — MCP
 
@@ -56,7 +56,7 @@ Then ask the MCP client to call `agent_reload` and `agent_address`.
 
 `dev_payment_quote` is available only when `AIFINPAY_MODE=dev`.
 
-Without owner payment configuration no MCP tool signs or broadcasts a payment, and the settlement invoice tools only prepare and validate non-signing instructions. `payable_fetch` is registered, and pays AIFP-1 merchants on Polygon v1.4 by signing locally, only when the owner sets `AIFINPAY_PAYMENTS_ENABLED=1` with `AIFINPAY_MAX_USD`, `AIFINPAY_DAILY_USD`, `AIFINPAY_GATEWAY_ORIGINS` and `AIFINPAY_MAX_GAS_POL` ([mcp/README.md](./mcp/README.md)).
+Without owner payment configuration no MCP tool signs or broadcasts a payment, and the settlement invoice tools only prepare and validate non-signing instructions. `payable_fetch` signs locally only when the owner enables payments with exact origins, purchase/daily limits and the selected family's gas or fee/rent cap. Configuration does not activate a route; the SDK also checks deployment and quote bindings. See [mcp/README.md](./mcp/README.md) and [configuration validation](mcp/src/config.ts).
 
 Legacy `agent_call`, `agent_quote`, `pay_with_split` and `quote_split` are not registered by the current MCP server.
 
@@ -118,7 +118,7 @@ print({
 })
 ```
 
-Python pays AIFP-1 merchants with `AiFinPayAgent.fetch_paid(url, allowed_origins=[...], max_amount_usd=..., daily_amount_usd=...)`: Polygon v1.4 by default, in POL or a pinned stablecoin (`asset="USDC"`), or Base with `chain="base"` and an explicit `max_gas_wei`. Legacy paid `call()` settlement stays disabled.
+Python pays AIFP-1 merchants with `AiFinPayAgent.fetch_paid(url, allowed_origins=[...], max_amount_usd=..., daily_amount_usd=...)`: Polygon v1.4 by default, in POL or a pinned stablecoin (`asset="USDC"`), or Base with `chain="base"` and an explicit `max_gas_wei`. Use this paid-access API rather than legacy `call()` settlement; consult the package guide for other chain families.
 
 See [python/README.md](./python/README.md).
 
@@ -143,25 +143,17 @@ Current v2 economics:
 
 The older 98.99% / 1% / 0.01% split is retired and must not be used as current economics.
 
-## Solana status
+## Verify availability and payment evidence
 
-The old Solana program `5g9zWHF1Vv6GiGpA2ZbJQbSCDZd5hAk9AyvabRJvKFx2` was closed and is not current.
+Use MCP `deployment_info` or the
+[Solana registry](deployments/registry/splitter/solana/deployments.json) for
+program IDs, settlement flags and recorded availability reasons. Follow the
+[Solana payment configuration](node/PAYMENT_RECEIPTS.md); an environment setting
+does not override deployment, backend or governance checks.
 
-Registry programs:
-
-- Devnet: `8dty5bD738Z9TzEkDu8vLSnhpJNWtEGMUEcYaKCUTY6y` — settlement disabled.
-- Mainnet: `724Ut31i4ecY4dJ25z8HuZetu3A43xtNkPdk4JdbsfdD` — settlement disabled.
-
-Check [deployments/registry/splitter/solana/deployments.json](./deployments/registry/splitter/solana/deployments.json) or use MCP `deployment_info` for the current status.
-
-## Historical on-chain evidence
-
-Historical evidence only; these transactions do not certify the current release or current network readiness.
-
-- Exa Search:
-  [`0xeb13c5eddf645b3e5b5e5db82d8b19d301a4c0c8593f6e7dce9cd4c3359c8700`](https://polygonscan.com/tx/0xeb13c5eddf645b3e5b5e5db82d8b19d301a4c0c8593f6e7dce9cd4c3359c8700)
-- io.net inference:
-  [`0x7c6ca0ffcf75b1ca3ade4800fb896c4bb08bc5f1a91916dc2cf4918f16129f0a`](https://polygonscan.com/tx/0x7c6ca0ffcf75b1ca3ade4800fb896c4bb08bc5f1a91916dc2cf4918f16129f0a)
+Verify a payment using its original transaction, settlement event and receipt
+on the selected network. Historical examples do not certify the installed
+release or current network readiness.
 
 ## Security
 

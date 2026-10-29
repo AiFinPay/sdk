@@ -58,17 +58,6 @@ app.wsgi_app = AifpGateWSGI(app.wsgi_app, Gate("mrch_…", routes=[Route("/api/*
 Both adapters also serve `/.well-known/x402.json` so agents discover the paid
 routes before they hit one (`serve_discovery=False` to turn it off).
 
-Every HTML response that passes through either adapter — the home page above
-all — gets one `Link` header pointing at `/llms.txt` (`rel="alternate"`,
-`type="text/markdown"`) and `/.well-known/x402.json` (`rel="describedby"`).
-An agent that opened a page instead of an API, with a User-Agent the gate does
-not charge, reads it before the body and knows where the payment instructions
-are. JSON responses, including the gate's own 402, never carry it; a page's own
-`Link` is kept. Publish an `llms.txt` (the dashboard generates one under
-Integration → Agent instructions). `discovery_link=False` switches the header
-off; `discovery_link={"llms_txt": "/agents.md", "x402": False}` moves or drops
-either link.
-
 ## Any other framework
 
 ```python
@@ -115,49 +104,17 @@ The store increments atomically and compares **after** the increment, so
 concurrent requests can never overspend a batch; the counter's TTL is set once
 and expires with the receipt.
 
-## Start in shadow — see the traffic before you charge for it
-
-`Gate(..., mode="shadow")` makes exactly the decisions enforce makes and emits
-exactly the events enforce emits — who asked, which route, what the answer
-would have been — and then serves the request anyway: no 402, no 403, no 503,
-nothing metered for a call it would have refused. Wire a `GateReporter` and
-the dashboard shows which operators hit your site; flip to `mode="enforce"`
-when the numbers say it is worth it.
-
-```python
-gate = Gate("mrch_…", routes=[Route("/articles/*")], should_charge=known_ai_agent,
-            mode="shadow", on_event=reporter.on_event)   # → "enforce" when ready
-```
-
-- A request the gate **would refuse** is served with `AIFP-Mode: shadow` and
-  `AIFP-Shadow-Status: 402` (or `403`, `503`); the app sees
-  `aifp["mode"] == "shadow"` and the refusal in `aifp["shadow"]` (`status`,
-  `error`, `detail`, the `weight` it would have cost).
-- A request the gate **would serve** — a valid receipt, an open route, an
-  exempt human reader — is served exactly as in enforce, metered and all,
-  plus the `AIFP-Mode: shadow` header.
-- The event stream is identical to enforce, request for request; the parity
-  fixture records both the responses and the events of every Node scenario.
-- Omitting `mode` is enforce; an unknown value raises at construction.
-
-Not on Python, or not ready to touch the app? See the Cloudflare Worker and
-nginx log-shipper templates in `examples/` of the SDK repository. On
-Cloudflare, check the zone's AI Crawl Control policy first: the 2026-09-15
-default *Block on pages with ads* cuts agents off before they reach a gate.
-
 ## Options
 
 | Option | Default | |
 |---|---|---|
-| `mode` | `"enforce"` | `"shadow"` observes: same decisions and events, every request served, nothing refused or metered for a would-be refusal. |
-| `operator_policy` | — | The merchant's allow / charge / block per operator from `GET /v1/merchants/:id` (`operator_rules`, `operator_default`), as a dict or a callable returning the current one. Applied after classification, before `should_charge`: `allow` serves free (`mode` `"exempt"`), `block` answers 403, `charge` is the gate's own decision. A `verified_only` rule applies only once the receipt verified; readers are never matched. Without it, or without rules, nothing changes. |
 | `should_charge` | everyone pays | `known_ai_agent` for content sites: human browsers read free and never see a 402; self-identifying AI crawlers and anything speaking AIFP pay. A predicate that raises charges. |
 | `allow(ctx)` | — | Your veto after verification, before metering (a refused call costs nothing). Return `False` → 403. |
 | `on_store_error` | `"closed"` | `"open"` serves un-metered calls when the store is down (`AIFP-Meter: degraded`). |
 | `require_agent_match` | `False` | Refuse when `AIFP-Agent-Id` differs from the receipt subject (anti-accident, not anti-theft). |
 | `replay` | `"auto"` | Single-use receipts get a one-shot nonce check. |
 | `jwks` | fetched | Pin the key set and skip network I/O (redeploy on key rotation). |
-| `on_event(e)` | — | `402` / `serve` / `403` / `meter_error` events for your metrics. Each carries who asked: `operator`, `ua_class`, `verified` (true only once the receipt verified — a User-Agent is a claim), from `AI_AGENT_UA_TABLE` / `classify_agent`; never the raw User-Agent, IP or headers. |
+| `on_event(e)` | — | `402` / `serve` / `403` / `meter_error` events for your metrics. |
 | `refund_on_error` (adapters) | `False` | Give the units back when your handler answers 5xx. |
 
 ## What it guarantees
@@ -170,13 +127,10 @@ default *Block on pages with ads* cuts agents off before they reach a gate.
   or without a usable `unit_quota`, is refused.
 
 Not included, on purpose: free allowances, daily caps and per-agent blocks live
-in the AiFinPay dashboard, so there is one source of truth for each rule. The
-per-operator allow / charge / block policy is the exception: only this gate can
-apply it, so it is read from the control plane (`operator_policy`), never
-re-stated here.
+in the AiFinPay dashboard, so there is one source of truth for each rule.
 
 
-## Opt-in dashboard request reporting (0.1.2, identity since 0.2.0)
+## Opt-in dashboard request reporting
 
 Use one `GateReporter` per merchant per worker, created **after worker fork**.
 It uses only Python's standard library. Add its callback to your existing gate;
@@ -209,15 +163,11 @@ Keep the merchant secret server-side. Share the reporter across mounts; do not
 report the same event through multiple reporters or through both hosted and
 self-hosted analytics. If you already have a callback, compose the two hooks.
 
-Only `402` and gate-admitted `serve` events are reported, each with the
-normalised `operator`, `ua_class` and `verified`; a `serve` that
-`should_charge` exempted is sent as `exempt: true` only when the caller was an
-AI crawler, agent browser or AIFP agent — human reads and other event kinds are
-excluded. `serve` is admission **before your handler**, not proof of successful
-HTTP response or delivered content. The payload has only UUID, kind, registered
-path, UTC timestamp and those enum values; no headers, User-Agents, receipts,
-payer IDs, IPs or customer content. Against an API without the identity fields
-the reporter falls back to the four-field shape instead of stopping. This populates request counters, not
+Only `402` and gate-admitted `serve` events are reported; exempt humans and
+other event kinds are excluded. `serve` is admission **before your handler**,
+not proof of successful HTTP response or delivered content. The payload has
+only UUID, kind, registered path and UTC timestamp; no headers, receipts,
+payer IDs, IPs or customer content. This populates request counters, not
 geographic/user-agent charts or general website visits. Settlements still
 supply payments/revenue; purchased quota is never backfilled as actual usage.
 

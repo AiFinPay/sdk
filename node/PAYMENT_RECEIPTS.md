@@ -1,8 +1,10 @@
-# Solana payment authorization (2.5.0 source candidate)
+# Solana payment authorization
 
-High-level execution still requires an accepted enabled canonical registry record.
-Both real Solana records remain disabled. This configuration describes the
-conditional source implementation; do not override availability in an application.
+High-level execution requires an available canonical registry record plus
+runtime and backend/merchant approval. Availability is resolved from the
+installed registry at runtime; this example does not grant payment authority.
+Do not override availability in an application. Source tests do not establish
+live payment acceptance.
 
 ```ts
 import { AiFinPayAgent, Aifp1FinalizedFailureError } from "@aifinpay/agent";
@@ -90,7 +92,7 @@ actual fee within the original caps. The local fee-only transition is atomic and
 idempotent, survives restart/day rollover and cannot overwrite confirmed payment.
 An unavailable/malformed proof or local journal error keeps the original guard.
 The backend's outstanding signed-quote policy reservation remains separate.
-Older SDKs must not operate on unreconciled 2.5 journals; retain IDs while recovery
+Older SDKs must not operate on unreconciled newer journals; retain IDs while recovery
 is possible, and reconcile before downgrade. Never clear state to retry payment.
 
 Public reads need no passport binding or payer signature:
@@ -106,7 +108,8 @@ cluster balance reads throw; they never become a verified zero balance.
 Devnet raw balances have test
 context, no SOL USD price and no contribution to the aggregate fiat value.
 Omitted legacy balance context is explicitly unverified owner RPC/mainnet mint;
-it does not establish payment availability. No devnet USDT pin is provided.
+it does not establish payment availability. Asset availability is determined
+by the installed registry and runtime checks.
 
 These query independently pinned cluster/program and preserve base58 case. They
 return retained partial-history coverage and explicitly unallocated costs, validate
@@ -115,7 +118,7 @@ chain and redact bearer JWTs.
 
 ---
 
-# v1.4 payment authorization (2.4.0 source candidate)
+# v1.4 payment authorization
 
 The existing v1.3 documentation below remains applicable to explicitly pinned
 v1.3 callers. The v1.4 path uses the original backend-signed quote:
@@ -152,7 +155,7 @@ a new transaction. Persist the receipt and restore `agent.aifp1Receipts` before
 another `fetchPaid`. A prepared-but-unbroadcast or reverted transaction requires
 owner reconciliation; receipt recovery is not a replacement broadcast.
 
-The public MCP candidate implements this private journal/cache/lock integration.
+MCP payment integration uses the same private journal/cache/lock controls.
 Applications using the SDK directly own persistence and process coordination.
 `fetchPaid` supports the current nine EVM mainnets in live mode, with the
 selected native currency or a stablecoin pinned for that chain. Every non-Polygon
@@ -256,8 +259,8 @@ successful mined receipt before requesting access.
 `maxAmountUsd` caps the next batch using the greater of quoted USD and native
 debit converted at that independent price. It must be positive and finite,
 and can only tighten the agent's limits. Gas is additional. A cached receipt
-does not buy another batch. Mainnet activation flags have not been enabled
-by this SDK update; unavailable or legacy quotes are refused before payment.
+does not buy another batch. The SDK checks registry/runtime availability before
+payment; unavailable or legacy quotes are refused.
 
 For a direct merchant endpoint such as `/api/agent/genres`, explicitly select
 the full-path format as well as the trusted origin:
@@ -344,26 +347,24 @@ does not discard paid access. The cache is local to this agent instance;
 applications must persist recovery/receipts for restart recovery.
 
 The API retains its legacy `settlement.fee_on_top` object during client upgrades.
-The RC client accepts that object only alongside explicit `gross-inclusive`
+The client accepts that object only alongside explicit `gross-inclusive`
 metadata, with provider, treasury and creator amounts matching the canonical
 payer/recipient amounts. An inconsistent quote is rejected before settlement.
 Native `valid_until` may be a JSON integer or an integer string. These wire
-compatibility changes do not activate a disabled deployment. v1.4 execution
-and legacy `call()` payment submission remain disabled in this RC. Current
-v1.4 quotes omit mutable fees/treasury from the signed commitment; a new
-contract/SDK release is required. There is no automatic version fallback.
+compatibility changes do not activate a deployment. Legacy `call()` is not a
+payment fallback. Current v1.4 quotes omit mutable fees/treasury from the signed
+commitment; there is no automatic version fallback.
 
-## Nine-network v1.4 source capability (2.4.0)
+## EVM v1.4 payment capabilities
 
-`v14.chain` accepts polygon (default), base, optimism, arbitrum, avalanche, bnb,
-unichain, xrplevm, robinhood, arc and arctestnet (2.10.0; USDC only, see the
-README). Quotes cannot choose or expand that setting.
-`evmRpcUrls` keys use those canonical names (BNB uses bnb, not the legacy bridge
-bsc name). The backend must independently authorize the requested settlement_chain
-for the merchant. Native/USD prices must match POL/ETH/AVAX/BNB/XRP. Gas budgets
-are in the selected native asset's18-decimal wei; approval and settlement share
-the budget. OP models include oracle data/operator estimates, Nitro estimates
-include parent data already. Unknown or unavailable fee estimates refuse signing.
+`v14.chain` is an explicit owner choice; quotes cannot choose or expand it.
+Use the SDK's `PAYMENT_CHAINS`, `paymentChain` and `paymentStableAsset` APIs,
+the installed deployment registry and backend merchant capabilities to inspect
+current options. RPC keys use canonical chain names. Native/USD prices must
+match the selected native asset. Gas budgets are in the selected native
+asset's 18-decimal wei; approval and settlement share the budget. OP models
+include oracle data/operator estimates, while Nitro estimates already include
+parent data. Unknown or unavailable fee estimates refuse signing.
 
 The quote amount and existing settlement aliases still contain USD micro-units.
 `token_settlement` contains asset, token, decimals, total_units, merchant_units,
@@ -376,5 +377,7 @@ Profiles remain administratively mutable under the accepted v1.4 trust model;
 these quote-time checks do not create immutable fee guarantees. Recovery never
 re-sends a payment and retains its original chain even after quote expiry.
 
-Source capability does not activate a production network. Per-chain deployment,
-backend/indexing and actual paid acceptance gates are recorded in the release evidence.
+Neither a descriptor nor a successful source test activates a production
+network. Availability requires an installed registry record, runtime checks
+and backend/merchant support. Check package manifests/lockfiles, registry
+inputs, capability APIs, executor tests and CI for current evidence.

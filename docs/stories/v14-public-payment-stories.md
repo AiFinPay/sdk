@@ -36,7 +36,8 @@ separate evidence. Run package registry check, build, relevant full suites, Node
 and MCP production dependency audit, secret/diff checks, independent review, and
 negative controls that remove a critical binding to prove regression tests fail.
 
-Current evidence is recorded in `../reviews/v14-public-payment-review.md`.
-Implementation and local validation are complete; independent review findings
-were addressed. Human sign-off, dev/live acceptance, publication and deployment
-remain pending. Local test passes do not establish production readiness.
+The [dated review](../reviews/v14-public-payment-review.md) records historical
+implementation/review observations, not current pass or release status.
+Current acceptance requires source-bound [CI](../../.github/workflows/ci.yml),
+independent review, human sign-off and dev/live publication/deployment evidence.
+Local test passes do not establish production readiness.

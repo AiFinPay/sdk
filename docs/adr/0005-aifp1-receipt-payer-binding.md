@@ -3,6 +3,13 @@
 Date: 2026-10-06. Status: proposed; pending backend, SDK and security review.
 Traceability: AIFP1-RECEIPT-PAYER-BINDING-20261006.
 
+Historical proposal and threat analysis, not an implementation or mitigation
+attestation. The proposed claims/header checks below require coordinated review;
+this text does not prove authenticated payer possession or non-transferability.
+Current receipt behavior must be checked in the [SDK receipt flow](../../node/src/aifp1.ts),
+[receipt contract documentation](../../node/PAYMENT_RECEIPTS.md) and
+[tests/CI](../../.github/workflows/ci.yml), together with the backend verifier.
+
 ## Context
 
 AIFP-1 receipts are Ed25519‑signed JWTs issued by `POST /v1/pay`. The SDK and MCP treat them as prepaid quota batches and reuse them across requests to the same merchant and resource scope. Receipt reuse is economically required: without it every page view becomes a new quote, settlement and minimum batch charge.

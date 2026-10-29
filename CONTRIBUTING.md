@@ -1,8 +1,9 @@
 # Contributing
 
 Read root and package `AGENTS.md` before changes. This monorepo builds each
-package independently; it has no root build orchestrator. Node support is 22/24/26
-in CI; Python CI uses 3.13. Use each package's authoritative lockfile.
+package independently; it has no root build orchestrator. Read runtime requirements
+from package manifests and the tested matrix from [CI](.github/workflows/ci.yml).
+Use each package's authoritative lockfile.
 
 ```sh
 cd node
@@ -33,3 +34,9 @@ the relevant repository owners; coordinate before crossing that boundary.
 Do not commit logs, private journals, credentials or local review artifacts.
 Architecture decisions live in `docs/adr/`; user-visible API/configuration changes
 must update package instructions as well as tests.
+
+Keep operational evidence in its authoritative artifact, not copied into guides:
+deployment pins and flags in the registry, test results in CI artifacts, and
+payment evidence in the original transaction and verified receipt. Documentation
+should link to these sources and explain how to verify them; it must not serve
+as an activation or publication claim. See [the evidence rules](AGENTS.md#evidence-not-status-snapshots).

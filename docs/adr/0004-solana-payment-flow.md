@@ -7,17 +7,21 @@ activation, publication or contract/governance operation.
 
 Reuse the existing HTTP402 negotiation, scope/receipt cache, local identity,
 durable shared cap and receipt proof/JWKS boundaries. Add a family executor for
-the exact packaged Solana v1.4.1 IDL at source commit
-`e5df8f5436cf646ab495381eee04e0d1a10b4e2f`: 216-byte quote and 297-byte instruction,
+the exact packaged Solana v1.4.1 IDL identified by the
+[canonical registry provenance](../../deployments/registry/splitter/solana/deployments.json):
+216-byte quote and 297-byte instruction,
 backend secp256k1 signature and local Ed25519 payer transaction. No new dependency
 or alternate architecture is needed. EVM defaults/options remain compatible.
 
 Solana authorization is explicit chain plus independently selected
 environment/network. Inventory lookup can encode/recover historical bytes;
 high-level authorization separately requires an enabled accepted canonical
-record. Both real records remain disabled. The implementation has no bypass
-flag. Approved-path tests inject synthetic records without changing registry
-flags. Program ELF/governance and funded paid acceptance remain prerequisites.
+record through the [runtime resolver](../../node/src/solanaDeploymentResolver.ts)
+and [canonical registry](../../deployments/registry/splitter/solana/deployments.json).
+This ADR is not availability authority and permits no bypass.
+Approved-path tests inject synthetic records without changing registry flags.
+Program ELF/governance approval, coordinated backend verification and funded
+end-to-end paid acceptance remain prerequisites.
 
 Native settlement uses SOL9 lamports; SPL uses independent classic-token mint
 pins and exact 6-decimal units. Quote gross/legs, payer/order/route/nonce/signer,

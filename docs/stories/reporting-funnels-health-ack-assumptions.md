@@ -5,6 +5,14 @@ reporting implementation; high risk, supervised 20% cap retained. This document
 is the only working log for this remediation. Independent QA/Security/review,
 architecture contract clarification and human approvals remain pending.
 
+Historical author log only: pending/closed dispositions describe the dated
+handoff, not today's implementation, test outcome or readiness. Current wire
+behavior must be checked in the [Node reporter](../../gate/src/reporter.ts),
+[Python reporter](../../python-gate/aifinpay_gate/reporter.py),
+[Node controls](../../gate/tests/reporting-funnels-v2.test.ts),
+[Python controls](../../python-gate/tests/test_reporting_funnels_v2.py) and
+[candidate CI](../../.github/workflows/ci.yml).
+
 ## Owned scope and decisions
 
 - Read project root AiFinPay.md, SDK/gate AGENTS, installed shared B inherited
@@ -43,16 +51,12 @@ Exactly seven owned paths under /Users/regrttrol/Documents/code/AiFinPay/sdk-rep
 6. python-gate/REPORTING-V2.md
 7. docs/stories/reporting-funnels-health-ack-assumptions.md
 
-## Pre-change SHA256
+## Source references
 
-```text
-d65d3c4cd08317a5cf8f85d80f1e3ec262c06fc9c0997e8bfdf3cd138fd2ad17 gate/src/reporter.ts
-f6629df2736668e40a7ca2d9036e7f921bbfbb687f49a511fe71e253f1501505 python-gate/aifinpay_gate/reporter.py
-07bccb7f9337f2781e701a5876373c75412a814cecd60c6c01b5b1e8a9c8cc52 gate/tests/reporting-funnels-v2.test.ts
-6194524e670fc9c2033881bbf769f385fcae4e67837df5e74bab76f8942656b0 python-gate/tests/test_reporting_funnels_v2.py
-421d4e761489d1fd8a49f7baadba6252850071eed8302ef0915a7f368a5cee1c gate/REPORTING-V2.md
-d5982d462fc982c0378c7b54d0607abb1b2b60cab960b49424fbdcf23736d8e8 python-gate/REPORTING-V2.md
-```
+The linked implementations/tests above and [Node guide](../../gate/REPORTING-V2.md)
+and [Python guide](../../python-gate/REPORTING-V2.md) replace duplicated file
+digests. Recover historical identity from version control; mutable links do not
+attest that the current source matches the old freeze.
 
 Pre-change read-only SHA256 inventory captured in memory:237 regular files,
 including four package trees (excluding dependencies/generated/cache trees),

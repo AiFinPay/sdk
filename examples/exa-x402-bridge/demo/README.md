@@ -32,7 +32,7 @@ brew install vhs ffmpeg
 # Terminal 1 — bridge
 cd ..
 EXA_API_KEY=...your_key... \
-BRIDGE_MERCHANT_WALLET=0xD31d82c4b35DABaA2ad7023C89A78A052D1f3c8e \
+BRIDGE_MERCHANT_WALLET='<your-verified-merchant-address>' \
 PORT=3001 \
 node server.js
 

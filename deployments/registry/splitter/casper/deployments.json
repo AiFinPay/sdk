@@ -1,5 +1,5 @@
 {
-  "$schema": "",
+  "$schema": "../../../src/reference/payment-deployments.schema.json",
   "version": "2.0",
   "description": "Casper Splitter — Rust → Wasm settlement contract for AI agent payments",
   "schemaVersion": 2,
@@ -54,8 +54,7 @@
       "network": "casper-test",
       "environment": "testnet",
       "testnet": true,
-      "status": "live",
-      "settlementEnabled": true,
+      "settlementEnabled": false,
       "contractPackageHash": "hash-47df409829ddf0612617460293ba591a19b26fa0c06918878204088d3eb9b78a",
       "rpcEndpoint": "https://node.testnet.casper.network/rpc",
       "explorer": "https://testnet.cspr.live/contract/47df409829ddf0612617460293ba591a19b26fa0c06918878204088d3eb9b78a",
@@ -84,7 +83,6 @@
       "network": "casper",
       "environment": "mainnet",
       "testnet": false,
-      "status": "historical",
       "settlementEnabled": false,
       "contractHash": "contract-9903a5e3948e799196df54b17270bc6769338ac1cc36c9eb47e113f88d23f019",
       "contractPackageHash": "hash-7ad34a204952eef63d5dcf5159fb7d009e85dea4f49cbdf73dde190652dfa375",
@@ -92,7 +90,6 @@
       "explorer": "https://cspr.live/contract/9903a5e3948e799196df54b17270bc6769338ac1cc36c9eb47e113f88d23f019",
       "version": "v1",
       "idlPath": "../../idl/casper/aifinpay-casper-schema.json",
-      "disabledReason": "v1: pay_agent recorded receipt but did NOT transfer value; separate native transfer required — not valid settlement proof",
       "warning": "Do not reproduce this v1 flow. Use v2 testnet deployment for valid atomic settlement."
     }
   ],

@@ -1,16 +1,25 @@
 # BOT Chain Deprecation Notice
 
 **Deprecation Date:** 2026-09-15  
-**Status:** Deprecated (backward compatible)  
-**Removal:** Next major version (TBD)
+**Scope:** Historical deprecation notice; not current compatibility or availability evidence.
+
+Current supported chain names, exports and route approval must be checked in
+[chain definitions](../node/src/chains.ts), [SDK exports](../node/src/index.ts),
+[the registry](../deployments/registry/splitter/evm/v1.4/deployments.json) and
+[CI](../.github/workflows/ci.yml). The examples below record the historical
+migration intent, not a guarantee that old APIs or BOT settlement remain usable.
 
 ## Summary
 
-BOT Chain (chainId: 677, symbol: BOT) is deprecated in favor of **Robinhood Chain** (chainId: 4663, symbol: ETH). This deprecation is non-breaking — all existing functionality remains available, but TypeScript will emit deprecation warnings to guide migration.
+The dated notice deprecated BOT Chain (chainId: 677, symbol: BOT) in favor of
+**Robinhood Chain** (chainId: 4663, symbol: ETH). These are distinct networks;
+historical BOT state must not be silently mapped to Robinhood.
 
 ## Why This Change
 
-The deprecation aligns the SDK with the canonical deployment registry, which has transitioned to Robinhood Chain as the preferred L2 network. BOT Chain deployments remain functional for backward compatibility but will not receive new features or deployment updates.
+The deprecation aligned chain naming with the canonical deployment registry.
+Deployment availability is determined by that registry and runtime verification,
+not this notice.
 
 ## Migration Guide
 
@@ -74,7 +83,7 @@ await agent.payWithSplitInvoice({
 
 ## Affected APIs
 
-The following types and exports are marked as `@deprecated`:
+The original review identified these types and exports for deprecation:
 
 ### Node SDK (`@aifinpay/agent`)
 
@@ -93,28 +102,29 @@ The following types and exports are marked as `@deprecated`:
 
 ## Timeline
 
-| Phase | Status | Description |
+| Phase | Historical plan | Description |
 |-------|--------|-------------|
 | Deprecation | ✅ Complete (2026-09-15) | `@deprecated` annotations added, docs published |
-| Warning Period | 🟡 Active | TypeScript emits deprecation warnings |
-| Removal | ⚪ Pending | Will be removed in next major version (TBD) |
+| Warning Period | Planned at notice date | TypeScript deprecation warnings |
+| Removal | Unscheduled in original notice | Consult current exports and changelogs |
 
 ## Backward Compatibility
 
-**All botchain functionality remains fully operational.** The deprecation is communicated via:
+The original compatibility plan used:
 
 1. TypeScript `@deprecated` JSDoc annotations
 2. This documentation
-3. CHANGELOG.md entry
+3. [Changelog entries](../node/CHANGELOG.md)
 
-Existing code will continue to work without modification. Deprecation warnings can be suppressed in TypeScript using `// @ts-ignore` comments (not recommended) or by migrating to Robinhood Chain.
+Do not suppress type errors or infer settlement support from this historical
+plan. Validate explicit chain configuration, route approval and recovery bindings
+against the current source before migration.
 
 ## Support
 
-- BOT Chain (chainId: 677) deployments remain accessible
-- Existing settlements and payment flows continue to work
-- No breaking changes until the next major version
-- Migration support available via standard channels
+No deployment or payment-support status is asserted here. Consult current source,
+registry approval, runtime verification and release evidence before attempting
+settlement; historical recovery must retain its original chain binding.
 
 ## Questions?
 

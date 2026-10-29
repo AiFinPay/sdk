@@ -109,7 +109,7 @@ describe("AifinpayRegistry", () => {
   });
 
   describe("isSettlementEnabled", () => {
-    it("checks settlement status for enabled chain", () => {
+    it("returns the recorded settlement flag for a chain", () => {
       const registry = AifinpayRegistry.loadEvm();
       const enabled = registry.isSettlementEnabled(10);
       expect(typeof enabled).toBe("boolean");
@@ -212,20 +212,6 @@ describe("AifinpayRegistry", () => {
     });
   });
 
-  describe("filterByStatus", () => {
-    it("filters deployments by enabled status", () => {
-      const registry = AifinpayRegistry.loadEvm();
-      const enabled = registry.filterByStatus("enabled");
-      expect(enabled.every((d) => d.status === "enabled")).toBe(true);
-    });
-
-    it("filters deployments by disabled status", () => {
-      const registry = AifinpayRegistry.loadEvm();
-      const disabled = registry.filterByStatus("disabled");
-      expect(disabled.every((d) => d.status === "disabled")).toBe(true);
-    });
-  });
-
   describe("getProdDeployments and getTestnetDeployments", () => {
     it("separates prod and testnet deployments", () => {
       const registry = AifinpayRegistry.loadEvm();
@@ -262,6 +248,7 @@ describe("AifinpayRegistry", () => {
       const registry = AifinpayRegistry.loadEvm();
       const enabledChains = registry.getSupportedChains("enabled");
       expect(Array.isArray(enabledChains)).toBe(true);
+      expect(enabledChains.every((chainId) => registry.isSettlementEnabled(chainId))).toBe(true);
     });
   });
 
@@ -272,9 +259,10 @@ describe("AifinpayRegistry", () => {
       expect(Array.isArray(networks)).toBe(true);
       expect(networks[0]).toHaveProperty("chainId");
       expect(networks[0]).toHaveProperty("name");
-      expect(networks[0]).toHaveProperty("status");
       expect(networks[0]).toHaveProperty("settlementEnabled");
       expect(networks[0]).toHaveProperty("testnet");
+      expect(networks[0]).not.toHaveProperty("status");
+      expect(networks[0]).not.toHaveProperty("disabledReason");
     });
 
     it("gets only prod networks", () => {
@@ -326,6 +314,7 @@ describe("AifinpayRegistry", () => {
       const markdown = registry.exportAsMarkdown();
       expect(markdown).toContain("| Chain ID | Network |");
       expect(markdown).toContain("|----------|---------|");
+      expect(markdown).not.toContain("| Status |");
     });
 
     it("exports filtered markdown", () => {
@@ -348,7 +337,8 @@ describe("AifinpayRegistry", () => {
     it("exports CSV format", () => {
       const registry = AifinpayRegistry.loadEvm();
       const csv = registry.exportAsCsv();
-      expect(csv).toContain("chainId,name,status,settlementEnabled,testnet");
+      expect(csv).toContain("chainId,name,settlementEnabled,testnet");
+      expect(csv).not.toContain(",status,");
     });
   });
 });

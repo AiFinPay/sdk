@@ -88,14 +88,12 @@
     "testnet": {
       "network": "casper-test",
       "contractPackageHash": "hash-47df409829ddf0612617460293ba591a19b26fa0c06918878204088d3eb9b78a",
-      "status": "live",
       "version": "v2"
     },
     "mainnet": {
       "network": "casper",
       "contractHash": "contract-9903a5e3948e799196df54b17270bc6769338ac1cc36c9eb47e113f88d23f019",
       "contractPackageHash": "hash-7ad34a204952eef63d5dcf5159fb7d009e85dea4f49cbdf73dde190652dfa375",
-      "status": "historical",
       "version": "v1",
       "warning": "v1: receipt only, no atomic transfer — not valid settlement proof"
     }

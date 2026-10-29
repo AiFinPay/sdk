@@ -1,6 +1,8 @@
 # @aifinpay/mcp — agent guide
 
-MCP production-RC control surface: Agent Passport resolution + runtime-verified AIFP-1/AIFP-2 settlement invoices. Signing tools stay gated until @aifinpay/agent v2.
+MCP control surface for Agent Passport resolution, runtime-verified AIFP-1/AIFP-2
+settlement invoices and owner-configured payment tools. Signing tools stay gated;
+do not ungate them or bypass runtime verification.
 
 ## Scope
 
@@ -35,13 +37,12 @@ MCP production-RC control surface: Agent Passport resolution + runtime-verified 
   in manifests or documentation. Keep protocol and contract version checks.
 
 
-## FULL-PAYMENT-FLOW-20261004 source state
+## Runtime and release evidence
 
-The user authorized coordinated Node/Python/MCP work on the existing v1.4 kernel.
-Nine EVM client descriptors do not establish production readiness or activate
-networks. Generated deployment pins, flags, profiles and economics are unchanged.
-Stable token units are independent chain/address-pinned6/18 decimals and additive
-quote metadata is validated. Preserve explicit owner chain, budgets, runtime,
-payer proof, receipt/SSRF and durable recovery controls. MCP2.6.0 requires
-agent2.4.0 source-pack integration, then published dependency/lock refresh before
-standalone release. No publish/merge/contract operations are authorized by this note.
+Payment availability is determined by the installed deployment registry,
+runtime verification and backend/merchant capabilities; client descriptors and
+source tests are not production approval. Preserve explicit owner chain,
+environment and budget selection, payer proof, receipt/SSRF checks and durable
+recovery. Do not bypass unavailable registry/runtime checks or infer activation
+from a source build. Use package manifests and lockfiles, registry inputs,
+capability APIs, executor tests and CI for current evidence.

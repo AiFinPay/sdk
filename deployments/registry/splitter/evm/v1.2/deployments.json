@@ -1,5 +1,5 @@
 {
-  "$schema": "./reference/payment-deployments.schema.json",
+  "$schema": "../../../../src/reference/payment-deployments.schema.json",
   "version": "1.2",
   "description": "B2BSplitter v1.2 — Added bytes32 paymentId replay guard",
   "schemaVersion": 1,
@@ -41,7 +41,6 @@
       "chainId": 137,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x9001fbb7ec70097909415325dc70c5b2102c4312dcd8e01e7495cfcaca2edaff",
       "contracts": {
@@ -65,7 +64,6 @@
       "chainId": 10,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0xcdf939fd4f9a189e3dba991c5d538bd77b3d493d2ce4e356b61e5742dbde1899",
       "contracts": {
@@ -89,7 +87,6 @@
       "chainId": 677,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0xabd084ff64e98bb8ac7db7783d80c6a6bcc69716dfb8f64a4686bed5cf428d96",
       "contracts": {
@@ -113,7 +110,6 @@
       "chainId": 1440000,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0xeb68cf314d335f888726a527dec10d989c26e2c5d6a8df68d117cc7d4dcec239",
       "contracts": {
