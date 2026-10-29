@@ -29,7 +29,7 @@ const MAX_FEED_AGE_S = 3600;
 export interface NativePrice {
   usd: number;
   observedAtMs: number;
-  source: `chainlink-${string}` | "coinbase" | "coingecko";
+  source: `chainlink-${string}` | "coinbase" | "coingecko" | "usd-peg";
 }
 
 type FetchImpl = (input: string, init?: RequestInit) => Promise<Response>;
@@ -111,6 +111,9 @@ export async function independentNativeUsd(opts: {
   rpc?: string;
 }): Promise<NativePrice> {
   const { chain } = opts;
+  // Arc's gas token is USDC itself (10^18 units = $1). Funding advice and gas
+  // are already USD; a market feed would only add a host and noise.
+  if (chain.stablecoinOnly) return { usd: 1, observedAtMs: Date.now(), source: "usd-peg" };
   const attempts: Array<[string, () => Promise<NativePrice>]> = [];
   const rpc = opts.rpc;
   if (rpc && chain.chainlinkNativeUsd)

@@ -32,7 +32,7 @@ export function payableFetchTool() {
   return {
     name: "payable_fetch",
     description:
-      'Fetch a GET resource from an AiFinPay merchant, paying its AIFP-1 402 when needed. Always listed: until a persistent wallet exists (npx @aifinpay/mcp init, then agent_reload) it signs nothing and returns the payment_setup_status checklist with the one next step. Payments are on by default within a built-in ceiling of $5 per payment and $20 per 24 hours (the owner can only lower it in env; the working limits are the dashboard Controls after agent_claim_self) and only ever reach a merchant registered with AiFinPay, through a quote signed by the AiFinPay backend; a 402 never chooses who is paid. Without AIFINPAY_GATEWAY_ORIGINS it pays only a merchant whose site AiFinPay reports as DNS-verified, on that very site (or through the AiFinPay hosted gateway); with it, only the origins the owner listed; AIFINPAY_PAYMENTS_ENABLED=0 turns payments off.  Buys a prepaid batch through verified v1.4 on the chain the owner set in AIFINPAY_PAY_CHAIN (Polygon by default; other supported networks require explicit owner selection) — in its native currency (POL, SOL, ETH, AVAX, BNB or XRP), or in the stablecoin the owner set in AIFINPAY_PAY_ASSET (e.g. USDC; gas is still native) — within owner limits, then reuses its receipt. With scope "merchant" one batch covers every path on the site. Pending payments are recovered without sending another transaction. Other payment protocols are unsupported.',
+      'Fetch a GET resource from an AiFinPay merchant, paying its AIFP-1 402 when needed. Always listed: until a persistent wallet exists (npx @aifinpay/mcp init, then agent_reload) it signs nothing and returns the payment_setup_status checklist with the one next step. Payments are on by default within a built-in ceiling of $5 per payment and $20 per 24 hours (the owner can only lower it in env; the working limits are the dashboard Controls after agent_claim_self) and only ever reach a merchant registered with AiFinPay, through a quote signed by the AiFinPay backend; a 402 never chooses who is paid. Without AIFINPAY_GATEWAY_ORIGINS it pays only a merchant whose site AiFinPay reports as DNS-verified, on that very site (or through the AiFinPay hosted gateway); with it, only the origins the owner listed; AIFINPAY_PAYMENTS_ENABLED=0 turns payments off.  Buys a prepaid batch through verified v1.4 on the chain the owner set in AIFINPAY_PAY_CHAIN (Polygon by default; other supported networks require explicit owner selection) — in its native currency (POL, SOL, ETH, AVAX, BNB or XRP), or in the stablecoin the owner set in AIFINPAY_PAY_ASSET (e.g. USDC; gas is still native; on Arc only USDC, which is also its gas) — within owner limits, then reuses its receipt. With scope "merchant" one batch covers every path on the site. Pending payments are recovered without sending another transaction. Other payment protocols are unsupported.',
     inputSchema: {
       type: "object",
       properties: {
@@ -128,6 +128,8 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
     const parsed = parseGatewayUrl(url.href, origins, pathMode);
     const pay = chain;
     const payAsset = ctx.config.payAsset ?? pay.native;
+    // On Arc the native symbol names the USDC token: always the token path.
+    const stablePay = payAsset !== pay.native || pay.stablecoinOnly === true;
     const rpc = ctx.config.rpcUrl ?? pay.defaultRpc;
     return await store.exclusive(async () => {
       state = store.read();
@@ -351,12 +353,12 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
               : {
                   v14: {
                     chain: pay.name,
-                    ...(payAsset !== pay.native ? { asset: payAsset } : {}),
+                    ...(stablePay ? { asset: payAsset } : {}),
                     maxGasWei: feeCap,
                     onPrepared: async (prepared) => {
                       await confirmPayee(prepared.quote.merchant_id);
                       let usd: number;
-                      if (payAsset !== pay.native) {
+                      if (stablePay) {
                         if (prepared.asset !== payAsset)
                           throw new Error("Prepared payment is not in the configured asset");
                         usd = Number(prepared.quote.amount);

@@ -356,7 +356,8 @@ contract/SDK release is required. There is no automatic version fallback.
 ## Nine-network v1.4 source capability (2.4.0)
 
 `v14.chain` accepts polygon (default), base, optimism, arbitrum, avalanche, bnb,
-unichain, xrplevm and robinhood. Quotes cannot choose or expand that setting.
+unichain, xrplevm, robinhood, arc and arctestnet (2.10.0; USDC only, see the
+README). Quotes cannot choose or expand that setting.
 `evmRpcUrls` keys use those canonical names (BNB uses bnb, not the legacy bridge
 bsc name). The backend must independently authorize the requested settlement_chain
 for the merchant. Native/USD prices must match POL/ETH/AVAX/BNB/XRP. Gas budgets

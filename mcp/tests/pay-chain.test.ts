@@ -474,13 +474,18 @@ describe("all EVM owner settings and independent prices", () => {
     "requires a native gas cap on %s and passes its exact chain to SDK",
     async (name) => {
       const chain = payChain(name);
-      expect(validatePaymentConfig({ ...owner, payChain: name, maxGas: "0.0005" })).toBe(5n * 10n ** 14n);
+      const mode = { devMode: chain.testnet === true };
+      expect(validatePaymentConfig({ ...owner, ...mode, payChain: name, maxGas: "0.0005" })).toBe(5n * 10n ** 14n);
       if (name !== "polygon")
-        expect(() => validatePaymentConfig({ ...owner, payChain: name, maxGasPol: "0.3" })).toThrow(/caps POL gas/);
+        expect(() => validatePaymentConfig({ ...owner, ...mode, payChain: name, maxGasPol: "0.3" })).toThrow(
+          /caps POL gas/
+        );
       const f = baseFixture();
       f.ctx.config.payChain = name;
+      f.ctx.config.devMode = mode.devMode;
       expect((await runPayableFetch(f.ctx, { url: origin + "/data" })).isError).not.toBe(true);
       expect(f.fetchPaid.mock.calls[0][2].v14).toMatchObject({ chain: name, maxGasWei: 5n * 10n ** 14n });
+      if (chain.stablecoinOnly) return; // covered by the Arc tests below
       const getPrice = vi.fn(async (url: string) =>
         url.startsWith("https://api.coinbase.com/")
           ? Response.json({ data: { base: chain.native, currency: "USD", amount: "0.5" } })
@@ -520,4 +525,40 @@ it("future native price timestamps cannot bypass the freshness guard", async () 
   await expect(
     independentNativeUsd({ fetchImpl: price, chain: PAY_CHAINS.base, rpc: "https://selected.example" })
   ).rejects.toThrow(/unavailable/);
+});
+
+describe("Arc: USDC is both the gas and the only pay asset", () => {
+  it.each(["arc", "arctestnet"])("pays %s in USDC through the token path with a USDC gas cap", async (name) => {
+    const f = baseFixture();
+    f.ctx.config.payChain = name;
+    f.ctx.config.maxGas = "0.05";
+    f.ctx.config.devMode = name === "arctestnet";
+    expect((await runPayableFetch(f.ctx, { url: origin + "/data" })).isError).not.toBe(true);
+    // The native symbol is "USDC" too; the asset must still be sent so the SDK takes the token path.
+    expect(f.fetchPaid.mock.calls[0][2].v14).toMatchObject({ chain: name, asset: "USDC", maxGasWei: 5n * 10n ** 16n });
+  });
+  it("refuses EURC, which the registry lists but is not offered", () => {
+    expect(() => validatePaymentConfig({ ...owner, payChain: "arc", payAsset: "EURC", maxGas: "0.05" })).toThrow(
+      /PAY_ASSET/
+    );
+  });
+  it("keeps Arc Testnet to dev mode and Arc mainnet to live mode", () => {
+    expect(() => validatePaymentConfig({ ...owner, payChain: "arctestnet", maxGas: "0.05" })).toThrow(
+      /arctestnet is a testnet: set AIFINPAY_MODE=dev/
+    );
+    expect(() => validatePaymentConfig({ ...owner, payChain: "arc", maxGas: "0.05", devMode: true })).toThrow(
+      /live mode only/
+    );
+    expect(validatePaymentConfig({ ...owner, payChain: "arctestnet", maxGas: "0.05", devMode: true })).toBe(
+      5n * 10n ** 16n
+    );
+  });
+  it("prices Arc gas at the $1 USDC peg without any network request", async () => {
+    const fetchImpl = vi.fn();
+    await expect(independentNativeUsd({ fetchImpl, chain: PAY_CHAINS.arc })).resolves.toMatchObject({
+      usd: 1,
+      source: "usd-peg",
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 });

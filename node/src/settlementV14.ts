@@ -373,7 +373,9 @@ export async function assertPreparedV14Recovery(
     lc(q.ipCreator) !== ZERO ||
     call.arg_encoding !== "struct+signature" ||
     call.function !== (stable ? STABLE_FUNCTION : NATIVE_FUNCTION) ||
-    (stable ? !pin || lc(pin.address) !== lc(q.token) : call.asset !== descriptor!.native) ||
+    (stable
+      ? !pin || lc(pin.address) !== lc(q.token)
+      : descriptor!.stablecoinOnly || call.asset !== descriptor!.native) ||
     (stable &&
       (lc(call.approval?.token ?? "") !== lc(q.token) ||
         lc(call.approval?.spender ?? "") !== lc(call.contract) ||
@@ -498,7 +500,10 @@ export async function executeV14Settlement(
   }
   if (
     lc(q.ipCreator) !== ZERO ||
-    (!stable && call.asset !== (expectedChain === "amoy" ? "POL" : paymentChain(expectedChain)!.native))
+    (!stable &&
+      (expectedChain === "amoy"
+        ? call.asset !== "POL"
+        : paymentChain(expectedChain)!.stablecoinOnly || call.asset !== paymentChain(expectedChain)!.native))
   ) {
     fail(
       "V14_UNSUPPORTED_ASSET",
@@ -678,7 +683,7 @@ export async function executeV14Settlement(
   ) {
     fail("V14_GAS_BUDGET_EXCEEDED", "estimated transaction fees exceed the operator gas budget");
   }
-  if (balance < settleValue + transactionCost)
+  if (balance < settleValue + tokenGrossAsGas(deployment.network, q.token, message.grossAmount) + transactionCost)
     fail("V14_INSUFFICIENT_BALANCE", "balance cannot cover authorized gross and estimated transaction fees");
   // Check deadline again after slow RPCs, before signing or persisting anything.
   validateV14SettlementCall(call, {
@@ -842,7 +847,8 @@ async function ensureExactApproval(
   ) {
     fail("V14_GAS_BUDGET_EXCEEDED", "approval plus settlement gas exceeds the operator gas budget");
   }
-  if (native < worstCase) fail("V14_INSUFFICIENT_BALANCE", "native balance cannot cover approval and settlement gas");
+  if (native < worstCase + tokenGrossAsGas(deployment.network, token, gross))
+    fail("V14_INSUFFICIENT_BALANCE", "native balance cannot cover approval and settlement gas");
 
   const serializedTransaction = await account.signTransaction!({
     type: "eip1559",
@@ -872,6 +878,16 @@ async function ensureExactApproval(
   });
   if (after < gross) fail("V14_APPROVAL_FAILED", "allowance is still below the authorized gross after approval");
   return approvalCost;
+}
+
+/** On a stablecoinOnly chain the token and the gas are one balance: the native
+ * balance is the 18-decimal view of it. Gas must fit beside the gross, or the
+ * settlement reverts after the approval has already spent gas. */
+function tokenGrossAsGas(network: string, token: Address, gross: bigint): bigint {
+  if (!paymentChain(network)?.stablecoinOnly) return 0n;
+  const decimals = pinnedTokenDecimals(network, token);
+  if (decimals === undefined) throw new V14SettlementError("V14_TOKEN_DECIMALS", "token decimals are not pinned");
+  return gross * 10n ** BigInt(18 - decimals);
 }
 
 /** OP chains charge L1 data and operator fees outside the EIP-1559 execution fee.

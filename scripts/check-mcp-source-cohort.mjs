@@ -26,9 +26,9 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // Keep the bootstrap immutable between such refreshes.
 export const BASE = "baff2043ca0170bc35e1603f3fa75f81ab54c2ea";
 export const COHORT = {
-  mcp: "2.13.0",
-  agent: "2.9.0",
-  python: "2.7.1",
+  mcp: "2.14.0",
+  agent: "2.10.0",
+  python: "2.8.0",
   skill: "2.11.0",
 };
 // Real CLI subprocess tests retain their default five-second limit. Serialize

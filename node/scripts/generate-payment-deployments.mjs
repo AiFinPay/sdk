@@ -26,6 +26,8 @@ const supportedEvmChains = new Set([
   "avalanche",
   "xrplevm",
   "amoy",
+  "arc",
+  "arcTestnet",
 ]);
 
 // Source of truth: @aifinpay/deployments ships the canonical per-ecosystem
@@ -36,9 +38,34 @@ const deploymentsRoot = path.dirname(deploymentsPkg);
 const evmRegistryPath = path.join(deploymentsRoot, "registry/splitter/evm/v1.4/deployments.json");
 const solanaRegistryPath = path.join(deploymentsRoot, "registry/splitter/solana/deployments.json");
 
+// @aifinpay/deployments 2.x dropped `status`/`disabledReason` (its ADR 0007):
+// `settlementEnabled` is the only flag. The SDK still checks status=enabled at
+// settlement, so derive it from that flag and never from anything looser.
+function withStatus(deployment) {
+  if (typeof deployment.settlementEnabled !== "boolean") {
+    fail(`${deployment.chain ?? deployment.cluster} has no boolean settlementEnabled`);
+  }
+  return {
+    ...deployment,
+    status: deployment.status ?? (deployment.settlementEnabled ? "enabled" : "disabled"),
+    disabledReason:
+      deployment.disabledReason ??
+      (deployment.settlementEnabled ? undefined : "settlementEnabled is false in @aifinpay/deployments"),
+  };
+}
+
 const evmRegistry = JSON.parse(fs.readFileSync(evmRegistryPath, "utf8"));
 const solanaRegistry = JSON.parse(fs.readFileSync(solanaRegistryPath, "utf8"));
-const sdkEvmDeployments = evmRegistry.deployments.filter((deployment) => supportedEvmChains.has(deployment.chain));
+// SDK network names are lowercase (resolvers lowercase their input, and the
+// backend slug is "arctestnet"); the registry spells the testnet "arcTestnet".
+const sdkEvmDeployments = evmRegistry.deployments
+  .filter((deployment) => supportedEvmChains.has(deployment.chain))
+  .map((deployment) => ({
+    ...withStatus(deployment),
+    chain: deployment.chain.toLowerCase(),
+    sourceArtifact: deployment.sourceArtifact || `deployments/${deployment.chain}-v14-${deployment.chain}-latest.json`,
+  }));
+const solanaDeployments = solanaRegistry.deployments.map(withStatus);
 
 function fail(message) {
   throw new Error(`Invalid payment deployment registry: ${message}`);
@@ -115,8 +142,11 @@ function evmTable() {
   return Object.fromEntries(
     sdkEvmDeployments.map((deployment) => {
       // The registry's new Polygon USDT entry is not part of the SDK token allowlist.
+      // Arc EURC is not either: quotes are in USD and a token is priced 1:1 with it.
       const assets = deployment.assets.filter(
-        (asset) => !(deployment.chain === "polygon" && asset.symbol === "USDT")
+        (asset) =>
+          !(deployment.chain === "polygon" && asset.symbol === "USDT") &&
+          !(deployment.chain.startsWith("arc") && asset.symbol === "EURC")
       );
       const findAsset = (symbol) => assets.find((asset) => asset.symbol === symbol)?.address ?? zeroAddress;
       return [
@@ -129,8 +159,7 @@ function evmTable() {
           status: deployment.status,
           settlementEnabled: deployment.settlementEnabled,
           ...(deployment.disabledReason ? { disabledReason: deployment.disabledReason } : {}),
-          sourceArtifact:
-            deployment.sourceArtifact || `deployments/${deployment.chain}-v14-${deployment.chain}-latest.json`,
+          sourceArtifact: deployment.sourceArtifact,
           splitter: {
             address: deployment.contracts.splitter,
             admin: deployment.contracts.admin,
@@ -210,13 +239,17 @@ export const V14_DEPLOYMENTS_SOURCE = ${json({ ...source, branch: "dev" })} as c
 
 export const V14_DEPLOYMENTS: Record<string, V14Deployment> = ${json(deployments)};
 
-export const V14_DEV_NETWORKS = ["amoy"] as const;
+export const V14_DEV_NETWORKS = ${JSON.stringify(
+    Object.values(deployments)
+      .filter((d) => d.environment === "dev")
+      .map((d) => d.network)
+  )} as const;
 `;
 }
 
 function solanaTable() {
   const deployments = Object.fromEntries(
-    solanaRegistry.deployments.map((deployment) => [
+    solanaDeployments.map((deployment) => [
       deployment.cluster,
       {
         network: deployment.cluster,
@@ -300,7 +333,7 @@ function writeOrCheck(outputPath, content) {
 }
 
 validateEvm(sdkEvmDeployments);
-validateSolana(solanaRegistry.deployments);
+validateSolana(solanaDeployments);
 writeOrCheck(evmOutput, renderEvm());
 writeOrCheck(solanaOutput, renderSolana());
 writeOrCheck(pythonOutput, renderPython());

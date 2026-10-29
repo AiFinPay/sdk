@@ -27,9 +27,8 @@ export const SOLANA_V14_DEPLOYMENTS: Record<string, SolanaV14Deployment> = {
     "network": "devnet",
     "environment": "dev",
     "splitterVersion": "1.4",
-    "status": "disabled",
-    "settlementEnabled": false,
-    "disabledReason": "Backend Solana receipt verification is not implemented",
+    "status": "enabled",
+    "settlementEnabled": true,
     "programId": "8dty5bD738Z9TzEkDu8vLSnhpJNWtEGMUEcYaKCUTY6y",
     "idl": {
       "name": "splitter",
@@ -42,9 +41,8 @@ export const SOLANA_V14_DEPLOYMENTS: Record<string, SolanaV14Deployment> = {
     "network": "mainnet",
     "environment": "prod",
     "splitterVersion": "1.4",
-    "status": "disabled",
-    "settlementEnabled": false,
-    "disabledReason": "Backend Solana receipt verification is not implemented and upgrade authority is not multisig",
+    "status": "enabled",
+    "settlementEnabled": true,
     "programId": "724Ut31i4ecY4dJ25z8HuZetu3A43xtNkPdk4JdbsfdD",
     "idl": {
       "name": "splitter",

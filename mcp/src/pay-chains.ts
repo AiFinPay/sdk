@@ -25,6 +25,10 @@ export interface PayChain {
   coingeckoId: string;
   /** Upper bound of a plausible native/USD price; anything above is refused. */
   maxSaneUsd: number;
+  /** Gas token is the pinned stablecoin itself (Arc USDC): pay only in the token. */
+  stablecoinOnly?: true;
+  /** Test network: payable only with AIFINPAY_MODE=dev, never with live money. */
+  testnet?: true;
 }
 
 // Reuse the SDK's trusted chain descriptors. Feed proxies are included only

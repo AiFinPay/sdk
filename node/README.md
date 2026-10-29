@@ -22,12 +22,28 @@ block signing. These are preflight estimates, not inclusion-time guarantees.
 Current admin profiles remain mutable; receipt and recovery policy is unchanged.
 See [payment configuration and recovery](./PAYMENT_RECEIPTS.md).
 
+### Arc and Arc Testnet (2.10.0)
+
+`v14.chain: "arc"` (chain 5042) and `"arctestnet"` (5042002) pay **only** in the
+pinned 6-decimal USDC ERC-20 at `0x3600…0000`; set `v14.asset: "USDC"`. Arc's gas
+token is native USDC, an 18-decimal view of the same balance, so there is no
+native quote: an omitted asset is refused, and `asset: "USDC"` always takes the
+token path (exact approval, `settleStable`, no `msg.value`). EURC is listed in
+the registry but not offered, because quotes are USD-priced 1:1. `maxGasWei` is
+in native USDC units (10^18 = $1), so no price feed is needed; the balance check
+counts gas and the gross against the one USDC balance. Arc Testnet accepts only
+`network_mode: "test"` quotes and Arc mainnet only live ones.
+
+Solana v1.4 records are enabled from `@aifinpay/deployments` 2.1.0 (founder
+decision ADR-007, accepting the single-key upgrade authority). Every other
+Solana check below is unchanged.
+
 The 2.5 candidate also adds owner-selected `solanaV14` paid access for SOL9 and
 classic SPL6 USDC/USDT. Network and environment, local Ed25519 payer,
 independently sourced SOL/USD and `maxFeeLamports` (transaction fees **plus all
 nonce/ATA rent**) are separate from EVM options. `v14` and `solanaV14` together
-are rejected. Canonical Solana flags remain disabled: this source is conditional,
-not a production activation or published 2.5 claim.
+are rejected. The canonical Solana records are enabled from deployments 2.1.0
+(see above); the backend must still serve the cluster.
 
 The exact 216-byte quote and 297-byte instruction follow the packaged pinned IDL.
 Fresh genesis/config/profile/mint/nonce/account evidence and unsigned final-message

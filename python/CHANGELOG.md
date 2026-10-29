@@ -1,3 +1,14 @@
+## 2.8.0 — Arc and Arc Testnet (USDC only); Solana records enabled
+
+- Generated pins come from `@aifinpay/deployments` 2.1.0: both Solana v1.4
+  records resolve enabled (ADR-007) and Arc/Arc Testnet are added.
+- `fetch_paid(chain="arc" | "arctestnet")` pays only in the 6-decimal USDC
+  ERC-20 (`asset="USDC"` required; native gas is the same USDC in 18 decimals,
+  so there is no native quote). EURC is not offered. `max_gas_wei` is in native
+  USDC (10**18 = $1); gas and the gross are checked against one balance.
+- `arctestnet` accepts only `network_mode: "test"` quotes; other EVM chains
+  only live ones. A native quote whose signed call names a token is refused.
+
 ## 2.7.1 — Codex is a framework
 
 - `codex` joins `AGENT_FRAMEWORKS`, matching `@aifinpay/agent` 2.9.0 and the

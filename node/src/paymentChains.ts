@@ -1,7 +1,23 @@
 import { V14_DEPLOYMENTS } from "./generated/v14Deployments.generated.js";
 
-/** Owner-selectable EVM execution environments. Listing is not production activation. */
-export const PAYMENT_CHAINS = Object.freeze({
+export interface PaymentChainDescriptor {
+  chainId: number;
+  label: string;
+  /** Gas currency, and the native pay asset unless stablecoinOnly. */
+  native: string;
+  gasModel: "evm" | "op" | "nitro";
+  defaultRpc: string;
+  coingeckoId: string;
+  maxSaneUsd: number;
+  /** The gas token is itself a pinned stablecoin (Arc: native USDC is an
+   *  18-decimal view of the 6-decimal ERC-20). Payment goes only through the
+   *  pinned token; there is no native quote, and the native symbol names it. */
+  stablecoinOnly?: true;
+  /** Test network: quotes are network_mode "test", never live money. */
+  testnet?: true;
+}
+
+const DESCRIPTORS = {
   polygon: {
     chainId: 137,
     label: "Polygon",
@@ -83,11 +99,38 @@ export const PAYMENT_CHAINS = Object.freeze({
     coingeckoId: "ethereum",
     maxSaneUsd: 100000,
   },
-} as const);
+  // Gas is native USDC at $1 per 10^18 units, so a gas cap in native units is
+  // already a USD amount. No price feed is read: there is no native payment.
+  arc: {
+    chainId: 5042,
+    label: "Arc",
+    native: "USDC",
+    gasModel: "evm",
+    defaultRpc: "https://rpc.blockdaemon.mainnet.arc.io",
+    coingeckoId: "usd-coin",
+    maxSaneUsd: 2,
+    stablecoinOnly: true,
+  },
+  arctestnet: {
+    chainId: 5042002,
+    label: "Arc Testnet",
+    native: "USDC",
+    gasModel: "evm",
+    defaultRpc: "https://rpc.blockdaemon.testnet.arc.io",
+    coingeckoId: "usd-coin",
+    maxSaneUsd: 2,
+    stablecoinOnly: true,
+    testnet: true,
+  },
+} as const satisfies Record<string, PaymentChainDescriptor>;
+
+export type PaymentChain = keyof typeof DESCRIPTORS;
+
+/** Owner-selectable EVM execution environments. Listing is not production activation. */
+export const PAYMENT_CHAINS: Readonly<Record<PaymentChain, Readonly<PaymentChainDescriptor>>> =
+  Object.freeze(DESCRIPTORS);
 
 for (const descriptor of Object.values(PAYMENT_CHAINS)) Object.freeze(descriptor);
-
-export type PaymentChain = keyof typeof PAYMENT_CHAINS;
 
 /** Unknown names never fall through to a default or to the deprecated BOT network. */
 export function paymentChain(name: string): (typeof PAYMENT_CHAINS)[PaymentChain] | undefined {
@@ -108,6 +151,9 @@ const TOKEN_DECIMALS: Readonly<Record<string, Readonly<Record<string, 6 | 18>>>>
   unichain: { "0x078d782b760474a361dda0af3839290b0ef57ad6": 6 },
   robinhood: { "0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34": 18, "0x5fc5360d0400a0fd4f2af552add042d716f1d168": 6 },
   amoy: { "0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582": 6 },
+  // ERC-20 decimals() read 2026-10-26. EURC is deliberately not pinned.
+  arc: { "0x3600000000000000000000000000000000000000": 6 },
+  arctestnet: { "0x3600000000000000000000000000000000000000": 6 },
 };
 
 export function pinnedTokenDecimals(chain: string, token: string): 6 | 18 | undefined {

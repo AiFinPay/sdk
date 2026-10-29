@@ -152,7 +152,8 @@ class Server:
 
     def quote(self, body):
         self.quotes += 1
-        stable = body.get("asset") not in (None, self.native_asset)
+        # Like the backend: a stablecoin-only chain (Arc) never quotes msg.value.
+        stable = body.get("asset") not in (None, self.native_asset) or PAYMENT_CHAINS[self.chain].get("stablecoinOnly")
         assert body["payer"] == PAYER.address and body["units"] == 200
         order = f"qt_{self.quotes:016d}"
         asset = body.get("asset") or self.native_asset
@@ -166,7 +167,8 @@ class Server:
             "quote_id": order, "nonce": "n-" + order, "payer": body["payer"], "merchant_id": body["merchant_id"],
             "resource": "*" if body["scope"] == "merchant" else body["resource"], "scope": body["scope"],
             "unit_quota": 200, "amount": AMOUNT,
-            "currency": "USD", "network_mode": "live", "expires_at": iso(valid_until),
+            "currency": "USD", "expires_at": iso(valid_until),
+            "network_mode": "test" if PAYMENT_CHAINS[self.chain].get("testnet") else "live",
             "accepted_chains": [self.chain],
             "pay_to": {"evm": MERCHANT, "polygon": MERCHANT}, "settlement_call": self.call,
             "payment_authorization": {"scheme": "wallet-signature-v1", "domain": API},
@@ -199,7 +201,8 @@ class Server:
         ).hexdigest()
         assert headers["Idempotency-Key"] == idem
         message = json.dumps(
-            ["AiFinPay receipt authorization v1", API, quote["quote_id"], quote["nonce"], quote["merchant_id"], "live",
+            ["AiFinPay receipt authorization v1", API, quote["quote_id"], quote["nonce"], quote["merchant_id"],
+             quote["network_mode"],
              body["chain"], body["tx_ref"], body["asset"], idem, auth["payer"], auth["expires_at"]],
             separators=(",", ":"),
         )
@@ -213,7 +216,7 @@ class Server:
         claims = {
             "iss": API, "aud": quote["merchant_id"], "sub": auth["payer"], "tx_ref": body["tx_ref"],
             "scope": quote["scope"], "resource": quote["resource"], "chain": self.chain, "asset": body["asset"].upper(),
-            "currency": "USD", "network_mode": "live", "amount": AMOUNT, "unit_quota": quote["unit_quota"],
+            "currency": "USD", "network_mode": quote["network_mode"], "amount": AMOUNT, "unit_quota": quote["unit_quota"],
             "iat": now, "exp": now + 3600, "receipt_id": receipt_id,
         }
         claims.update(self.claims_override)

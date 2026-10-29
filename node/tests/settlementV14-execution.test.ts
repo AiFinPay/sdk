@@ -190,7 +190,9 @@ async function fixture(network = "polygon", route = "merchant-aifp1") {
 }
 
 describe("authorized native v1.4 execution", () => {
-  it.each(["amoy", ...Object.keys(PAYMENT_CHAINS)])(
+  // Stablecoin-only chains (Arc) have no native payment; see the refusal below.
+  const nativeChains = (Object.keys(PAYMENT_CHAINS) as PaymentChain[]).filter((c) => !PAYMENT_CHAINS[c].stablecoinOnly);
+  it.each(["amoy", ...nativeChains])(
     "journals locally signed bounded transaction and verifies mined Payment on %s",
     async (network) => {
       const f = await fixture(network);
@@ -223,7 +225,7 @@ describe("authorized native v1.4 execution", () => {
     const f = await fixture("polygon", "agent-x402");
     await expect(executeV14Settlement(f.call, f.ctx)).resolves.toMatchObject({ route: "agent-x402" });
   });
-  it.each(Object.keys(PAYMENT_CHAINS))(
+  it.each(nativeChains)(
     "binds actual signed recovery bytes to independently selected %s without new RPC or expiry rejection",
     async (network) => {
       const f = await fixture(network);

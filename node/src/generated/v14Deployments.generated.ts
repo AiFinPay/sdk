@@ -263,6 +263,45 @@ export const V14_DEPLOYMENTS: Record<string, V14Deployment> = {
       ]
     }
   },
+  "arc": {
+    "network": "arc",
+    "chainId": 5042,
+    "environment": "prod",
+    "splitterVersion": "1.4",
+    "status": "enabled",
+    "settlementEnabled": true,
+    "sourceArtifact": "deployments/arc-v14-arc-latest.json",
+    "splitter": {
+      "address": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+      "admin": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+      "pauser": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "treasury": "0x5AFe07483886DFa0B77C6d60212B6E52D78ac11e",
+      "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+      "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+      "assets": [
+        {
+          "symbol": "USDC",
+          "name": "USDC",
+          "address": "0x3600000000000000000000000000000000000000"
+        }
+      ],
+      "usdc": "0x3600000000000000000000000000000000000000",
+      "usdt": "0x0000000000000000000000000000000000000000"
+    },
+    "runtimeCodeHash": "0x8d5cda7c85169c4ad6e0cf3a08ba51994391de087d5223ab8723cc324d52c423",
+    "safe": {
+      "address": "0x5afe07483886dfa0b77c6d60212b6e52d78ac11e",
+      "version": "1.5.0",
+      "threshold": 3,
+      "owners": [
+        "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+        "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+        "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+        "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+      ]
+    }
+  },
   "base": {
     "network": "base",
     "chainId": 8453,
@@ -456,7 +495,46 @@ export const V14_DEPLOYMENTS: Record<string, V14Deployment> = {
         "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
       ]
     }
+  },
+  "arctestnet": {
+    "network": "arctestnet",
+    "chainId": 5042002,
+    "environment": "dev",
+    "splitterVersion": "1.4",
+    "status": "enabled",
+    "settlementEnabled": true,
+    "sourceArtifact": "deployments/arcTestnet-v14-arcTestnet-latest.json",
+    "splitter": {
+      "address": "0x78bed24B8D3A5eB2cf8D9A0D6A9Da6Bc5d7f32eB",
+      "admin": "0xDBD9fB312eca3311Be2cfE899aB8c242C0271Ed6",
+      "signer": "0x0000e81aEf36D89373FBF0012550B10B63dAa873",
+      "pauser": "0xDBD9fB312eca3311Be2cfE899aB8c242C0271Ed6",
+      "treasury": "0xDBD9fB312eca3311Be2cfE899aB8c242C0271Ed6",
+      "tokenList": "0xbA98C0797707611787B04680E260036573D9D7a1",
+      "profiles": "0x4dcDd923d9c45bd306aA21c4438B3D325f8F783C",
+      "assets": [
+        {
+          "symbol": "USDC",
+          "name": "USDC",
+          "address": "0x3600000000000000000000000000000000000000"
+        }
+      ],
+      "usdc": "0x3600000000000000000000000000000000000000",
+      "usdt": "0x0000000000000000000000000000000000000000"
+    },
+    "runtimeCodeHash": "0x2605a351c5595aafabbb9064b2b842fb5db9eb8fdf00a62a66f02b43c46b698b",
+    "safe": {
+      "address": "0xc9ab36c2af2888414c7ea9160d9e33b773c2b388",
+      "version": "1.4.1",
+      "threshold": 3,
+      "owners": [
+        "0x25A834b6fEC79e9ee6ED04Ef5b97440149C6Cc24",
+        "0x2118c57dEBD53f614DDfE464Ff2941BE6646cA82",
+        "0x3C31dd9daCeC5473cC9B660CD69247A20701cF19",
+        "0x588A80e94a762C670711ff77CC60a2e65E64F53A"
+      ]
+    }
   }
 };
 
-export const V14_DEV_NETWORKS = ["amoy"] as const;
+export const V14_DEV_NETWORKS = ["amoy","arctestnet"] as const;

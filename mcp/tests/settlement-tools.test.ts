@@ -76,8 +76,14 @@ describe("settlement_routes", () => {
     expect(v14.routes[1]).toMatchObject({ chain: "base", chain_id: 8453, assets: ["ETH", "USDC"], live: true });
     const rest = v14.routes.slice(2);
     expect(rest.length).toBeGreaterThan(0);
+    // Arc Testnet is a dev deployment: never presented as an enabled production route.
     for (const route of rest)
-      expect(route).toMatchObject({ live: false, served_by_backend: false, deployment_enabled: true });
+      expect(route).toMatchObject({
+        live: false,
+        served_by_backend: false,
+        deployment_enabled: route.chain !== "arctestnet",
+      });
+    expect(rest.find((r: any) => r.chain === "arc")).toMatchObject({ chain_id: 5042, assets: ["USDC"] });
     expect(v14.routes.map((r: any) => r.chain)).not.toContain("solana");
     expect(v14.served_from).toEqual([
       "https://aifinpay.io/api/health: read",

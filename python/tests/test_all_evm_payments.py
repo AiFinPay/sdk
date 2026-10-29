@@ -23,7 +23,7 @@ def no_network(monkeypatch):
                            splitter=dict(dep["splitter"], signer=SIGNER.address)))
 
 
-PAIRS = [(chain, descriptor["native"]) for chain, descriptor in PAYMENT_CHAINS.items()] + [
+PAIRS = [(chain, d["native"]) for chain, d in PAYMENT_CHAINS.items() if not d.get("stablecoinOnly")] + [
     (chain, asset["symbol"]) for chain in PAYMENT_CHAINS for asset in V14_DEPLOYMENTS[chain]["splitter"]["assets"]
 ]
 
@@ -33,7 +33,7 @@ def test_end_to_end_offline_quote_exact_approval_receipt_reuse_and_recovery(chai
     h = Harness(V14_DEPLOYMENTS[chain], asset=asset)
     assert h.fetch(f"{SHOP}/articles/1", chain=chain).status_code == 200
     assert h.server.last_quote_request["settlement_chain"] == chain
-    native = asset == PAYMENT_CHAINS[chain]["native"]
+    native = asset == PAYMENT_CHAINS[chain]["native"] and not PAYMENT_CHAINS[chain].get("stablecoinOnly")
     assert len(h.chain.sent) == (1 if native else 2)
     assert all(decode_tx(raw)["chainId"] == PAYMENT_CHAINS[chain]["chainId"] for raw in h.chain.sent)
     if not native:

@@ -1,3 +1,11 @@
+## Agent 2.10.0 / Python 2.8.0 / MCP 2.14.0 — Arc, and Solana records enabled
+
+- `@aifinpay/deployments` 2.1.0: Solana mainnet/devnet v1.4 resolve enabled
+  (ADR-007); Arc (5042) and Arc Testnet (5042002) are payable in Node, Python
+  and MCP, through the 6-decimal USDC ERC-20 only (Arc's gas token is the same
+  USDC; there is no native quote and EURC is not offered). Arc Testnet takes
+  only test-mode quotes and, in MCP, `AIFINPAY_MODE=dev`. BOT Chain stays out.
+
 ## MCP 2.13.1 — a refusal to pay an unverified site says what to do
 
 - `payable_fetch` refusing an unverified merchant now tells the agent to stop

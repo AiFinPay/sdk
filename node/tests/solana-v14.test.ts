@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { mkdtemp, rm, open, type FileHandle } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -847,9 +847,14 @@ describe("Solana v1.4 exact source flow", () => {
       }
     }
   );
-  it("real canonical availability refuses before quote/proof/sign/broadcast", async () => {
+  it("a quarantined canonical record refuses before quote/proof/sign/broadcast", async () => {
     const fetchImpl = vi.fn();
     const agent = await AiFinPayAgent.fromSeed("42".repeat(32), { fetchImpl });
+    const original = SOLANA_V14_DEPLOYMENTS.mainnet;
+    SOLANA_V14_DEPLOYMENTS.mainnet = { ...original, status: "disabled", settlementEnabled: false };
+    onTestFinished(() => {
+      SOLANA_V14_DEPLOYMENTS.mainnet = original;
+    });
     await expect(
       agent.fetchPaid(
         url,

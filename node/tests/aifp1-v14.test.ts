@@ -111,6 +111,7 @@ function fixture(chain: PaymentChain = "polygon") {
     },
     nonce: "nonce",
     expires_at: new Date(expiry * 1000).toISOString(),
+    ...(PAYMENT_CHAINS[chain].testnet ? { network_mode: "test" as const } : {}),
   };
   const claims: Record<string, unknown> = {
     iss: api,
@@ -127,6 +128,7 @@ function fixture(chain: PaymentChain = "polygon") {
     unit_quota: 200,
     iat: Math.floor(Date.now() / 1000),
     exp: expiry,
+    ...(PAYMENT_CHAINS[chain].testnet ? { network_mode: "test" } : {}),
   };
   const encode = (v: unknown) => Buffer.from(JSON.stringify(v)).toString("base64url");
   let payFailure = false;
@@ -602,7 +604,7 @@ describe("Base v1.4 chain authorization", () => {
 });
 
 describe("nine EVM networks share the signed quote/receipt/recovery kernel", () => {
-  it.each(Object.keys(PAYMENT_CHAINS) as PaymentChain[])(
+  it.each((Object.keys(PAYMENT_CHAINS) as PaymentChain[]).filter((c) => !PAYMENT_CHAINS[c].stablecoinOnly))(
     "native purchase and expired recovery on %s",
     async (chain) => {
       const f = fixture(chain);
@@ -685,4 +687,61 @@ it("omitted chain keeps Polygon and omits the legacy quote selector", async () =
   expect((await aifp1Fetch(f.deps, url, {}, f.opts))?.status).toBe(200);
   const request = vi.mocked(f.deps.fetchImpl).mock.calls.find(([u]) => String(u).endsWith("/v1/quote"))!;
   expect(JSON.parse(String(request[1]!.body))).not.toHaveProperty("settlement_chain");
+});
+
+describe("Arc pays only in its 6-decimal USDC ERC-20", () => {
+  const ARC_USDC = "0x3600000000000000000000000000000000000000";
+  const quoteRequests = (f: ReturnType<typeof fixture>) =>
+    vi.mocked(f.deps.fetchImpl).mock.calls.filter(([u]) => String(u).endsWith("/v1/quote"));
+
+  it("asset=USDC takes the token path with exact 6-decimal units and no native price", async () => {
+    const f = stableFixture("arc", "USDC", 100001n);
+    expect((await aifp1Fetch(f.deps, url, {}, f.opts))?.status).toBe(200);
+    expect(JSON.parse(String(quoteRequests(f)[0][1]!.body))).toMatchObject({ asset: "USDC", settlement_chain: "arc" });
+    expect(f.deps.settle).toHaveBeenCalledWith(
+      expect.objectContaining({ token: ARC_USDC, grossWei: 100001n, treasuryWei: 1000n })
+    );
+    expect(f.call.approval).toEqual({ token: ARC_USDC, spender: f.call.contract, amount: "100001" });
+    expect(f.prepared).toHaveBeenCalledWith(expect.objectContaining({ chain: "arc", asset: "USDC" }));
+    expect(f.price).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["no asset (native)", undefined, /no native payment/],
+    ["EURC", "EURC", /not a stablecoin pinned for arc/],
+  ])("refuses %s before quoting", async (_label, asset, message) => {
+    const f = stableFixture("arc");
+    f.opts.v14 = { ...f.opts.v14!, asset };
+    await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toThrow(message);
+    expect(quoteRequests(f)).toHaveLength(0);
+    expect(f.deps.reserveDaily).not.toHaveBeenCalled();
+    expect(f.deps.settle).not.toHaveBeenCalled();
+  });
+
+  it("never pays a native-shaped quote when USDC was asked for", async () => {
+    const f = fixture("arc");
+    f.opts.v14 = { ...f.opts.v14!, asset: "USDC" };
+    await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toThrow(/stablecoin call disagrees/);
+    expect(f.deps.reserveDaily).not.toHaveBeenCalled();
+    expect(f.deps.settle).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["arctestnet", "live"],
+    ["arc", "test"],
+  ] as const)("refuses a %s quote in %s mode", async (chain, mode) => {
+    const f = stableFixture(chain);
+    f.quote.network_mode = mode;
+    await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toThrow(/live currency/);
+    expect(f.deps.reserveDaily).not.toHaveBeenCalled();
+  });
+});
+
+it("refuses a native quote whose signed call names a token before reserving budget", async () => {
+  const f = fixture("polygon");
+  f.call.args.quote.token = paymentStableAsset("polygon", "USDC")!.address;
+  f.call.value_wei = "0";
+  await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toThrow(/signed v1.4 call disagrees/);
+  expect(f.deps.reserveDaily).not.toHaveBeenCalled();
+  expect(f.deps.settle).not.toHaveBeenCalled();
 });

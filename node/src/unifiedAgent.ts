@@ -28,7 +28,7 @@ import { privateKeyToAccount, type LocalAccount } from "viem/accounts";
 import { viemWalletClientWallet, type AgentWallet } from "./agentWallet.js";
 import { polygon, base, arbitrum, optimism, bsc, mainnet, unichain, avalanche, type Chain } from "viem/chains";
 import { paymentChain, type PaymentChain } from "./paymentChains.js";
-import { botchain, xrplevm, robinhood } from "./chains.js";
+import { botchain, xrplevm, robinhood, arc, arcTestnet } from "./chains.js";
 import { V14_DEPLOYMENTS } from "./generated/v14Deployments.generated.js";
 import { SPLITTER_ROUTES } from "./generated/splitterRoutes.generated.js";
 import {
@@ -550,7 +550,11 @@ function evmChainObject(name: AnyEvmChainName): Chain | undefined {
       ? bsc
       : name === "avalanche"
         ? avalanche
-        : (EVM_CHAIN_OBJECTS as Partial<Record<string, Chain>>)[name]) ??
+        : name === "arc"
+          ? arc
+          : name === "arctestnet"
+            ? arcTestnet
+            : (EVM_CHAIN_OBJECTS as Partial<Record<string, Chain>>)[name]) ??
     (SPLITTER_DEPLOYMENTS as Partial<Record<string, SplitterDeployment>>)[name]?.chain
   );
 }

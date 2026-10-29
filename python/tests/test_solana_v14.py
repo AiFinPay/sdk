@@ -662,9 +662,15 @@ def test_signed_wrong_receipt_keeps_confirmed_debit_and_original_journal(monkeyp
     assert a.SpendLedger(1, 1, str(tmp_path / "spend.json")).spent_24h() == pytest.approx(0.1104)
 
 
-def test_actual_canonical_unavailability_prevents_all_http_and_proofs(monkeypatch, tmp_path):
+def test_quarantined_canonical_record_prevents_all_http_and_proofs(monkeypatch, tmp_path):
+    # aifinpay-deployments 2.1.0 enables mainnet (ADR-007); a disabled record must still refuse.
     f = Fixture()
     monkeypatch.setattr(a.requests, "Session", lambda: f)
+    monkeypatch.setitem(
+        s.SOLANA_V14_DEPLOYMENTS,
+        "mainnet",
+        dict(s.SOLANA_V14_DEPLOYMENTS["mainnet"], status="disabled", settlementEnabled=False),
+    )
     with pytest.raises(s.SolanaV14Error, match="disabled"):
         fetch(AiFinPayAgent.from_seed("42" * 32, solana_rpc=RPC), tmp_path)
     assert not f.quotes and not f.sends and not f.pays

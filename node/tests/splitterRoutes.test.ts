@@ -268,12 +268,12 @@ describe("registry provenance", () => {
 
 describe("Amoy requires explicit testnet opt-in", () => {
   const date = new Date("2026-09-12T00:00:00Z");
+  // @aifinpay/deployments 2.1.0 disables the v1.3 Amoy routes; opt-in cannot re-enable them.
   it.each(["merchant-aifp1", "agent-x402"])("does not activate %s by syncing metadata", (route) => {
     expect(resolveSplitterRoute("amoy", route).testnet).toBe(true);
+    expect(resolveSplitterRoute("amoy", route).chainId).toBe(80002);
     expect(() => resolveSettlingSplitterRoute("amoy", route, date)).toThrow(/testnet.*opt-in/);
-    const entry = resolveSettlingSplitterRoute("amoy", route, date, { allowTestnet: true });
-    expect(entry.chainId).toBe(80002);
-    expect(entry.viemChain.testnet).toBe(true);
+    expect(() => resolveSettlingSplitterRoute("amoy", route, date, { allowTestnet: true })).toThrow(/not enabled/);
   });
 
   it("testnet opt-in cannot enable a disabled mainnet route", () => {
