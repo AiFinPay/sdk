@@ -396,6 +396,19 @@ describe("Arc: native USDC gas, payment only through the 6-decimal ERC-20", () =
     expect(f.client.sendRawTransaction).not.toHaveBeenCalled();
   });
 
+  it("refuses a native settleNative call on BOT Chain, which has no BOT price", async () => {
+    const f = await fixture("botchain", "USDT");
+    f.call.asset = "BOT";
+    f.call.args.quote.token = zero;
+    f.call.function = "settleNative((address,address,address,uint256,address,uint256,bytes32,uint256,bytes32),bytes)";
+    f.call.value_wei = f.call.args.quote.grossAmount;
+    delete f.call.approval;
+    f.ctx.expectedToken = zero;
+    await expect(executeV14Settlement(f.call, f.ctx)).rejects.toMatchObject({ code: "V14_UNSUPPORTED_ASSET" });
+    expect(f.wallet.account.signTransaction).not.toHaveBeenCalled();
+    expect(f.client.sendRawTransaction).not.toHaveBeenCalled();
+  });
+
   it("refuses EURC, which the registry lists but the SDK does not offer", async () => {
     const f = await fixture("arc", "USDC");
     f.call.asset = "EURC";

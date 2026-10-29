@@ -1,4 +1,4 @@
-import { PAYMENT_CHAINS, paymentStableAsset, type PaymentChain } from "../src/paymentChains.js";
+import { PAYMENT_CHAINS, nativePayable, paymentStableAsset, type PaymentChain } from "../src/paymentChains.js";
 import { describe, it, expect, vi } from "vitest";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { keccak256, stringToHex } from "viem";
@@ -604,7 +604,7 @@ describe("Base v1.4 chain authorization", () => {
 });
 
 describe("nine EVM networks share the signed quote/receipt/recovery kernel", () => {
-  it.each((Object.keys(PAYMENT_CHAINS) as PaymentChain[]).filter((c) => !PAYMENT_CHAINS[c].stablecoinOnly))(
+  it.each((Object.keys(PAYMENT_CHAINS) as PaymentChain[]).filter((c) => nativePayable(PAYMENT_CHAINS[c])))(
     "native purchase and expired recovery on %s",
     async (chain) => {
       const f = fixture(chain);
@@ -687,6 +687,37 @@ it("omitted chain keeps Polygon and omits the legacy quote selector", async () =
   expect((await aifp1Fetch(f.deps, url, {}, f.opts))?.status).toBe(200);
   const request = vi.mocked(f.deps.fetchImpl).mock.calls.find(([u]) => String(u).endsWith("/v1/quote"))!;
   expect(JSON.parse(String(request[1]!.body))).not.toHaveProperty("settlement_chain");
+});
+
+describe("BOT Chain pays only in its 6-decimal USDT; BOT pays gas", () => {
+  const quoteRequests = (f: ReturnType<typeof fixture>) =>
+    vi.mocked(f.deps.fetchImpl).mock.calls.filter(([u]) => String(u).endsWith("/v1/quote"));
+
+  it("quotes and settles USDT without reading a price", async () => {
+    const f = stableFixture("botchain", "USDT", 100001n);
+    expect((await aifp1Fetch(f.deps, url, {}, f.opts))?.status).toBe(200);
+    expect(JSON.parse(String(quoteRequests(f)[0][1]!.body))).toMatchObject({
+      asset: "USDT",
+      settlement_chain: "botchain",
+    });
+    expect(f.deps.settle).toHaveBeenCalledWith(
+      expect.objectContaining({ token: "0xababc7ddc03e501d190c676bf3d92ef0e6e87a3c", grossWei: 100001n })
+    );
+    expect(f.price).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["no asset (native)", undefined, /BOT Chain has no native payment/],
+    ["BOT", "BOT", /BOT has no USD price/],
+    ["an unpinned symbol", "USDC", /not a stablecoin pinned for botchain/],
+  ])("refuses %s before quoting", async (_label, asset, message) => {
+    const f = stableFixture("botchain", "USDT");
+    f.opts.v14 = { ...f.opts.v14!, asset };
+    await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toThrow(message);
+    expect(quoteRequests(f)).toHaveLength(0);
+    expect(f.deps.reserveDaily).not.toHaveBeenCalled();
+    expect(f.deps.settle).not.toHaveBeenCalled();
+  });
 });
 
 describe("Arc pays only in its 6-decimal USDC ERC-20", () => {

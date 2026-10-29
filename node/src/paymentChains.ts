@@ -13,6 +13,8 @@ export interface PaymentChainDescriptor {
    *  18-decimal view of the 6-decimal ERC-20). Payment goes only through the
    *  pinned token; there is no native quote, and the native symbol names it. */
   stablecoinOnly?: true;
+  /** Gas token has no USD price (BOT Chain): pay only in a pinned stablecoin. */
+  noNativePayment?: true;
   /** Test network: quotes are network_mode "test", never live money. */
   testnet?: true;
 }
@@ -99,6 +101,16 @@ const DESCRIPTORS = {
     coingeckoId: "ethereum",
     maxSaneUsd: 100000,
   },
+  botchain: {
+    chainId: 677,
+    label: "BOT Chain",
+    native: "BOT",
+    gasModel: "evm",
+    defaultRpc: "https://rpc.botchain.ai",
+    coingeckoId: "",
+    maxSaneUsd: 1000,
+    noNativePayment: true,
+  },
   // Gas is native USDC at $1 per 10^18 units, so a gas cap in native units is
   // already a USD amount. No price feed is read: there is no native payment.
   arc: {
@@ -132,7 +144,7 @@ export const PAYMENT_CHAINS: Readonly<Record<PaymentChain, Readonly<PaymentChain
 
 for (const descriptor of Object.values(PAYMENT_CHAINS)) Object.freeze(descriptor);
 
-/** Unknown names never fall through to a default or to the deprecated BOT network. */
+/** Unknown names never fall through to a default network. */
 export function paymentChain(name: string): (typeof PAYMENT_CHAINS)[PaymentChain] | undefined {
   return Object.hasOwn(PAYMENT_CHAINS, name) ? PAYMENT_CHAINS[name as PaymentChain] : undefined;
 }
@@ -151,10 +163,16 @@ const TOKEN_DECIMALS: Readonly<Record<string, Readonly<Record<string, 6 | 18>>>>
   unichain: { "0x078d782b760474a361dda0af3839290b0ef57ad6": 6 },
   robinhood: { "0x5d3a1ff2b6bab83b63cd9ad0787074081a52ef34": 18, "0x5fc5360d0400a0fd4f2af552add042d716f1d168": 6 },
   amoy: { "0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582": 6 },
+  botchain: { "0xababc7ddc03e501d190c676bf3d92ef0e6e87a3c": 6 },
   // ERC-20 decimals() read 2026-10-26. EURC is deliberately not pinned.
   arc: { "0x3600000000000000000000000000000000000000": 6 },
   arctestnet: { "0x3600000000000000000000000000000000000000": 6 },
 };
+
+/** Whether msg.value may pay: false on stablecoinOnly and noNativePayment chains. */
+export function nativePayable(descriptor: PaymentChainDescriptor): boolean {
+  return descriptor.stablecoinOnly !== true && descriptor.noNativePayment !== true;
+}
 
 export function pinnedTokenDecimals(chain: string, token: string): 6 | 18 | undefined {
   return Object.hasOwn(TOKEN_DECIMALS, chain) ? TOKEN_DECIMALS[chain][token.toLowerCase()] : undefined;

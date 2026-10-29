@@ -27,6 +27,8 @@ export interface PayChain {
   maxSaneUsd: number;
   /** Gas token is the pinned stablecoin itself (Arc USDC): pay only in the token. */
   stablecoinOnly?: true;
+  /** Gas token has no USD price (BOT Chain): pay only in AIFINPAY_PAY_ASSET. */
+  noNativePayment?: true;
   /** Test network: payable only with AIFINPAY_MODE=dev, never with live money. */
   testnet?: true;
 }

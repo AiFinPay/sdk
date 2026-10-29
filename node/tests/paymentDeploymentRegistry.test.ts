@@ -14,8 +14,9 @@ describe("payment deployment registry provenance", () => {
   });
 
   it("preserves the selected network cohort and imports Robinhood with assets", () => {
-    // @aifinpay/deployments 2.1.0 enables BOT Chain; the SDK still does not import it.
-    expect(V14_DEPLOYMENTS.botchain).toBeUndefined();
+    // BOT Chain joined in agent 2.11.0 (owner decision 2026-10-29), USDT only.
+    expect(V14_DEPLOYMENTS.botchain.chainId).toBe(677);
+    expect(V14_DEPLOYMENTS.botchain.splitter.assets.map((a) => a.symbol)).toEqual(["USDT"]);
     expect(Object.keys(V14_DEPLOYMENTS).sort()).toEqual([
       "amoy",
       "arbitrum",
@@ -24,6 +25,7 @@ describe("payment deployment registry provenance", () => {
       "avalanche",
       "base",
       "bnb",
+      "botchain",
       "optimism",
       "polygon",
       "robinhood",

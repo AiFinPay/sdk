@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.11.0 — BOT Chain (USDT only)
+
+- `PAYMENT_CHAINS` gains `botchain` (677), marked `noNativePayment`: BOT pays
+  gas but has no USD price, so `v14.asset` must be the pinned stablecoin
+  (`"USDT"`). An omitted asset or `"BOT"` is refused before any quote, and the
+  executor refuses `settleNative` there.
+- The generator no longer refuses the BOT Chain v1.4 record, so
+  `resolveDeployment` resolves it to v1.4 (the v1.2 record stays for legacy
+  callers).
+- `nativePayable(descriptor)` is exported: false on `stablecoinOnly` and
+  `noNativePayment` chains.
+- The `@deprecated` tags on the `botchain` chain export are removed.
+
 ## 2.10.0 — Arc and Arc Testnet (USDC only); Solana records enabled
 
 - `@aifinpay/deployments` is pinned to exactly 2.1.0 (what the backend pins).

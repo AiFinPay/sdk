@@ -74,7 +74,6 @@ export {
   SplitterRouteNotSettlingError,
 } from "./splitterRoutes.js";
 export type { SplitterRoute, SplitterRouteChain, SplitterRouteKey, SplitterRouteDeployment } from "./splitterRoutes.js";
-/** @deprecated botchain is deprecated. Use robinhood instead. */
 export { botchain, robinhood, xrplevm } from "./chains.js";
 export { arc, arcTestnet } from "./chains.js";
 
@@ -246,7 +245,7 @@ export {
 export type { V14ExecutionContext, V14SettlementCall, V14Quote, V14ValidateOptions } from "./settlementV14.js";
 
 // Independent chain/native/gas/token descriptors, without activation authority.
-export { PAYMENT_CHAINS, paymentChain, paymentStableAsset } from "./paymentChains.js";
+export { PAYMENT_CHAINS, nativePayable, paymentChain, paymentStableAsset } from "./paymentChains.js";
 export type { PaymentChain } from "./paymentChains.js";
 
 // Solana v1.4 codecs/preflight are inventory-aware; public payment availability

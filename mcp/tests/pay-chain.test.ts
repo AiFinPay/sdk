@@ -33,7 +33,17 @@ describe("AIFINPAY_PAY_CHAIN configuration", () => {
       /AIFINPAY_MAX_GAS_POL caps POL gas and does not apply on base; set AIFINPAY_MAX_GAS in ETH/
     );
   });
-  it.each(["botchain", "Base", "amoy", "", "__proto__"])("refuses unsupported chain %j", (name) => {
+  it("BOT Chain needs a pinned stablecoin asset; BOT pays gas only", () => {
+    for (const payAsset of [undefined, "BOT"])
+      expect(() => validatePaymentConfig({ ...owner, payChain: "botchain", payAsset, maxGas: "0.1" })).toThrow(
+        /BOT Chain has no native payment: set AIFINPAY_PAY_ASSET/
+      );
+    expect(() => validatePaymentConfig({ ...owner, payChain: "botchain", payAsset: "USDC", maxGas: "0.1" })).toThrow(
+      /AIFINPAY_PAY_ASSET must be "BOT" or a stablecoin symbol pinned for botchain/
+    );
+    expect(validatePaymentConfig({ ...owner, payChain: "botchain", payAsset: "USDT", maxGas: "0.1" })).toBe(10n ** 17n);
+  });
+  it.each(["Base", "amoy", "", "__proto__"])("refuses unsupported chain %j", (name) => {
     expect(() => validatePaymentConfig({ ...owner, payChain: name, maxGas: "0.1" })).toThrow(
       /AIFINPAY_PAY_CHAIN must be one of polygon, base/
     );
@@ -470,7 +480,15 @@ describe("payable_fetch on Base", () => {
 });
 
 describe("all EVM owner settings and independent prices", () => {
-  it.each(Object.keys(PAY_CHAINS))(
+  it("passes BOT Chain's owner-set USDT and BOT gas cap to the SDK, with no BOT price read", async () => {
+    const f = baseFixture();
+    f.ctx.config.payChain = "botchain";
+    f.ctx.config.payAsset = "USDT";
+    expect((await runPayableFetch(f.ctx, { url: origin + "/data" })).isError).not.toBe(true);
+    expect(f.fetchPaid.mock.calls[0][2].v14).toMatchObject({ chain: "botchain", asset: "USDT" });
+  });
+  // BOT Chain (noNativePayment) needs AIFINPAY_PAY_ASSET; covered just above.
+  it.each(Object.keys(PAY_CHAINS).filter((name) => !payChain(name).noNativePayment))(
     "requires a native gas cap on %s and passes its exact chain to SDK",
     async (name) => {
       const chain = payChain(name);
