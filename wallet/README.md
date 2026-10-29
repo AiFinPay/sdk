@@ -104,12 +104,11 @@ scrypt-aes-256-gcm.
   encrypted keystore; the CLI does not read `.env` itself. `@aifinpay/mcp`
   needs the same variable in its `env`. The seed itself is stored encrypted (`seedEnc`) — no plaintext key material is written to the keystore.
 
-> The bugs from the coverage pass (AiFinPay/sdk#96) are fixed and pinned by
-> tests: the seed is stored only encrypted, `export` of an encrypted keystore
-> requires the passphrase, generated passphrases always pass validation, and
-> `show`/`export` read a keystore written by `npx @aifinpay/mcp init`. One
-> intentional difference remains: an unindexed default-mode wallet's addresses
-> are not the ones MCP would derive (see the note at the top).
+Tests cover encrypted seed storage, passphrase requirements for export,
+generated passphrase validation, and compatibility with keystores written by
+`npx @aifinpay/mcp init`. One intentional difference remains: an unindexed
+default-mode wallet's addresses are not the ones MCP would derive (see the note
+at the top).
 
 **Plain keystore.** `--plain` writes an unencrypted keystore, protected only by
 file mode 600.

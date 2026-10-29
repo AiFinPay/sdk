@@ -4,8 +4,7 @@ Reference paid-proxy bridge in front of [Exa AI](https://exa.ai/) `/search` —
 the canonical example of how to plug a pay-per-call API into AiFinPay.
 
 The bridge gates upstream calls behind an on-chain settlement to the
-[B2BSplitter](https://polygonscan.com/address/0xE34Fc0E6694821c600Fa0955C0F74720ea6d8440)
-contract: the agent's payment is split atomically — 98.99% to the
+`B2BSplitter` contract selected in [server.js](server.js): the agent's payment is split atomically — 98.99% to the
 bridge's merchant wallet, 1.00% to the AiFinPay treasury, 0.01% to a
 creator/referral slot — in a single transaction. The bridge then
 forwards the request to Exa using its own pooled API key and returns
@@ -15,11 +14,11 @@ The same pattern works for **any** paid third-party API — Venice AI,
 Nansen, Cloudflare AI, anything with a price-per-call model. Copy this
 folder, change `EXA_API_URL`, the API-key header, and `PRICE_WEI`.
 
-> **Where the chain comes in**: the bridge currently runs against
-> Polygon mainnet because the splitter is deployed there. A Solana
-> per-call counterpart is on the roadmap (the program code is
-> merge-ready); deployment is gated on partner demand, so for now
-> Polygon is the canonical execution environment.
+> **Where the chain comes in**: inspect the bridge configuration and
+> [deployment registry](../../deployments/registry/splitter/INDEX.md) for the
+> selected network and deployment. Verify runtime and receipt support before
+> sending funds; this example does not establish production readiness or
+> availability of another chain.
 
 ## Wire flow
 
@@ -73,7 +72,7 @@ MATIC per search call.
 node server.js
 # [exa-x402-bridge] x402 paid-proxy bridge on port 3001
 #   Upstream:    https://api.exa.ai/search
-#   Splitter:    0xE34Fc0E6694821c600Fa0955C0F74720ea6d8440 (Polygon)
+#   Splitter:    <address from the running bridge configuration>
 #   Merchant:    0x...
 #   Price:       5000000000000000 wei (~0.005000 MATIC) merchant amount, +1.01% fee on top
 ```

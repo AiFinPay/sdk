@@ -5,6 +5,11 @@ context (Coinbase Agentic Wallets / CDP, MetaMask Delegation Toolkit, Circle
 Agent Stack, x402) and the decision on where an `AgentWallet` abstraction
 belongs in this repository. Local source only, not published or deployed.
 
+All implementation/publication observations below are historical, not current
+readiness evidence. Current exports and regression coverage live in
+[the SDK entry point](../../node/src/index.ts),
+[wallet tests](../../node/tests/agentWallet.test.ts) and [CI](../../.github/workflows/ci.yml).
+
 ## Market context reviewed
 
 - **Coinbase Agentic Wallets / CDP AgentKit** — managed agent wallets with

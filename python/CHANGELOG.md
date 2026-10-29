@@ -52,6 +52,11 @@
   any other merchant on any origin. An unreadable pin refuses payment.
 - `410 {"error":"gateway_retired"}` raises `Aifp1GatewayRetiredError` after one
   request, with no quote or retry.
+- 
+## 2.5.2 — documentation refresh
+
+- Remove transient package-cohort and deployment-availability snapshots from
+  the README; point to installed registry and runtime/backend checks.
 
 ## 2.5.1
 

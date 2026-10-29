@@ -50,6 +50,11 @@
 - `GateReporter` sends the fields, forwards agent-class exempt serves as
   `exempt: true`, and falls back to the legacy shape on a 400 for the new one.
 
+## 0.1.4 — documentation refresh
+
+- Remove versioned release snapshots from the README and reporting guide;
+  clarify that source test fixtures do not establish live integration.
+
 ## 0.1.3 — unreleased
 
 - Add explicit reporting-v2 producer, bounded flow mint/event/health transport,

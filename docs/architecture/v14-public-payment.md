@@ -3,6 +3,11 @@
 Traceability: `v14-public-payment`. Requirements: [PRD](../business/v14-public-payment-prd.md).
 Decision: [ADR 0001](../adr/0001-v14-public-payment.md).
 
+Historical design baseline for the September 2026 integration, not a current
+implementation-status table or release approval. Current behavior is defined by
+the [executor](../../node/src/settlementV14.ts), [resolver](../../node/src/deploymentResolver.ts)
+and [CI](../../.github/workflows/ci.yml).
+
 ## Existing boundaries and minimal changes
 
 | Boundary | Existing behavior | Required change |

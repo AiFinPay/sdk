@@ -65,10 +65,15 @@
 - `410 {"error":"gateway_retired"}` throws `Aifp1GatewayRetiredError` after one
   request, with no quote or retry; held batches are kept.
 
-## 2.6.5 — rebuild with TypeScript 7
+## 2.6.6 — rebuild with TypeScript 7
 
 - No API change. Built with TypeScript 7; the published type declarations and
   development dependencies differ from 2.6.4, so the version moves with them.
+
+## 2.6.5 — documentation refresh
+
+- Remove transient release and deployment snapshots from package documentation;
+  direct readers to registry, capability and runtime evidence.
 
 ## 2.6.4 — use the standalone wallet package
 

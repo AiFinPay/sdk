@@ -1,5 +1,5 @@
 {
-  "$schema": "./reference/payment-deployments.schema.json",
+  "$schema": "../../../src/reference/payment-deployments.schema.json",
   "version": "1.4",
   "description": "Solana Splitter v1.4 — Program deployment",
   "schemaVersion": 1,
@@ -16,9 +16,7 @@
       "cluster": "devnet",
       "environment": "dev",
       "testnet": true,
-      "status": "disabled",
-      "settlementEnabled": false,
-      "disabledReason": "Backend Solana receipt verification is not implemented",
+      "settlementEnabled": true,
       "programId": "8dty5bD738Z9TzEkDu8vLSnhpJNWtEGMUEcYaKCUTY6y",
       "idl": {
         "name": "splitter",
@@ -30,9 +28,7 @@
       "cluster": "mainnet",
       "environment": "prod",
       "testnet": false,
-      "status": "disabled",
-      "settlementEnabled": false,
-      "disabledReason": "Backend Solana receipt verification is not implemented and upgrade authority is not multisig",
+      "settlementEnabled": true,
       "programId": "724Ut31i4ecY4dJ25z8HuZetu3A43xtNkPdk4JdbsfdD",
       "idl": {
         "name": "splitter",

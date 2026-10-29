@@ -13,12 +13,12 @@ deployments/
 ├── tsconfig.json          # TypeScript config
 ├── vitest.config.ts       # test runner config
 ├── .gitignore             # ignored build/install artifacts
-├── src/                   # TypeScript source
+├── src/                   # TypeScript source and schema references
 ├── dist/                  # compiled output (tsc)
 ├── tests/                 # offline unit tests
 └── registry/              # shipped deployment artifacts
     ├── splitter/                  # versioned registry with governance metadata
-    │   ├── INDEX.md               # registry index with lookup tables
+    │   ├── INDEX.md               # registry links and verification checklist
     │   ├── evm/                   # EVM deployments
     │   │   ├── v1.4/deployments.json  # EVM v1.4 full contract suite
     │   │   ├── v1.3/deployments.json  # EVM v1.3 route table
@@ -40,6 +40,7 @@ deployments/
 | `src/grabber.ts` | GitHub listing helpers, EVM + Solana fetch + latest-per-chain selection, deployment file writer, O(1) lookup helpers. |
 | `src/types.ts` | Registry TypeScript types: `DeploymentRegistry`, `EcosystemRegistry`, `EvmDeployment`, `SolanaDeployment`, `Stablecoin`, type guards. |
 | `src/build.ts` | CLI entry point for `npm run registry:build`; writes deployment files to `registry/splitter/evm/v1.4/` and `registry/splitter/solana/`. |
+| `src/reference/payment-deployments.schema.json` | JSON Schema linked by the versioned EVM, Solana and Casper registry files. |
 
 
 ## Tests (`tests/`)
@@ -49,22 +50,31 @@ deployments/
 | `tests/grabber.test.ts` | `compareVersionTime`, `listGitHubFiles`, `fetchJson`, mocked `grabEvmDeployments`, mocked `grabSolanaDeployments` + IDL writes, mocked `buildRegistry`, `writeSplitRegistries`. |
 | `tests/registry.test.ts` | `AifinpayRegistry` class: all public methods for EVM/Solana deployment queries. |
 | `tests/artifacts.test.ts` | `ArtifactRegistry` class: EVM ABI, Solana IDL, Casper IDL, Aptos IDL, Tron ABI queries. |
+| `tests/schema.test.ts` | Checks that each registry's relative `$schema` reference resolves to the packaged schema. |
 
 ## Registry artifacts (`registry/`)
 
 ### `registry/splitter/`
 
-Versioned deployment registry with governance metadata. Each version directory contains `deployments.json` following a consistent schema:
+Versioned deployment registry with governance metadata. Consult the
+[registry index](registry/splitter/INDEX.md) for links to each JSON and the
+verification checklist; this layout is not an availability report.
 
 - `evm/v1.4/deployments.json` — EVM v1.4 full contract suite with governance Safe info
 - `evm/v1.3/deployments.json` — EVM v1.3 route table (merchant-aifp1 + agent-x402 routes)
 - `evm/v1.2/deployments.json` — EVM v1.2 legacy with `paymentId` replay guard
 - `evm/v1.1/deployments.json` — EVM v1.1 initial production release
 - `solana/deployments.json` — Solana v1.4 program deployments
-- `casper/deployments.json` — Casper deployments (testnet live, mainnet historical)
-- `INDEX.md` — registry index with lookup tables by version and chain
+- `casper/deployments.json` — Casper deployment records
+- `INDEX.md` — registry links and verification checklist
+- Each deployment JSON references `src/reference/payment-deployments.schema.json` using a relative `$schema` link.
 
-Each `deployments.json` includes `$schema`, `version`, `description`, `schemaVersion`, `generatedAt`, `ecosystem`, `protocolVersion`, `source`, `governance` (EVM only), `deployments` array, and `sourceArtifact` metadata.
+Common metadata fields include `version`, `schemaVersion`, `generatedAt`,
+`ecosystem`, `protocolVersion`, `source`, `deployments` and `sourceArtifact`.
+Field layout varies by ecosystem/version; read the selected JSON and
+[registry types](src/types.ts). Treat settlement flags in generated EVM and
+Solana records as packaged metadata requiring fresh runtime/backend evidence,
+not proof of activation.
 
 ### `registry/abi/`
 
@@ -84,7 +94,8 @@ registry/idl/
 ├── aptos/
 │   └── .gitkeep
 ├── casper/
-│   └── .gitkeep
+│   ├── .gitkeep
+│   └── aifinpay-casper-schema.json
 └── solana/
     └── splitter-v14/
         ├── splitter.devnet.json
@@ -128,6 +139,7 @@ registry/splitter/solana/deployments.json
 registry/splitter/solana/README.md
 registry/idl/aptos/.gitkeep
 registry/idl/casper/.gitkeep
+registry/idl/casper/aifinpay-casper-schema.json
 registry/idl/solana/splitter-v14/splitter.devnet.json
 registry/idl/solana/splitter-v14/splitter.mainnet.json
 src/build.ts
@@ -136,9 +148,11 @@ src/index.ts
 src/types.ts
 src/registry.ts            # AifinpayRegistry class
 src/artifacts.ts            # ArtifactRegistry class
+src/reference/payment-deployments.schema.json
 tests/grabber.test.ts
 tests/registry.test.ts      # AifinpayRegistry tests
 tests/artifacts.test.ts     # ArtifactRegistry tests
+tests/schema.test.ts
 tsconfig.json
 vitest.config.ts
 ```

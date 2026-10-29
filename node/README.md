@@ -1,19 +1,21 @@
 # @aifinpay/agent (Node / TypeScript)
 
-Version **2.5.2** (source candidate) extends the existing signed AIFP-1 `fetchPaid`
-flow to Polygon, Base, Optimism, Arbitrum, Avalanche, BNB, Unichain, XRPL EVM and
-Robinhood. Polygon remains the default; select another network explicitly with
-`v14.chain`. A descriptor is client capability, not production readiness: the
-merchant must authorize the chain and the backend must serve/verifiably settle it.
-Runtime, signer, token, RPC-chain and current profile checks remain mandatory,
-along with a durable pre-broadcast journal and explicit native gas budget.
+The signed AIFP-1 `fetchPaid` flow supports owner-selected v1.4 payment chains.
+Polygon is the default; select another chain explicitly with `v14.chain`.
+Client descriptors are not production approval: payment availability is
+determined by the installed deployment registry, runtime verification and
+backend/merchant capabilities. Runtime, signer, token, RPC-chain and current
+profile checks remain mandatory, along with a durable pre-broadcast journal and
+explicit native gas budget. Source builds and tests do not establish live
+payment acceptance.
 
 Native purchases require a fresh independent `nativeUsdPrice` for POL, ETH, AVAX,
 BNB or XRP on the selected chain. Stablecoins use an independently pinned token
 address and decimals. USD micro-units remain unchanged; `token_settlement` binds
 exact6/18-decimal token units and every gross-inclusive leg to the signed gross
 and exact approval.18-decimal tokens require this metadata; legacy6-decimal
-quotes remain accepted. XRPL EVM currently has no pinned stablecoin.
+quotes remain accepted. Inspect current assets through the SDK capability API
+and installed deployment registry.
 
 `maxGasWei` covers approval plus settlement. OP chains (Base/Optimism/Unichain)
 include buffered L1/operator estimates; Nitro (Arbitrum/Robinhood) already includes
@@ -22,28 +24,20 @@ block signing. These are preflight estimates, not inclusion-time guarantees.
 Current admin profiles remain mutable; receipt and recovery policy is unchanged.
 See [payment configuration and recovery](./PAYMENT_RECEIPTS.md).
 
-### Arc and Arc Testnet (2.10.0)
+### Stablecoin-only chains
 
-`v14.chain: "arc"` (chain 5042) and `"arctestnet"` (5042002) pay **only** in the
-pinned 6-decimal USDC ERC-20 at `0x3600…0000`; set `v14.asset: "USDC"`. Arc's gas
-token is native USDC, an 18-decimal view of the same balance, so there is no
-native quote: an omitted asset is refused, and `asset: "USDC"` always takes the
-token path (exact approval, `settleStable`, no `msg.value`). EURC is listed in
-the registry but not offered, because quotes are USD-priced 1:1. `maxGasWei` is
-in native USDC units (10^18 = $1), so no price feed is needed; the balance check
-counts gas and the gross against the one USDC balance. Arc Testnet accepts only
-`network_mode: "test"` quotes and Arc mainnet only live ones.
+On a `stablecoinOnly` chain (Arc) the gas token is the pinned stablecoin itself:
+set `v14.asset` to it, `maxGasWei` is in its 18-decimal native units, and gas
+and the gross are checked against one balance. A testnet chain accepts only
+`network_mode: "test"` quotes.
 
-Solana v1.4 records are enabled from `@aifinpay/deployments` 2.1.0 (founder
-decision ADR-007, accepting the single-key upgrade authority). Every other
-Solana check below is unchanged.
-
-The 2.5 candidate also adds owner-selected `solanaV14` paid access for SOL9 and
-classic SPL6 USDC/USDT. Network and environment, local Ed25519 payer,
+The `solanaV14` option provides owner-selected paid access for SOL and classic
+SPL assets. Network and environment, local Ed25519 payer,
 independently sourced SOL/USD and `maxFeeLamports` (transaction fees **plus all
 nonce/ATA rent**) are separate from EVM options. `v14` and `solanaV14` together
-are rejected. The canonical Solana records are enabled from deployments 2.1.0
-(see above); the backend must still serve the cluster.
+are rejected. Availability is checked against the installed deployment
+registry and runtime/backend policy; application configuration cannot override
+an unavailable route.
 
 The exact 216-byte quote and 297-byte instruction follow the packaged pinned IDL.
 Fresh genesis/config/profile/mint/nonce/account evidence and unsigned final-message
@@ -76,9 +70,9 @@ the quote, merchant receives 99%, AiFinPay receives 1%, creator/referral
 receives 0%. AIFP-2/x402 currently charges 0% at the protocol layer. Legacy
 `/api/b2b` split-invoice methods are retired. The v1.3 executor checks the
 independently supplied deployment/runtime pin, chain, fee profile, merchant
-target and asset. Deployment activation and funded E2E approval remain
-separate operator responsibilities; a matching runtime hash alone is not
-production-readiness evidence.
+target and asset. A matching runtime value alone is not production approval;
+use the installed registry, capability APIs, executor tests and CI as evidence,
+and do not bypass runtime checks.
 
 The Ed25519 keypair is generated locally with `tweetnacl` and never leaves
 your process. The SDK only sends a one-time SHA-256 + Ed25519 signature in

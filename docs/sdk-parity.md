@@ -2,10 +2,15 @@
 
 Source versions compared: Node `node/` 2.3.x and Python `python/` 2.3.x, on `main` as of 2026-10-02.
 
+This is a historical source comparison, not current feature parity, test-pass
+or release-readiness evidence. Consult the [Node source](../node/src/index.ts),
+[Python source](../python/aifinpay/__init__.py) and [candidate CI](../.github/workflows/ci.yml)
+for the current implementation and verification.
+
 How this was built:
 
 - From the code, not the READMEs.
-- Line references are to this commit.
+- Line references describe the dated review snapshot and may have moved.
 - Where a behaviour is listed as different, it was confirmed in both sources.
 
 The table cells use three markers:

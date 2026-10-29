@@ -3,9 +3,16 @@
 Date: 2026-10-10. Traceability: `reporting-dependency-remediation`, SDK PR106.
 Reviewer: independent Codex `sdlc-security` / `sdlc-reviewer`; **not Nash, the dependency author**.
 
+Historical review only. All verdicts, advisory counts, scans, test outcomes and
+gate dispositions below apply to the dated local candidate, not current
+pass/readiness, vulnerability status or remote alert closure. Current identity
+and outcomes require version-control provenance, fresh audits and
+[candidate CI](../../.github/workflows/ci.yml). Source links below are navigational,
+not immutable attestations of the old working tree.
+
 ## Bounded technical verdict
 
-**PASS for the inspected local dependency remediation and the separately supplied Exa QA-only repair, at the exact source pins below.** All32 original advisory instances are outside their affected ranges in the installed candidate; every candidate bridge audit and the strict installed Python scan reports zero known vulnerabilities. No new reachable security defect or dependency compatibility regression was established in this scope.
+**Historical bounded acceptance of the inspected local dependency remediation and separately supplied Exa QA-only repair.** The review mapped the original advisory instances outside affected ranges in the installed candidate; the dated bridge audits and strict installed Python scan reported no known vulnerabilities. No new reachable security defect or dependency compatibility regression was established within that scope. This is not a current clean-audit assertion.
 
 This is **not** whole-monorepo clearance, a complete Security/Code Review/DoD gate, a human approval, a hosted Node22/24/26 result, a remote alert-closure claim, publication authority or reporting deployment acceptance. The dormant parser limitation below is deliberately retained. No failed baseline test was waived.
 
@@ -16,40 +23,24 @@ The review supersedes only the author's **pending independent review** and **pen
 - Read SDK log first, then SDK/Python AGENTS, principal YAGNI, inherited agents-config/SDLC governance and the security-review skill personally. Existing independent-package architecture is unchanged. No architecture/code implementation was performed by this reviewer.
 - Inspect nine dependency inputs: four private bridge manifest/lock pairs and generated Python requirements. The parent subsequently added one disjoint QA-only input, `examples/exa-x402-bridge/request-binding.test.js`, to the review.
 - Write only this repository report. Disposable source exports, installations and reviewer-owned probes live outside the repository. Do not edit Nash's source, evidence or log. No SDK API/version/cohort/network/payment/economics change is attributed to this reviewer.
-- Author final freeze was explicitly received. HEAD, dependency diff and author-document pins were independently verified before replay and again after replay. The parent was also asked, before this verdict, to freeze the additional Exa QA test at its observed hash. No unreceived acknowledgment or committed release tree is invented: results remain bound to the observed inputs below, and final release-candidate handoff remains parent-owned.
+- Author final freeze was explicitly received. HEAD, dependency diff and author-document identities were independently verified before replay and again after replay. The parent was also asked to freeze the additional Exa QA test. No unreceived acknowledgment or committed release tree is invented: historical results applied only to those observed inputs; a new release candidate needs fresh provenance and handoff.
 
-Original/current HEAD: `5d28340da6251a107219a10fa0e79ab8e9353e28`.
+The original comparison used an archived baseline and independently installed
+working-tree candidate, then rechecked for drift. It did not create a committed
+release tree or establish hosted CI. Duplicated HEAD/file/diff digests are
+replaced by the existing authoritative inputs:
 
-Nine-dependency-file binary diff SHA256:
-`ba35c9d58021e7b3f8f045be032575097096a00460ae2a4748c0f37d9f0e11ed`.
+- [Generic bridge lock](../../examples/_generic-x402-bridge/package-lock.json)
+- [Exa bridge lock](../../examples/exa-x402-bridge/package-lock.json)
+- [io-net bridge lock](../../examples/io-net-x402-bridge/package-lock.json)
+- [Venice bridge lock](../../examples/venice-x402-bridge/package-lock.json)
+- [Python runtime pins](../../python/requirements.txt)
+- [Exa request-binding regression](../../examples/exa-x402-bridge/request-binding.test.js)
+- [Exa server](../../examples/exa-x402-bridge/server.js)
+- [Author remediation](reporting-dependency-remediation.md)
 
-Author report SHA256, unchanged:
-`14e3e7cba3b3dd378415d3572323795bc772b754a4d170904337b93d52c23609`.
-
-Separate Exa QA binary diff SHA256:
-`7684d37fd03dd83df57e1221495d0446e029e467a81ce5decd2d48b5c79f431b`.
-
-These uncommitted file/diff identities are **not** a new Git commit/tree or hosted-CI claim. An all-working-tree diff now includes the additional QA file and is not the nine-input dependency hash.
-
-### Before/after SHA256 source pins
-
-Before bytes come from a fresh `git archive` of the exact HEAD above. Candidate bytes were copied from the working tree, independently installed, then rechecked against that working tree.
-
-| Source path | Before SHA256 | Candidate SHA256 |
-| --- | --- | --- |
-| `examples/_generic-x402-bridge/package.json` | `a080fee9cf4fcb63570e928b4491e377148de8a0a31fc07289b09fb6e382dcd6` | `d2a1d25679694dab707f594d4a971ed259304c06ac78600ac2a244ad46ece8be` |
-| `examples/_generic-x402-bridge/package-lock.json` | `90691c030b11e6a9046cbdbb22ab8c5c0bbb3d4ed2f7df24c272d0a59e6e3fc0` | `f489792c9f157a243afe14954213c73a7bc8608100ab48d3d61f6cc20a502c25` |
-| `examples/exa-x402-bridge/package.json` | `146ce07e2e10d0de176ed6dd8d5ae1791852561dc7595abefdd685b91ecc0c8d` | `9c0cc38c193e4fe8d7606da18f3791cbfd9c36e710837e1373979e47d8f4b71e` |
-| `examples/exa-x402-bridge/package-lock.json` | `4f56eca7fce9c954e38c80caa2235db3f8837e0537606deec44e7fd684d22344` | `1e8a4df84aa3ae1e2a9cf943b7ea0f59d38e46a1b4a9cfbe8c13366abab0ee5d` |
-| `examples/io-net-x402-bridge/package.json` | `a278293726bd0e2193e6b4b85959dfa334d8ac24ff05c6071356af2259494d5d` | `d08b1e9e651363f3ba0c693c8c4cd40bf7c0b6d069e080fa4a95dfc13e104d4e` |
-| `examples/io-net-x402-bridge/package-lock.json` | `71d76a0cefcc930b58a89c2a312018e8418d89f158734df026c0a89c45954bde` | `6e2655acb982e090d03037bd8ac14e52e4283f1e478e98e4b4e44a7dc9b76f80` |
-| `examples/venice-x402-bridge/package.json` | `97de6c8ab110861a34fd86d99eac78d766635118af036255c8f9615fb621b173` | `ae7c9a9d33afe2abec5eae75819e2e4aa76ad80ccf10d0c332e448b7d4745dff` |
-| `examples/venice-x402-bridge/package-lock.json` | `16edeb424a862121a5d4805f13f7bad520a0d3605e6955cb7166336477cc95f6` | `eaa3c3d4c3981b73689fdeb1f7e1ad67a8dceb3d88ff3292cbb64a5a11df54fb` |
-| `python/requirements.txt` | `cc0d79f39d8771f3000bee5a33800310700905e945110663432729e1ff607d82` | `54215aaca57c0906b5d7481be739a1911435d240fdafb85d4b480f78dddd09d1` |
-| `examples/exa-x402-bridge/request-binding.test.js` | `c37b6ca1d1ae9f58b42b32a310c0b5df8c677fe4d3b9dcc4d5627e0536bc6624` | `416d26ebffc913752097f3f9f7ee268e62c1ce88e01b2f80ccca860416a00929` |
-
-Unchanged Exa server SHA256, before and after:
-`714b8acfbd677b70762327bfc461ff1830750f67626ee38b4398c7ef86a5a46b`.
+Historical before/after identities must be recovered from version control and
+retained CI artifacts, not inferred from these mutable links.
 All authored JavaScript files in the four exported bridge directories were compared: **zero runtime-JS changes**, one QA test change. Python runtime/pyproject, direct Node dependency declarations and package versions are unchanged by the remediation.
 
 ## Independent dependency and reachability analysis
@@ -100,19 +91,19 @@ All inputs were installed in fresh reviewer-owned directories, not Nash's instal
 | Strict installed-only Python before scan | Exactly45 packages, four advisory instances in two packages; exit1 |
 | Strict installed-only Python candidate scan | Exactly45 packages with exact requirements identities,0 vulnerabilities; exit0 |
 | Candidate runtime/test dependency consistency | `uv pip check` PASS for45-package runtime and51-package test environment |
-| Actual source Python SDK suite, exact45 runtime pins + editable disposable source + pytest |435/435 PASS,0fail/skip,24.17s, socket/DNS refusal active |
+| Actual source Python SDK suite, exact runtime pins + editable disposable source + pytest | Historical offline replay; current totals/outcomes: [Python tests](../../python/tests/) and CI |
 | Python network-refusal controls |4/4 PASS before suite |
 | Python High-advisory causal controls | Two before/after pairs PASS, entirely in memory |
-| Generic existing tests |14/14 PASS,0skip |
-| io-net existing tests |15/15 PASS,0skip |
-| Venice existing tests |15/15 PASS,0skip |
+| Generic existing tests | Historical local replay; current [test sources](../../examples/_generic-x402-bridge/) |
+| io-net existing tests | Historical local replay; current [test sources](../../examples/io-net-x402-bridge/) |
+| Venice existing tests | Historical local replay; current [test sources](../../examples/venice-x402-bridge/) |
 | Exa exact original HEAD with original lock/test |24PASS/1FAIL of25,0skip; obsolete three-argument source regex |
 | Exa dependency-only candidate with original test | Same24PASS/1FAIL of25,0skip; same assertion/location |
-| Exa final candidate with parent's QA-only repair |26/26 PASS,0skip; all three files run |
+| Exa final candidate with parent's QA-only repair | Historical local replay included all files; current [test sources](../../examples/exa-x402-bridge/) |
 | Independent Exa source-regex causal/mutation checks | Old regex rejects unchanged real four-argument call; new guard accepts it; three separately mutated exact-one-call inputs all refused |
 | Current workspace pins vs independently installed candidate; diff whitespace | Nine pins unchanged; QA pin unchanged; `git diff --check` PASS |
 
-The70 final bridge tests are distinct from the dependency/advisory probes. No count above is a hosted-CI or whole-release test count. `--ignore-scripts` suppresses third-party install lifecycle execution, not scanner findings or test assertions; lifecycle/native-build acceptance is not inferred from these installs.
+Bridge suites are distinct from dependency/advisory probes. No count above is a hosted-CI or whole-release test count. `--ignore-scripts` suppresses third-party install lifecycle execution, not scanner findings or test assertions; lifecycle/native-build acceptance is not inferred from these installs.
 
 ### Exa QA-only closure
 
@@ -139,9 +130,12 @@ pip-audit emitted cache-entry-deserialization warnings and ignored those cache e
 - Official npm manifests: [jayson4.1.3](https://registry.npmjs.org/jayson/4.1.3), [jayson4.3.0](https://registry.npmjs.org/jayson/4.3.0), [stream-json3.6.0](https://registry.npmjs.org/stream-json/3.6.0), [uuid11.1.1](https://registry.npmjs.org/uuid/11.1.1).
 - Official PyPI manifests: [urllib3 2.8.0](https://pypi.org/pypi/urllib3/2.8.0/json), [multidict6.9.1](https://pypi.org/pypi/multidict/6.9.1/json); baseline engine floors were also fetched directly.
 
-## Retained independent evidence and reproducibility
+## Historical independent evidence and reproducibility
 
-Owned root: `/private/tmp/aifp-sdk-independent-deps.QUlwFu`. No existing author evidence was overwritten.
+The original reviewer used local-only exports, logs and probes. Their retention
+is not verified here; the names below describe historical evidence categories,
+not durable repository artifacts. Existing source/lock/test links above and
+fresh candidate-bound CI/audit artifacts must support any current claim.
 
 - `before/`: fresh exact HEAD export; `after/`: candidate source copy plus separately supplied QA repair.
 - `live-alerts.json`, `independent-metadata.json`, `compatibility-primary-metadata.jsonl`: independent live advisory/provenance mapping and source pins.
@@ -149,17 +143,10 @@ Owned root: `/private/tmp/aifp-sdk-independent-deps.QUlwFu`. No existing author 
 - `*-tests-deps-only.log`, `exa-tests-original.log`, `exa-tests-final.log`: distinct historical/current assertions, not overwritten outcomes.
 - `python-audit-{before,after}.json/.log`, requirements-only runtime venvs, separate scanner venv, editable source test venv, `python-tests-guarded.log`, `generator/requirements.txt` and `generator-replay.log`.
 
-Reviewer probe source SHA256:
-
-| Disposable reviewer input | SHA256 |
-| --- | --- |
-| `metadata-review.mjs` | `1d0c6313477e74419dc423ce71dd7cf3904d1897615c6032cfc4239b6ff869d2` |
-| `independent-probes.cjs` | `04d3b29c3574415ebf4534f40751f93cfea3fa009366111d03221e8c83e7623e` |
-| `no-network.cjs` | `057d887b2e223f7f682d04ec6c1e5ea27a47b33c1137b9195bccb8c34fbc98e5` |
-| `parser-reachability.cjs` | `5465432fe170070cd46ab452bab71a674c74ed126f1fea071e61dc90031d00cf` |
-| `exa-independent-controls.cjs` | `b07958442a59f47df51f7cfbeddb365d9d6b9be4b6b9dca4676ae354a14bbc8e` |
-| `python-advisory-probes.py` | `e5c194333f11d4d414d082b8f251725cb6bfddaa64b9aec906a4de16d1f55edc` |
-| `python-guard/sitecustomize.py` | `548466152579ca39d88f063b9803d081842a4d5ea8308ec65b4563345db59128` |
+Historical local probes covered metadata identity, advisory behavior, network
+refusal, parser reachability, Exa mutations and Python advisory behavior.
+Their copied digests are not a substitute for retaining executable probes and
+fresh results with the release candidate.
 
 Replay installs with `npm ci` only inside reviewed disposable bridge copies, then run all/prod audits, installed-tree checks and `test:store` with REDIS_URL unset and the local refusal preload. Run the independent Node probes under that same preload. Install exact requirements separately from pip-audit, scan with `--strict --path <runtime-site-packages>`, and test editable **local source** with the same45 runtime pins plus the Python refusal guard. Do not replace source with a registry SDK, use an editable SDK scan as a published-package audit, or silently reuse old locks/old hosted CI as candidate proof.
 
@@ -167,7 +154,9 @@ Replay installs with `npm ci` only inside reviewed disposable bridge copies, the
 
 Parent still owns final candidate freeze/commit/push and fresh hosted checks, human Engineering/Security decisions, remote alert recalculation after merge, real publication/MCP registry-lock handshake, and backend/native/dev-first/production acceptance. This SDK-only review closes none of those by implication. No RPC, wallet, real payment, GitHub mutation, commit, merge, publish, deployment or sibling source write was performed.
 
-HANDOFF: parent-owned `sdlc-auditor` / release coordinator with the exact local pins above. Local dependency remediation and Exa QA closure are independently substantiated; whole reporting-release approval remains separate.
+HISTORICAL HANDOFF: parent-owned `sdlc-auditor` / release coordinator. The dated
+review substantiated bounded dependency remediation and Exa QA closure; current
+source-bound review and whole reporting-release approval remain separate.
 
 ## Traceability
 
@@ -179,9 +168,7 @@ traceability:
   author: Nash
   reviewer_role: independent-sdlc-security-and-code-review
   reviewer_model: null # exact runtime model identifier is not exposed
-  source_head: 5d28340da6251a107219a10fa0e79ab8e9353e28
-  dependency_diff_sha256: ba35c9d58021e7b3f8f045be032575097096a00460ae2a4748c0f37d9f0e11ed
-  exa_qa_sha256: 416d26ebffc913752097f3f9f7ee268e62c1ce88e01b2f80ccca860416a00929
+  evidence_scope: historical-local-review-not-current-readiness
   scoped_results:
     original_advisory_ranges: pass
     independent_installed_scans: pass

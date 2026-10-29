@@ -27,7 +27,6 @@ export interface EvmDeployment {
   runtimeCodeHash: string;
   stablecoins: Stablecoin[];
   settlementEnabled: boolean;
-  status: string;
   deployedAt: string; // ISO 8601
   sourceUrl: string;
   /** Path to the local ABI bundle, once manually added. */
@@ -93,9 +92,7 @@ export interface EvmDeploymentRecord {
   chainId: number;
   environment: "dev" | "prod";
   testnet: boolean;
-  status: "enabled" | "disabled" | "invalid" | "retired";
   settlementEnabled: boolean;
-  disabledReason?: string;
   runtimeCodeHash: string;
   contracts: {
     splitter: string;
@@ -123,9 +120,7 @@ export interface SolanaDeploymentRecord {
   cluster: "mainnet" | "devnet";
   environment: "dev" | "prod";
   testnet: boolean;
-  status: "enabled" | "disabled" | "invalid" | "retired";
   settlementEnabled: boolean;
-  disabledReason: string;
   programId: string;
   idl: {
     name: string;

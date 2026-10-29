@@ -1,5 +1,10 @@
 # @aifinpay/wallet — changelog
 
+## 1.5.1 — documentation refresh
+
+- Remove a historical issue-reference snapshot from the README; describe the
+  covered behavior without tying it to a transient issue state.
+
 ## 1.5.0 — unreleased
 
 - Derive optional indexed child wallets from a 32-byte recovery seed without

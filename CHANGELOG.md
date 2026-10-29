@@ -1,3 +1,11 @@
+# Changelog
+
+Entries record changes and release context at the time they were written.
+They are not current publication, deployment or acceptance evidence. Resolve
+versions from manifests/registries, deployment metadata from
+[the registry](deployments/registry/splitter/INDEX.md), and execution results
+from the corresponding CI or payment artifacts.
+
 ## MCP 2.14.1 — installs agent 2.10.0, so Arc works
 
 - MCP 2.14.0 pinned `@aifinpay/agent` 2.9.0 (no Arc) and could not pass
@@ -120,6 +128,24 @@
   route.
 - Bundles the published skill 2.11.0, so the payer guide inside the package
   matches payments on by default and the verified-site rule.
+
+## Deployments 2.1.0 — payment registry schema
+
+- Add and package a shared JSON Schema for EVM, Solana and Casper deployment
+  records, and link each registry artifact to it.
+- Omit `status` and `disabledReason` from generated EVM/Solana deployment
+  records, their public types, the schema, and tracked registry records.
+- Retain `settlementEnabled` as packaged metadata, not live availability
+  evidence.
+
+## Documentation source-of-truth cleanup
+
+- Replace duplicated transaction hashes, deployment addresses and operational
+  status snapshots in guides with registry, implementation and verification links.
+- Keep runtime trust pins, settlement flags and payment checks unchanged.
+- Documentation-only package patches: Node agent 2.6.5, MCP 2.8.3, Python
+  agent 2.5.2, Node gate 0.4.1, Python gate 0.1.4, wallet 1.5.1 and
+  deployments 1.1.5. Version changes do not assert registry publication.
 
 ## MCP 2.12.1 — payments on by default, $5 / $20 ceiling, limits in the dashboard
 
@@ -617,12 +643,6 @@ daily_amount_usd=…, asset="POL"|"USDC")` pays AIFP-1 merchants on the Polygon
   legacy Robinhood deployment (Robinhood remains in the v1.4 registry).
 
 # Changelog
-
-## Analytics 0.1.0 — new opt-in telemetry package (unreleased)
-
-- Add `@aifinpay/analytics`: opt-in SDK telemetry, off by default, zero runtime
-  dependencies, sanitized payloads and a schema v1 event catalog shared with
-  the backend gateway. No consumer emits events yet.
 
 All notable changes to the AiFinPay SDK packages are documented here.
 Versioning follows [Semantic Versioning](https://semver.org/). From

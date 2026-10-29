@@ -1,5 +1,5 @@
 {
-  "$schema": "./reference/payment-deployments.schema.json",
+  "$schema": "../../../../src/reference/payment-deployments.schema.json",
   "version": "1.1",
   "description": "B2BSplitter v1.1 — Initial production version with immutable fee split",
   "schemaVersion": 1,
@@ -41,7 +41,6 @@
       "chainId": 8453,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x545b3a4ba195edc6b728df8cc64f28da528c9e7805c15f1aa61ef58c3c562197",
       "contracts": {
@@ -65,7 +64,6 @@
       "chainId": 130,
       "environment": "prod",
       "testnet": false,
-      "status": "retired",
       "settlementEnabled": false,
       "runtimeCodeHash": "0x545b3a4ba195edc6b728df8cc64f28da528c9e7805c15f1aa61ef58c3c562197",
       "contracts": {

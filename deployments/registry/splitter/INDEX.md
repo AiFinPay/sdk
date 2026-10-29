@@ -1,163 +1,59 @@
 # Splitter Deployment Registry — Index
 
-Versioned storage for B2BSplitter contract deployments across all supported chains and ecosystems.
+Versioned deployment records and interface artifacts. Registry values are recorded
+inputs to verification, not evidence of current runtime or backend availability.
 
-## Structure
+## Registry lookup
 
+| Registry | Machine-readable records | Guide |
+|----------|--------------------------|-------|
+| EVM v1.1 | [deployments.json](evm/v1.1/deployments.json) | [Legacy interface](evm/v1.1/README.md) |
+| EVM v1.2 | [deployments.json](evm/v1.2/deployments.json) | [Replay guard](evm/v1.2/README.md) |
+| EVM v1.3 | [deployments.json](evm/v1.3/deployments.json) | [Protocol routes](evm/v1.3/README.md) |
+| EVM v1.4 | [deployments.json](evm/v1.4/deployments.json) | [Contract suite](evm/v1.4/README.md) |
+| Solana | [deployments.json](solana/deployments.json) | [Program and IDL](solana/README.md) |
+| Casper | [deployments.json](casper/deployments.json) | [Contract schema](casper/README.md) |
+
+Read the selected record for chain/network identity, addresses or program IDs,
+runtime hashes, governance, assets, policy fields and settlement flags. Read
+`source`, `sourceArtifact` and `generatedAt` where present for provenance;
+do not infer provenance from the age of this guide.
+
+## Querying records
+
+Use [AifinpayRegistry](../../src/registry.ts) and the
+[usage guide](../../USAGE.md) for lookups and generated exports. A registry query
+does not perform live verification. For v1.3, select the raw record by chain
+**and** `_route`; the chain-keyed registry API cannot distinguish multiple routes
+on the same chain.
+
+## Refreshing and testing
+
+The [grabber](../../src/grabber.ts) and [build CLI](../../src/build.ts) define
+upstream selection and generated output locations. From `deployments/`:
+
+```bash
+npm run build
+npm test
+# Explicit maintenance operation: fetches upstream and rewrites registry outputs.
+npm run registry:build
 ```
-deployments/registry/splitter
-├── INDEX.md                 # This file
-├── evm/v1.1/                    # EVM Legacy — Initial version (immutable 1%/0.01% fee)
-│   ├── README.md
-│   └── deployments.json
-├── evm/v1.2/                    # EVM Legacy — Added paymentId replay guard
-│   ├── README.md
-│   └── deployments.json
-├── evm/v1.3/                    # EVM Route table — Protocol routes (merchant-aifp1 / agent-x402)
-│   ├── README.md
-│   └── deployments.json
-├── evm/v1.4/                    # EVM Full contract suite — 7 contracts per chain
-│   ├── README.md
-│   └── deployments.json
-├── solana/                  # Solana v1.4 — Program deployments (non-EVM)
-│   ├── README.md
-│   └── deployments.json
-└── casper/                  # Casper — Placeholder (not yet deployed)
-    ├── README.md
-    └── deployments.json
-```
 
-## Quick Lookup by Version
+These commands build, test or refresh records; none proves live settlement.
+Review upstream provenance and resulting JSON changes before adopting refreshed
+records. The grabber does not regenerate the v1.3 route snapshot; preserve its
+provenance when maintaining it. See the [package rules](../../AGENTS.md).
 
-| Version | Ecosystem | Status | Chains/Networks | Key Feature |
-|---------|-----------|--------|-----------------|-------------|
-| [v1.1](evm/v1.1/README.md) | EVM | Superseded | Base, Unichain | Initial production release |
-| [v1.2](evm/v1.2/README.md) | EVM | Superseded | Polygon, Optimism, BOT Chain, XRPL EVM | `bytes32 paymentId` replay guard |
-| [v1.3](evm/v1.3/README.md) | EVM | Active | 10 chains × 2 routes | Protocol routes with immutable fee splits |
-| [v1.4](evm/v1.4/README.md) | EVM | Mostly disabled | 10 chains | Full contract suite (7 contracts per chain) |
-| [v1.4](./solana/README.md) | Solana | Disabled | Devnet, Mainnet | Program ID + IDL (Anchor-style) |
-| [v1/v2](./casper/README.md) | Casper | Testnet live | Testnet (live), Mainnet (historical v1) | Rust → Wasm contract; `register_agent` / `pay_agent` |
+For downstream SDK generation, see
+[the generator](../../../node/scripts/generate-splitter-routes.mjs).
+Run `npm run registry:check` from `node/` to check generated files against the
+installed deployment package. This is an offline consistency check, not runtime
+or backend verification.
 
-## Quick Lookup by Chain
+## Interface artifacts
 
-### EVM Chains
-
-| Chain | Chain ID | v1.1 | v1.2 | v1.3 Routes | v1.4 Status |
-|-------|----------|------|------|-------------|-------------|
-| Amoy | 80002 | — | — | `merchant-aifp1`, `agent-x402` (testnet, settlement enabled) | ✅ enabled |
-| Arbitrum | 42161 | — | — | `merchant-aifp1`, `agent-x402` | ❌ disabled |
-| Avalanche | 43114 | — | — | `merchant-aifp1`, `agent-x402` | ❌ disabled |
-| Base | 8453 | ✓ | — | `merchant-aifp1`, `agent-x402` | ⚠️ invalid (redeploy required) |
-| BNB | 56 | — | — | `merchant-aifp1`, `agent-x402` | ❌ disabled |
-| BOT Chain | 677 | — | ✓ | `merchant-aifp1`, `agent-x402` | — |
-| Optimism | 10 | — | ✓ | `merchant-aifp1`, `agent-x402` | ❌ disabled |
-| Polygon | 137 | — | ✓ | `merchant-aifp1`, `agent-x402` | ❌ disabled |
-| Robinhood | 4663 | — | — | — | ❌ disabled (TokenList empty) |
-| Unichain | 130 | ✓ | — | `merchant-aifp1`, `agent-x402` | ❌ disabled |
-| XRPL EVM | 1440000 | — | ✓ | `merchant-aifp1`, `agent-x402` | ❌ disabled (no stablecoin) |
-
-### Non-EVM Ecosystems
-
-| Ecosystem | Network | Program ID / Contract Hash | Status |
-|-----------|---------|---------------------------|--------|
-| [Solana](./solana/README.md) | Devnet | `8dty5bD738Z9TzEkDu8vLSnhpJNWtEGMUEcYaKCUTY6y` | ❌ disabled (no backend verification) |
-| Solana | Mainnet | `724Ut31i4ecY4dJ25z8HuZetu3A43xtNkPdk4JdbsfdD` | ❌ disabled (no backend verification + upgrade authority not multisig) |
-| [Casper](./casper/README.md) | Testnet | `hash-47df409829ddf0612617460293ba591a19b26fa0c06918878204088d3eb9b78a` | ✅ **live** (v2 verified) |
-| Casper | Mainnet | `hash-7ad34a204952eef63d5dcf5159fb7d009e85dea4f49cbdf73dde190652dfa375` | ⚠️ **historical** (v1 — receipt only, no atomic transfer) |
-
-## Governance
-
-All v1.3 deployments are owned by the same governance Safe:
-
-- **Safe:** `0xFd936f75D9221949f2FEaB54Cd342F7527154eD5`
-- **Threshold:** 3 of 5
-- **Owners:** 5 multisig signers
-
-Legacy v1.1/v1.2 deployments have varying owners (see version-specific READMEs).
-
-## Sources of Truth
-
-### EVM v1.1-v1.3 (Route Table)
-
-- **Source:** `AiFinPay/evm-contract/registry/generated/splitter-table.json`
-- **Local copy:** `deployments/registry/reference/splitter-table.json`
-- **Last updated:** 2026-08-30
-
-### EVM v1.4 (Full Contract Suite)
-
-- **Source:** `AiFinPay/evm-contract/deployments/*-v14-*-latest.json`
-- **Local copy:** `deployments/registry/evm-splitter-v1.4.json`
-- **Last generated:** 2026-09-13
-- **Upstream commit:** `a54a4c107de7bb42f54e411e621d3897938bfc31`
-
-### Solana v1.4 (Program)
-
-- **Source:** `AiFinPay/solana-contract/deployments/splitter_v14/`
-- **Local copy:** `deployments/registry/solana-splitter-v1.4.json`
-- **Last generated:** 2026-09-13
-- **Upstream commit:** `e5df8f5436cf646ab495381eee04e0d1a10b4e2f`
-
-### Casper
-
-- **Testnet (v2):** `hash-47df409829ddf0612617460293ba591a19b26fa0c06918878204088d3eb9b78a` — live, verified
-- **Mainnet (v1):** `hash-7ad34a204952eef63d5dcf5159fb7d009e85dea4f49cbdf73dde190652dfa375` — historical, receipt-only (not valid settlement proof)
-- **Source:** `AiFinPay/casper-contract` — Rust → Wasm contract
-- **IDL:** Not applicable (Casper uses Rust contract schema, not Anchor-style IDL)
-
-**Do not hand-edit** the JSON files in this directory. To update:
-
-1. Change `registry/registry.json` in `AiFinPay/evm-contract`
-2. Run `verify-registry.mjs` to verify against chain
-3. Run `npm run registry:sync -- --from <path-to-evm-contract>` in `node/`
-4. Copy updated `node/registry/splitter-table.json` to `deployments/registry/reference/`
-5. Regenerate versioned files with a script (TODO: add generator)
-
-## Related Artifacts
-
-### EVM
-
-- `registry/reference/splitter-table.json` — Raw upstream route table (v1.2 + v1.3)
-- `registry/reference/splitter-table-source.json` — Provenance metadata
-- `registry/evm-splitter-v1.4.json` — v1.4 full contract suite deployments
-- `registry/abi/` — EVM ABI bundles and Tron ABI artifacts
-
-### Solana
-
-- `registry/solana-splitter-v1.4.json` — v1.4 program deployments
-- `registry/idl/solana/splitter-v14/` — IDL copies (devnet + mainnet)
-
-### Casper
-
-- `registry/idl/casper/` — Casper IDL artifacts (contract schema, not Anchor-style)
-- **Upstream:** `AiFinPay/casper-contract` — https://github.com/AiFinPay/casper-contract
-
-### Combined
-
-- `registry/evm-splitter-v1.4.json` — Generated EVM v1.4 deployments (matches `splitter/v1.4/deployments.json` schema)
-- `registry/solana-splitter-v1.4.json` — Generated Solana v1.4 deployments (matches `splitter/solana/deployments.json` schema)
-
-## Usage
-
-### For SDK consumers
-
-Use the `@aifinpay/agent` SDK's `resolveSplitterRoute(chain, route)` function — it reads from the generated `splitterRoutes.generated.ts` table.
-
-### For auditors
-
-1. Check `evm/v1.2` for superseded addresses
-2. Verify migration guards in `node/tests/splitterV12.test.ts`
-3. Compare runtime code hashes against on-chain `eth_getCode`
-
-### For deployment verification
-
-1. Check `evm/v1.3` for current addresses
-2. Verify `runtimeCodeHash` matches deployed bytecode
-3. Confirm `owner` and `treasury` match expected governance Safe
-4. Check `validFrom`/`validUntil` policy window
-
-## Security Notes
-
-- **Address collisions:** Same address can appear on different chains/routes with different fee splits. Never select by address alone.
-- **Settlement status:** `settlementEnabled: false` means the route is not cleared for mainnet payments.
-- **Policy window:** Routes outside their `validFrom`/`validUntil` window must not settle.
-- **Testnet opt-in:** Amoy routes require explicit `allowTestnet: true` flag in settlement code.
+- [Payment deployment JSON Schema](../../src/reference/payment-deployments.schema.json)
+- [EVM ABI bundles](../abi/evm/)
+- [Solana IDL copies](../idl/solana/splitter-v14/)
+- [Casper contract schema](../idl/casper/aifinpay-casper-schema.json)
+- [Artifact loading implementation](../../src/artifacts.ts)

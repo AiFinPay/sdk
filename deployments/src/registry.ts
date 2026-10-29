@@ -201,13 +201,6 @@ export class AifinpayRegistry {
   }
 
   /**
-   * Filter deployments by status.
-   */
-  filterByStatus(status: "enabled" | "disabled" | "invalid" | "retired"): EvmDeploymentRecord[] {
-    return this.getAllEvmDeployments().filter((d) => d.status === status);
-  }
-
-  /**
    * Get only production deployments (excludes testnet/dev).
    */
   getProdDeployments(): EvmDeploymentRecord[] {
@@ -230,7 +223,7 @@ export class AifinpayRegistry {
     const filtered = deployments.filter((d) => {
       if (filter === "prod") return d.environment === "prod" && !d.testnet;
       if (filter === "testnet") return d.testnet;
-      if (filter === "enabled") return d.status === "enabled" && d.settlementEnabled;
+      if (filter === "enabled") return d.settlementEnabled;
       return true;
     });
     return filtered.map((d) => d.chainId).sort((a, b) => a - b);
@@ -243,7 +236,6 @@ export class AifinpayRegistry {
   getNetworkList(filter?: "all" | "prod" | "testnet" | "enabled"): Array<{
     chainId: number;
     name: string;
-    status: string;
     settlementEnabled: boolean;
     testnet: boolean;
   }> {
@@ -251,7 +243,7 @@ export class AifinpayRegistry {
     const filtered = deployments.filter((d) => {
       if (filter === "prod") return d.environment === "prod" && !d.testnet;
       if (filter === "testnet") return d.testnet;
-      if (filter === "enabled") return d.status === "enabled" && d.settlementEnabled;
+      if (filter === "enabled") return d.settlementEnabled;
       return true;
     });
     return filtered
@@ -259,7 +251,6 @@ export class AifinpayRegistry {
       .map((d) => ({
         chainId: d.chainId,
         name: d.chain,
-        status: d.status,
         settlementEnabled: d.settlementEnabled,
         testnet: d.testnet,
       }));
@@ -300,10 +291,10 @@ export class AifinpayRegistry {
       return "No networks found.";
     }
 
-    const header = "| Chain ID | Network | Status | Settlement | Testnet |\n|----------|---------|--------|------------|---------|";
+    const header = "| Chain ID | Network | Settlement | Testnet |\n|----------|---------|------------|---------|";
     const rows = networks.map(
       (n) =>
-        `| ${n.chainId} | ${n.name} | ${n.status} | ${n.settlementEnabled ? "✅" : "❌"} | ${n.testnet ? "Yes" : "No"} |`,
+        `| ${n.chainId} | ${n.name} | ${n.settlementEnabled ? "✅" : "❌"} | ${n.testnet ? "Yes" : "No"} |`,
     );
     return [header, ...rows].join("\n");
   }
@@ -324,11 +315,11 @@ export class AifinpayRegistry {
   exportAsCsv(filter?: "all" | "prod" | "testnet" | "enabled"): string {
     const networks = this.getNetworkList(filter);
     if (networks.length === 0) {
-      return "chainId,name,status,settlementEnabled,testnet\n";
+      return "chainId,name,settlementEnabled,testnet\n";
     }
 
-    const header = "chainId,name,status,settlementEnabled,testnet";
-    const rows = networks.map((n) => `${n.chainId},${n.name},${n.status},${n.settlementEnabled},${n.testnet}`);
+    const header = "chainId,name,settlementEnabled,testnet";
+    const rows = networks.map((n) => `${n.chainId},${n.name},${n.settlementEnabled},${n.testnet}`);
     return [header, ...rows].join("\n");
   }
 }

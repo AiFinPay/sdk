@@ -4,6 +4,13 @@
 dispatch authorize this implementation; high risk / 20% supervised AI cap.
 Independent QA, Security, code review and human merge gates remain pending.
 
+Historical author handoff only. All counts, pass/fail dispositions and source
+freeze observations below describe the dated work, not current pass/readiness
+evidence. Reproduce against [gate tests](../../gate/tests/),
+[Node tests](../../node/tests/) and [candidate CI](../../.github/workflows/ci.yml).
+Retained authoritative controls are the [independent Node regression](../../gate/tests/reporting-funnels-independent.test.ts)
+and [independent review](../security/reporting-funnels-sdk-security.md).
+
 ## Decisions / working log
 
 - Read SDK/gate/Node AGENTS, inherited AGENTS + complete SDLC/dev rules,
@@ -78,10 +85,9 @@ Independent QA, Security, code review and human merge gates remain pending.
 
 ## Final author evidence / implementation handoff
 
-- Actual Node executable: `/Users/regrttrol/.nvm/versions/node/v24.0.2/bin/node`.
-  Final source freeze: gate208/208PASS across20files (154 existing +54new),
-  Node734/734PASS across38files (725 existing +9new). Both0FAIL/0SKIP.
-  Gate run3.66s, Node run17.06s; no live API/RPC/partner/financial request.
+- The dated author replay exercised complete gate and Node payer suites.
+  Current totals/outcomes must come from the linked tests and fresh CI, not
+  this historical freeze. No live API/RPC/partner/financial request was made.
 - Explicit v1 reporter29/29 was executed; its interfaces/implementation body
   byte-compares unchanged against the read-only original sibling. Python219
   is the supplied historical baseline, not rerun or certified by this author.
@@ -163,27 +169,13 @@ No Git, publish, live API/RPC, paid transaction, secret/profile, partner,
 cloud or new-service action. MAIN coordinates root CHANGELOG/cohort and later
 S03/S04 HTTP integration separately; no automatic release is implied.
 
-Frozen SHA256 (17 files; this working log deliberately excluded from self-hash):
-
-```text
-fc91257c3180d98dec1e17da9cfcb758e436d9705b5d3e95d6a6aefad04e1c1d gate/src/reporter.ts
-c3bf561af0f408654bbe6cda39aa1b11e280e96f041b53d9b366052ac5efefd9 gate/src/core.ts
-f711d03d0ff6a00c9bf6bcf088d1942e60159865c5a2f789998b9c72243d8b1e gate/src/express.ts
-09d22eb7f07fb3817dcb6843bd030f26293d791a274546395655efc2e1c14a85 gate/src/index.ts
-8cc9305d1d3aec674943e69d6bc69b09b2238212cce0b8a2c131ecf58af74fc1 gate/src/types.ts
-ceb9de3a4e6c2e299ce3135f3fb9d42b4f0b8b165744660b1737f0023a2c7487 node/src/aifp1.ts
-b82d942d06a71a4cec9a8d1df1f5df44de2d880201e74a3baf19f6eb14b055a0 node/src/agent.ts
-87c65caf1ce5e92c78177d2d6a40832b4eeb91a13277e8942964ed8771384695 node/src/unifiedAgent.ts
-bf827354a0273b054c122cd2c35dac83eaf9969924115ce76ef651c01bb2c730 gate/REPORTING-V2.md
-0b479163558a03f9dcbeac7c086428e30a5c267e48149bce28f7cd88d8b32001 gate/package.json
-9add0e046b8f81e1a11ce91a6aadf6984bde2cd538373c7c254b0d4478e158f2 gate/package-lock.json
-2c133df4097c704064ec87d40c40e4d84ddf4eaf5a4278dac9a2c270fcc8e0f7 gate/CHANGELOG.md
-b0a270b555279a91437bc761075eb8157c7e45bfa089d8cdb85ef63d723cce42 node/package.json
-d3dfb3eb5c77ddecb035f00185c4564b7afba7b06eafda43d59bee9e05d73d91 node/package-lock.json
-35431f1422906e781f833a1131dc63cd4c59804def08d2a0b1db7fe2ba58aef4 node/CHANGELOG.md
-cbfaeccd8d2ae5ccc71b594c578a66ddd1d9de0da513addefeb4ebe4ccfcd060 gate/tests/reporting-funnels-v2.test.ts
-d9ec524421e87b479a45766a2688dde30ce39096cf5ba54186beba4af9c74eaf node/tests/reporting-funnels-v2.test.ts
-```
+Historical source identity belongs in version control and CI artifacts, not a
+duplicated freeze table. Source references:
+[reporter](../../gate/src/reporter.ts), [adapter](../../gate/src/express.ts),
+[payer](../../node/src/aifp1.ts), [gate controls](../../gate/tests/reporting-funnels-v2.test.ts),
+[payer controls](../../node/tests/reporting-funnels-v2.test.ts) and
+[guide](../../gate/REPORTING-V2.md). These links are navigation, not attestations
+that today's files match the dated review.
 
 Implementation self-check: patterns/scope/no new dependencies/assumptions PASS.
 Independent QA, Security, engineering review, human merge gates and actual
@@ -209,12 +201,10 @@ HANDOFF: sdlc-qa | artifact: sdk-reporting source + docs/stories/reporting-funne
   boundary checks at1s/4999ms/5s and complete60s success/outage controls; existing
   event1/2/4/8s controls remain unchanged. Updated only the existing Node guide.
   This repairs pacing, not reporting coverage or backend readiness claims.
-- Actual green replay: unchanged independent Node49PASS/0FAIL/0SKIP (2.12s),
-  full Gate259PASS/0FAIL/0SKIP across21files (3.95s):210author/legacy +49
-  independent. Original author54now56 with two added minute controls.
-  Existing v1 reporter29passes; independent byte-identity/version-only checks
-  pass. Node payer734PASS/0FAIL/0SKIP across38files (12.37s). Gate TypeScript
-  build and scoped ESLint PASS. No filtered/skipped acceptance or waiver.
+- The historical repair replay exercised the unchanged independent regression,
+  complete gate/payer suites, v1 identity/version-only checks, TypeScript and
+  scoped ESLint without filtered/skipped acceptance or waiver. The added minute
+  controls and retained repro, not copied suite totals, define current coverage.
 - Complete-minute author controls record11attempts for503 and12for successful
   ACKs; every spacing>=5s. Frozen outage samples retain identical bodies for
   their five attempts; new sequence appears only after exhaustion. Earlier
@@ -224,7 +214,7 @@ HANDOFF: sdlc-qa | artifact: sdk-reporting source + docs/stories/reporting-funne
   removals. This author changed exactly reporter, author test, Node guide and
   this S05 log. Concurrent changes observed in Python guide/ASGI/author test/
   S06 log; untouched by this author, so no global245-file freeze is claimed.
-  Only three of the17Node S05 product/test/document pins below changed; the
+  Only three of the17Node S05 product/test/document identities changed; the
   other14retain their independent-review pins. Both retained independent tests
   and both QA/Security reports remain byte-identical to remediation start.
 - No API/type/export/support-stage/version/dependency change; no Python,
@@ -232,50 +222,24 @@ HANDOFF: sdlc-qa | artifact: sdk-reporting source + docs/stories/reporting-funne
   write/action. Reviewer must close SEC-SDK-01 independently on these new bytes;
   SEC-SDK-02 and all broader QA/Security/backend/release gates are not certified.
 
-Exact replay from package directories (same absolute Node as above):
+Replay from package directories with source dependencies configured:
 
 ```sh
-# gate: retained independent49; complete [0,60) pacing, no filter
-/Users/regrttrol/.nvm/versions/node/v24.0.2/bin/node node_modules/vitest/vitest.mjs run --no-cache tests/reporting-funnels-independent.test.ts
-# gate:259 includes210author/legacy +49independent
-/Users/regrttrol/.nvm/versions/node/v24.0.2/bin/node node_modules/vitest/vitest.mjs run --no-cache
-# node:734existing/author payer controls
-/Users/regrttrol/.nvm/versions/node/v24.0.2/bin/node node_modules/vitest/vitest.mjs run --no-cache
+# gate: retained independent regression; complete [0,60) pacing
+node node_modules/vitest/vitest.mjs run --no-cache tests/reporting-funnels-independent.test.ts
+# gate and node, separately: complete suites, no filter
+node node_modules/vitest/vitest.mjs run --no-cache
 # gate: build and scoped lint
-/Users/regrttrol/.nvm/versions/node/v24.0.2/bin/node node_modules/typescript/bin/tsc -p tsconfig.json
-/Users/regrttrol/.nvm/versions/node/v24.0.2/bin/node node_modules/eslint/bin/eslint.js src/reporter.ts tests/reporting-funnels-v2.test.ts
+node node_modules/typescript/bin/tsc -p tsconfig.json
+node node_modules/eslint/bin/eslint.js src/reporter.ts tests/reporting-funnels-v2.test.ts
 ```
 
 Loopback permission is required only for owned HTTP adapter fixtures.
-Fresh S05 freeze SHA256(17; log excluded from self-hash):
-
-```text
-d65d3c4cd08317a5cf8f85d80f1e3ec262c06fc9c0997e8bfdf3cd138fd2ad17 gate/src/reporter.ts
-c3bf561af0f408654bbe6cda39aa1b11e280e96f041b53d9b366052ac5efefd9 gate/src/core.ts
-f711d03d0ff6a00c9bf6bcf088d1942e60159865c5a2f789998b9c72243d8b1e gate/src/express.ts
-09d22eb7f07fb3817dcb6843bd030f26293d791a274546395655efc2e1c14a85 gate/src/index.ts
-8cc9305d1d3aec674943e69d6bc69b09b2238212cce0b8a2c131ecf58af74fc1 gate/src/types.ts
-ceb9de3a4e6c2e299ce3135f3fb9d42b4f0b8b165744660b1737f0023a2c7487 node/src/aifp1.ts
-b82d942d06a71a4cec9a8d1df1f5df44de2d880201e74a3baf19f6eb14b055a0 node/src/agent.ts
-87c65caf1ce5e92c78177d2d6a40832b4eeb91a13277e8942964ed8771384695 node/src/unifiedAgent.ts
-421d4e761489d1fd8a49f7baadba6252850071eed8302ef0915a7f368a5cee1c gate/REPORTING-V2.md
-0b479163558a03f9dcbeac7c086428e30a5c267e48149bce28f7cd88d8b32001 gate/package.json
-9add0e046b8f81e1a11ce91a6aadf6984bde2cd538373c7c254b0d4478e158f2 gate/package-lock.json
-2c133df4097c704064ec87d40c40e4d84ddf4eaf5a4278dac9a2c270fcc8e0f7 gate/CHANGELOG.md
-b0a270b555279a91437bc761075eb8157c7e45bfa089d8cdb85ef63d723cce42 node/package.json
-d3dfb3eb5c77ddecb035f00185c4564b7afba7b06eafda43d59bee9e05d73d91 node/package-lock.json
-35431f1422906e781f833a1131dc63cd4c59804def08d2a0b1db7fe2ba58aef4 node/CHANGELOG.md
-07bccb7f9337f2781e701a5876373c75412a814cecd60c6c01b5b1e8a9c8cc52 gate/tests/reporting-funnels-v2.test.ts
-d9ec524421e87b479a45766a2688dde30ce39096cf5ba54186beba4af9c74eaf node/tests/reporting-funnels-v2.test.ts
-```
-
-Read-only independent replay artifact pins (4unchanged):
-
-```text
-9608fda92fe3f89728cc38d77de8f6ca586b832ed32a28674cab5d143bb0dfc8 gate/tests/reporting-funnels-independent.test.ts
-38eaac86bc479b25306d1a657ec897b8d95f9f1fa7c50d1b25505ab14663c431 python-gate/tests/test_reporting_funnels_independent.py
-ba2c2e2847025e228d3f4d0d4d31607c555b82acfa724c5c111f08e7f7aabbee docs/security/reporting-funnels-sdk-security.md
-1d9ca6447b05a5d85ea14168e1697524febb13093aff60d8cf5f82d1e8813918 docs/stories/reporting-funnels-sdk-independent-tests.md
-```
+The repair and independent repro remain in the source/control links above.
+For the dated independent closure and limitations, see the
+[QA report](reporting-funnels-sdk-independent-tests.md) and
+[security report](../security/reporting-funnels-sdk-security.md).
+Fresh source-bound CI/review, not these historical freeze observations, must
+establish current acceptance.
 
 HANDOFF: MAIN / independent reviewer | SEC-SDK-01 author repair and replay PASS | independent finding closure PENDING | no waiver

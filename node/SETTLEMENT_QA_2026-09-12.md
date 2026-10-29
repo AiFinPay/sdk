@@ -4,6 +4,11 @@ This is source remediation for the supplied SDK/AIFP-1 audit. It is not a
 production-readiness or mainnet activation report. Candidate versions:
 Node/MCP `2.0.0-rc.12`, Python `2.0.0rc1`; publication remains separate.
 
+All implementation, advisory and validation observations below are historical.
+They do not establish current pass/readiness or route availability; use the
+[test sources](tests/), [CI](../.github/workflows/ci.yml), runtime resolvers and
+[registry provenance](../deployments/registry/splitter/evm/v1.4/deployments.json).
+
 ## Fixed and exercised
 
 - Native and stable v1.3 tuple ABI, independently decoded selectors
@@ -22,10 +27,10 @@ Node/MCP `2.0.0-rc.12`, Python `2.0.0rc1`; publication remains separate.
 - MCP redirect modes, method/body preservation, cross-origin credential
   removal and mapped private IPv6 guards. Standard x402 USD caps use pinned
   chain/USDC identifiers, six decimals and integer atomic amounts.
-- Canonical registry matches EVM commit
-  `64e245fd613e97f95195239238d6ac75484a8a21`, SHA-256
-  `36ee672b1deccd7b851460b459af26984ca07802477bc8c1e78018f5d5154827`.
-  Amoy needs explicit testnet opt-in; mainnet flags remain disabled.
+- Deployment source identity and runtime pins belong to the
+  [canonical registry](../deployments/registry/splitter/evm/v1.4/deployments.json),
+  not a copy in this report. Amoy needs explicit testnet opt-in; route
+  availability requires current registry approval and runtime verification.
 - Native v2 authentication binds trusted origin, method, path/query, body
   digest, nonce and expiry. Unbound v1 signing is retired in both SDKs.
 - Removed legacy Node/Python payment submission bodies. The private legacy
@@ -38,6 +43,7 @@ Node/MCP `2.0.0-rc.12`, Python `2.0.0rc1`; publication remains separate.
 Build the Node package, then run from the SDK repository:
 
 ```sh
+npm --prefix node run registry:check
 npm --prefix node run build
 node scripts/check-settlement-compat.mjs /path/to/aifinpay-web/backend
 node scripts/check-native-auth-compat.mjs /path/to/aifinpay-web/backend
@@ -51,21 +57,25 @@ The native-auth probe signs with a fresh synthetic local identity, exercises
 the actual backend gate, and rejects altered requests and consumed nonces.
 Only seat lookup and metrics are stubbed; no external service is contacted.
 
-Local verification of this candidate: Node **352 passed**, Python **69 passed**,
-MCP **134 passed** against the locked registry dependency and **134 passed**
-against the packed source SDK. The coordinated backend has **691 passed**,
-no failures and one existing conditional skip. Native/stable invoice
+Historical local verification exercised Node, Python, MCP locked-dependency
+and source-pack paths plus the coordinated backend. Current outcomes must be
+reproduced from [Node](tests/), [Python](../python/tests/),
+[MCP](../mcp/tests/) and [CI](../.github/workflows/ci.yml), not inferred from
+stale suite totals. Native/stable invoice
 compatibility and native-auth GET/POST, six request mutations and nonce replay
 were exercised across the actual SDK/backend modules. Independent review of
 the affected paths completed after the resulting edge cases were fixed.
 
-## Open release work
+## Historical open release work (at review time)
 
-Current v1.4 signatures do not commit mutable profile bps/resolved treasury.
-EVM `78240ecc` has this at `B2BSplitterV14.sol:67,212,314` and
-`Profiles.sol:75`. A preflight-only fix cannot close the change-before-mining
+The reviewed v1.4 signatures did not commit mutable profile bps/resolved treasury.
+Contract source provenance belongs to the
+[deployment registry](../deployments/registry/splitter/evm/v1.4/deployments.json).
+A preflight-only fix cannot close the change-before-mining
 gap. The contract owner must review a signed economics commitment/versioned
 immutable profile before a coordinated contract/backend/SDK upgrade.
+The later [accepted administrative trust model](../docs/adr/0001-v14-public-payment.md)
+records the architecture decision; this historical finding does not supersede it.
 Native and stable v1.4 execution are not implemented as a safe replacement.
 
 Solana settlement verification remains unavailable; the coordinated backend
