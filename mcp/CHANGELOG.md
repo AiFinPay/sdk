@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.15.0 — BOT Chain (USDT only)
+
+- `AIFINPAY_PAY_CHAIN=botchain` (from `@aifinpay/agent` 2.11.0) pays only in
+  the stablecoin set in `AIFINPAY_PAY_ASSET` (Bridged USDT). BOT pays gas
+  (`AIFINPAY_MAX_GAS` is in BOT) but has no USD price, so a missing or `BOT`
+  pay asset is refused at startup instead of on the first payment.
+
 ## 2.14.1 — installs agent 2.10.0, so Arc works
 
 - `@aifinpay/agent` ^2.10.0. 2.14.0 left the lock and the release-input check

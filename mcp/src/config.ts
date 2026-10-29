@@ -304,6 +304,12 @@ export function validatePaymentConfig(config: McpConfig): bigint {
     !paymentStableAsset(chain.name, config.payAsset)
   )
     throw new Error(`AIFINPAY_PAY_ASSET must be "${chain.native}" or a stablecoin symbol pinned for ${chain.name}`);
+  // BOT pays gas but has no USD price, so the SDK refuses a native quote there.
+  // Say so at startup rather than on the first payment.
+  if (chain.noNativePayment && (config.payAsset === undefined || config.payAsset === chain.native))
+    throw new Error(
+      `${chain.label} has no native payment: set AIFINPAY_PAY_ASSET to a stablecoin pinned for ${chain.name}; ${chain.native} pays gas only`
+    );
   // The POL-named cap means POL. Read on another chain it would silently cap
   // ETH gas at a number chosen for POL — 0.3 POL is ~$0.04, 0.3 ETH is ~$800.
   if (config.maxGasPol !== undefined && chain.name !== "polygon")

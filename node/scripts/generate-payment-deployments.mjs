@@ -28,6 +28,7 @@ const supportedEvmChains = new Set([
   "amoy",
   "arc",
   "arcTestnet",
+  "botchain",
 ]);
 
 // Source of truth: @aifinpay/deployments ships the canonical per-ecosystem
@@ -84,7 +85,6 @@ function validateEvm(deployments) {
     if (!deployment.settlementEnabled && !deployment.disabledReason) {
       fail(`${key} is disabled without disabledReason`);
     }
-    if (deployment.chain === "botchain") fail("BOT Chain must not be registered for v1.4");
     if (!Number.isInteger(deployment.chainId)) fail(`${key} has invalid chainId`);
 
     const addresses = [deployment.contracts?.splitter, deployment.contracts?.tokenList, deployment.contracts?.profiles];

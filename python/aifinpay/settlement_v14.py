@@ -34,7 +34,7 @@ from eth_account.messages import encode_typed_data
 from eth_utils import is_address, keccak, to_checksum_address
 
 from ._v14_deployments import V14_DEPLOYMENTS
-from .payment_chains import PAYMENT_CHAINS, pinned_token_decimals
+from .payment_chains import PAYMENT_CHAINS, native_payable, pinned_token_decimals
 
 ZERO = "0x0000000000000000000000000000000000000000"
 KNOWN_V14_ROUTES = ("merchant-aifp1", "agent-x402")
@@ -511,8 +511,8 @@ def execute_v14_settlement(call: Dict[str, Any], ctx: V14ExecutionContext) -> Di
     ):
         _fail("V14_CALL_MISMATCH", "route, method or quote field order disagrees with the supported ABI")
     native_asset = "POL" if expected_chain == "amoy" else PAYMENT_CHAINS[expected_chain]["native"]
-    stablecoin_only = expected_chain != "amoy" and PAYMENT_CHAINS[expected_chain].get("stablecoinOnly")
-    if _lc(q["ipCreator"]) != ZERO or (not stable and (stablecoin_only or call.get("asset") != native_asset)):
+    no_native = expected_chain != "amoy" and not native_payable(expected_chain)
+    if _lc(q["ipCreator"]) != ZERO or (not stable and (no_native or call.get("asset") != native_asset)):
         _fail("V14_UNSUPPORTED_ASSET", "This executor supports the chain's native asset or a pinned stablecoin, "
                                       "without creator payments")
     if _lc(ctx.expected_token or ZERO) != _lc(q["token"]):

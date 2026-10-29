@@ -1,4 +1,4 @@
-import { PAYMENT_CHAINS, paymentStableAsset, type PaymentChain } from "../src/paymentChains.js";
+import { nativePayable, PAYMENT_CHAINS, paymentStableAsset, type PaymentChain } from "../src/paymentChains.js";
 import { describe, it, expect, vi } from "vitest";
 import { privateKeyToAccount } from "viem/accounts";
 import {
@@ -190,8 +190,9 @@ async function fixture(network = "polygon", route = "merchant-aifp1") {
 }
 
 describe("authorized native v1.4 execution", () => {
-  // Stablecoin-only chains (Arc) have no native payment; see the refusal below.
-  const nativeChains = (Object.keys(PAYMENT_CHAINS) as PaymentChain[]).filter((c) => !PAYMENT_CHAINS[c].stablecoinOnly);
+  // Arc (stablecoinOnly) and BOT Chain (noNativePayment) have no native
+  // payment; see their refusals in settlementV14-stable.test.ts.
+  const nativeChains = (Object.keys(PAYMENT_CHAINS) as PaymentChain[]).filter((c) => nativePayable(PAYMENT_CHAINS[c]));
   it.each(["amoy", ...nativeChains])(
     "journals locally signed bounded transaction and verifies mined Payment on %s",
     async (network) => {

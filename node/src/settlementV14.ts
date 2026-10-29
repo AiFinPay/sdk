@@ -1,5 +1,6 @@
 import {
   PAYMENT_CHAINS,
+  nativePayable,
   paymentChain,
   paymentStableAsset,
   pinnedTokenDecimals,
@@ -375,7 +376,7 @@ export async function assertPreparedV14Recovery(
     call.function !== (stable ? STABLE_FUNCTION : NATIVE_FUNCTION) ||
     (stable
       ? !pin || lc(pin.address) !== lc(q.token)
-      : descriptor!.stablecoinOnly || call.asset !== descriptor!.native) ||
+      : !nativePayable(descriptor!) || call.asset !== descriptor!.native) ||
     (stable &&
       (lc(call.approval?.token ?? "") !== lc(q.token) ||
         lc(call.approval?.spender ?? "") !== lc(call.contract) ||
@@ -503,7 +504,7 @@ export async function executeV14Settlement(
     (!stable &&
       (expectedChain === "amoy"
         ? call.asset !== "POL"
-        : paymentChain(expectedChain)!.stablecoinOnly || call.asset !== paymentChain(expectedChain)!.native))
+        : !nativePayable(paymentChain(expectedChain)!) || call.asset !== paymentChain(expectedChain)!.native))
   ) {
     fail(
       "V14_UNSUPPORTED_ASSET",

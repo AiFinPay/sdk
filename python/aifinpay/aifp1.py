@@ -46,7 +46,7 @@ from eth_utils import keccak
 
 from ._v14_deployments import V14_DEPLOYMENTS
 from .client import _reporting_headers, _user_agent
-from .payment_chains import PAYMENT_CHAINS, pinned_token_decimals
+from .payment_chains import PAYMENT_CHAINS, native_payable, pinned_token_decimals
 from .settlement_v14 import (
     SettlementConfirmationPending,
     V14ExecutionContext,
@@ -263,6 +263,11 @@ def _stablecoin_only(chain: str) -> bool:
     return chain != "solana" and bool(PAYMENT_CHAINS.get(chain, {}).get("stablecoinOnly"))
 
 
+def _no_native_payment(chain: str) -> bool:
+    """The native token pays gas only: it has no USD price to check a quote (BOT)."""
+    return chain != "solana" and bool(PAYMENT_CHAINS.get(chain, {}).get("noNativePayment"))
+
+
 def _merchant_address(quote: dict[str, Any], chain: str) -> str:
     pay_to = quote.get("pay_to") or {}
     if chain == "solana":
@@ -418,7 +423,7 @@ def validate_native_quote(
 ) -> float:
     """Cross-check the selected native asset against its independent price."""
     native_asset = _native_asset(chain)
-    if _stablecoin_only(chain):
+    if chain != "solana" and not native_payable(chain):
         raise Aifp1QuoteError(f"{chain} has no native payment; pay in a pinned stablecoin")
     call = quote.get("settlement_call") or {}
     if call.get("splitter_version") != "1.4":
@@ -1436,8 +1441,13 @@ def aifp1_fetch(
     requested_chain = chain
     chain = "polygon" if chain is None else chain
     native_asset = _native_asset(chain)
-    if asset is None and _stablecoin_only(chain):
+    if asset is None and (_stablecoin_only(chain) or _no_native_payment(chain)):
         raise Aifp1QuoteError(f"{chain} has no native payment; set asset to a pinned stablecoin")
+    if asset == native_asset and _no_native_payment(chain):
+        raise Aifp1QuoteError(
+            f"{chain} has no native payment: {native_asset} has no USD price to check a quote against; "
+            "set asset to a pinned stablecoin"
+        )
     asset = native_asset if asset is None else asset
     stable = asset != native_asset or _stablecoin_only(chain)
     sol = chain == "solana"

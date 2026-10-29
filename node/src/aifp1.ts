@@ -2325,12 +2325,19 @@ function authorizedV14Chain(chain: Aifp1V14Chain | undefined): Aifp1V14Chain {
 }
 
 /** Native by default; stablecoin symbols must be pinned for the selected chain.
- * On a stablecoinOnly chain the native symbol names the token, never msg.value. */
+ * On a stablecoinOnly chain the native symbol names the token, never msg.value.
+ * On a noNativePayment chain the native token pays gas only. */
 function pinnedStableAsset(asset: string | undefined, chain: Aifp1V14Chain): string | null {
   const descriptor = paymentChain(chain)!;
+  const noNative = descriptor.noNativePayment === true;
   if (asset === undefined) {
-    if (!descriptor.stablecoinOnly) return null;
+    if (!descriptor.stablecoinOnly && !noNative) return null;
     throw new Aifp1QuoteError(`${descriptor.label} has no native payment; set v14.asset to a pinned stablecoin`);
+  }
+  if (noNative && asset === descriptor.native) {
+    throw new Aifp1QuoteError(
+      `${descriptor.label} has no native payment: ${descriptor.native} has no USD price to check a quote against; set v14.asset to a pinned stablecoin`
+    );
   }
   if (!descriptor.stablecoinOnly && asset === descriptor.native) return null;
   const pinned = paymentStableAsset(chain, asset);
