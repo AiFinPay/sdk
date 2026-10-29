@@ -1,3 +1,8 @@
+## MCP 2.14.1 — installs agent 2.10.0, so Arc works
+
+- MCP 2.14.0 pinned `@aifinpay/agent` 2.9.0 (no Arc) and could not pass
+  `prepublishOnly`; 2.14.1 installs 2.10.0. 2.14.0 was never published.
+
 ## Agent 2.10.0 / Python 2.8.0 / MCP 2.14.0 — Arc, and Solana records enabled
 
 - `@aifinpay/deployments` 2.1.0: Solana mainnet/devnet v1.4 resolve enabled

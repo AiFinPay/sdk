@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.14.1 — installs agent 2.10.0, so Arc works
+
+- `@aifinpay/agent` ^2.10.0. 2.14.0 left the lock and the release-input check
+  on 2.9.0, which has no Arc: the Arc tests failed and `npm publish` stopped
+  in `prepublishOnly`, so 2.14.0 was never published. Use 2.14.1.
+
 ## 2.14.0 — Arc and Arc Testnet
 
 - `AIFINPAY_PAY_CHAIN` accepts `arc` and `arctestnet` (from `@aifinpay/agent`
@@ -12,9 +18,6 @@
   twice) and never shows the dev-only testnet as an enabled production route.
 - Solana payments become possible once agent 2.10.0 is installed (its
   deployments 2.1.0 enables the records); the MCP checks are unchanged.
-- Dependency: `@aifinpay/agent` ^2.10.0 (lock and the release-input check
-  pinned 2.9.0, which has no Arc, so the Arc tests failed and `npm publish`
-  stopped in `prepublishOnly`).
 
 ## 2.13.1 — a refusal to pay an unverified site says what to do
 
