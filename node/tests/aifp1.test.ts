@@ -1270,6 +1270,19 @@ describe("aifp1: a gateway site keeps the merchant it was first paid as", () => 
     expect(settlements).toHaveLength(0);
   });
 
+  it("a gate that reads case literally keeps the batch for its own spelling", async () => {
+    const server = mockServer();
+    server.patterns = ["/Docs/*"];
+    const { agent, settlements } = await agentFor(server);
+    expect((await agent.fetchPaid(`${GATEWAY}/acme/Docs/a`)).status).toBe(200);
+    expect(settlements).toHaveLength(1);
+    expect((await agent.fetchPaid(`${GATEWAY}/acme/docs/x`)).status).toBe(200);
+    expect(settlements).toHaveLength(2);
+    expect((await agent.fetchPaid(`${GATEWAY}/acme/Docs/y`)).status).toBe(200);
+    expect((await agent.fetchPaid(`${GATEWAY}/acme/docs/x`)).status).toBe(200);
+    expect(settlements).toHaveLength(2);
+  });
+
   it("keeps refusing in the same process once the old batch is turned away", async () => {
     const server = mockServer();
     const { agent, settlements } = await agentFor(server);
@@ -2098,6 +2111,10 @@ describe("reading a gate's answers as the gate does", () => {
     ["/paid;x=1/a", "/paid/a"],
     ["/x/../paid/a", "/paid/a"],
     ["/paid/./a", "/paid/a"],
+    ["/docs/what%3F", "/docs/what%3f"],
+    ["/wiki/C%23", "/wiki/c%23"],
+    ["/caf\u00e9/x", "/caf%c3%a9/x"],
+    ["/caf%C3%A9/x", "/caf%c3%a9/x"],
     ["", "/"],
   ])("reads %s as %s", (raw, read) => {
     expect(readPath(raw)).toBe(read);

@@ -2,6 +2,10 @@
 
 ## 2.14.1 — a payer that reads a gate's answers as the gate does
 
+- A gate set to read case literally refusing another spelling no longer costs the
+  batch: it stays good for its own spelling, and the other page is bought once.
+- `%3F` and `%23` are part of a page's name and a character outside ASCII reads as its
+  escape, as in `@aifinpay/gate` 0.10.1.
 - A batch for `/paid/` opens `/paid`, as a gate from `@aifinpay/gate` 0.9.1 reads it.
   It settled again on every read of the section page.
 - A URL in another case or spelling matches its pattern the way a gate from 0.10

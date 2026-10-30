@@ -61,7 +61,7 @@ test("reporting source target refuses every stale package version without claimi
   verifyCohortVersions({
     mcp: "2.16.2",
     agent: "2.14.1",
-    python: "2.11.1",
+    python: "2.11.2",
     skill: "2.12.2",
   });
   for (const [name, oldVersion] of Object.entries({

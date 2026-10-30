@@ -676,12 +676,12 @@ export function patternCovers(pattern: string, path: string): boolean {
 function decodeAscii(text: string): string {
   return text.replace(/%([0-9a-f]{2})/gi, (match, hex: string) => {
     const code = parseInt(hex, 16);
-    return code < 0x80 ? String.fromCharCode(code) : match;
+    return code < 0x80 && code !== 0x3f && code !== 0x23 ? String.fromCharCode(code) : match;
   });
 }
 
 /** Mirror of inspectPath in @aifinpay/gate: the page a gate reads a spelling as. */
-export function readPath(raw: string): string {
+export function readPath(raw: string, { literalCase = false }: { literalCase?: boolean } = {}): string {
   let path = String(raw ?? "/").split(/[?#]/, 1)[0] || "/";
   for (let round = 0; round < 3; round++) {
     const next = decodeAscii(path).replace(/\\/g, "/");
@@ -695,15 +695,18 @@ export function readPath(raw: string): string {
     if (segment === "..") out.pop();
     else out.push(segment);
   }
-  return ("/" + out.join("/")).toLowerCase();
+  const read = ("/" + out.join("/")).replace(/[^\x00-\x7f]+/g, (run) =>
+    Array.from(new TextEncoder().encode(run), (b) => `%${b.toString(16).padStart(2, "0")}`).join("")
+  );
+  return literalCase ? read.replace(/%[0-9a-f]{2}/gi, (hex) => hex.toLowerCase()) : read.toLowerCase();
 }
 
 /** Mirror of spelledAsPath in @aifinpay/gate: a pattern or a receipt's resource, read the way a path is. */
-export function readResource(resource: string): string {
+export function readResource(resource: string, options: { literalCase?: boolean } = {}): string {
   const text = String(resource ?? "");
   if (!text.startsWith("/")) return text;
-  if (!text.endsWith("/*")) return readPath(text);
-  const base = readPath(text.slice(0, -2));
+  if (!text.endsWith("/*")) return readPath(text, options);
+  const base = readPath(text.slice(0, -2), options);
   return base === "/" ? "/*" : `${base}/*`;
 }
 
@@ -837,6 +840,8 @@ export function idempotencyKeyFor(p: { quoteId: string; chain: string; asset: st
 // ── Receipt cache ─────────────────────────────────────────────────────────
 
 export interface Aifp1CachedReceipt {
+  /** The gate refused another case of this spelling, so it reads case literally. */
+  literalCase?: boolean;
   /** origin + slug, as parseGatewayUrl() computes it. */
   site: string;
   merchantId: string;
@@ -1024,6 +1029,7 @@ export class Aifp1ReceiptCache {
   find(site: string, restPath: string, merchantId?: string, payer?: string): Aifp1CachedReceipt | undefined {
     const now = Date.now();
     const asked = readPath(restPath);
+    const literal = readPath(restPath, { literalCase: true });
     return this.entries.find(
       (e) =>
         e.site === site &&
@@ -1031,7 +1037,9 @@ export class Aifp1ReceiptCache {
         (payer === undefined || e.payer === undefined || sameAccount(e.payer, payer)) &&
         e.remaining > 0 &&
         e.expiresAt - EXPIRY_MARGIN_MS > now &&
-        scopeCovers(e.scope, readResource(e.resource), asked)
+        (e.literalCase
+          ? scopeCovers(e.scope, readResource(e.resource, { literalCase: true }), literal)
+          : scopeCovers(e.scope, readResource(e.resource), asked))
     );
   }
 
@@ -1641,6 +1649,24 @@ export async function aifp1Fetch(
     // unguarded would retire a full batch the first time a route was free.
     const remaining = quotaRemaining(resp);
     if (remaining !== null) deps.cache.noteQuotaRemaining(held, remaining);
+  }
+
+  // find() folds case, as a gate does by default. One set to read case literally
+  // refuses another spelling, and the batch is still good for its own.
+  if (
+    held &&
+    resp.status === 403 &&
+    !scopeCovers(held.scope, readResource(held.resource, { literalCase: true }), readPath(restPath, { literalCase: true }))
+  ) {
+    const refusal = await resp
+      .clone()
+      .json()
+      .catch(() => null);
+    if (refusal?.error === "AIFP-403") {
+      held.literalCase = true;
+      held = undefined;
+      resp = await send(undefined);
+    }
   }
 
   if (resp.status !== 402) {
