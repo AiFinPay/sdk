@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.11.1 — Solana RPC URLs without a path
+
+- The payment HTTP transport compared `response.url` to the request URL as
+  strings. fetch reports `https://host` as `https://host/`, so a Solana RPC
+  configured without a trailing slash (`https://api.devnet.solana.com`) was
+  refused as a redirect (`redirect_refused`), breaking `balance` and Solana
+  payments. The URLs are now compared after parsing; a real redirect is still
+  refused.
+
 ## 2.11.0 — BOT Chain (USDT only)
 
 - `PAYMENT_CHAINS` gains `botchain` (677), marked `noNativePayment`: BOT pays

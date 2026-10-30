@@ -6,6 +6,11 @@ versions from manifests/registries, deployment metadata from
 [the registry](deployments/registry/splitter/INDEX.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## Agent 2.11.1 — Solana RPC URLs without a path
+
+- `settlementHttp` compares parsed URLs, so an RPC such as
+  `https://api.devnet.solana.com` is no longer refused as a redirect.
+
 ## MCP 2.15.3 — bundles skill 2.12.0
 
 - MCP depends on and serves skill 2.12.0; 2.15.2 was published with 2.11.0.
