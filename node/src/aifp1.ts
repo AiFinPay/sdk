@@ -1662,7 +1662,8 @@ export async function aifp1Fetch(
       .clone()
       .json()
       .catch(() => null);
-    if (refusal?.error === "AIFP-403") {
+    // Only a refusal about the scope: a policy block or a bad token is not cured by buying.
+    if (refusal?.error === "AIFP-403" && String(refusal.detail ?? "").includes("scoped to")) {
       held.literalCase = true;
       held = undefined;
       resp = await send(undefined);

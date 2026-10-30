@@ -1283,6 +1283,16 @@ describe("aifp1: a gateway site keeps the merchant it was first paid as", () => 
     expect(settlements).toHaveLength(2);
   });
 
+  it("a refusal that is not about the scope is not paid around, in any spelling", async () => {
+    const server = mockServer();
+    server.patterns = ["/paid/*"];
+    const { agent, settlements } = await agentFor(server);
+    expect((await agent.fetchPaid(`${GATEWAY}/acme/paid/a`)).status).toBe(200);
+    server.merchants.acme = "mrch_squatter";
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/PAID/b`)).rejects.toBeInstanceOf(Aifp1ReceiptRejectedError);
+    expect(settlements).toHaveLength(1);
+  });
+
   it("keeps refusing in the same process once the old batch is turned away", async () => {
     const server = mockServer();
     const { agent, settlements } = await agentFor(server);
