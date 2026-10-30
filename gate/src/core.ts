@@ -198,13 +198,16 @@ export const HEADER_MODE = "AIFP-Mode";
 export const HEADER_SHADOW_STATUS = "AIFP-Shadow-Status";
 /** On an answer that depends on who asked: a shared cache keyed by URL must not hand it to the next caller. */
 export const NO_STORE = "private, no-store, max-age=0";
-/** These outrank Cache-Control at the CDN they address, so a paid answer must not carry them. */
+/** These outrank Cache-Control at the cache they address, so a paid answer must not carry them. */
 export const CDN_CACHE_HEADERS = [
   "cdn-cache-control",
   "surrogate-control",
   "cloudflare-cdn-cache-control",
   "vercel-cdn-cache-control",
   "netlify-cdn-cache-control",
+  "edge-control",
+  "akamai-cache-control",
+  "x-accel-expires",
 ];
 
 export function createGate(options: GateOptions): (req: GateRequest) => Promise<GateResult> {

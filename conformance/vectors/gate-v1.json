@@ -2205,6 +2205,70 @@
    }
   },
   {
+   "id": "scope.encoded_mark",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A batch bought for a page with an encoded mark opens that page",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/what%3Fx",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       200,
+       301,
+       302,
+       307,
+       308,
+       404
+      ]
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/paid/what%3Fx"
+     }
+    }
+   }
+  },
+  {
+   "id": "scope.before_the_mark",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A batch for a page does not open a page that only starts like it",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/what%3Fx",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/paid/what"
+     }
+    }
+   }
+  },
+  {
    "id": "scope.encoded_resource",
    "group": "scope",
    "level": "must",
@@ -3196,10 +3260,34 @@
       "origin": true,
       "headers": {
        "cdn-cache-control": {
-        "absentOr": "no-store"
+        "absentOr": [
+         "no-store",
+         "0"
+        ]
        },
        "surrogate-control": {
-        "absentOr": "no-store"
+        "absentOr": [
+         "no-store",
+         "0"
+        ]
+       },
+       "edge-control": {
+        "absentOr": [
+         "no-store",
+         "0"
+        ]
+       },
+       "akamai-cache-control": {
+        "absentOr": [
+         "no-store",
+         "0"
+        ]
+       },
+       "x-accel-expires": {
+        "absentOr": [
+         "no-store",
+         "0"
+        ]
        }
       }
      }
@@ -5527,6 +5615,64 @@
      "request": {
       "method": "GET",
       "path": "/x%23/../paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.still_encoded",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A dot segment still encoded after the last round does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/%2525252e%2525252e/x",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.still_encoded_deeper",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "One layer deeper, for a server that decodes before the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/%252525252e%252525252e/x",
       "ua": "gptbot"
      },
      "expect": {

@@ -20,7 +20,11 @@ _STATUS = {200: "200 OK", 400: "400 Bad Request", 402: "402 Payment Required", 4
 class _WsgiRequest:
     def __init__(self, environ: Dict[str, Any]):
         # The server decoded this, so a "?" or "#" in it is part of the path, not its end.
-        self.path = (environ.get("PATH_INFO") or "/").replace("?", "%3F").replace("#", "%23")
+        # PEP 3333: PATH_INFO holds the URL's bytes as latin-1 characters.
+        path = environ.get("PATH_INFO") or "/"
+        if not path.isascii() and all(ord(c) <= 0xFF for c in path):
+            path = "".join(c if ord(c) < 0x80 else f"%{ord(c):02x}" for c in path)
+        self.path = path.replace("?", "%3F").replace("#", "%23")
         self.method = environ.get("REQUEST_METHOD", "GET")
         self._environ = environ
 

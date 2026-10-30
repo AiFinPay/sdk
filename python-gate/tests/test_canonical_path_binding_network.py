@@ -210,7 +210,7 @@ def test_a_mount_with_no_resource_observes_nothing_for_reporting_v2():
     assert gt.reporting_for(req(path="/private/customer-42"), gt.decide(req(path="/private/customer-42"))) is None
 
 
-CDN_HEADERS = [("CDN-Cache-Control", "max-age=600"), ("Surrogate-Control", "max-age=600"), ("X-Own", "1")]
+CDN_HEADERS = [("CDN-Cache-Control", "max-age=600"), ("Surrogate-Control", "max-age=600"), ("Edge-Control", "max-age=600"), ("Akamai-Cache-Control", "max-age=600"), ("X-Accel-Expires", "600"), ("X-Own", "1")]
 
 
 def test_wsgi_drops_a_cdns_own_cache_header_on_a_paid_response():
@@ -222,7 +222,8 @@ def test_wsgi_drops_a_cdns_own_cache_header_on_a_paid_response():
     seen = {}
     list(g.AifpGateWSGI(own, gate(routes=[g.Route("/paid")]))(
         environ, lambda status, headers, exc_info=None: seen.update(headers=[k.lower() for k, _ in headers])))
-    assert "cdn-cache-control" not in seen["headers"] and "surrogate-control" not in seen["headers"]
+    for name in ("cdn-cache-control", "surrogate-control", "edge-control", "akamai-cache-control", "x-accel-expires"):
+        assert name not in seen["headers"]
     assert "x-own" in seen["headers"]
 
 
@@ -245,4 +246,61 @@ def test_asgi_drops_a_cdns_own_cache_header_on_a_paid_response():
     scope = {"type": "http", "method": "GET", "path": "/paid", "headers": [(b"aifp-receipt", token().encode())]}
     asyncio.run(g.AifpGateMiddleware(own, gate=gate(routes=[g.Route("/paid")]))(scope, receive, send))
     names = [k for k, _ in sent[0]["headers"]]
-    assert b"cdn-cache-control" not in names and b"surrogate-control" not in names and b"x-own" in names
+    for name in (b"cdn-cache-control", b"surrogate-control", b"edge-control", b"akamai-cache-control", b"x-accel-expires"):
+        assert name not in names
+    assert b"x-own" in names
+
+
+@pytest.mark.parametrize("raw", ["/paid/%2525252e%2525252e/x", "/paid/%252525252e%252525252e/x", "/z#/..;/paid/a"])
+def test_a_spelling_that_cannot_be_read_one_way_is_refused(raw):
+    assert g.inspect_path(raw).ambiguous
+    assert routed().decide(req(path=raw, **GPTBOT)).status == 400
+
+
+def test_an_escape_is_lower_case_even_when_case_counts():
+    assert g.inspect_path("/Caf%C3%A9", case_sensitive=True).path == "/Caf%c3%a9"
+
+
+def test_a_path_read_again_reads_the_same():
+    pieces = ["paid", "A", "%2e", "%252e", "%2e%2e", "..", ".", ";x=1", "%3F", "%253F", "%23", "%25", "%2525", "%2f",
+              "%252f", "\\", "caf\u00e9", "%C3%A9", "%", "%4", "%41", "%2541", "%3B", "%5C", ""]
+    for a in pieces:
+        for b in pieces:
+            for c in pieces:
+                raw = f"/{a}/{b}{c}/x"
+                for case_sensitive in (False, True):
+                    once = g.inspect_path(raw, case_sensitive=case_sensitive)
+                    if not once.ambiguous:
+                        assert g.inspect_path(once.path, case_sensitive=case_sensitive) == once, raw
+
+
+def test_an_exact_route_beats_a_wildcard_and_a_tie_goes_to_the_paid_one():
+    wild, exact = g.Route("/x/*"), g.Route("/x/y", "premium")
+    assert gate(routes=[wild, exact]).route_for("/x/y") is exact
+    assert gate(routes=[exact, wild]).route_for("/x/y") is exact
+    section, page = g.Route("/report/*"), g.Route("/report", "complex")
+    assert gate(routes=[section, page]).route_for("/report") is page
+    closed = g.Route("/docs/*", "premium")
+    opened = g.Route("/Docs/*", paywall=False)
+    assert gate(routes=[opened, closed]).route_for("/docs/x") is closed
+
+
+@pytest.mark.parametrize("pattern,path", [
+    ("/caf%C3%A9/*", "/caf\u00e9/x"), ("/caf\u00e9/*", "/caf\u00e9/x"), ("/caf\u00e9/*", "/caf%C3%A9/x"), ("/wiki/C%23", "/wiki/C%23"),
+])
+def test_a_route_with_an_escape_or_a_character_is_the_page_it_names(pattern, path):
+    assert gate(routes=[g.Route(pattern, "premium")]).decide(req(path=path, **GPTBOT)).body["unit_weight"] == 10
+
+
+def test_the_wsgi_adapter_reads_pep_3333_bytes():
+    from aifinpay_gate.wsgi import _WsgiRequest
+    assert _WsgiRequest({"PATH_INFO": "/caf\u00c3\u00a9/x"}).path == "/caf%c3%a9/x"
+    assert g.inspect_path(_WsgiRequest({"PATH_INFO": "/wiki/C#"}).path).path == "/wiki/c%23"
+
+
+def test_a_receipt_names_the_page_before_the_mark_only():
+    gt = gate(routes=None)
+    asked = gt.decide(req(path="/docs/what%3F", **GPTBOT))
+    assert asked.status == 402 and asked.body["resource"] == "/docs/what%3F"
+    assert gt.decide(req(path="/docs/what%3F", **{**GPTBOT, "AIFP-Receipt": token(resource="/docs/what%3F", scope="exact")})).status != 403
+    assert gt.decide(req(path="/docs/what%3F", **{**GPTBOT, "AIFP-Receipt": token(resource="/docs/what", scope="exact")})).status == 403

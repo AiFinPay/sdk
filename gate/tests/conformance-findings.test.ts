@@ -112,7 +112,7 @@ describe("no answer that depends on who asked can be stored by a shared cache", 
     [
       "writeHead",
       (res: { writeHead: (s: number, h: unknown) => void }) =>
-        res.writeHead(200, { "CDN-Cache-Control": "max-age=600", "Surrogate-Control": "max-age=600" }),
+        res.writeHead(200, { "CDN-Cache-Control": "max-age=600", "Surrogate-Control": "max-age=600", "Edge-Control": "max-age=600", "Akamai-Cache-Control": "max-age=600", "X-Accel-Expires": "600" }),
     ],
     [
       "a flat writeHead",
@@ -145,6 +145,7 @@ describe("no answer that depends on who asked can be stored by a shared cache", 
       expect(response.status).toBe(200);
       expect(response.headers.get("cdn-cache-control")).toBeNull();
       expect(response.headers.get("surrogate-control")).toBeNull();
+      for (const name of ["edge-control", "akamai-cache-control", "x-accel-expires"]) expect(response.headers.get(name)).toBeNull();
       expect(response.headers.get("cache-control")).toBe(NO_STORE);
     });
   }

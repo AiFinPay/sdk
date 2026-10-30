@@ -87,8 +87,101 @@ describe("inspectPath", () => {
     });
   }
 
-  it("keeps the case when asked to", () => {
+  it("keeps the case when asked to, and always lower-cases an escape", () => {
     expect(inspectPath("/PAID/A", { caseSensitive: true }).path).toBe("/PAID/A");
+    expect(inspectPath("/Caf%C3%A9", { caseSensitive: true }).path).toBe("/Caf%c3%a9");
+  });
+
+  for (const [raw, path] of [
+    ["/docs/what%3F", "/docs/what%3f"],
+    ["/docs/what%253F", "/docs/what%3f"],
+    ["/wiki/C%23", "/wiki/c%23"],
+    ["/caf\u00e9/X", "/caf%c3%a9/x"],
+    ["/caf%C3%A9/X", "/caf%c3%a9/x"],
+    ["/caf\u00c3\u00a9/X", "/caf%c3%a9/x"],
+    ["/100%25", "/100%"],
+  ] as const) {
+    it(`${JSON.stringify(raw)} is its own page`, () => {
+      expect(inspectPath(raw)).toEqual({ path, ambiguous: false });
+    });
+  }
+
+  for (const raw of [
+    "/paid/%2525252e%2525252e/x",
+    "/paid/%252525252e%252525252e/x",
+    "/%25252570aid/a",
+    "/z#/..;/paid/a",
+    "/paid/a#f",
+  ]) {
+    it(`${raw} cannot be read one way`, () => {
+      expect(inspectPath(raw).ambiguous).toBe(true);
+    });
+  }
+
+  it("a path read again reads the same", () => {
+    const pieces = ["paid", "A", "%2e", "%252e", "%2e%2e", "..", ".", ";x=1", "%3F", "%253F", "%23", "%25", "%2525", "%2f", "%252f", "\\", "caf\u00e9", "%C3%A9", "%", "%4", "%41", "%2541", "%3B", "%5C", ""];
+    for (const a of pieces) {
+      for (const b of pieces) {
+        for (const c of pieces) {
+          const raw = `/${a}/${b}${c}/x`;
+          for (const caseSensitive of [false, true]) {
+            const once = inspectPath(raw, { caseSensitive });
+            if (!once.ambiguous) expect(inspectPath(once.path, { caseSensitive }), raw).toEqual(once);
+          }
+        }
+      }
+    }
+  });
+});
+
+describe("which pattern a path falls under", () => {
+  const paywalled = (pattern: string, tier = "standard", paywall_enabled = true) => ({ ...resource(pattern, tier), paywall_enabled });
+
+  it("an exact pattern beats a wildcard in any order", () => {
+    const wild = paywalled("/x/*");
+    const exact = paywalled("/x/y", "premium");
+    expect(matchResource([wild, exact], "/x/y")).toBe(exact);
+    expect(matchResource([exact, wild], "/x/y")).toBe(exact);
+    const section = paywalled("/report/*");
+    const page = paywalled("/report", "complex");
+    expect(matchResource([section, page], "/report")).toBe(page);
+  });
+
+  it("on a tie the paid one wins", () => {
+    const open = paywalled("/Docs/*", "standard", false);
+    const paid = paywalled("/docs/*", "premium");
+    expect(matchResource([open, paid], "/docs/x")).toBe(paid);
+    expect(matchResource([paid, open], "/docs/x")).toBe(paid);
+  });
+
+  it("an escaped mark is part of the page, not the end of it", () => {
+    const page = paywalled("/wiki/C%23", "premium");
+    expect(matchResource([page], "/wiki/C%23")).toBe(page);
+    expect(matchResource([page], "/wiki/C")).toBeNull();
+    expect(matchResource([paywalled("/paid")], "/paid%3Fx")).toBeNull();
+    const cafe = paywalled("/caf\u00e9/*", "premium");
+    expect(matchResource([cafe], "/caf%C3%A9/x")).toBe(cafe);
+  });
+});
+
+describe("the same read at every step", () => {
+  it("a junk segment that decodes further is refused, not priced as what is left", async () => {
+    const { gate } = await gateWith();
+    const answer = await gate(req("/paid/%2525252e%2525252e/x", GPTBOT));
+    expect(answer.status).toBe(400);
+  });
+
+  it("a receipt for the page named in the 402 opens that page, and only that page", async () => {
+    const { gate, iss } = await gateWith({ registry: undefined, resource: undefined });
+    const asked = await gate(req("/docs/what%3F", GPTBOT));
+    expect(asked.status).toBe(402);
+    const named = (asked as { body: { resource: string } }).body.resource;
+    expect(named).toBe("/docs/what%3F");
+    const claims = { sub: "0xabc", typ_aifp: "quota", receipt_id: "r1", resource: named, scope: "exact", unit_quota: 5 };
+    const bought = await iss.sign(claims);
+    expect((await gate(req("/docs/what%3F", { ...GPTBOT, "AIFP-Receipt": bought }))).status).toBe(200);
+    const other = await iss.sign({ ...claims, receipt_id: "r2", resource: "/docs/what" });
+    expect((await gate(req("/docs/what%3F", { ...GPTBOT, "AIFP-Receipt": other }))).status).toBe(403);
   });
 });
 

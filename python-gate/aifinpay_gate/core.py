@@ -12,6 +12,7 @@ of truth for a rule the merchant edits in the dashboard.
 
 import math
 import re
+import sys
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -43,6 +44,7 @@ NO_STORE = "private, no-store, max-age=0"
 CDN_CACHE_HEADERS = frozenset({
     "cdn-cache-control", "surrogate-control", "cloudflare-cdn-cache-control",
     "vercel-cdn-cache-control", "netlify-cdn-cache-control",
+    "edge-control", "akamai-cache-control", "x-accel-expires",
 })
 MODES = ("shadow", "enforce")
 NETWORK_MODES = ("live", "test")
@@ -241,15 +243,17 @@ class Gate:
     def route_for(self, path: str, method: Optional[str] = None) -> Optional[Route]:
         asked = inspect_path(path, case_sensitive=self.case_sensitive).path
         best: Optional[Route] = None
-        best_length = -1
+        best_rank = -1
         for r in self.routes or ():
             if r.methods is not None and method is not None and method.upper() not in r.methods:
                 continue
             pattern = spelled_as_path(r.pattern, case_sensitive=self.case_sensitive)
             if not pattern_covers(pattern, asked):
                 continue
-            if len(pattern) > best_length:
-                best, best_length = r, len(pattern)
+            # An exact pattern wins, then the longest wildcard. On a tie the paid one wins.
+            rank = len(pattern) if pattern.endswith("/*") else sys.maxsize
+            if rank > best_rank or (rank == best_rank and best is not None and not best.paywall and r.paywall):
+                best, best_rank = r, rank
         return best
 
     def discovery_resources(self) -> List[Dict[str, Any]]:

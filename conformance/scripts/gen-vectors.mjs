@@ -169,6 +169,8 @@ add("scope.prefix_section_slash", "must", "content-enforce", "The same batch ope
 add("scope.spelling_case", "must", "content-enforce", "A paid batch is not refused over the case of a path", step(pay("r", "/PAID/a"), { status: PAID_SPELLING }), { receipts: { r: R() } });
 add("scope.spelling_slash", "must", "content-enforce", "A paid batch is not refused over a trailing slash", step(pay("r", "/paid/a/"), { status: PAID_SPELLING }), { receipts: { r: R() } });
 add("scope.spelling_exact_slash", "must", "content-enforce", "A paid batch for an exact pattern is not refused over a trailing slash", step(pay("x", "/report/"), { status: PAID_SPELLING }), { receipts: { x: R({ resource: "/report" }) } });
+add("scope.encoded_mark", "must", "content-enforce", "A batch bought for a page with an encoded mark opens that page", step(pay("x", "/paid/what%3Fx"), { status: PAID_SPELLING }), { receipts: { x: R({ resource: "/paid/what%3Fx" }) } });
+add("scope.before_the_mark", "must", "content-enforce", "A batch for a page does not open a page that only starts like it", step(pay("x", "/paid/what%3Fx"), noOrigin(403)), { receipts: { x: R({ resource: "/paid/what" }) } });
 add("scope.encoded_resource", "must", "content-enforce", "A batch bought for an encoded spelling opens that page", step(pay("x", "/paid/my%20report"), { status: PAID_SPELLING }), { receipts: { x: R({ resource: "/paid/my%20report" }) } });
 add("scope.other_path", "must", "content-enforce", "An exact receipt for another path is refused", step(pay("x"), refused403()), { receipts: { x: R({ resource: "/other" }) } });
 add("scope.other_path_detail", "parity", "content-enforce", "The scope refusal names the scope", step(pay("x"), refused403("receipt is scoped to /other (exact), not /paid/a")), { receipts: { x: R({ resource: "/other" }) } });
@@ -203,7 +205,7 @@ add("cache.challenge", "must", "content-enforce", "A 402 is never stored", step(
 add("cache.refusal", "must", "content-enforce", "A 403 is never stored", step(pay("x"), { ...noOrigin(403), headers: noStore }), { receipts: { x: R({}, { mutate: "tamper_payload" }) } });
 add("cache.unavailable", "must", "content-enforce", "A 503 is never stored", step(pay(), { ...noOrigin(503), headers: noStore }), { receipts: { r: R() }, fault: { jwks: true }, needs: ["fault:jwks"] });
 add("cache.paid", "must", "content-enforce", "A paid response is never stored, whatever the origin says", step(pay(), { status: 200, origin: true, headers: noStore }), { receipts: { r: R() } });
-add("cache.paid_at_cdn", "must", "content-enforce", "A paid response carries nothing a CDN reads before Cache-Control as leave to store it", step(pay(), { status: 200, origin: true, headers: { "cdn-cache-control": { absentOr: "no-store" }, "surrogate-control": { absentOr: "no-store" } } }), { receipts: { r: R() } });
+add("cache.paid_at_cdn", "must", "content-enforce", "A paid response carries nothing a CDN reads before Cache-Control as leave to store it", step(pay(), { status: 200, origin: true, headers: Object.fromEntries(["cdn-cache-control", "surrogate-control", "edge-control", "akamai-cache-control", "x-accel-expires"].map((name) => [name, { absentOr: ["no-store", "0"] }])) }), { receipts: { r: R() } });
 add("cache.exempt", "must", "content-enforce", "A reader's copy of a protected page cannot answer an agent", step(get("chrome"), { status: 200, origin: true, headers: noStore }), { unless: "pre_cache" });
 add("cache.shadow_agent", "should", "content-shadow", "An agent's shadow response is not stored", step(get("gptbot"), { status: 200, origin: true, headers: noStore }), { unless: "pre_cache" });
 add("cache.shadow_keeps_origin", "should", "content-shadow", "Shadow leaves the origin's cache header alone before a cache it runs ahead of", step(get("gptbot"), served({ "cache-control": "public, max-age=600", "cdn-cache-control": "public, max-age=600", "surrogate-control": "max-age=600" })), { needs: ["pre_cache", "proxy"] });
@@ -279,6 +281,8 @@ alias("exact_case", "A case change does not walk around an exact pattern", "/Rep
 alias("exact_query", "A query string does not walk around an exact pattern", "/report?utm_source=x");
 alias("encoded_query_mark", "An encoded question mark does not end the path", "/x%3F/../paid/a");
 alias("encoded_hash", "An encoded hash does not end the path", "/x%23/../paid/a");
+alias("still_encoded", "A dot segment still encoded after the last round does not walk around the gate", "/paid/%2525252e%2525252e/x");
+alias("still_encoded_deeper", "One layer deeper, for a server that decodes before the gate", "/paid/%252525252e%252525252e/x");
 alias("dotdot_param_pop", "A dot-dot with a parameter does not move the price", "/paid/..;/x");
 alias("matrix_dotdot_pop", "A dot-dot behind a parameter does not pop past the pattern", "/paid/..;/../a");
 alias("empty_dotdot", "A dot-dot behind an empty segment does not pop past the pattern", "/paid//../a");

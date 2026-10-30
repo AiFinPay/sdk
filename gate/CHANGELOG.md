@@ -4,6 +4,14 @@
 
 0.10.0 was never published. Publish this one, after `@aifinpay/agent` 2.14.1.
 
+- A path reads the same however many times it is read. `?` and `#` stay escaped, and
+  a spelling still decoding after the last round is ambiguous, as is a raw `#`. Before,
+  `/paid/%2525252e%2525252e/x` was read a second time as `/x` and served free.
+- A character outside ASCII reads as its escape, in a path and in a pattern, so
+  `/café/*` and `/caf%C3%A9/*` are one page. An escape is lower case even with `caseSensitive`.
+- An exact pattern beats a wildcard in any order, and a tie goes to the paid one.
+- `Edge-Control`, `Akamai-Cache-Control` and `X-Accel-Expires` join the headers a paid
+  response drops. Behind nginx `X-Accel-Expires` let a paid page be stored.
 - A pattern and a receipt's resource are read the way a path is read, escapes
   included. In 0.10.0 only the path was: a pattern for `/my%20report` cost the
   default, and a receipt for `/data/my%20report` answered 403 on that page.

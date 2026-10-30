@@ -1669,11 +1669,11 @@
    "/paid/a#f",
    {
     "path": "/paid/a",
-    "ambiguous": false
+    "ambiguous": true
    },
    {
     "path": "/paid/a",
-    "ambiguous": false
+    "ambiguous": true
    }
   ],
   [
@@ -1859,7 +1859,7 @@
     "ambiguous": false
    },
    {
-    "path": "/a%E2%82%ACb",
+    "path": "/a%e2%82%acb",
     "ambiguous": false
    }
   ],
@@ -1905,6 +1905,127 @@
    {
     "path": "/",
     "ambiguous": true
+   }
+  ],
+  [
+   "/docs/what%3F",
+   {
+    "path": "/docs/what%3f",
+    "ambiguous": false
+   },
+   {
+    "path": "/docs/what%3f",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/docs/what%253F",
+   {
+    "path": "/docs/what%3f",
+    "ambiguous": false
+   },
+   {
+    "path": "/docs/what%3f",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/wiki/C%23",
+   {
+    "path": "/wiki/c%23",
+    "ambiguous": false
+   },
+   {
+    "path": "/wiki/C%23",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/x%3F/../paid/a",
+   {
+    "path": "/paid/a",
+    "ambiguous": true
+   },
+   {
+    "path": "/paid/a",
+    "ambiguous": true
+   }
+  ],
+  [
+   "/z#/..;/paid/a",
+   {
+    "path": "/z",
+    "ambiguous": true
+   },
+   {
+    "path": "/z",
+    "ambiguous": true
+   }
+  ],
+  [
+   "/paid/%2525252e%2525252e/x",
+   {
+    "path": "/paid/%2e%2e/x",
+    "ambiguous": true
+   },
+   {
+    "path": "/paid/%2e%2e/x",
+    "ambiguous": true
+   }
+  ],
+  [
+   "/paid/%252525252e%252525252e/x",
+   {
+    "path": "/paid/%252e%252e/x",
+    "ambiguous": true
+   },
+   {
+    "path": "/paid/%252e%252e/x",
+    "ambiguous": true
+   }
+  ],
+  [
+   "/café/X",
+   {
+    "path": "/caf%c3%a9/x",
+    "ambiguous": false
+   },
+   {
+    "path": "/caf%c3%a9/X",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/caf%C3%A9/X",
+   {
+    "path": "/caf%c3%a9/x",
+    "ambiguous": false
+   },
+   {
+    "path": "/caf%c3%a9/X",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/100%25",
+   {
+    "path": "/100%",
+    "ambiguous": false
+   },
+   {
+    "path": "/100%",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/%zz",
+   {
+    "path": "/%zz",
+    "ambiguous": false
+   },
+   {
+    "path": "/%zz",
+    "ambiguous": false
    }
   ]
  ],
@@ -1953,6 +2074,21 @@
    "/A/B/*",
    "/a/b/*",
    "/A/B/*"
+  ],
+  [
+   "/wiki/C%23",
+   "/wiki/c%23",
+   "/wiki/C%23"
+  ],
+  [
+   "/café/*",
+   "/caf%c3%a9/*",
+   "/caf%c3%a9/*"
+  ],
+  [
+   "/caf%C3%A9/*",
+   "/caf%c3%a9/*",
+   "/caf%c3%a9/*"
   ]
  ],
  "scenarios": [
