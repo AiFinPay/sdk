@@ -169,8 +169,6 @@ add("scope.prefix_section_slash", "must", "content-enforce", "The same batch ope
 add("scope.spelling_case", "must", "content-enforce", "A paid batch is not refused over the case of a path", step(pay("r", "/PAID/a"), { status: PAID_SPELLING }), { receipts: { r: R() } });
 add("scope.spelling_slash", "must", "content-enforce", "A paid batch is not refused over a trailing slash", step(pay("r", "/paid/a/"), { status: PAID_SPELLING }), { receipts: { r: R() } });
 add("scope.spelling_exact_slash", "must", "content-enforce", "A paid batch for an exact pattern is not refused over a trailing slash", step(pay("x", "/report/"), { status: PAID_SPELLING }), { receipts: { x: R({ resource: "/report" }) } });
-add("scope.encoded_mark", "must", "content-enforce", "A batch bought for a page with an encoded mark opens that page", step(pay("x", "/paid/what%3Fx"), { status: PAID_SPELLING }), { receipts: { x: R({ resource: "/paid/what%3Fx" }) } });
-add("scope.before_the_mark", "must", "content-enforce", "A batch for a page does not open a page that only starts like it", step(pay("x", "/paid/what%3Fx"), noOrigin([403, 404])), { receipts: { x: R({ resource: "/paid/what" }) } });
 add("scope.encoded_resource", "must", "content-enforce", "A batch bought for an encoded spelling opens that page", step(pay("x", "/paid/my%20report"), { status: PAID_SPELLING }), { receipts: { x: R({ resource: "/paid/my%20report" }) } });
 add("scope.other_path", "must", "content-enforce", "An exact receipt for another path is refused", step(pay("x"), refused403()), { receipts: { x: R({ resource: "/other" }) } });
 add("scope.other_path_detail", "parity", "content-enforce", "The scope refusal names the scope", step(pay("x"), refused403("receipt is scoped to /other (exact), not /paid/a")), { receipts: { x: R({ resource: "/other" }) } });
@@ -281,6 +279,9 @@ alias("exact_case", "A case change does not walk around an exact pattern", "/Rep
 alias("exact_query", "A query string does not walk around an exact pattern", "/report?utm_source=x");
 alias("encoded_query_mark", "An encoded question mark does not end the path", "/x%3F/../paid/a");
 alias("encoded_hash", "An encoded hash does not end the path", "/x%23/../paid/a");
+alias("mark_ends_exact", "An escaped mark does not walk around an exact pattern behind a proxy that decodes", "/report%3Fx");
+alias("mark_ends_section", "An escaped mark does not walk around a section behind a proxy that decodes", "/paid%3Fx");
+alias("hash_ends_exact", "An escaped hash does not walk around an exact pattern behind a proxy that decodes", "/report%23x");
 alias("still_encoded", "A dot segment still encoded after the last round does not walk around the gate", "/paid/%2525252e%2525252e/x");
 alias("still_encoded_deeper", "One layer deeper, for a server that decodes before the gate", "/paid/%252525252e%252525252e/x");
 alias("dotdot_param_pop", "A dot-dot with a parameter does not move the price", "/paid/..;/x");

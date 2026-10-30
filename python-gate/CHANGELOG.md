@@ -3,7 +3,7 @@
 0.7.0 was never published.
 
 - **Both adapters read a decoded path as if it were raw.** `/x%3F/../paid/a` reached the gate as `/x?/../paid/a` and was read as `/x`, so an app that resolves it served the paid page free. A `?` or `#` in a decoded path is now part of the path. Serious on any app that serves files; publish nothing before this.
-- WSGI reads `PATH_INFO` as the bytes it holds, so a route with a character outside ASCII is the page it names on both adapters.
+- WSGI reads `PATH_INFO` as the bytes it holds and ASGI reads `raw_path` for a path outside ASCII, so a route with such a character is the page it names on both adapters.
 - Port of `@aifinpay/gate` 0.10.1, including a path that reads the same when read twice: routes and a receipt's resource are read the way a path is read, an unregistered path is quoted as asked, a paid response drops a CDN's own cache headers, a prefix receipt for `/x/*` covers the section.
 - A mount with no resource observes nothing for reporting v2: it would name the raw path, which is private.
 

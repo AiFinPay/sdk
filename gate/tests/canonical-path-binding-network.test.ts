@@ -93,9 +93,6 @@ describe("inspectPath", () => {
   });
 
   for (const [raw, path] of [
-    ["/docs/what%3F", "/docs/what%3f"],
-    ["/docs/what%253F", "/docs/what%3f"],
-    ["/wiki/C%23", "/wiki/c%23"],
     ["/caf\u00e9/X", "/caf%c3%a9/x"],
     ["/caf%C3%A9/X", "/caf%c3%a9/x"],
     ["/caf\u00c3\u00a9/X", "/caf%c3%a9/x"],
@@ -106,7 +103,16 @@ describe("inspectPath", () => {
     });
   }
 
+  it("the character itself in a pattern is not guessed at as bytes", () => {
+    expect(spelledAsPath("/\u00d7\u00a9/*")).toBe("/%c3%97%c2%a9/*");
+    expect(inspectPath("/\u00d7\u00a9/x").path).toBe("/%d7%a9/x");
+  });
+
   for (const raw of [
+    "/docs/what%3F",
+    "/docs/what%253F",
+    "/wiki/C%23",
+    "/report%3Fx",
     "/paid/%2525252e%2525252e/x",
     "/paid/%252525252e%252525252e/x",
     "/%25252570aid/a",
@@ -171,18 +177,12 @@ describe("the same read at every step", () => {
     expect(answer.status).toBe(400);
   });
 
-  it("a receipt for the page named in the 402 opens that page, and only that page", async () => {
-    const { gate, iss } = await gateWith({ registry: undefined, resource: undefined });
-    const asked = await gate(req("/docs/what%3F", GPTBOT));
-    expect(asked.status).toBe(402);
-    const named = (asked as { body: { resource: string } }).body.resource;
-    expect(named).toBe("/docs/what%3F");
-    const claims = { sub: "0xabc", typ_aifp: "quota", receipt_id: "r1", resource: named, scope: "exact", unit_quota: 5 };
-    const bought = await iss.sign(claims);
-    expect((await gate(req("/docs/what%3F", { ...GPTBOT, "AIFP-Receipt": bought }))).status).toBe(200);
-    const other = await iss.sign({ ...claims, receipt_id: "r2", resource: "/docs/what" });
-    expect((await gate(req("/docs/what%3F", { ...GPTBOT, "AIFP-Receipt": other }))).status).toBe(403);
-  });
+  for (const spelled of ["/report%3Fx", "/paid%3Fx", "/report%23x", "/docs/what%3F"]) {
+    it(`${spelled} is refused: a proxy that decodes hands it on as the page before the mark`, async () => {
+      const { gate } = await gateWith();
+      expect((await gate(req(spelled, GPTBOT))).status).toBe(400);
+    });
+  }
 });
 
 describe("a spelling does not buy another price", () => {

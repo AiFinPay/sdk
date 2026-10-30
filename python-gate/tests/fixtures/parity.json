@@ -1911,33 +1911,33 @@
    "/docs/what%3F",
    {
     "path": "/docs/what%3f",
-    "ambiguous": false
+    "ambiguous": true
    },
    {
     "path": "/docs/what%3f",
-    "ambiguous": false
+    "ambiguous": true
    }
   ],
   [
    "/docs/what%253F",
    {
     "path": "/docs/what%3f",
-    "ambiguous": false
+    "ambiguous": true
    },
    {
     "path": "/docs/what%3f",
-    "ambiguous": false
+    "ambiguous": true
    }
   ],
   [
    "/wiki/C%23",
    {
     "path": "/wiki/c%23",
-    "ambiguous": false
+    "ambiguous": true
    },
    {
     "path": "/wiki/C%23",
-    "ambiguous": false
+    "ambiguous": true
    }
   ],
   [
@@ -2089,6 +2089,11 @@
    "/caf%C3%A9/*",
    "/caf%c3%a9/*",
    "/caf%c3%a9/*"
+  ],
+  [
+   "/×©/*",
+   "/%c3%97%c2%a9/*",
+   "/%c3%97%c2%a9/*"
   ]
  ],
  "scenarios": [

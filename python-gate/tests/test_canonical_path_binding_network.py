@@ -251,7 +251,8 @@ def test_asgi_drops_a_cdns_own_cache_header_on_a_paid_response():
     assert b"x-own" in names
 
 
-@pytest.mark.parametrize("raw", ["/paid/%2525252e%2525252e/x", "/paid/%252525252e%252525252e/x", "/z#/..;/paid/a"])
+@pytest.mark.parametrize("raw", ["/paid/%2525252e%2525252e/x", "/paid/%252525252e%252525252e/x", "/z#/..;/paid/a",
+                                 "/report%3Fx", "/paid%3Fx", "/report%23x", "/docs/what%3F"])
 def test_a_spelling_that_cannot_be_read_one_way_is_refused(raw):
     assert g.inspect_path(raw).ambiguous
     assert routed().decide(req(path=raw, **GPTBOT)).status == 400
@@ -286,7 +287,7 @@ def test_an_exact_route_beats_a_wildcard_and_a_tie_goes_to_the_paid_one():
 
 
 @pytest.mark.parametrize("pattern,path", [
-    ("/caf%C3%A9/*", "/caf\u00e9/x"), ("/caf\u00e9/*", "/caf\u00e9/x"), ("/caf\u00e9/*", "/caf%C3%A9/x"), ("/wiki/C%23", "/wiki/C%23"),
+    ("/caf%C3%A9/*", "/caf\u00e9/x"), ("/caf\u00e9/*", "/caf\u00e9/x"), ("/caf\u00e9/*", "/caf%C3%A9/x"),
 ])
 def test_a_route_with_an_escape_or_a_character_is_the_page_it_names(pattern, path):
     assert gate(routes=[g.Route(pattern, "premium")]).decide(req(path=path, **GPTBOT)).body["unit_weight"] == 10
@@ -295,12 +296,13 @@ def test_a_route_with_an_escape_or_a_character_is_the_page_it_names(pattern, pat
 def test_the_wsgi_adapter_reads_pep_3333_bytes():
     from aifinpay_gate.wsgi import _WsgiRequest
     assert _WsgiRequest({"PATH_INFO": "/caf\u00c3\u00a9/x"}).path == "/caf%c3%a9/x"
-    assert g.inspect_path(_WsgiRequest({"PATH_INFO": "/wiki/C#"}).path).path == "/wiki/c%23"
+    assert g.inspect_path(_WsgiRequest({"PATH_INFO": "/wiki/C#"}).path).ambiguous
 
 
-def test_a_receipt_names_the_page_before_the_mark_only():
-    gt = gate(routes=None)
-    asked = gt.decide(req(path="/docs/what%3F", **GPTBOT))
-    assert asked.status == 402 and asked.body["resource"] == "/docs/what%3F"
-    assert gt.decide(req(path="/docs/what%3F", **{**GPTBOT, "AIFP-Receipt": token(resource="/docs/what%3F", scope="exact")})).status != 403
-    assert gt.decide(req(path="/docs/what%3F", **{**GPTBOT, "AIFP-Receipt": token(resource="/docs/what", scope="exact")})).status == 403
+def test_the_asgi_adapter_reads_an_escape_that_is_not_utf8():
+    from aifinpay_gate.asgi import _AsgiRequest
+    request = _AsgiRequest({"path": "/lat\ufffd/x", "raw_path": b"/lat%E9/x"})
+    answer = gate(routes=[g.Route("/lat%E9/*", "premium")]).decide(req(path=request.path, **GPTBOT))
+    assert answer.status == 402 and answer.body["unit_weight"] == 10
+    assert _AsgiRequest({"path": "/caf\u00e9/x", "raw_path": b"/caf%C3%A9/x"}).path == "/caf%C3%A9/x"
+    assert _AsgiRequest({"path": "/plain/x", "raw_path": b"/%70lain/x"}).path == "/plain/x"

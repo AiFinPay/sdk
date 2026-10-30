@@ -2205,73 +2205,6 @@
    }
   },
   {
-   "id": "scope.encoded_mark",
-   "group": "scope",
-   "level": "must",
-   "profile": "content-enforce",
-   "title": "A batch bought for a page with an encoded mark opens that page",
-   "steps": [
-    {
-     "request": {
-      "method": "GET",
-      "path": "/paid/what%3Fx",
-      "ua": "sdk",
-      "receipt": "x",
-      "agent": "payer"
-     },
-     "expect": {
-      "status": [
-       200,
-       301,
-       302,
-       307,
-       308,
-       404
-      ]
-     }
-    }
-   ],
-   "receipts": {
-    "x": {
-     "claims": {
-      "resource": "/paid/what%3Fx"
-     }
-    }
-   }
-  },
-  {
-   "id": "scope.before_the_mark",
-   "group": "scope",
-   "level": "must",
-   "profile": "content-enforce",
-   "title": "A batch for a page does not open a page that only starts like it",
-   "steps": [
-    {
-     "request": {
-      "method": "GET",
-      "path": "/paid/what%3Fx",
-      "ua": "sdk",
-      "receipt": "x",
-      "agent": "payer"
-     },
-     "expect": {
-      "status": [
-       403,
-       404
-      ],
-      "origin": false
-     }
-    }
-   ],
-   "receipts": {
-    "x": {
-     "claims": {
-      "resource": "/paid/what"
-     }
-    }
-   }
-  },
-  {
    "id": "scope.encoded_resource",
    "group": "scope",
    "level": "must",
@@ -5618,6 +5551,93 @@
      "request": {
       "method": "GET",
       "path": "/x%23/../paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.mark_ends_exact",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An escaped mark does not walk around an exact pattern behind a proxy that decodes",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/report%3Fx",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.mark_ends_section",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An escaped mark does not walk around a section behind a proxy that decodes",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid%3Fx",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.hash_ends_exact",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An escaped hash does not walk around an exact pattern behind a proxy that decodes",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/report%23x",
       "ua": "gptbot"
      },
      "expect": {

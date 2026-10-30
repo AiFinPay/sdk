@@ -194,7 +194,7 @@ const fixture = {
     "/paid/./a", "/x/../paid/a", "/x/..;/paid/a", "/.;/paid/a", "/paid/..;/../a", "/paid//../a", "/paid/%252e%252e/../a", "/paid/x\\..\\../../a", "/a%00b", "/a%E2%82%ACb", "/", "", "/..", "/.",
     "/docs/what%3F", "/docs/what%253F", "/wiki/C%23", "/x%3F/../paid/a", "/z#/..;/paid/a", "/paid/%2525252e%2525252e/x", "/paid/%252525252e%252525252e/x", "/caf\u00e9/X", "/caf%C3%A9/X", "/100%25", "/%zz"]
     .map((raw) => [raw, G.inspectPath(raw), G.inspectPath(raw, { caseSensitive: true })]),
-  spelled_cases: ["/Paid/*", "/*", "/report/", "/my%20report", "/%64ata/two", "/a;b=1/c", "/", "*", "/A/B/*", "/wiki/C%23", "/caf\u00e9/*", "/caf%C3%A9/*"]
+  spelled_cases: ["/Paid/*", "/*", "/report/", "/my%20report", "/%64ata/two", "/a;b=1/c", "/", "*", "/A/B/*", "/wiki/C%23", "/caf\u00e9/*", "/caf%C3%A9/*", "/\u00d7\u00a9/*"]
     .map((raw) => [raw, G.spelledAsPath(raw), G.spelledAsPath(raw, { caseSensitive: true })]),
   scenarios: results,
 };

@@ -21,7 +21,12 @@ from .discovery import DISCOVERY_PATH, build_discovery_document, discovery_link_
 class _AsgiRequest:
     def __init__(self, scope: Dict[str, Any]):
         # The server decoded this, so a "?" or "#" in it is part of the path, not its end.
-        self.path = (scope.get("path") or "/").replace("?", "%3F").replace("#", "%23")
+        path = scope.get("path") or "/"
+        # An escape that is not UTF-8 arrives replaced, so the raw bytes name the page.
+        raw = scope.get("raw_path")
+        if raw and not path.isascii():
+            path = raw.decode("latin-1").split("?", 1)[0]
+        self.path = path.replace("?", "%3F").replace("#", "%23")
         self.method = scope.get("method", "GET")
         self._headers: Dict[str, str] = {}
         for k, v in scope.get("headers") or []:

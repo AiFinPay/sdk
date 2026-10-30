@@ -5,6 +5,7 @@ from typing import NamedTuple
 
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _ESCAPE = re.compile(r"%([0-9a-fA-F]{2})")
+_MARK = re.compile(r"%(?:3f|23)", re.IGNORECASE)
 _NON_ASCII = re.compile(r"[^\x00-\x7f]+")
 _LOWER_HEX = re.compile(r"%[0-9a-fA-F]{2}")
 
@@ -29,9 +30,10 @@ def _escape_non_ascii(text: str) -> str:
 def inspect_path(raw_target: str, *, case_sensitive: bool = False) -> InspectedPath:
     """For an origin whose routing the gate cannot see. The origin still receives
     what the client sent. Origins disagree on dot segments: ``/paid/..;/../a`` is
-    ``/a`` to one and ``/paid/a`` to another, so ``ambiguous`` marks those, a raw
-    ``#``, which no client sends for a real page, and a spelling still decoding
-    after the last round. Anything else reads the same when read again."""
+    ``/a`` to one and ``/paid/a`` to another, so ``ambiguous`` marks those, an
+    escaped ``?`` or ``#``, which a proxy that decodes hands on as the end of the
+    path, a raw ``#``, and a spelling still decoding after the last round.
+    Anything else reads the same when read again."""
     target = ("/" if raw_target is None else str(raw_target)).split("?", 1)[0]
     path = target.split("#", 1)[0] or "/"
     for _ in range(3):
@@ -39,7 +41,12 @@ def inspect_path(raw_target: str, *, case_sensitive: bool = False) -> InspectedP
         if decoded == path:
             break
         path = decoded
-    ambiguous = "#" in target or _CONTROL.search(path) is not None or _decode_round(path) != path
+    ambiguous = (
+        "#" in target
+        or _CONTROL.search(path) is not None
+        or _decode_round(path) != path
+        or _MARK.search(path) is not None
+    )
     out = []
     for raw in path.split("/"):
         segment = raw.split(";", 1)[0]
