@@ -32,6 +32,22 @@ describe("bounded payment API transport", () => {
     expect(fetchImpl.mock.calls[0][1].redirect).toBe("error");
   });
 
+  it("accepts a URL without a path, which fetch reports with a trailing slash", async () => {
+    const answer = (url: string) => {
+      const response = new Response('{"result":"ok"}');
+      Object.defineProperty(response, "url", { value: url });
+      return response;
+    };
+    const ok = vi.fn().mockResolvedValue(answer("https://api.devnet.solana.com/"));
+    await expect(settlementHttp(ok, "https://api.devnet.solana.com", { method: "POST" })).resolves.toMatchObject({
+      text: '{"result":"ok"}',
+    });
+    const moved = vi.fn().mockResolvedValue(answer("https://other.invalid/"));
+    await expect(settlementHttp(moved, "https://api.devnet.solana.com", { method: "POST" })).rejects.toMatchObject({
+      code: "redirect_refused",
+    });
+  });
+
   it("rejects an oversized body instead of buffering without a limit", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response("x".repeat(1_048_577)));
     await expect(settlementHttp(fetchImpl, "https://api.aifinpay.io/v1/quote")).rejects.toThrow(/limit/);

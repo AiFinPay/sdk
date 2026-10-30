@@ -9,6 +9,15 @@ export class SettlementHttpError extends Error {
   }
 }
 
+// fetch normalizes response.url ("https://host" -> "https://host/"); compare parsed URLs.
+function sameUrl(a: string, b: string): boolean {
+  try {
+    return new URL(a).href === new URL(b).href;
+  } catch {
+    return false;
+  }
+}
+
 export async function settlementHttp(
   fetchImpl: typeof fetch,
   url: string,
@@ -35,7 +44,7 @@ export async function settlementHttp(
     });
     if (
       response.redirected ||
-      (response.url && response.url !== url) ||
+      (response.url && !sameUrl(response.url, url)) ||
       (response.status >= 300 && response.status < 400)
     ) {
       void response.body?.cancel().catch(() => {});
