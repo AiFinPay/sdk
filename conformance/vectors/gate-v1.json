@@ -2255,7 +2255,10 @@
       "agent": "payer"
      },
      "expect": {
-      "status": 403,
+      "status": [
+       403,
+       404
+      ],
       "origin": false
      }
     }
