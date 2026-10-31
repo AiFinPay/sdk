@@ -1,0 +1,112 @@
+{
+  "$schema": "../../../src/reference/payment-deployments.schema.json",
+  "version": "1.4",
+  "description": "AiFinPay NEAR splitter deployment snapshots.",
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-31T20:31:32.209Z",
+  "ecosystem": "near",
+  "protocolVersion": "v1.4",
+  "source": {
+    "repo": "AiFinPay/near-contract",
+    "commit": "479a8bfa28fff0f1971a5f082f3b3b48713487b6",
+    "path": "deployments/",
+    "url": "https://github.com/AiFinPay/near-contract/tree/479a8bfa28fff0f1971a5f082f3b3b48713487b6/deployments"
+  },
+  "deployments": [
+    {
+      "network": "mainnet",
+      "environment": "prod",
+      "testnet": false,
+      "version": "1.4.0",
+      "contractAccountId": "aifp-splitter.near",
+      "settlementEnabled": true,
+      "wasmCodeHash": "691777e085c7f3d27ede99cb3a27de4196e00e0f2018a4cd76bcfaf271fdc92c",
+      "runtimeCodeHash": "691777e085c7f3d27ede99cb3a27de4196e00e0f2018a4cd76bcfaf271fdc92c",
+      "treasuryAccountId": "aifinpay.sputnik-dao.near",
+      "timestamp": "2026-10-31T20:31:32.209Z",
+      "sourceArtifact": "https://github.com/AiFinPay/near-contract/blob/479a8bfa28fff0f1971a5f082f3b3b48713487b6/deployments/mainnet-2026-10-31T20-31-32-209Z.json",
+      "splitter": {
+        "admin": "aifinpay.sputnik-dao.near",
+        "signer": "0x06b551ebd05d427840330bc30d272f9f752af73fb1d9a8b07aab0970558c37a7656af5cd5684808e4593b89f3a885d96fcbf3ec60f4fb593469d48ef8f6ce467",
+        "pauser": "aifinpay.sputnik-dao.near",
+        "treasury": "aifinpay.sputnik-dao.near",
+        "paused": false,
+        "routes": [
+          {
+            "route_id": "ROUTE_AGENT_X402",
+            "treasury_bps": 0,
+            "ip_creator_bps": 0
+          },
+          {
+            "route_id": "ROUTE_MERCHANT_AIFP1",
+            "treasury_bps": 100,
+            "ip_creator_bps": 0
+          }
+        ],
+        "paymentCount": "0",
+        "totalSettled": "0"
+      },
+      "transactions": {
+        "deploy": {
+          "txHash": "2wbdGjhctnbE1mCTuPqu3mL1z3pKM2MRYqX96D4faoqB",
+          "explorerUrl": "https://nearblocks.io/txns/2wbdGjhctnbE1mCTuPqu3mL1z3pKM2MRYqX96D4faoqB"
+        },
+        "unpause": {
+          "txHash": "CiNu9n85QDgb1QWewowC1xpGm6NV33CDmAgS5S72zAjb",
+          "explorerUrl": "https://nearblocks.io/txns/CiNu9n85QDgb1QWewowC1xpGm6NV33CDmAgS5S72zAjb"
+        }
+      }
+    },
+    {
+      "network": "testnet",
+      "environment": "dev",
+      "testnet": true,
+      "version": "1.4.0",
+      "contractAccountId": "aifp-splitter.testnet",
+      "settlementEnabled": false,
+      "wasmCodeHash": "d18b181f17cd597e96c1703af3e1d6b38576492d19e035ee06bc3aab56531b46",
+      "runtimeCodeHash": "d18b181f17cd597e96c1703af3e1d6b38576492d19e035ee06bc3aab56531b46",
+      "treasuryAccountId": "aifp-treasury-e7abd866cd527146.testnet",
+      "timestamp": "2026-10-20T23:30:27.866Z",
+      "sourceArtifact": "https://github.com/AiFinPay/near-contract/blob/479a8bfa28fff0f1971a5f082f3b3b48713487b6/deployments/testnet-2026-10-20T23-30-27-866Z.json",
+      "splitter": {
+        "admin": "aifp-admin-28250297dc920295.testnet",
+        "signer": "0x06b551ebd05d427840330bc30d272f9f752af73fb1d9a8b07aab0970558c37a7656af5cd5684808e4593b89f3a885d96fcbf3ec60f4fb593469d48ef8f6ce467",
+        "pauser": "aifp-pauser-8c2e441982c1834c.testnet",
+        "treasury": "aifp-treasury-e7abd866cd527146.testnet",
+        "paused": true,
+        "routes": [
+          {
+            "route_id": "ROUTE_AGENT_X402",
+            "treasury_bps": 0,
+            "ip_creator_bps": 0
+          },
+          {
+            "route_id": "ROUTE_MERCHANT_AIFP1",
+            "treasury_bps": 100,
+            "ip_creator_bps": 0
+          }
+        ],
+        "paymentCount": "0",
+        "totalSettled": "0"
+      },
+      "transactions": {}
+    }
+  ],
+  "sourceArtifact": {
+    "path": null,
+    "retrievedAt": "2026-10-31",
+    "note": "Each deployment links its immutable upstream JSON snapshot. wasmCodeHash is mapped from runtimeCodeHash; environment is normalized to prod/dev. Settlement flags and splitter state are preserved from upstream, not independently verified."
+  },
+  "governanceMembership": {
+    "network": "mainnet",
+    "sourceArtifact": "https://github.com/AiFinPay/near-contract/blob/479a8bfa28fff0f1971a5f082f3b3b48713487b6/deployments/multisig-members.mainnet.json",
+    "members": [
+      "965b61a914dccbf357eebce29d14f138fdf0e0fd2f518352a93d0075083e11b5",
+      "29998d26617f5ed678903790f423a1bd438e71111cc3dbdd9c00112a0c6ee716",
+      "iryna0707.near",
+      "09642e6c9901a28258ae1765abc46d6a124eb0ce70d88c145b1a756c92528b37"
+    ],
+    "note": "Council membership input only; this does not establish on-chain DAO policy, approval thresholds, or contract upgrade authority."
+  }
+}

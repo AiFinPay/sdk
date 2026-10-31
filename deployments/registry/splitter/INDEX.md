@@ -14,6 +14,7 @@ inputs to verification, not evidence of current runtime or backend availability.
 | Solana | [deployments.json](solana/deployments.json) | [Program and IDL](solana/README.md) |
 | Casper | [deployments.json](casper/deployments.json) | [Contract schema](casper/README.md) |
 | Aptos | [deployments.json](aptos/deployments.json) · [multisig-deployments.json](aptos/multisig-deployments.json) | [Payment and multisig snapshots](aptos/README.md) |
+| NEAR | [deployments.json](near/deployments.json) | [Account/WASM and council snapshots](near/README.md) |
 
 Read the selected record for chain/network identity, addresses or program IDs,
 runtime hashes, governance, assets, policy fields and settlement flags. Read

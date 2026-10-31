@@ -84,6 +84,7 @@ registry/
 │   │   └── v1.1/deployments.json  # EVM v1.1 legacy
 │   ├── solana/deployments.json # Solana v1.4 program deployments
 │   ├── casper/deployments.json # Casper deployments
+│   ├── near/deployments.json   # Curated NEAR account/WASM snapshots
 │   └── aptos/                  # Aptos deployment snapshots
 │       ├── deployments.json
 │       └── multisig-deployments.json
@@ -107,6 +108,10 @@ stored in the generated JSON rather than this README.
 Aptos records are curated package data, not outputs of `registry:build`. See the
 [Aptos registry guide](registry/splitter/aptos/README.md) for snapshot
 provenance and refresh instructions.
+
+NEAR records are also curated package data, not grabber outputs or programmatic
+lookup APIs. See the [NEAR registry guide](registry/splitter/near/README.md)
+for provenance, field normalization, governance caveats, and refresh instructions.
 
 ## Exports
 

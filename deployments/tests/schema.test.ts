@@ -12,6 +12,7 @@ const registryFiles = [
   "registry/splitter/solana/deployments.json",
   "registry/splitter/casper/deployments.json",
   "registry/splitter/aptos/deployments.json",
+  "registry/splitter/near/deployments.json",
 ];
 const aptosMultisigFiles = [
   "registry/splitter/aptos/multisig-deployments.json",
@@ -124,6 +125,52 @@ describe("payment deployment schema references", () => {
       );
       expect(rule?.then.properties.source.required).toEqual(["commit", "path"]);
     }
+  });
+
+  it("packages NEAR account/WASM snapshots with immutable provenance", () => {
+    const registry = JSON.parse(
+      readFileSync(resolve(packageRoot, "registry/splitter/near/deployments.json"), "utf8"),
+    );
+    expect(registry.ecosystem).toBe("near");
+    expect(registry.source).toMatchObject({
+      repo: "AiFinPay/near-contract",
+      commit: expect.stringMatching(/^[0-9a-f]{40}$/),
+      path: "deployments/",
+    });
+    expect(registry.deployments.map(({ network }: { network: string }) => network)).toEqual([
+      "mainnet",
+      "testnet",
+    ]);
+
+    const artifactPrefix =
+      `https://github.com/${registry.source.repo}/blob/${registry.source.commit}/deployments/`;
+    for (const deployment of registry.deployments) {
+      const isTestnet = deployment.network === "testnet";
+      expect(deployment.environment).toBe(isTestnet ? "dev" : "prod");
+      expect(deployment.testnet).toBe(isTestnet);
+      expect(deployment.contractAccountId).toMatch(
+        new RegExp(`^[a-z0-9._-]+\\.${isTestnet ? "testnet" : "near"}$`),
+      );
+      expect(deployment.wasmCodeHash).toMatch(/^[0-9a-f]{64}$/);
+      expect(deployment.wasmCodeHash).toBe(deployment.runtimeCodeHash);
+      expect(deployment.treasuryAccountId).toBe(deployment.splitter.treasury);
+      expect(Number.isNaN(Date.parse(deployment.timestamp))).toBe(false);
+      expect(deployment.sourceArtifact.startsWith(artifactPrefix + deployment.network + "-")).toBe(true);
+      expect(deployment.sourceArtifact).not.toContain("latest");
+      expect(deployment.settlementEnabled).toBe(!isTestnet);
+      expect(deployment.splitter.paused).toBe(isTestnet);
+      expect(deployment.splitter.routes).toEqual([
+        { route_id: "ROUTE_AGENT_X402", treasury_bps: 0, ip_creator_bps: 0 },
+        { route_id: "ROUTE_MERCHANT_AIFP1", treasury_bps: 100, ip_creator_bps: 0 },
+      ]);
+    }
+
+    const membership = registry.governanceMembership;
+    expect(membership.network).toBe("mainnet");
+    expect(membership.sourceArtifact).toBe(artifactPrefix + "multisig-members.mainnet.json");
+    expect(membership.members.length).toBeGreaterThan(0);
+    expect(new Set(membership.members).size).toBe(membership.members.length);
+    expect(membership).not.toHaveProperty("threshold");
   });
 
   it("omits status and disabledReason from generated deployment shapes and registry records", () => {

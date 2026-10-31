@@ -6,6 +6,13 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## Deployments 2.1.4 — NEAR registry snapshots
+
+- Package curated NEAR mainnet/testnet deployment records and council membership
+  input with immutable upstream provenance and the shared deployment schema.
+- Preserve upstream settlement metadata without adding SDK execution support or
+  changing the EVM/Solana grabber.
+
 ## Deployments 2.1.2 — Aptos registry snapshots
 
 - Package mainnet/testnet payment and multisig deployment records with their
