@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/deployments",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Contracts deployment registry for AiFinPay SDK and Agent Passport identity and settlement protocol.",
   "keywords": [
     "aifinpay",

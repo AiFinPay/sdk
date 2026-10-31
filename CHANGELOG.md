@@ -6,6 +6,13 @@ versions from manifests/registries, deployment metadata from
 [the registry](deployments/registry/splitter/INDEX.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## Deployments 2.1.1 — Aptos and NEAR schema coverage
+
+- Define and validate Aptos package/module deployment records and NEAR account/
+  WASM deployment records, including network, source artifact and asset fields.
+- Keep ecosystem-specific deployment records extensible for chain-specific
+  metadata.
+
 ## Agent 2.11.1 — Solana RPC URLs without a path
 
 - `settlementHttp` compares parsed URLs, so an RPC such as

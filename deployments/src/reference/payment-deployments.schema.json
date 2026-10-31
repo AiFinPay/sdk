@@ -154,6 +154,50 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "ecosystem": {
+            "const": "aptos"
+          }
+        },
+        "required": ["ecosystem"]
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "required": ["commit", "path"]
+          },
+          "deployments": {
+            "items": {
+              "$ref": "#/$defs/aptosDeployment"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ecosystem": {
+            "const": "near"
+          }
+        },
+        "required": ["ecosystem"]
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "required": ["commit", "path"]
+          },
+          "deployments": {
+            "items": {
+              "$ref": "#/$defs/nearDeployment"
+            }
+          }
+        }
+      }
     }
   ],
   "$defs": {
@@ -383,6 +427,191 @@
         },
         "version": {
           "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "aptosDeployment": {
+      "type": "object",
+      "required": [
+        "network",
+        "chainId",
+        "environment",
+        "testnet",
+        "settlementEnabled",
+        "packageAddress",
+        "packageName",
+        "modules",
+        "sourceArtifact"
+      ],
+      "properties": {
+        "network": {
+          "enum": ["mainnet", "testnet", "devnet", "local"]
+        },
+        "chainId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "environment": {
+          "enum": ["dev", "prod"]
+        },
+        "testnet": {
+          "type": "boolean"
+        },
+        "settlementEnabled": {
+          "type": "boolean"
+        },
+        "packageAddress": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{1,64}$"
+        },
+        "packageName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "upgradePolicy": {
+          "enum": ["immutable", "compatible", "arbitrary"]
+        },
+        "modules": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              },
+              "bytecodeHash": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "sourceArtifact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/aptosAsset"
+          }
+        },
+        "authorities": {
+          "type": "object",
+          "properties": {
+            "upgradeAuthorityAddress": {
+              "type": "string",
+              "pattern": "^0x[0-9a-fA-F]{1,64}$"
+            },
+            "adminAddress": {
+              "type": "string",
+              "pattern": "^0x[0-9a-fA-F]{1,64}$"
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "aptosAsset": {
+      "type": "object",
+      "required": ["symbol", "name"],
+      "properties": {
+        "symbol": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "metadataAddress": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{1,64}$"
+        },
+        "coinType": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": ["metadataAddress"]
+        },
+        {
+          "required": ["coinType"]
+        }
+      ],
+      "additionalProperties": true
+    },
+    "nearDeployment": {
+      "type": "object",
+      "required": [
+        "network",
+        "environment",
+        "testnet",
+        "settlementEnabled",
+        "contractAccountId",
+        "wasmCodeHash",
+        "sourceArtifact"
+      ],
+      "properties": {
+        "network": {
+          "enum": ["mainnet", "testnet", "localnet"]
+        },
+        "environment": {
+          "enum": ["dev", "prod"]
+        },
+        "testnet": {
+          "type": "boolean"
+        },
+        "settlementEnabled": {
+          "type": "boolean"
+        },
+        "contractAccountId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9._-]+$"
+        },
+        "wasmCodeHash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceArtifact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "treasuryAccountId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9._-]+$"
+        },
+        "assets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["symbol", "name", "contractAccountId"],
+            "properties": {
+              "symbol": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "contractAccountId": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 64,
+                "pattern": "^[a-z0-9._-]+$"
+              }
+            },
+            "additionalProperties": true
+          }
         }
       },
       "additionalProperties": true

@@ -40,7 +40,7 @@ deployments/
 | `src/grabber.ts` | GitHub listing helpers, EVM + Solana fetch + latest-per-chain selection, deployment file writer, O(1) lookup helpers. |
 | `src/types.ts` | Registry TypeScript types: `DeploymentRegistry`, `EcosystemRegistry`, `EvmDeployment`, `SolanaDeployment`, `Stablecoin`, type guards. |
 | `src/build.ts` | CLI entry point for `npm run registry:build`; writes deployment files to `registry/splitter/evm/v1.4/` and `registry/splitter/solana/`. |
-| `src/reference/payment-deployments.schema.json` | JSON Schema linked by the versioned EVM, Solana and Casper registry files. |
+| `src/reference/payment-deployments.schema.json` | Shared JSON Schema defining deployment record shapes for EVM, Solana, Casper, Aptos and NEAR. |
 
 
 ## Tests (`tests/`)
