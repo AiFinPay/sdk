@@ -1,3 +1,10 @@
+## 2.9.1 — Arc splitter getters
+
+- The pre-payment deployment check reads `TOKEN_LIST()` / `PROFILES()` on
+  `arc` and `arctestnet`, where the splitter is built from the current
+  contract source; other chains keep `tokenList()` / `profiles()`. Every Arc
+  payment was refused before signing. Matches `@aifinpay/agent` 2.11.2.
+
 ## 2.9.0 — BOT Chain (USDT only)
 
 - `fetch_paid(chain="botchain")` pays only in its pinned USDT

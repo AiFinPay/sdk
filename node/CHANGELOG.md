@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.11.2 — Arc splitter getters
+
+- The splitter on Arc and Arc Testnet is built from the current contract
+  source, which names the satellite getters `TOKEN_LIST()` and `PROFILES()`;
+  the other chains run an earlier build with `tokenList()` / `profiles()`.
+  The pre-payment deployment check read the lower-case names everywhere, so
+  every Arc payment was refused before signing. It now reads the upper-case
+  getters on `arc` and `arctestnet`.
+
 ## 2.11.1 — Solana RPC URLs without a path
 
 - The payment HTTP transport compared `response.url` to the request URL as

@@ -246,6 +246,10 @@ def _selector(signature: str) -> bytes:
     return keccak(text=signature)[:4]
 
 
+# Arc's pinned splitter build names the satellite getters in upper case.
+_UPPER_CASE_GETTERS = frozenset({"arc", "arctestnet"})
+
+
 def _read(client: ChainClient, to: str, signature: str, arg_types: List[str], args: list, ret: List[str]):
     data = _selector(signature) + (abi_encode(arg_types, args) if arg_types else b"")
     out = abi_decode(ret, client.call(to, data))
@@ -563,8 +567,9 @@ def execute_v14_settlement(call: Dict[str, Any], ctx: V14ExecutionContext) -> Di
         _fail("V14_UNTRUSTED_SIGNER", "quote signer does not match independent deployment pin")
 
     contract = call["contract"]
-    profiles = _read(c, contract, "profiles()", [], [], ["address"])
-    token_list = _read(c, contract, "tokenList()", [], [], ["address"])
+    upper = deployment["network"] in _UPPER_CASE_GETTERS
+    profiles = _read(c, contract, "PROFILES()" if upper else "profiles()", [], [], ["address"])
+    token_list = _read(c, contract, "TOKEN_LIST()" if upper else "tokenList()", [], [], ["address"])
     treasury = _read(c, contract, "treasury()", [], [], ["address"])
     signer_role = _read(
         c, contract, "hasRole(bytes32,address)", ["bytes32", "address"],

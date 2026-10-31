@@ -325,9 +325,13 @@ const EXECUTION_ABI = parseAbi([
   "function settleStable((address payer,address merchant,address token,uint256 grossAmount,address ipCreator,uint256 validUntil,bytes32 orderIdHash,uint256 nonce,bytes32 routeId) quote,bytes signature)",
   "function profiles() view returns (address)",
   "function tokenList() view returns (address)",
+  "function PROFILES() view returns (address)",
+  "function TOKEN_LIST() view returns (address)",
   "function treasury() view returns (address)",
   "function hasRole(bytes32,address) view returns (bool)",
 ]);
+// Arc's pinned splitter build names the satellite getters in upper case.
+const UPPER_CASE_GETTERS: ReadonlySet<string> = new Set(["arc", "arctestnet"]);
 const PROFILE_ABI = parseAbi([
   "function getProfile(bytes32) view returns ((uint16 treasuryBps,uint16 ipCreatorBps,bool enabled,uint64 configuredAt,address routeTreasury))",
 ]);
@@ -595,8 +599,16 @@ export async function executeV14Settlement(
   if (lc(signer!) !== lc(deployment.splitter.signer))
     fail("V14_UNTRUSTED_SIGNER", "quote signer does not match independent deployment pin");
   const [profiles, tokenList, treasury, signerHasRole, profile, preflight] = await Promise.all([
-    publicClient.readContract({ address: call.contract, abi: EXECUTION_ABI, functionName: "profiles" }),
-    publicClient.readContract({ address: call.contract, abi: EXECUTION_ABI, functionName: "tokenList" }),
+    publicClient.readContract({
+      address: call.contract,
+      abi: EXECUTION_ABI,
+      functionName: UPPER_CASE_GETTERS.has(deployment.network) ? "PROFILES" : "profiles",
+    }),
+    publicClient.readContract({
+      address: call.contract,
+      abi: EXECUTION_ABI,
+      functionName: UPPER_CASE_GETTERS.has(deployment.network) ? "TOKEN_LIST" : "tokenList",
+    }),
     publicClient.readContract({ address: call.contract, abi: EXECUTION_ABI, functionName: "treasury" }),
     publicClient.readContract({
       address: call.contract,
