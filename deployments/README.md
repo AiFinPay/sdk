@@ -89,7 +89,7 @@ registry/
 │       └── multisig-deployments.json
 ├── abi/
 │   ├── aptos/       # Aptos splitter ABI snapshots
-│   ├── evm/         # EVM ABI bundles (B2BSplitterV14, TimelockWrapper)
+│   ├── evm/         # EVM ABI bundles (including the linted B2BSplitterV14 ABI)
 │   └── tron/        # Tron ABI bundles when applicable
 └── idl/
     ├── solana/      # Solana IDL (splitter-v14 mainnet/devnet)

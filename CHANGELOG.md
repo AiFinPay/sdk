@@ -13,6 +13,11 @@ from the corresponding CI or payment artifacts.
 - Document that Aptos snapshots are curated data and are not refreshed by the
   EVM/Solana registry grabber.
 
+## Deployments 2.1.3 — linted EVM splitter ABI
+
+- Document the linted B2BSplitterV14 ABI as required for Arc and subsequent EVM
+  chain deployments.
+
 ## Deployments 2.1.1 — Aptos and NEAR schema coverage
 
 - Define and validate Aptos package/module deployment records and NEAR account/

@@ -87,6 +87,7 @@ registry/abi/
 │       └── splitter-testnet-<address>.json
 ├── evm/
 │   ├── B2BSplitterV14/B2BSplitterV14.json
+│   ├── B2BSplitterV14/B2BSplitterV14-linted.json # Required for Arc and subsequent EVM deployments
 │   └── TimelockWrapper/TimelockWrapper.json
 └── tron/
     └── .gitkeep
@@ -127,6 +128,7 @@ STRUCTURE.md             # This file
 package-lock.json
 package.json
 registry/abi/evm/B2BSplitterV14/B2BSplitterV14.json
+registry/abi/evm/B2BSplitterV14/B2BSplitterV14-linted.json
 registry/abi/evm/TimelockWrapper/TimelockWrapper.json
 registry/abi/tron/.gitkeep
 registry/abi/aptos/splitter/splitter-mainnet-<address>.json
