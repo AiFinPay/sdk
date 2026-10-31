@@ -6,6 +6,13 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## Agent 2.12.0 — Aptos and NEAR deployment resolution
+
+- Generate typed Aptos and NEAR deployment pins from the installed deployment
+  package, preserving per-network provenance, module/ABI digests and WASM pins.
+- Add explicit environment/version-bound inspection and enabled-record selection.
+  Keep payment execution unsupported pending backend and verified executor support.
+
 ## Deployments 2.1.4 — NEAR registry snapshots
 
 - Package curated NEAR mainnet/testnet deployment records and council membership

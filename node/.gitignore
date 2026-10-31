@@ -13,3 +13,5 @@ coverage/
 
 # Generated files - can be regenerated from @aifinpay/deployments
 src/generated/*.generated.ts
+!src/generated/aptosV14Deployments.generated.ts
+!src/generated/nearV14Deployments.generated.ts

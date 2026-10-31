@@ -9,6 +9,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const nodeRoot = path.resolve(here, "..");
 const evmOutput = path.join(nodeRoot, "src/generated/v14Deployments.generated.ts");
 const solanaOutput = path.join(nodeRoot, "src/generated/solanaV14Deployments.generated.ts");
+const aptosOutput = path.join(nodeRoot, "src/generated/aptosV14Deployments.generated.ts");
+const nearOutput = path.join(nodeRoot, "src/generated/nearV14Deployments.generated.ts");
 // The Python SDK reads the same pins; generated here so one check covers both.
 const pythonOutput = path.resolve(nodeRoot, "../python/aifinpay/_v14_deployments.py");
 const pythonSolanaOutput = path.resolve(nodeRoot, "../python/aifinpay/_solana_v14_deployments.py");
@@ -31,13 +33,14 @@ const supportedEvmChains = new Set([
   "botchain",
 ]);
 
-// Source of truth: @aifinpay/deployments ships the canonical per-ecosystem
-// split registries. It is installed as a local file: dependency (the package is
-// private/unpublished) so the SDK resolves it through node_modules.
+// Source of truth: the installed @aifinpay/deployments package ships the
+// canonical per-ecosystem registries.
 const deploymentsPkg = require.resolve("@aifinpay/deployments/package.json");
 const deploymentsRoot = path.dirname(deploymentsPkg);
 const evmRegistryPath = path.join(deploymentsRoot, "registry/splitter/evm/v1.4/deployments.json");
 const solanaRegistryPath = path.join(deploymentsRoot, "registry/splitter/solana/deployments.json");
+const aptosRegistryPath = path.join(deploymentsRoot, "registry/splitter/aptos/deployments.json");
+const nearRegistryPath = path.join(deploymentsRoot, "registry/splitter/near/deployments.json");
 
 // @aifinpay/deployments 2.x dropped `status`/`disabledReason` (its ADR 0007):
 // `settlementEnabled` is the only flag. The SDK still checks status=enabled at
@@ -57,6 +60,8 @@ function withStatus(deployment) {
 
 const evmRegistry = JSON.parse(fs.readFileSync(evmRegistryPath, "utf8"));
 const solanaRegistry = JSON.parse(fs.readFileSync(solanaRegistryPath, "utf8"));
+const aptosRegistry = JSON.parse(fs.readFileSync(aptosRegistryPath, "utf8"));
+const nearRegistry = JSON.parse(fs.readFileSync(nearRegistryPath, "utf8"));
 // SDK network names are lowercase (resolvers lowercase their input, and the
 // backend slug is "arctestnet"); the registry spells the testnet "arcTestnet".
 const sdkEvmDeployments = evmRegistry.deployments
@@ -322,6 +327,131 @@ V14_DEPLOYMENTS = _TABLE["deployments"]
 `;
 }
 
+function validateAccountRegistry(registry, ecosystem) {
+  if (
+    registry.ecosystem !== ecosystem ||
+    !["1.4", "v1.4", "1.4.0"].includes(registry.protocolVersion) ||
+    !Array.isArray(registry.deployments) ||
+    registry.deployments.length === 0
+  ) fail(`invalid ${ecosystem} v1.4 registry`);
+  const keys = new Set();
+  for (const deployment of registry.deployments) {
+    const key = `${ecosystem}:${deployment.environment}:${deployment.network}:v1.4`;
+    if (!["mainnet", "testnet"].includes(deployment.network)) fail(`${key} has unsupported network`);
+    const testnet = deployment.network === "testnet";
+    if (deployment.environment !== (testnet ? "dev" : "prod") || deployment.testnet !== testnet) {
+      fail(`${key} has inconsistent environment/testnet`);
+    }
+    if (keys.has(deployment.network)) fail(`duplicate deployment ${key}`);
+    keys.add(deployment.network);
+    if (typeof deployment.settlementEnabled !== "boolean") fail(`${key} has no boolean settlementEnabled`);
+    const source = deployment.source ?? registry.source;
+    if (
+      source?.repo !== `AiFinPay/${ecosystem}-contract` ||
+      !/^[0-9a-f]{40}$/.test(source.commit ?? "") ||
+      typeof source.path !== "string" || !source.path.trim() ||
+      typeof deployment.sourceArtifact !== "string" || !deployment.sourceArtifact.trim()
+    ) fail(`${key} has missing immutable provenance`);
+    if (ecosystem === "aptos") {
+      if (!Number.isSafeInteger(deployment.chainId) || deployment.chainId !== (testnet ? 2 : 1)) {
+        fail(`${key} has invalid chainId`);
+      }
+      if (!/^0x[0-9a-fA-F]{1,64}$/.test(deployment.packageAddress ?? "") ||
+        /^0x0+$/.test(deployment.packageAddress) ||
+        typeof deployment.packageName !== "string" || !deployment.packageName.trim()) {
+        fail(`${key} has invalid package identity`);
+      }
+      const modules = deployment.modules;
+      if (!Array.isArray(modules) || !modules.length ||
+        new Set(modules.map((module) => module.name)).size !== modules.length ||
+        !modules.some((module) => module.name === "splitter") ||
+        modules.some((module) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(module.name ?? "") ||
+          !/^0x[0-9a-fA-F]{64}$/.test(module.bytecodeHash ?? ""))) {
+        fail(`${key} has invalid module pins`);
+      }
+      const artifact = path.resolve(path.dirname(aptosRegistryPath), deployment.sourceArtifact);
+      if (!artifact.startsWith(deploymentsRoot + path.sep)) fail(`${key} artifact escapes deployments package`);
+      const abi = JSON.parse(fs.readFileSync(artifact, "utf8"));
+      if (abi.address?.toLowerCase() !== deployment.packageAddress.toLowerCase() || abi.name !== "splitter") {
+        fail(`${key} ABI does not match package/splitter identity`);
+      }
+    } else {
+      if (
+        !/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/.test(deployment.contractAccountId ?? "") ||
+        deployment.contractAccountId.length < 2 || deployment.contractAccountId.length > 64 ||
+        !deployment.contractAccountId.endsWith(testnet ? ".testnet" : ".near") ||
+        !/^[0-9a-fA-F]{64}$/.test(deployment.wasmCodeHash ?? "") ||
+        (deployment.runtimeCodeHash !== undefined && deployment.runtimeCodeHash !== deployment.wasmCodeHash)
+      ) fail(`${key} has invalid account/WASM pins`);
+      const prefix = `https://github.com/${source.repo}/blob/${source.commit}/`;
+      if (!deployment.sourceArtifact.startsWith(prefix) ||
+        deployment.sourceArtifact.includes("latest") ||
+        !deployment.sourceArtifact.endsWith(".json")) {
+        fail(`${key} source artifact is not immutable`);
+      }
+    }
+  }
+}
+
+function renderAccountRegistry(registry, ecosystem) {
+  const aptos = ecosystem === "aptos";
+  const name = aptos ? "Aptos" : "Near";
+  const constant = ecosystem.toUpperCase();
+  const table = Object.fromEntries(registry.deployments.map((deployment) => [
+    deployment.network,
+    {
+      network: deployment.network,
+      environment: deployment.environment,
+      testnet: deployment.testnet,
+      splitterVersion: "1.4",
+      settlementEnabled: deployment.settlementEnabled,
+      source: deployment.source ?? registry.source,
+      sourceArtifact: deployment.sourceArtifact,
+      ...(aptos ? {
+        chainId: deployment.chainId,
+        packageAddress: deployment.packageAddress,
+        packageName: deployment.packageName,
+        modules: deployment.modules,
+        abiSha256: createHash("sha256").update(fs.readFileSync(
+          path.resolve(path.dirname(aptosRegistryPath), deployment.sourceArtifact)
+        )).digest("hex"),
+      } : {
+        contractAccountId: deployment.contractAccountId,
+        wasmCodeHash: deployment.wasmCodeHash,
+        treasuryAccountId: deployment.treasuryAccountId,
+      }),
+    },
+  ]));
+  return `// DO NOT EDIT. Generated by scripts/generate-payment-deployments.mjs from @aifinpay/deployments.
+
+import type { SdkEnvironment } from "../deploymentResolver.js";
+
+export type ${name}Network = "mainnet" | "testnet";
+
+/** Packaged deployment metadata, not authorization or runtime verification. */
+export interface ${name}V14Deployment {
+  network: ${name}Network;
+  environment: SdkEnvironment;
+  testnet: boolean;
+  splitterVersion: "1.4";
+  settlementEnabled: boolean;
+  source: { repo: string; commit: string; path: string; url?: string; localPath?: string };
+  sourceArtifact: string;
+${aptos ? `  chainId: number;
+  packageAddress: \`0x\${string}\`;
+  packageName: string;
+  modules: readonly { name: string; bytecodeHash: \`0x\${string}\` }[];
+  abiSha256: string;` : `  contractAccountId: string;
+  wasmCodeHash: string;
+  treasuryAccountId?: string;`}
+}
+
+export const ${constant}_V14_DEPLOYMENTS_SOURCE = ${json(registry.source)} as const;
+
+export const ${constant}_V14_DEPLOYMENTS: Readonly<Record<${name}Network, ${name}V14Deployment | undefined>> = ${json(table)};
+`;
+}
+
 function writeOrCheck(outputPath, content) {
   if (checkOnly) {
     if (!fs.existsSync(outputPath) || fs.readFileSync(outputPath, "utf8") !== content) {
@@ -334,8 +464,12 @@ function writeOrCheck(outputPath, content) {
 
 validateEvm(sdkEvmDeployments);
 validateSolana(solanaDeployments);
+validateAccountRegistry(aptosRegistry, "aptos");
+validateAccountRegistry(nearRegistry, "near");
 writeOrCheck(evmOutput, renderEvm());
 writeOrCheck(solanaOutput, renderSolana());
+writeOrCheck(aptosOutput, renderAccountRegistry(aptosRegistry, "aptos"));
+writeOrCheck(nearOutput, renderAccountRegistry(nearRegistry, "near"));
 writeOrCheck(pythonOutput, renderPython());
 writeOrCheck(
   pythonSolanaOutput,

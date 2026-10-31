@@ -11,11 +11,12 @@ Agent Passport identity + route-verified AIFP-1/AIFP-2 settlement for autonomous
 
 - `npm run build` — clears only this package's generated `dist/`, then runs `tsc -p tsconfig.json`; retired output must never enter a package.
 - `npm test` — `vitest run` (from `node/`)
-- `npm run registry:sync` regenerates `src/generated/splitterRoutes.generated.ts` and `src/generated/v14Deployments.generated.ts`/`src/generated/solanaV14Deployments.generated.ts` from the installed `@aifinpay/deployments` package; `npm run registry:check` verifies both in CI
+- `npm run registry:sync` regenerates `src/generated/splitterRoutes.generated.ts` and the EVM/Solana/Aptos/NEAR deployment tables in `src/generated/` from the installed `@aifinpay/deployments` package; `npm run registry:check` verifies them in CI.
 
 ## Rules
 
 - Never edit `generated/*.ts` by hand — change the `@aifinpay/deployments` registry inputs or `scripts/generate-*.mjs`, then run the matching `registry:sync`.
+- `accountDeploymentResolver.ts` selects Aptos/NEAR metadata from generated package pins. It is not a payment executor; keep these families out of EVM `PaymentChain` and `fetchPaid` until verified quote/receipt, signing and recovery support exists.
 - Keep both exports working (`.`, `./wallet`); `PAYMENT_RECEIPTS.md` ships in `files` — update it if receipt shape changes.
 - Settlement changes need tests in `tests/`; no live RPC, mock at `settlementHttp.ts` / facilitator boundaries.
 - Do not weaken route verification or log secret keys.

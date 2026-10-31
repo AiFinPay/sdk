@@ -120,6 +120,24 @@ export {
 } from "./generated/solanaV14Deployments.generated.js";
 export type { SolanaV14Deployment, SolanaNetwork } from "./generated/solanaV14Deployments.generated.js";
 
+// Aptos/NEAR registry integration is read-only; fetchPaid has no executor for these families.
+export {
+  getAptosDeployment,
+  getNearDeployment,
+  resolveAptosDeployment,
+  resolveNearDeployment,
+  AccountDeploymentResolverError,
+} from "./accountDeploymentResolver.js";
+export type {
+  AccountChainFamily,
+  AccountRequestedVersion,
+  ResolveAccountDeploymentOptions,
+} from "./accountDeploymentResolver.js";
+export { APTOS_V14_DEPLOYMENTS, APTOS_V14_DEPLOYMENTS_SOURCE } from "./generated/aptosV14Deployments.generated.js";
+export type { AptosV14Deployment, AptosNetwork } from "./generated/aptosV14Deployments.generated.js";
+export { NEAR_V14_DEPLOYMENTS, NEAR_V14_DEPLOYMENTS_SOURCE } from "./generated/nearV14Deployments.generated.js";
+export type { NearV14Deployment, NearNetwork } from "./generated/nearV14Deployments.generated.js";
+
 export { AiFinPayAgent, SPLITTER_DEPLOYMENTS, paymentIdFor } from "./unifiedAgent.js";
 export type {
   AiFinPayAgentOptions,
