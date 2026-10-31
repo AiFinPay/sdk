@@ -1,0 +1,101 @@
+{
+  "$schema": "../../../src/reference/payment-deployments.schema.json",
+  "version": "1.0.0",
+  "description": "AiFinPay Aptos payment deployment registry.",
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-30T22:25:06Z",
+  "ecosystem": "aptos",
+  "protocolVersion": "1.4.0",
+  "source": {
+    "repo": "AiFinPay/aptos-contract",
+    "commit": "2e0f6992ef9eedc534f9fd91451fba2a00eadd42",
+    "path": "sources/splitter.move",
+    "url": "https://github.com/AiFinPay/aptos-contract/blob/2e0f6992ef9eedc534f9fd91451fba2a00eadd42/sources/splitter.move",
+    "localPath": "sources/splitter.move"
+  },
+  "deployments": [
+    {
+      "network": "mainnet",
+      "chainId": 1,
+      "environment": "prod",
+      "testnet": false,
+      "settlementEnabled": true,
+      "packageAddress": "0xe03369aa7519038833647bbcf80a448131e68a0101f6be19f292306f3e908164",
+      "packageName": "@aifinpay/aptos-contract",
+      "modules": [
+        {
+          "name": "splitter",
+          "bytecodeHash": "0x8500449e2c78b8d274b76f7f95883894c71d0a7555f8418b723faf003ebccfbf"
+        }
+      ],
+      "sourceArtifact": "../../abi/aptos/splitter/splitter-mainnet-0xe03369aa7519038833647bbcf80a448131e68a0101f6be19f292306f3e908164.json",
+      "timestamp": "2026-10-30T22:25:06Z",
+      "splitterVersion": "1.4.0",
+      "splitter": {
+        "address": "0xe03369aa7519038833647bbcf80a448131e68a0101f6be19f292306f3e908164"
+      },
+      "publishTx": "0x64148f2d621f93a9b8747bb78f38d53e695deeebe6711ffc191255c88271f382",
+      "initializeTx": "none",
+      "bytecodeHash": "0x8500449e2c78b8d274b76f7f95883894c71d0a7555f8418b723faf003ebccfbf",
+      "abi": "../../abi/aptos/splitter/splitter-mainnet-0xe03369aa7519038833647bbcf80a448131e68a0101f6be19f292306f3e908164.json",
+      "source": {
+        "repo": "AiFinPay/aptos-contract",
+        "commit": "2e0f6992ef9eedc534f9fd91451fba2a00eadd42",
+        "path": "sources/splitter.move",
+        "url": "https://github.com/AiFinPay/aptos-contract/blob/2e0f6992ef9eedc534f9fd91451fba2a00eadd42/sources/splitter.move",
+        "localPath": "sources/splitter.move"
+      }
+    },
+    {
+      "network": "testnet",
+      "chainId": 2,
+      "environment": "dev",
+      "testnet": true,
+      "settlementEnabled": true,
+      "packageAddress": "0x75427b810f65688cf0062ac244a4a09d11d583250c1d85c8bf02f0237c7cfe82",
+      "packageName": "@aifinpay/aptos-contract",
+      "modules": [
+        {
+          "name": "splitter",
+          "bytecodeHash": "0x12fcf4d87e39ad4fb1bf662d6ff67ee2dc1252f4bdc808cc65de7488899ed57d"
+        }
+      ],
+      "sourceArtifact": "../../abi/aptos/splitter/splitter-testnet-0x75427b810f65688cf0062ac244a4a09d11d583250c1d85c8bf02f0237c7cfe82.json",
+      "timestamp": "2026-10-19T22:33:13Z",
+      "splitterVersion": "1.4.0",
+      "splitter": {
+        "address": "0x75427b810f65688cf0062ac244a4a09d11d583250c1d85c8bf02f0237c7cfe82",
+        "admin": "0x27c2a07419067492c3ce1f1556ae73b40fe6efae7a064200e831f63ef11af4b4",
+        "signer": "fbec7b9956b293ce67dc5582c9335eb2d73364451a00e938f2e26e42685b241e77effb2e352bc4adb8a7c2147a72760787c2e3ac04cb96c1180bb1e21a1f2267",
+        "pauser": "0x91be04b834a86c4f34182ff1a77ed463cfaf208d4e2bd3991732fc16e85c741c",
+        "treasury": "0xe12274ece6a86e69f5c383c141e013c33f720c7d10e4f7c14df99facf8043dbe",
+        "paused": false,
+        "stablecoins": [
+          "0x69091fbab5f7d635ee7ac5098cf0c1efbe31d68fec0f2cd565e8d168daf52832"
+        ],
+        "routes": [
+          "8dc505be335e565d2a5e2c96057c7fb0caff7c5009f61b82ac3ef5e7a9ec0f1e",
+          "b9dbf587b0df69870df1e60b22fba0317f53eb19d78a573abf94fc384a339a89"
+        ],
+        "paymentCount": "0",
+        "totalSettled": "0"
+      },
+      "publishTx": "0xa37d78d43465575858de0d057205874a02552c236a9606885c9821930ec34698",
+      "initializeTx": "0xeb53c0378a5c38f4338e3a554cb6d3bca6972d4d061a6e7fffc23e109d1bef58",
+      "bytecodeHash": "0x12fcf4d87e39ad4fb1bf662d6ff67ee2dc1252f4bdc808cc65de7488899ed57d",
+      "abi": "../../abi/aptos/splitter/splitter-testnet-0x75427b810f65688cf0062ac244a4a09d11d583250c1d85c8bf02f0237c7cfe82.json",
+      "source": {
+        "repo": "AiFinPay/aptos-contract",
+        "commit": "1a7d7f1c302ac97fee2c8d13d337e38ca3756124",
+        "path": "sources/splitter.move",
+        "url": "https://github.com/AiFinPay/aptos-contract/blob/1a7d7f1c302ac97fee2c8d13d337e38ca3756124/sources/splitter.move",
+        "localPath": "sources/splitter.move"
+      }
+    }
+  ],
+  "sourceArtifact": {
+    "path": null,
+    "retrievedAt": "2026-10-30",
+    "note": "The ABI artifact for each network is referenced by its deployment record."
+  }
+}

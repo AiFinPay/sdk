@@ -13,6 +13,7 @@ inputs to verification, not evidence of current runtime or backend availability.
 | EVM v1.4 | [deployments.json](evm/v1.4/deployments.json) | [Contract suite](evm/v1.4/README.md) |
 | Solana | [deployments.json](solana/deployments.json) | [Program and IDL](solana/README.md) |
 | Casper | [deployments.json](casper/deployments.json) | [Contract schema](casper/README.md) |
+| Aptos | [deployments.json](aptos/deployments.json) · [multisig-deployments.json](aptos/multisig-deployments.json) | [Payment and multisig snapshots](aptos/README.md) |
 
 Read the selected record for chain/network identity, addresses or program IDs,
 runtime hashes, governance, assets, policy fields and settlement flags. Read
@@ -54,6 +55,7 @@ or backend verification.
 
 - [Payment deployment JSON Schema](../../src/reference/payment-deployments.schema.json)
 - [EVM ABI bundles](../abi/evm/)
+- [Aptos splitter ABI bundles](../abi/aptos/splitter/)
 - [Solana IDL copies](../idl/solana/splitter-v14/)
 - [Casper contract schema](../idl/casper/aifinpay-casper-schema.json)
 - [Artifact loading implementation](../../src/artifacts.ts)

@@ -11,6 +11,10 @@ const registryFiles = [
   "registry/splitter/evm/v1.4/deployments.json",
   "registry/splitter/solana/deployments.json",
   "registry/splitter/casper/deployments.json",
+  "registry/splitter/aptos/deployments.json",
+];
+const aptosMultisigFiles = [
+  "registry/splitter/aptos/multisig-deployments.json",
 ];
 
 describe("payment deployment schema references", () => {
@@ -33,6 +37,55 @@ describe("payment deployment schema references", () => {
     );
 
     expect(schema.$schema).toBe("https://json-schema.org/draft/2020-12/schema");
+  });
+
+  it("packages Aptos schemas and referenced ABI artifacts", () => {
+    for (const file of registryFiles.filter((path) => path.startsWith("registry/splitter/aptos/"))) {
+      const registryPath = resolve(packageRoot, file);
+      const registry = JSON.parse(readFileSync(registryPath, "utf8"));
+      const schemaPath = resolve(dirname(registryPath), registry.$schema);
+
+      expect(schemaPath).toBe(
+        resolve(packageRoot, "src/reference/payment-deployments.schema.json"),
+      );
+      expect(existsSync(schemaPath), file).toBe(true);
+
+      for (const deployment of registry.deployments) {
+        expect(deployment).not.toHaveProperty("status");
+        for (const artifactPath of [deployment.abi, deployment.sourceArtifact]) {
+          expect(existsSync(resolve(dirname(registryPath), artifactPath)), artifactPath).toBe(true);
+        }
+      }
+
+      if (registry.sourceArtifact.path) {
+        expect(
+          existsSync(resolve(dirname(registryPath), registry.sourceArtifact.path)),
+          registry.sourceArtifact.path,
+        ).toBe(true);
+      }
+    }
+
+    for (const file of aptosMultisigFiles) {
+      const registryPath = resolve(packageRoot, file);
+      const registry = JSON.parse(readFileSync(registryPath, "utf8"));
+      const schemaPath = resolve(dirname(registryPath), registry.$schema);
+
+      expect(schemaPath).toBe(
+        resolve(packageRoot, "src/reference/aptos-multisig-deployment.schema.json"),
+      );
+      expect(existsSync(schemaPath), file).toBe(true);
+      expect(registry.deployments.map(({ network }: { network: string }) => network)).toEqual([
+        "mainnet",
+        "testnet",
+      ]);
+      for (const deployment of registry.deployments) {
+        expect(deployment.source).toMatchObject({
+          repo: "AiFinPay/aptos-contract",
+          commit: expect.stringMatching(/^[0-9a-f]{40}$/),
+          path: expect.any(String),
+        });
+      }
+    }
   });
 
   it("defines ecosystem-specific Aptos and NEAR deployment records", () => {

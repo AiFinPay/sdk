@@ -3,8 +3,15 @@
 Entries record changes and release context at the time they were written.
 They are not current publication, deployment or acceptance evidence. Resolve
 versions from manifests/registries, deployment metadata from
-[the registry](deployments/registry/splitter/INDEX.md), and execution results
+[the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
+
+## Deployments 2.1.2 — Aptos registry snapshots
+
+- Package mainnet/testnet payment and multisig deployment records with their
+  referenced ABI artifacts and multisig schema.
+- Document that Aptos snapshots are curated data and are not refreshed by the
+  EVM/Solana registry grabber.
 
 ## Deployments 2.1.1 — Aptos and NEAR schema coverage
 

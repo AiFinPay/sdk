@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AiFinPay Aptos multisig wallet registry",
+  "description": "Schema for Aptos multisig wallet creation records, separate from payment package deployments.",
+  "type": "object",
+  "required": [
+    "$schema",
+    "version",
+    "description",
+    "schemaVersion",
+    "generatedAt",
+    "ecosystem",
+    "source",
+    "deployments"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri-reference"
+    },
+    "version": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ecosystem": {
+      "const": "aptos"
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "repo",
+        "commit",
+        "path"
+      ],
+      "properties": {
+        "repo": {
+          "const": "AiFinPay/aptos-contract"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "path": {
+          "enum": [
+            "scripts/ts/create-multisig.ts",
+            "scripts/ts/create-multisig-mainnet.ts"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "localPath": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "deployments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/aptosMultisigDeployment"
+      }
+    }
+  },
+  "$defs": {
+    "aptosMultisigDeployment": {
+      "type": "object",
+      "required": [
+        "network",
+        "chainId",
+        "timestamp",
+        "multisig",
+        "createTx",
+        "creationFunction",
+        "creationVersion",
+        "status",
+        "contractPublished",
+        "explorerUrl"
+      ],
+      "properties": {
+        "network": {
+          "enum": [
+            "mainnet",
+            "testnet"
+          ]
+        },
+        "chainId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "multisig": {
+          "type": "object",
+          "required": [
+            "address",
+            "type",
+            "numSignaturesRequired",
+            "owners",
+            "bootstrapperIsOwner",
+            "authenticationKeyDisabled"
+          ],
+          "properties": {
+            "address": {
+              "type": "string",
+              "pattern": "^0x[0-9a-fA-F]{1,64}$"
+            },
+            "type": {
+              "const": "0x1::multisig_account::MultisigAccount"
+            },
+            "numSignaturesRequired": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "owners": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^0x[0-9a-fA-F]{1,64}$"
+              }
+            },
+            "bootstrapperIsOwner": {
+              "type": "boolean"
+            },
+            "authenticationKeyDisabled": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": true
+        },
+        "createTx": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{64}$"
+        },
+        "creationFunction": {
+          "const": "0x1::multisig_account::create_with_owners_then_remove_bootstrapper"
+        },
+        "creationVersion": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        },
+        "status": {
+          "const": "created"
+        },
+        "contractPublished": {
+          "const": false
+        },
+        "explorerUrl": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "network": {
+                "const": "mainnet"
+              }
+            },
+            "required": [
+              "network"
+            ]
+          },
+          "then": {
+            "properties": {
+              "chainId": {
+                "const": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "network": {
+                "const": "testnet"
+              }
+            },
+            "required": [
+              "network"
+            ]
+          },
+          "then": {
+            "properties": {
+              "chainId": {
+                "const": 2
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": true
+    }
+  }
+}

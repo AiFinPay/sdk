@@ -83,8 +83,12 @@ registry/
 │   │   ├── v1.2/deployments.json  # EVM v1.2 legacy
 │   │   └── v1.1/deployments.json  # EVM v1.1 legacy
 │   ├── solana/deployments.json # Solana v1.4 program deployments
-│   └── casper/deployments.json # Casper deployments
+│   ├── casper/deployments.json # Casper deployments
+│   └── aptos/                  # Aptos deployment snapshots
+│       ├── deployments.json
+│       └── multisig-deployments.json
 ├── abi/
+│   ├── aptos/       # Aptos splitter ABI snapshots
 │   ├── evm/         # EVM ABI bundles (B2BSplitterV14, TimelockWrapper)
 │   └── tron/        # Tron ABI bundles when applicable
 └── idl/
@@ -99,6 +103,10 @@ Schema](src/reference/payment-deployments.schema.json) describes their
 ecosystem-specific record shapes. Output selection is implemented in the
 [grabber](src/grabber.ts) and [build CLI](src/build.ts); upstream provenance is
 stored in the generated JSON rather than this README.
+
+Aptos records are curated package data, not outputs of `registry:build`. See the
+[Aptos registry guide](registry/splitter/aptos/README.md) for snapshot
+provenance and refresh instructions.
 
 ## Exports
 
