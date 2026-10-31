@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.11.2 — Arc splitter getters
+
+- The splitter on Arc and Arc Testnet uses the linted ABI published in
+  `@aifinpay/deployments` 2.1.3, where the satellite getters are
+  `TOKEN_LIST()` and `PROFILES()`. The pre-payment deployment check read
+  `tokenList()` / `profiles()` everywhere, so every Arc payment was refused
+  before signing. Those names are now read only on the splitters deployed
+  before the linted ABI; Arc and every later EVM deployment use the upper-case
+  getters.
+- `@aifinpay/deployments` 2.1.3.
+
 ## 2.11.1 — Solana RPC URLs without a path
 
 - The payment HTTP transport compared `response.url` to the request URL as

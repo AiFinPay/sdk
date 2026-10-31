@@ -1,3 +1,11 @@
+## 2.9.1 — Arc splitter getters
+
+- The pre-payment deployment check reads `TOKEN_LIST()` / `PROFILES()` (the
+  linted ABI in `@aifinpay/deployments` 2.1.3) on Arc and every later EVM
+  deployment, and `tokenList()` / `profiles()` only on the splitters deployed
+  before it. Every Arc payment was refused before signing. Matches
+  `@aifinpay/agent` 2.11.2.
+
 ## 2.9.0 — BOT Chain (USDT only)
 
 - `fetch_paid(chain="botchain")` pays only in its pinned USDT
