@@ -35,12 +35,56 @@ describe("payment deployment schema references", () => {
     expect(schema.$schema).toBe("https://json-schema.org/draft/2020-12/schema");
   });
 
+  it("defines ecosystem-specific Aptos and NEAR deployment records", () => {
+    const schema = JSON.parse(
+      readFileSync(resolve(packageRoot, "src/reference/payment-deployments.schema.json"), "utf8"),
+    );
+    const expectedFields: Record<string, string[]> = {
+      aptosDeployment: [
+        "network",
+        "chainId",
+        "packageAddress",
+        "packageName",
+        "modules",
+        "sourceArtifact",
+      ],
+      nearDeployment: [
+        "network",
+        "contractAccountId",
+        "wasmCodeHash",
+        "sourceArtifact",
+      ],
+    };
+
+    for (const [definition, fields] of Object.entries(expectedFields)) {
+      expect(schema.$defs[definition]).toBeDefined();
+      expect(schema.$defs[definition].required).toEqual(expect.arrayContaining(fields));
+    }
+
+    for (const ecosystem of ["aptos", "near"]) {
+      const rule = schema.allOf.find(
+        (condition: { if: { properties: { ecosystem: { const: string } } } }) =>
+          condition.if.properties.ecosystem.const === ecosystem,
+      );
+      expect(rule?.then.properties.deployments.items.$ref).toBe(
+        `#/$defs/${ecosystem}Deployment`,
+      );
+      expect(rule?.then.properties.source.required).toEqual(["commit", "path"]);
+    }
+  });
+
   it("omits status and disabledReason from generated deployment shapes and registry records", () => {
     const schema = JSON.parse(
       readFileSync(resolve(packageRoot, "src/reference/payment-deployments.schema.json"), "utf8"),
     );
 
-    for (const definition of ["evmDeployment", "solanaDeployment", "casperDeployment"]) {
+    for (const definition of [
+      "evmDeployment",
+      "solanaDeployment",
+      "casperDeployment",
+      "aptosDeployment",
+      "nearDeployment",
+    ]) {
       expect(schema.$defs[definition].properties).not.toHaveProperty("status");
       expect(schema.$defs[definition].properties).not.toHaveProperty("disabledReason");
     }
