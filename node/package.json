@@ -92,7 +92,7 @@
   },
   "bugs": "https://github.com/AiFinPay/sdk/issues",
   "dependencies": {
-    "@aifinpay/deployments": "2.1.0",
+    "@aifinpay/deployments": "2.1.3",
     "@aifinpay/wallet": "1.5.0",
     "@noble/curves": "^1.9.0",
     "@noble/hashes": "^1.5.0",

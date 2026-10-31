@@ -104,7 +104,7 @@ class FakeChain:
             "getL1FeeUpperBound(uint256)": ["uint256"], "getOperatorFee(uint256)": ["uint256"],
         }
         if dep["network"] in ("arc", "arctestnet"):
-            # The live Arc splitter exposes only the upper-case getters; a lower-case read reverts there.
+            # The live Arc splitter (linted ABI) exposes only the upper-case getters; a lower-case read reverts there.
             for old, new in (("profiles()", "PROFILES()"), ("tokenList()", "TOKEN_LIST()")):
                 self.state[new] = self.state.pop(old)
                 self.returns[new] = self.returns.pop(old)

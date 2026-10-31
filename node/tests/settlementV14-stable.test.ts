@@ -127,7 +127,7 @@ async function fixture(network: PaymentChain = "polygon", asset = "USDC", micro 
       [token, gross, gross - gross / 100n, gross / 100n, 0n, message.validUntil, q.routeId, q.orderIdHash]
     ),
   });
-  // The live Arc splitter exposes only the upper-case getters; a lower-case read reverts there.
+  // The live Arc splitter (linted ABI) exposes only the upper-case getters; a lower-case read reverts there.
   const upperCaseGetters = network === "arc" || network === "arctestnet";
   const state: Record<string, unknown> = {
     ...(upperCaseGetters

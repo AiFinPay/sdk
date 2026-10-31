@@ -2,12 +2,14 @@
 
 ## 2.11.2 — Arc splitter getters
 
-- The splitter on Arc and Arc Testnet is built from the current contract
-  source, which names the satellite getters `TOKEN_LIST()` and `PROFILES()`;
-  the other chains run an earlier build with `tokenList()` / `profiles()`.
-  The pre-payment deployment check read the lower-case names everywhere, so
-  every Arc payment was refused before signing. It now reads the upper-case
-  getters on `arc` and `arctestnet`.
+- The splitter on Arc and Arc Testnet uses the linted ABI published in
+  `@aifinpay/deployments` 2.1.3, where the satellite getters are
+  `TOKEN_LIST()` and `PROFILES()`. The pre-payment deployment check read
+  `tokenList()` / `profiles()` everywhere, so every Arc payment was refused
+  before signing. Those names are now read only on the splitters deployed
+  before the linted ABI; Arc and every later EVM deployment use the upper-case
+  getters.
+- `@aifinpay/deployments` 2.1.3.
 
 ## 2.11.1 — Solana RPC URLs without a path
 
