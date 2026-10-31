@@ -4,13 +4,17 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  toml@<=5.0.0: ^5.0.1
+  zod@<4.6.6: ^4.6.6
+
 importers:
 
   .:
     devDependencies:
       '@daochild/agents-config':
-        specifier: ^1.2.1
-        version: 1.2.1
+        specifier: ^2.1.0
+        version: 2.1.0
 
 packages:
 
@@ -18,8 +22,8 @@ packages:
     resolution: {integrity: sha512-oGMAgGoQdBXbZqNG0Ze56CHjDZ1IDYOwGYxYjO5KLSlz5HiNQ9udIXsPZ61VWaHGZ5XW/jyjmr6t2xz2jGVwbQ==}
     engines: {node: '>=18'}
 
-  '@daochild/agents-config@1.2.1':
-    resolution: {integrity: sha512-R23BlcZIwCjgM4My0Nkf4iHEbeMIaeIwi/Yd9sN8zyibyVeCc91qw+Rv4qvPXw2hWxz8zr6W+9nGOZSb50U2MQ==}
+  '@daochild/agents-config@2.1.0':
+    resolution: {integrity: sha512-hzhzZRhZH176Gc0K3fIkgLRwZCN+1JsAbIAZBGt7714PFjbauPbt5FdCNmLVc2PiXbwdq7lOqLRh49fVFKfDyA==}
 
   '@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.4':
     resolution: {integrity: sha512-LCkGo6JDfaBhgST7UpPWgNgLINpcpabaHfyz5OBx75nUYxBsaEPxjnyNjWpeb/xBup/682QnBfRBy2/LvPutZQ==}
@@ -131,8 +135,8 @@ packages:
     resolution: {integrity: sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==}
     engines: {node: '>=8'}
 
-  toml@4.3.0:
-    resolution: {integrity: sha512-lVb8X9BsPVuH0M4BKeS91tXAmJvCjQ5UIyAbQFaxkKGyUFK2RPkhwaFSQH8vbpl1d23eu/IBH+dwVMHWaq9A5A==}
+  toml@5.0.1:
+    resolution: {integrity: sha512-EqYNA/YvUNndrA2B3O2ojzLQoTQrBxeZ9UIjQwk8t10oe6n7dwclBwd9IdZQTOKwe6vWX+AXtl6IntXRbepdxQ==}
     engines: {node: '>=20'}
 
   uuid@14.0.2:
@@ -149,8 +153,8 @@ packages:
     engines: {node: '>= 14.6'}
     hasBin: true
 
-  zod@4.1.8:
-    resolution: {integrity: sha512-5R1P+WwQqmmMIEACyzSvo4JXHY5WiAFHRMg+zBZKgKS+Q1viRa0C1hmUKtHltoIFKtIdki3pRxkmpP74jnNYHQ==}
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
 
@@ -158,7 +162,7 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
-  '@daochild/agents-config@1.2.1':
+  '@daochild/agents-config@2.1.0':
     dependencies:
       '@opencode-ai/plugin': 1.18.30
     transitivePeerDependencies:
@@ -189,7 +193,7 @@ snapshots:
       '@ai-sdk/provider': 3.0.8
       '@opencode-ai/sdk': 1.18.30
       effect: 4.0.0-beta.83
-      zod: 4.1.8
+      zod: 4.6.7
 
   '@opencode-ai/sdk@1.18.30':
     dependencies:
@@ -215,7 +219,7 @@ snapshots:
       kubernetes-types: 1.30.0
       msgpackr: 2.1.0
       multipasta: 0.2.8
-      toml: 4.3.0
+      toml: 5.0.1
       uuid: 14.0.2
       yaml: 2.9.1
 
@@ -266,7 +270,7 @@ snapshots:
 
   shebang-regex@3.0.0: {}
 
-  toml@4.3.0: {}
+  toml@5.0.1: {}
 
   uuid@14.0.2: {}
 
@@ -276,4 +280,4 @@ snapshots:
 
   yaml@2.9.1: {}
 
-  zod@4.1.8: {}
+  zod@4.6.7: {}
