@@ -11,10 +11,21 @@ agent identity via env.
 ### Run locally
 
 ```bash
-cd mcp-http
+cd mcp
 npm ci --no-audit --no-fund
+cd ../mcp-http
+npm ci --no-audit --no-fund
+npm run build
 PORT=3010 node server.js
 ```
+
+The `file:../mcp` dependency resolves to the upstream package's compiled
+`dist/` exports, not its TypeScript source. Build it before starting the shim
+and after changing upstream source. `npm run build` invokes that package's
+build; `npm test` does so automatically through `pretest` before exercising
+the HTTP transport. This prevents stale exports from breaking the directory
+profile or its `/toolspec.json` endpoint. The directory integration tests use
+the real linked MCP package without calling external APIs.
 
 ```bash
 # Probe the catalog descriptor

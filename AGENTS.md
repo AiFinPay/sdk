@@ -1,10 +1,8 @@
-# AiFinPay SDK — agent guide
+# Agent Notes
 
 Primary instructions: `node_modules/@daochild/agents-config/AGENTS.md` — read in full and follow unless overridden below.
 
-Payment rail for AI agents (AIFP-1 gross-inclusive settlement, AIFP-2/x402 negotiation).
-Optional observational context grants no payment authority. Canonical domain is
-`aifinpay.io`.
+Main domain is `aifinpay.io`.
 
 ## Evidence, not status snapshots
 
