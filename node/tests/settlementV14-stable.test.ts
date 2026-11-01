@@ -127,9 +127,12 @@ async function fixture(network: PaymentChain = "polygon", asset = "USDC", micro 
       [token, gross, gross - gross / 100n, gross / 100n, 0n, message.validUntil, q.routeId, q.orderIdHash]
     ),
   });
+  // The live Arc splitter (linted ABI) exposes only the upper-case getters; a lower-case read reverts there.
+  const upperCaseGetters = network === "arc" || network === "arctestnet";
   const state: Record<string, unknown> = {
-    profiles: dep.splitter.profiles,
-    tokenList: dep.splitter.tokenList,
+    ...(upperCaseGetters
+      ? { PROFILES: dep.splitter.profiles, TOKEN_LIST: dep.splitter.tokenList }
+      : { profiles: dep.splitter.profiles, tokenList: dep.splitter.tokenList }),
     treasury: dep.splitter.treasury,
     hasRole: true,
     getProfile: { treasuryBps: 100, ipCreatorBps: 0, enabled: true, configuredAt: 1n, routeTreasury: zero },
@@ -151,7 +154,10 @@ async function fixture(network: PaymentChain = "polygon", asset = "USDC", micro 
     chain: { id: dep.chainId },
     getChainId: vi.fn(async () => dep.chainId),
     getBytecode: vi.fn(async () => "0x6001"),
-    readContract: vi.fn(async ({ functionName }: { functionName: string }) => state[functionName]),
+    readContract: vi.fn(async ({ functionName }: { functionName: string }) => {
+      if (!(functionName in state)) throw new Error(`execution reverted: ${functionName}`);
+      return state[functionName];
+    }),
     simulateContract: vi.fn(async () => ({})),
     estimateGas: vi.fn(async () => 100000n),
     estimateFeesPerGas: vi.fn(async () => ({ maxFeePerGas: 10n, maxPriorityFeePerGas: 1n })),

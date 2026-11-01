@@ -325,8 +325,24 @@ const EXECUTION_ABI = parseAbi([
   "function settleStable((address payer,address merchant,address token,uint256 grossAmount,address ipCreator,uint256 validUntil,bytes32 orderIdHash,uint256 nonce,bytes32 routeId) quote,bytes signature)",
   "function profiles() view returns (address)",
   "function tokenList() view returns (address)",
+  "function PROFILES() view returns (address)",
+  "function TOKEN_LIST() view returns (address)",
   "function treasury() view returns (address)",
   "function hasRole(bytes32,address) view returns (bool)",
+]);
+// Splitters deployed before the linted ABI (deployments 2.1.3) keep lower-case satellite getters.
+const LOWER_CASE_GETTERS: ReadonlySet<string> = new Set([
+  "amoy",
+  "arbitrum",
+  "avalanche",
+  "base",
+  "bnb",
+  "botchain",
+  "optimism",
+  "polygon",
+  "robinhood",
+  "unichain",
+  "xrplevm",
 ]);
 const PROFILE_ABI = parseAbi([
   "function getProfile(bytes32) view returns ((uint16 treasuryBps,uint16 ipCreatorBps,bool enabled,uint64 configuredAt,address routeTreasury))",
@@ -595,8 +611,16 @@ export async function executeV14Settlement(
   if (lc(signer!) !== lc(deployment.splitter.signer))
     fail("V14_UNTRUSTED_SIGNER", "quote signer does not match independent deployment pin");
   const [profiles, tokenList, treasury, signerHasRole, profile, preflight] = await Promise.all([
-    publicClient.readContract({ address: call.contract, abi: EXECUTION_ABI, functionName: "profiles" }),
-    publicClient.readContract({ address: call.contract, abi: EXECUTION_ABI, functionName: "tokenList" }),
+    publicClient.readContract({
+      address: call.contract,
+      abi: EXECUTION_ABI,
+      functionName: LOWER_CASE_GETTERS.has(deployment.network) ? "profiles" : "PROFILES",
+    }),
+    publicClient.readContract({
+      address: call.contract,
+      abi: EXECUTION_ABI,
+      functionName: LOWER_CASE_GETTERS.has(deployment.network) ? "tokenList" : "TOKEN_LIST",
+    }),
     publicClient.readContract({ address: call.contract, abi: EXECUTION_ABI, functionName: "treasury" }),
     publicClient.readContract({
       address: call.contract,
