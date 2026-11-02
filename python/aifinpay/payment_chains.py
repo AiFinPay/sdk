@@ -121,7 +121,7 @@ PAYMENT_CHAINS = {
         "label": "Arc Testnet",
         "native": "USDC",
         "gasModel": "evm",
-        "defaultRpc": "https://rpc.blockdaemon.testnet.arc.io",
+        "defaultRpc": "https://rpc.drpc.testnet.arc.io",
         "coingeckoId": "usd-coin",
         "maxSaneUsd": 2,
         "stablecoinOnly": True,

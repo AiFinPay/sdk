@@ -160,3 +160,9 @@ def test_high_level_omitted_chain_preserves_selector_omission_and_polygon_overri
     agent._w3 = override
     assert agent._web3() is override
     assert agent._web3("base") is not override
+
+
+def test_arc_testnet_reads_receipts_from_drpc_by_default():
+    # rpc.blockdaemon.testnet.arc.io keeps answering a receipt query with the
+    # first null it served, so a payment there outlived the receipt wait.
+    assert PAYMENT_CHAINS["arctestnet"]["defaultRpc"] == "https://rpc.drpc.testnet.arc.io"
