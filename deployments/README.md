@@ -33,6 +33,7 @@ const csv = evmRegistry.exportAsCsv();
 // Query artifacts
 const abi = artifacts.getEvmAbi("B2BSplitterV14", "1.4");
 const solanaIdl = artifacts.getSolanaIdl("mainnet");
+const nearAbi = artifacts.getNearAbi("aifinpay-near-contract");
 ```
 
 See [USAGE.md](./USAGE.md) for complete documentation.
@@ -109,8 +110,9 @@ Aptos records are curated package data, not outputs of `registry:build`. See the
 [Aptos registry guide](registry/splitter/aptos/README.md) for snapshot
 provenance and refresh instructions.
 
-NEAR records are also curated package data, not grabber outputs or programmatic
-lookup APIs. See the [NEAR registry guide](registry/splitter/near/README.md)
+NEAR deployment records are curated package data, not grabber outputs or
+programmatic deployment lookup APIs. NEAR ABI documents are available through
+`ArtifactRegistry`. See the [NEAR registry guide](registry/splitter/near/README.md)
 for provenance, field normalization, governance caveats, and refresh instructions.
 
 ## Exports
@@ -141,6 +143,8 @@ for provenance, field normalization, governance caveats, and refresh instruction
 - `getCasperIdl(network)` — Casper IDL (mainnet/testnet)
 - `getAptosIdl(contractName, version?)` — Aptos IDL
 - `getTronAbi(contractName, version?)` — Tron ABI
+- `getNearAbi(contractName, version?)` — NEAR ABI document
+- `getAllNearAbis()` — all loaded NEAR ABI documents
 
 ### Legacy grabber (deprecated)
 
@@ -153,4 +157,4 @@ for provenance, field normalization, governance caveats, and refresh instruction
 ### Types
 
 - `DeploymentRegistry`, `EcosystemRegistry`, `Deployment`, `EvmDeployment`, `SolanaDeployment`, `Stablecoin`
-- `EvmDeploymentRecord`, `SolanaDeploymentRecord`, `EvmAbiArtifact`, `SolanaIdlArtifact`
+- `EvmDeploymentRecord`, `SolanaDeploymentRecord`, `EvmAbiArtifact`, `SolanaIdlArtifact`, `NearAbiArtifact`

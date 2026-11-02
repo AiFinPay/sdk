@@ -318,6 +318,23 @@ const versionedAbi = artifacts.getTronAbi("B2BSplitter", "1.4");
 const allAbis = artifacts.getAllTronAbis();
 ```
 
+### NEAR ABI
+
+```typescript
+const artifacts = ArtifactRegistry.load();
+
+// Get the complete ABI document by contract name and optional version
+const nearAbi = artifacts.getNearAbi("aifinpay-near-contract", "1.4.0");
+if (nearAbi) {
+  console.log(nearAbi.contractName);
+  console.log(nearAbi.version);
+  console.log(nearAbi.abi); // Includes metadata and body
+}
+
+// Get all loaded NEAR ABI documents
+const allNearAbis = artifacts.getAllNearAbis();
+```
+
 ---
 
 ## Complete Examples
@@ -455,6 +472,7 @@ import type {
   SolanaDeploymentRecord,
   EvmAbiArtifact,
   SolanaIdlArtifact,
+  NearAbiArtifact,
 } from "@aifinpay/deployments";
 
 // EVM deployment record
@@ -500,6 +518,12 @@ interface SolanaIdlArtifact {
   cluster: "mainnet" | "devnet";
   idl: unknown;
 }
+
+interface NearAbiArtifact {
+  contractName: string;
+  version: string;
+  abi: unknown;
+}
 ```
 
 ---
@@ -522,6 +546,7 @@ registry/
 │   ├── evm/
 │   │   ├── B2BSplitterV14/
 │   │   └── TimelockWrapper/
+│   ├── near/
 │   └── tron/
 └── idl/
     ├── solana/splitter-v14/

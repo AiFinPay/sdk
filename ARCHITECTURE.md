@@ -14,6 +14,9 @@ build orchestrator. Package instructions and lockfiles are authoritative.
   Solana and Casper registry files. Node generated registry files are
   regenerated from these inputs, never edited by hand. See
   [ADR 0007](docs/adr/0007-payment-deployment-schema.md).
+- The deployments package exposes curated NEAR ABI documents through the
+  existing `ArtifactRegistry` pattern. See
+  [ADR 0008](docs/adr/0008-near-abi-artifact-access.md).
 - `mcp/` adapts the public Node SDK to stdio tools. It consumes the published Node
   package; source changes require a packed SDK integration test. Operator config,
   wallet loading, SSRF-safe fetch, and tool dispatch are separate boundaries.

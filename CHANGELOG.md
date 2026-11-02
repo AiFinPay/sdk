@@ -13,6 +13,11 @@ from the corresponding CI or payment artifacts.
 - Add explicit environment/version-bound inspection and enabled-record selection.
   Keep payment execution unsupported pending backend and verified executor support.
 
+## Deployments 2.1.5 — NEAR ABI artifact access
+
+- Load NEAR ABI JSON documents through `ArtifactRegistry` with lookup and
+  enumeration methods.
+
 ## Deployments 2.1.4 — NEAR registry snapshots
 
 - Package curated NEAR mainnet/testnet deployment records and council membership

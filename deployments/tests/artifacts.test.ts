@@ -97,4 +97,27 @@ describe("ArtifactRegistry", () => {
       expect(abi).toBeNull();
     });
   });
+
+  describe("NEAR ABI", () => {
+    it("gets NEAR ABI by contract name and version", () => {
+      const abi = registry.getNearAbi("aifinpay-near-contract", "1.4.0");
+      expect(abi).not.toBeNull();
+      expect(abi?.contractName).toBe("aifinpay-near-contract");
+      expect(abi?.version).toBe("1.4.0");
+      expect(abi?.abi).toHaveProperty("body.functions");
+    });
+
+    it("gets NEAR ABI without a version", () => {
+      const abi = registry.getNearAbi("aifinpay-near-contract");
+      expect(abi?.version).toBe("1.4.0");
+    });
+
+    it("gets all NEAR ABIs", () => {
+      expect(registry.getAllNearAbis()).toHaveLength(1);
+    });
+
+    it("returns null for an unknown contract", () => {
+      expect(registry.getNearAbi("UnknownContract")).toBeNull();
+    });
+  });
 });
