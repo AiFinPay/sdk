@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.15.4 — installs agent 2.12.3, so Solana payments recover
+
+- `@aifinpay/agent` ^2.12.3 (lock resolved from the registry, with
+  `@aifinpay/deployments` 2.1.4). It accepts an existing Solana payer nonce
+  account written by the deployed program, closes an expired admission whose
+  quote no longer verifies, and recovers a pending Solana payment from the
+  durable ledger in a new process.
+
 ## 2.15.3 — bundles skill 2.12.0
 
 - `@aifinpay/skill` ^2.12.0, and `aifinpay://skill` serves it: the pricing
