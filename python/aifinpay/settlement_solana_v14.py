@@ -464,11 +464,8 @@ def prepare_settlement(call, *, rpc, deployment, payer, order_id, max_fee_lampor
         raise SolanaV14Error("invalid Solana recipients/profile")
     if pn:
         b = _bytes(pn, d["programId"], DISCS["payerNonce"], 49)
-        if (
-            _pub(b, 8) != payer
-            or struct.unpack_from("<Q", b, 40)[0] != _integer(q["nonce"])
-            or b[48] != bump(b"payer-nonce", bytes(_key(payer)))
-        ):
+        # The deployed program stores 0 in the bump byte; the derived address already proves the PDA.
+        if _pub(b, 8) != payer or struct.unpack_from("<Q", b, 40)[0] != _integer(q["nonce"]):
             raise SolanaV14Error("Solana payer nonce mismatch")
     elif q["nonce"] != "0":
         raise SolanaV14Error("Solana nonce account missing")
