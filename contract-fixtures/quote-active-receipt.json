@@ -1,0 +1,12 @@
+{
+  "source": "aifinpay-web backend/interfaces/http/routes/aifp.js, POST /v1/quote: the payer's active slot holds a settled quote",
+  "answer": {
+    "active_receipt": true,
+    "receipt_id": "rcpt_00000000000000a1",
+    "merchant_id": "mrch_acme",
+    "resource": "/articles/one",
+    "chain": "arctestnet",
+    "tx_ref": "0x00000000000000000000000000000000000000000000000000000000000000a1",
+    "settled_at": "2026-11-02T16:38:00.000Z"
+  }
+}

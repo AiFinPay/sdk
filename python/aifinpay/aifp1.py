@@ -131,6 +131,32 @@ class Aifp1GatewayRetiredError(Aifp1Error):
         self.site = site
 
 
+class Aifp1ActiveReceiptError(Aifp1QuoteError):
+    """/v1/quote answered ``active_receipt``: this payer already bought this resource.
+
+    Nothing was quoted or paid. Recover ``receipt_id`` with the journal saved
+    for ``tx_ref`` (``journal_path`` when this agent's journal has it); do not buy again.
+    """
+
+    code = "AIFP1_ACTIVE_RECEIPT"
+
+    def __init__(self, answer: Dict[str, Any]):
+        def text(key):
+            value = answer.get(key)
+            return value if isinstance(value, str) and value else None
+
+        self.receipt_id = answer["receipt_id"]
+        self.tx_ref, self.chain = text("tx_ref"), text("chain")
+        self.merchant_id, self.resource, self.settled_at = text("merchant_id"), text("resource"), text("settled_at")
+        self.journal_path: Optional[str] = None
+        super().__init__(
+            f"already paid: receipt {self.receipt_id}"
+            + (f" (tx {self.tx_ref})" if self.tx_ref else "")
+            + " covers this purchase; nothing was quoted or paid. "
+            "Recover it with recover_paid and the journal saved for that transaction; do not buy again."
+        )
+
+
 def _iso_to_unix(value: str) -> int:
     return timegm(time.strptime(str(value)[:19], "%Y-%m-%dT%H:%M:%S"))
 
@@ -1660,6 +1686,13 @@ def aifp1_fetch(
                     ledger.close_quote_admission(admission["id"], admission_binding, admission_context, "not-admitted")
             raise Aifp1QuoteError(f"POST /v1/quote → {r.status_code}: {r.text[:300]}")
         quote = r.json()
+        if (
+            isinstance(quote, dict)
+            and quote.get("active_receipt") is True
+            and isinstance(quote.get("receipt_id"), str)
+            and quote["receipt_id"].startswith("rcpt_")
+        ):
+            raise Aifp1ActiveReceiptError(quote)
         if admission:
             admission["quote_json"] = json.dumps(quote, separators=(",", ":"), ensure_ascii=False)
             ledger.adopt_quote_admission(admission["id"], admission_binding, admission_context, admission["quote_json"])

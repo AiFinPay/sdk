@@ -14,7 +14,7 @@
 // routes/aifp.js idempotency — because a mock that is merely agreeable would
 // pass while the SDK talks to nobody.
 
-import { readdirSync, statSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { verifyMessage, keccak256, stringToHex, encodeFunctionData } from "viem";
@@ -27,6 +27,7 @@ import {
   Aifp1ReceiptRejectedError,
   Aifp1MerchantChangedError,
   Aifp1GatewayRetiredError,
+  Aifp1ActiveReceiptError,
   FileMerchantPinStore,
   recoverAifp1Payment,
   idempotencyKeyFor,
@@ -75,6 +76,8 @@ interface MockServer {
   merchants: Record<string, string>;
   /** Slugs a site published and no longer serves: 410 gateway_retired. */
   retired: string[];
+  /** Answer /v1/quote with this body instead of a quote. */
+  quoteAnswer?: Record<string, unknown>;
   /** Number of AIFP-425 answers /v1/pay gives before settling. */
   payNotConfirmedTimes: number;
   payUnavailableTimes?: number;
@@ -140,6 +143,7 @@ function mockServer(): MockServer {
     if (url.origin === API && url.pathname === "/v1/quote") {
       s.quotes++;
       const body = JSON.parse(String(init?.body ?? "{}"));
+      if (s.quoteAnswer) return json(s.quoteAnswer);
       const scope: string = body.scope ?? "exact";
       if (!["exact", "prefix", "merchant"].includes(scope)) {
         return json({ error: "AIFP-400", detail: "bad scope" }, 400);
@@ -1334,6 +1338,57 @@ describe("aifp1: a gateway site keeps the merchant it was first paid as", () => 
     const { agent, settlements } = await agentFor(server);
     await expect(agent.fetchPaid(`${GATEWAY}/acme/articles/two`)).rejects.toThrow(/merchant pin/);
     expect(server.quotes).toBe(1);
+    expect(settlements).toHaveLength(0);
+  });
+});
+
+const ACTIVE_RECEIPT = JSON.parse(
+  readFileSync(new URL("../../contract-fixtures/quote-active-receipt.json", import.meta.url), "utf8")
+).answer as Record<string, unknown>;
+
+describe("aifp1: /v1/quote answers active_receipt", () => {
+  it("throws a typed error naming the existing receipt and pays nothing", async () => {
+    const server = mockServer();
+    server.quoteAnswer = ACTIVE_RECEIPT;
+    const { agent, settlements } = await agentFor(server);
+
+    const refused = await agent.fetchPaid(`${GATEWAY}/acme/articles/one`).catch((e: unknown) => e);
+    expect(refused).toBeInstanceOf(Aifp1ActiveReceiptError);
+    expect(refused).toBeInstanceOf(Aifp1QuoteError);
+    expect(refused).toMatchObject({
+      code: "AIFP1_ACTIVE_RECEIPT",
+      receiptId: ACTIVE_RECEIPT.receipt_id,
+      txRef: ACTIVE_RECEIPT.tx_ref,
+      chain: ACTIVE_RECEIPT.chain,
+      merchantId: ACTIVE_RECEIPT.merchant_id,
+      resource: ACTIVE_RECEIPT.resource,
+      settledAt: ACTIVE_RECEIPT.settled_at,
+    });
+    expect((refused as Error).message).toContain(String(ACTIVE_RECEIPT.receipt_id));
+    expect(server.quotes).toBe(1);
+    expect(server.pays).toBe(0);
+    expect(settlements).toHaveLength(0);
+    expect(agent.aifp1Receipts.size).toBe(0);
+  });
+
+  it("keeps a receipt whose transaction the server no longer has", async () => {
+    const server = mockServer();
+    server.quoteAnswer = { ...ACTIVE_RECEIPT, tx_ref: null };
+    const { agent, settlements } = await agentFor(server);
+
+    const refused = await agent.fetchPaid(`${GATEWAY}/acme/articles/one`).catch((e: unknown) => e);
+    expect(refused).toMatchObject({ code: "AIFP1_ACTIVE_RECEIPT", receiptId: ACTIVE_RECEIPT.receipt_id, txRef: null });
+    expect(settlements).toHaveLength(0);
+  });
+
+  it("does not take an answer without a receipt id for one", async () => {
+    const server = mockServer();
+    server.quoteAnswer = { active_receipt: true };
+    const { agent, settlements } = await agentFor(server);
+
+    const refused = await agent.fetchPaid(`${GATEWAY}/acme/articles/one`).catch((e: unknown) => e);
+    expect(refused).toBeInstanceOf(Aifp1QuoteError);
+    expect(refused).not.toBeInstanceOf(Aifp1ActiveReceiptError);
     expect(settlements).toHaveLength(0);
   });
 });

@@ -10,6 +10,7 @@ resource, and an uncertain outcome is surfaced for recovery, never paid twice.
 import base64
 import hashlib
 import json
+import pathlib
 import os
 import stat
 import time
@@ -95,6 +96,7 @@ class Server:
         self.merchant_hits = []
         self.slugs = {"acme": "mrch_acme", "other": "mrch_other"}  # gateway slug → merchant_id
         self.retired = set()  # slugs answered 410 gateway_retired
+        self.quote_answer = None  # answered by /v1/quote instead of a quote
         self.call = None
         self.last_quote = None
 
@@ -152,6 +154,8 @@ class Server:
 
     def quote(self, body):
         self.quotes += 1
+        if self.quote_answer is not None:
+            return Resp(200, self.quote_answer)
         # Like the backend: a stablecoin-only chain (Arc) never quotes msg.value.
         stable = body.get("asset") not in (None, self.native_asset) or PAYMENT_CHAINS[self.chain].get("stablecoinOnly")
         assert body["payer"] == PAYER.address and body["units"] == 200
@@ -390,6 +394,43 @@ def test_a_retired_gateway_slug_is_terminal_after_one_request(pinned, tmp_path):
         gateway(h, a.MerchantPins(str(tmp_path)))
     assert e.value.code == "AIFP1_GATEWAY_RETIRED" and e.value.site == f"{GATEWAY}/acme"
     assert len(h.server.merchant_hits) == 1 and h.server.quotes == 0
+    assert_nothing_paid(h)
+
+
+ACTIVE_RECEIPT = json.loads(
+    (pathlib.Path(__file__).resolve().parents[2] / "contract-fixtures" / "quote-active-receipt.json").read_text()
+)["answer"]
+
+
+def test_an_active_receipt_answer_names_the_receipt_and_pays_nothing(pinned):
+    h = Harness(pinned)
+    h.server.quote_answer = ACTIVE_RECEIPT
+    with pytest.raises(a.Aifp1ActiveReceiptError) as e:
+        h.fetch()
+    assert isinstance(e.value, a.Aifp1QuoteError) and e.value.code == "AIFP1_ACTIVE_RECEIPT"
+    assert (e.value.receipt_id, e.value.tx_ref, e.value.chain, e.value.merchant_id, e.value.resource,
+            e.value.settled_at) == tuple(ACTIVE_RECEIPT[k] for k in (
+                "receipt_id", "tx_ref", "chain", "merchant_id", "resource", "settled_at"))
+    assert ACTIVE_RECEIPT["receipt_id"] in str(e.value)
+    assert h.server.quotes == 1 and not any(h.receipts.values())
+    assert_nothing_paid(h)
+
+
+def test_an_active_receipt_without_a_transaction_still_names_the_receipt(pinned):
+    h = Harness(pinned)
+    h.server.quote_answer = {**ACTIVE_RECEIPT, "tx_ref": None}
+    with pytest.raises(a.Aifp1ActiveReceiptError) as e:
+        h.fetch()
+    assert e.value.receipt_id == ACTIVE_RECEIPT["receipt_id"] and e.value.tx_ref is None
+    assert_nothing_paid(h)
+
+
+def test_an_active_receipt_answer_without_a_receipt_id_is_not_one(pinned):
+    h = Harness(pinned)
+    h.server.quote_answer = {"active_receipt": True}
+    with pytest.raises(a.Aifp1QuoteError) as e:
+        h.fetch()
+    assert not isinstance(e.value, a.Aifp1ActiveReceiptError)
     assert_nothing_paid(h)
 
 

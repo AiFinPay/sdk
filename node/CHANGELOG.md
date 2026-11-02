@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.13.0 — an already-paid purchase is a typed outcome
+
+- Within a minute of a settled purchase, `/v1/quote` answers the same payer and
+  resource with `active_receipt` (the existing `receipt_id`, `tx_ref`, `chain`,
+  `settled_at`) instead of a quote, so a retry cannot buy twice. `fetchPaid`
+  threw "POST /v1/quote → 200 without a quote_id" for it. It now throws
+  `Aifp1ActiveReceiptError` (`code: "AIFP1_ACTIVE_RECEIPT"`, a subclass of
+  `Aifp1QuoteError`) with `receiptId`, `txRef`, `chain`, `merchantId`,
+  `resource` and `settledAt`. Nothing is quoted, signed or paid; recover the
+  receipt with `recoverPaidPayment` and the recovery saved for `txRef`.
+
 ## 2.12.3 — Solana recovery in a new process
 
 - `recoverPaidPayment` for a Solana payment read the in-memory ledger when no

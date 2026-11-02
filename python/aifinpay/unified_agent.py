@@ -1011,6 +1011,12 @@ class AiFinPayAgent:
             if os.path.exists(path):
                 e.recovery["journal_path"] = path
             raise
+        except aifp1.Aifp1ActiveReceiptError as e:
+            if e.tx_ref and re.fullmatch(r"0x[0-9a-fA-F]{64}|[1-9A-HJ-NP-Za-km-z]{64,90}", e.tx_ref):
+                path = os.path.join(journal, f"{e.tx_ref}.json")
+                if os.path.exists(path):
+                    e.journal_path = path
+            raise
 
     def get_payment_history(self, *, chain: str = "polygon", solana_network: [str] = None, **options) -> dict:
         """Read public settlement/receipt metadata; no wallet signature or JWT is returned."""

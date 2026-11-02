@@ -175,6 +175,15 @@ then obtain the receipt for that transaction without sending another one
 ([node/PAYMENT_RECEIPTS.md](node/PAYMENT_RECEIPTS.md)). Never treat a nonce
 check or a quoted invoice as evidence that a payment happened.
 
+Within a minute of a settled purchase, `/v1/quote` answers the same payer and
+resource with `{"active_receipt": true, "receipt_id", "tx_ref", "chain",
+"settled_at", …}` instead of a quote. The SDKs raise `Aifp1ActiveReceiptError`
+(`AIFP1_ACTIVE_RECEIPT`) for it; nothing was quoted or paid. An agent should
+recover that receipt from the journal entry for `tx_ref` (`recoverPaidPayment`
+/ `recover_paid`), not call `fetchPaid` again: after the minute a new quote is a
+new purchase. Without a journal entry for `tx_ref` the receipt cannot be
+reissued, so stop and report it; buying again is the owner's decision.
+
 ---
 
 ## 6. Knowing what a payment buys, not just the amount

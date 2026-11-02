@@ -85,6 +85,7 @@ def __getattr__(name: str):
         "Aifp1FinalizedFailureError",
         "Aifp1MerchantChangedError",
         "Aifp1GatewayRetiredError",
+        "Aifp1ActiveReceiptError",
     ):
         from . import aifp1
 
@@ -133,6 +134,7 @@ __all__ = [
     "Aifp1FinalizedFailureError",
     "Aifp1MerchantChangedError",
     "Aifp1GatewayRetiredError",
+    "Aifp1ActiveReceiptError",
     "get_agent_history",
     "get_quota",
     "V14SettlementError",

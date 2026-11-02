@@ -88,6 +88,21 @@ def test_a_pay_error_points_at_its_journal_and_recovery_resumes_it(agent, tmp_pa
     assert agent._aifp1_receipts["mrch_acme"][0]["jwt"] == "h.p.s"
 
 
+@pytest.mark.parametrize("tx_ref,found", [("0x" + "a1" * 32, True), ("evil", False), (None, False)])
+def test_an_active_receipt_points_at_the_journal_of_its_transaction(agent, tmp_path, monkeypatch, tx_ref, found):
+    (tmp_path / ("0x" + "a1" * 32 + ".json")).write_text("{}")
+    (tmp_path / "evil.json").write_text("{}")  # a server-chosen tx_ref is not a file name
+
+    def already_paid(url, **kw):
+        raise a.Aifp1ActiveReceiptError({"active_receipt": True, "receipt_id": "rcpt_1", "tx_ref": tx_ref})
+
+    monkeypatch.setattr(a, "aifp1_fetch", already_paid)
+    with pytest.raises(a.Aifp1ActiveReceiptError) as e:
+        agent.fetch_paid("https://shop.example/x", allowed_origins=["https://shop.example"],
+                         max_amount_usd=1, daily_amount_usd=1, journal_dir=str(tmp_path))
+    assert e.value.journal_path == (str(tmp_path / f"{tx_ref}.json") if found else None)
+
+
 def test_the_default_gas_cap_covers_a_usdc_purchase_at_a_250_gwei_base_fee(agent, tmp_path, monkeypatch):
     from aifinpay.settlement_v14 import STABLE_SETTLE_GAS_BOUND
 
