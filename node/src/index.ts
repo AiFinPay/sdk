@@ -200,6 +200,7 @@ export {
   Aifp1ReceiptRejectedError,
   Aifp1MerchantChangedError,
   Aifp1GatewayRetiredError,
+  Aifp1ActiveReceiptError,
 } from "./aifp1.js";
 
 // ── Cross-chain orchestration ─────────────────────────────────────────────

@@ -152,7 +152,10 @@ After a transport error, call `agent.recoverPaidPayment(recovery)` with the save
 recovery object. It only retries receipt issuance, verifies the issuer's Ed25519
 signature and purchase bindings, and returns the existing receipt. It never sends
 a new transaction. Persist the receipt and restore `agent.aifp1Receipts` before
-another `fetchPaid`. A prepared-but-unbroadcast or reverted transaction requires
+another `fetchPaid`. `Aifp1ActiveReceiptError` from `fetchPaid` means the same
+thing from the other side: `/v1/quote` found a settled purchase for this payer
+and resource and names its `receiptId` and `txRef`; recover it with the
+recovery saved for `txRef`. A prepared-but-unbroadcast or reverted transaction requires
 owner reconciliation; receipt recovery is not a replacement broadcast.
 
 MCP payment integration uses the same private journal/cache/lock controls.

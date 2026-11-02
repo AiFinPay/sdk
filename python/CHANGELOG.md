@@ -1,3 +1,15 @@
+## 2.10.0 — an already-paid purchase is a typed outcome
+
+- Within a minute of a settled purchase, `/v1/quote` answers the same payer and
+  resource with `active_receipt` instead of a quote, so a retry cannot buy
+  twice. `fetch_paid` now raises `Aifp1ActiveReceiptError`
+  (`code = "AIFP1_ACTIVE_RECEIPT"`, a subclass of `Aifp1QuoteError`) with
+  `receipt_id`, `tx_ref`, `chain`, `merchant_id`, `resource`, `settled_at`, and
+  `journal_path` when this agent's journal holds that transaction. Nothing is
+  quoted, signed or paid; call `agent.recover_paid(e.journal_path)`. A Solana
+  quote admission no longer stores that answer as its quote. Matches
+  `@aifinpay/agent` 2.13.0.
+
 ## 2.9.4 — Arc Testnet receipts
 
 - The default Arc Testnet RPC is now `rpc.drpc.testnet.arc.io`; the previous

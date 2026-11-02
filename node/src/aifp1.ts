@@ -385,6 +385,28 @@ export class Aifp1GatewayRetiredError extends Aifp1Error {
   }
 }
 
+/**
+ * /v1/quote answered `active_receipt`: this payer already bought this resource
+ * and the receipt is `receiptId`. Nothing was quoted or paid. Recover that
+ * receipt with the recovery saved for `txRef`; do not buy again.
+ */
+export class Aifp1ActiveReceiptError extends Aifp1QuoteError {
+  readonly code = "AIFP1_ACTIVE_RECEIPT";
+  constructor(
+    public readonly receiptId: string,
+    public readonly txRef: string | null,
+    public readonly chain: string | null,
+    public readonly merchantId: string | null,
+    public readonly resource: string | null,
+    public readonly settledAt: string | null
+  ) {
+    super(
+      `already paid: receipt ${receiptId}${txRef ? ` (tx ${txRef})` : ""} covers this purchase; nothing was quoted or paid. ` +
+        "Recover it with recoverPaidPayment and the recovery saved for that transaction; do not buy again."
+    );
+  }
+}
+
 // ── Wire shapes (mirrors of the server; do not invent fields) ─────────────
 
 export type Aifp1Scope = "exact" | "prefix" | "merchant";
@@ -2480,6 +2502,18 @@ async function requestQuote(
     quote = JSON.parse(text) as Aifp1Quote;
   } catch {
     throw new Aifp1QuoteError(`POST /v1/quote → 200 but not JSON: ${text.slice(0, 200)}`);
+  }
+  const active = quote as unknown as Record<string, unknown>;
+  if (active.active_receipt === true && typeof active.receipt_id === "string" && /^rcpt_/.test(active.receipt_id)) {
+    const str = (v: unknown) => (typeof v === "string" && v ? v : null);
+    throw new Aifp1ActiveReceiptError(
+      active.receipt_id,
+      str(active.tx_ref),
+      str(active.chain),
+      str(active.merchant_id),
+      str(active.resource),
+      str(active.settled_at)
+    );
   }
   if (!quote.quote_id) {
     throw new Aifp1QuoteError(`POST /v1/quote → 200 without a quote_id: ${text.slice(0, 200)}`);

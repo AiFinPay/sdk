@@ -299,6 +299,31 @@ key already names the merchant. A slug the gateway retired answers
 (`code: "AIFP1_GATEWAY_RETIRED"`) after one request; do not retry it. Batches
 already held are kept.
 
+### Already paid: `Aifp1ActiveReceiptError`
+
+Within a minute of a settled purchase, `/v1/quote` answers the same payer and
+resource with the existing receipt instead of a quote, so a retry cannot buy
+twice. A process that holds no receipt for it (a new process, or one whose
+`fetchPaid` failed after paying) gets `Aifp1ActiveReceiptError`
+(`code: "AIFP1_ACTIVE_RECEIPT"`, a subclass of `Aifp1QuoteError`). Nothing was
+quoted or paid. It names `receiptId`, `txRef`, `chain`, `merchantId`,
+`resource` and `settledAt`; recover that receipt from the recovery your
+`onPrepared` saved for `txRef`:
+
+```ts
+try {
+  return await agent.fetchPaid(url, {}, opts);
+} catch (e) {
+  if (!(e instanceof Aifp1ActiveReceiptError)) throw e;
+  const paid = await agent.recoverPaidPayment(savedRecoveryFor(e.txRef));
+  return fetch(url, { headers: { "AIFP-Receipt": paid.receipt } });
+}
+```
+
+Do not retry `fetchPaid` to get past it: once the minute is over a new quote is
+a new purchase. With no saved recovery for `txRef` the receipt cannot be
+reissued; buying again is a new payment and the owner's decision.
+
 ### Name the AI client that pays
 
 Set `framework` to the AI client the agent runs in, and every request of the

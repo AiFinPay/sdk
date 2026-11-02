@@ -1032,6 +1032,24 @@ def test_only_exact_expired_nonadmission_closes_local_phase(monkeypatch, tmp_pat
     assert sent == [sent[0], sent[0]] and not f.sends
 
 
+def test_active_receipt_answer_is_not_adopted_as_the_admitted_quote(monkeypatch, tmp_path):
+    f = Fixture()
+    approved(monkeypatch, f)
+    post = f.post
+
+    def already_paid(url, **kw):
+        if url.endswith("/v1/quote"):
+            return Response({"active_receipt": True, "receipt_id": "rcpt_1", "tx_ref": "5" * 88})
+        return post(url, **kw)
+
+    monkeypatch.setattr(f, "post", already_paid)
+    with pytest.raises(a.Aifp1ActiveReceiptError) as e:
+        fetch(AiFinPayAgent.from_seed("42" * 32, solana_rpc=RPC), tmp_path)
+    assert e.value.receipt_id == "rcpt_1" and not f.sends
+    admission = json.loads((tmp_path / "spend.json").read_text())["quote_admissions"][0]
+    assert "quote_json" not in admission and "terminal" not in admission
+
+
 def test_expired_unverifiable_quote_admission_closes_without_post(monkeypatch, tmp_path):
     f = Fixture()
     approved(monkeypatch, f)

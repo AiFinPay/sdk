@@ -200,6 +200,29 @@ serve several merchants under one prefix. A slug the gateway retired answers
 `410 gateway_retired`, which raises `Aifp1GatewayRetiredError`
 (`code = "AIFP1_GATEWAY_RETIRED"`) after one request; do not retry it.
 
+Within a minute of a settled purchase, `/v1/quote` answers the same payer and
+resource with the existing receipt instead of a quote, so a retry cannot buy
+twice. A process that holds no receipt for it raises `Aifp1ActiveReceiptError`
+(`code = "AIFP1_ACTIVE_RECEIPT"`, a subclass of `Aifp1QuoteError`). Nothing was
+quoted or paid. It names `receipt_id`, `tx_ref`, `chain`, `merchant_id`,
+`resource`, `settled_at`, and `journal_path` when this agent's journal holds
+that transaction:
+
+```python
+from aifinpay import Aifp1ActiveReceiptError
+
+try:
+    r = agent.fetch_paid(url, ...)
+except Aifp1ActiveReceiptError as e:
+    if not e.journal_path:
+        raise  # no journal for e.tx_ref: buying again is a new payment, the owner's call
+    agent.recover_paid(e.journal_path)
+    r = agent.fetch_paid(url, ...)  # reuses the recovered receipt
+```
+
+Do not retry `fetch_paid` to get past it: once the minute is over a new quote
+is a new purchase.
+
 Processes using the same local journal directory share one atomic USD budget.
 The SDK reserves the validated debit under an operating-system file lock before
 approval or settlement signing, then replaces and fsyncs the ledger atomically.
