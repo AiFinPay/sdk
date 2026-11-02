@@ -1108,6 +1108,41 @@ describe("durable Solana quote admission before POST", () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+  it("closes an expired, never-reserved admission whose quote no longer verifies", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "aifp-quote-unverifiable-")),
+      path = join(dir, "spend.json"),
+      f = fixture(),
+      now = Date.now();
+    f.quote.settlement_call.accounts = {
+      ...f.quote.settlement_call.accounts,
+      extra: f.quote.settlement_call.accounts.payer,
+    };
+    let posts = 0;
+    try {
+      const flow = await quoteOnlyAgent(f, path, async () => {
+        posts++;
+        return json(f.quote);
+      });
+      await expect(flow.agent.fetchPaid(url, {}, flow.options())).rejects.toThrow();
+      const fs = await import("node:fs/promises"),
+        original = JSON.parse(await fs.readFile(path, "utf8"))[0];
+      expect(original.quoteAdmission).toMatchObject({ phase: "pending" });
+      expect(original.quoteAdmission.wasReserved).toBeFalsy();
+      vi.spyOn(Date, "now").mockReturnValue(now + 700000);
+      const next = await quoteOnlyAgent(f, path, async () => {
+        posts++;
+        throw new Error("Must not POST");
+      });
+      await expect(next.agent.fetchPaid(url, {}, next.options())).rejects.toThrow("expired");
+      const terminal = JSON.parse(await fs.readFile(path, "utf8"))[0];
+      expect(terminal.quoteAdmission).toMatchObject({ phase: "terminal", terminal: "expired-unbroadcast" });
+      expect(posts).toBe(1);
+      expect(f.sends).toBe(0);
+      expect(await new FileSpendLedger(path).total(86400000)).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("owner-cluster Solana balance context", () => {

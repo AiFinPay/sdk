@@ -1867,7 +1867,12 @@ export async function aifp1Fetch(
         validateSolanaQuote(quote, sol, deps.payerAddress, quoteExpiryMs, solDeployment!, true);
         if (!deps.verifyHistoricalSolanaQuote)
           throw new Aifp1QuoteError("Historical quote signer verification is required");
-        await deps.verifyHistoricalSolanaQuote(quote.settlement_call as SolanaV14SettlementCall, sol, quote.quote_id);
+        try {
+          await deps.verifyHistoricalSolanaQuote(quote.settlement_call as SolanaV14SettlementCall, sol, quote.quote_id);
+        } catch (error) {
+          // Never reserved, so never signed: a quote that cannot verify was never payable and must not block the payer.
+          if (!(error instanceof SolanaV14Error && error.code === "SOLANA_V14_INVALID")) throw error;
+        }
         await deps.closeQuoteAdmission!(
           admission.id,
           admissionBinding!,
