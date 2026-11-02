@@ -1,3 +1,11 @@
+## 2.9.3 — existing Solana payer nonce accounts
+
+- The deployed Solana splitter stores 0 in `PayerNonce.bump`. The pre-payment
+  check required the stored byte to equal the PDA bump, so after a payer's
+  first settlement every later Solana payment was refused with "Solana payer
+  nonce mismatch". The account is still read at its derived address and
+  checked for owner, discriminator, length, payer and nonce. Matches `@aifinpay/agent` 2.12.2.
+
 ## 2.9.2 — expired Solana admissions that no longer verify
 
 - A Solana quote admission that expired without being reserved is now closed

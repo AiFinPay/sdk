@@ -409,6 +409,16 @@ class Fixture:
         raise AssertionError(url)
 
 
+def test_existing_payer_nonce_with_zero_bump_byte_is_accepted():
+    f = Fixture("USDC")
+    payer = PAYER.pubkey()
+    pn = bytearray(49)
+    pn[0:8] = bytes.fromhex("ef21b02e80314128")
+    pn[8:40] = bytes(payer)
+    f.data[str(s.pdas(f.d["programId"], str(payer), "0")["payerNonce"])] = pn
+    assert plan(f)
+
+
 def json_module(value):
     return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
 

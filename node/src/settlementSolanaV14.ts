@@ -528,12 +528,8 @@ export async function prepareSolanaV14Settlement(
   const effectiveTreasury = treasury!;
   if (pn) {
     const b = accountBytes(pn, d.programId, ACCOUNT_DISC.payerNonce, 49);
-    if (
-      pub(b, 8) !== payer ||
-      b.readBigUInt64LE(40) !== integer(q.nonce) ||
-      b[48] !== bump(Buffer.from("payer-nonce"), key(payer).toBuffer())
-    )
-      fail("Solana payer nonce mismatch");
+    // The deployed program stores 0 in the bump byte; the derived address already proves the PDA.
+    if (pub(b, 8) !== payer || b.readBigUInt64LE(40) !== integer(q.nonce)) fail("Solana payer nonce mismatch");
   } else if (q.nonce !== "0") fail("Solana nonce account missing");
   if (cn) fail("Solana nonce marker already exists; recover original purchase");
   const rent = async (size: number) =>

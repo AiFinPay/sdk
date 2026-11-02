@@ -319,6 +319,27 @@ describe("Solana v1.4 exact source flow", () => {
       ).toBe(c.instructionHex);
     }
   });
+  it("accepts an existing PayerNonce whose stored bump byte is 0, as the deployed program writes it", async () => {
+    const f = fixture("USDC"),
+      pn = Buffer.alloc(49);
+    Buffer.from("ef21b02e80314128", "hex").copy(pn, 0);
+    payer.publicKey.toBuffer().copy(pn, 8);
+    f.map[f.call.accounts.payerNonce!] = {
+      owner: f.d.programId,
+      executable: false,
+      lamports: 1_000_000,
+      data: [pn.toString("base64"), "base64"],
+    };
+    await expect(
+      prepareSolanaV14Settlement(f.call, {
+        rpc: f.rpc,
+        deployment: f.d,
+        payer: payer.publicKey.toBase58(),
+        orderId: f.quote.quote_id,
+        maxFeeLamports: 1_000_000n,
+      })
+    ).resolves.toBeTruthy();
+  });
   it.each(["SOL", "USDC", "USDT"])("preflights, signs and persists %s before a single send", async (asset) => {
     const f = fixture(asset),
       saved: SolanaV14Prepared[] = [];
