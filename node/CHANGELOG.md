@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.12.3 — Solana recovery in a new process
+
+- `recoverPaidPayment` for a Solana payment read the in-memory ledger when no
+  daily cap was set, while `fetchPaid` had reserved the purchase in the durable
+  file ledger. Recovery from a new process (the documented path after
+  `SOLANA_V14_PENDING`) therefore failed with "Recovery disagrees with the
+  original spending reservation" and no receipt was issued. It now opens the
+  same durable ledger.
+
 ## 2.12.2 — existing Solana payer nonce accounts
 
 - The deployed Solana splitter stores 0 in `PayerNonce.bump`. The pre-payment

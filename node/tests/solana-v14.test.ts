@@ -699,6 +699,142 @@ describe("Solana v1.4 exact source flow", () => {
       ).rejects.toThrow();
     }
   );
+  it.each(["SOL", "USDC"])(
+    "a new agent without a daily cap recovers a %s payment from the durable ledger fetchPaid used",
+    async (asset) => {
+      const stateDir = await mkdtemp(join(tmpdir(), "aifp-sol-recover-")),
+        priorStateDir = process.env.AIFINPAY_STATE_DIR;
+      process.env.AIFINPAY_STATE_DIR = stateDir;
+      onTestFinished(async () => {
+        if (priorStateDir === undefined) delete process.env.AIFINPAY_STATE_DIR;
+        else process.env.AIFINPAY_STATE_DIR = priorStateDir;
+        await rm(stateDir, { recursive: true, force: true });
+      });
+      const f = fixture(asset),
+        issuer = generateKeyPairSync("ed25519");
+      vi.spyOn(resolver, "resolveSolanaDeployment").mockReturnValue({
+        version: "v1.4",
+        environment: "prod",
+        network: "mainnet",
+        programId: f.d.programId,
+        deployment: { ...f.d, status: "enabled", settlementEnabled: true },
+      });
+      let recovery: Aifp1SolanaPaymentRecovery | undefined,
+        receiptCalls = 0;
+      const fetchImpl: typeof fetch = vi.fn(async (input, init) => {
+        const u = String(input),
+          body = init?.body ? JSON.parse(String(init.body)) : undefined;
+        if (u === "https://solana.example") return json({ result: await f.rpc.request(body.method, body.params) });
+        if (u === url)
+          return new Headers(init?.headers).has("AIFP-Receipt")
+            ? json({ ok: true })
+            : json(
+                { protocol: "AIFP-1", merchant_id: f.quote.merchant_id, resource: "/api/items", unit_weight: 1 },
+                402
+              );
+        if (u.endsWith("/v1/quote")) {
+          expect(body.settlement_chain).toBe("solana");
+          expect(body.asset).toBe(asset);
+          expect(
+            nacl.sign.detached.verify(
+              Buffer.from(solanaQuoteAuthorizationMessage(body, body.quote_authorization, api)),
+              bs58.decode(body.quote_authorization.signature),
+              payer.publicKey.toBytes()
+            )
+          ).toBe(true);
+          return json(f.quote);
+        }
+        if (u.endsWith("/.well-known/jwks.json"))
+          return json({ keys: [{ ...issuer.publicKey.export({ format: "jwk" }), kid: "test", alg: "EdDSA" }] });
+        if (u.endsWith("/v1/pay")) {
+          receiptCalls++;
+          expect(body.payment_authorization.payer).toBe(payer.publicKey.toBase58());
+          expect(
+            nacl.sign.detached.verify(
+              Buffer.from(
+                paymentAuthorizationMessage({
+                  quote: f.quote,
+                  apiBase: api,
+                  chain: "solana",
+                  asset,
+                  txRef: body.tx_ref,
+                  idempotencyKey: new Headers(init?.headers).get("Idempotency-Key")!,
+                  payer: body.payment_authorization.payer,
+                  expiresAt: body.payment_authorization.expires_at,
+                  issuer: api,
+                })
+              ),
+              bs58.decode(body.payment_authorization.signature),
+              payer.publicKey.toBytes()
+            )
+          ).toBe(true);
+          const exp = Math.floor(Date.now() / 1000) + 86400,
+            claims = {
+              iss: api,
+              aud: f.quote.merchant_id,
+              sub: payer.publicKey.toBase58(),
+              scope: f.quote.scope,
+              resource: f.quote.resource,
+              chain: "solana",
+              network: "mainnet",
+              program: f.d.programId,
+              asset,
+              tx_ref: body.tx_ref,
+              amount: "0.1",
+              currency: "USD",
+              network_mode: "live",
+              unit_quota: 200,
+              receipt_id: "rc_solana",
+              iat: Math.floor(Date.now() / 1000),
+              exp,
+            };
+          const raw = [{ alg: "EdDSA", typ: "JWT", kid: "test" }, claims]
+            .map((x) => Buffer.from(JSON.stringify(x)).toString("base64url"))
+            .join(".");
+          return json({
+            ...claims,
+            receipt_id: claims.receipt_id,
+            merchant_id: claims.aud,
+            status: "settled",
+            receipt: `${raw}.${sign(null, Buffer.from(raw), issuer.privateKey).toString("base64url")}`,
+            expires_at: new Date(exp * 1000).toISOString(),
+          });
+        }
+        throw new Error(u);
+      });
+      const agent = await AiFinPayAgent.fromSeed("42".repeat(32), {
+        solanaRpc: "https://solana.example",
+        fetchImpl,
+      });
+      const options = {
+        gatewayOrigins: ["https://merchant.example"],
+        resourcePathMode: "direct" as const,
+        resource: f.quote.resource,
+        maxAmountUsd: 1,
+        nativeUsdPrice: { usd: 100, observedAtMs: Date.now() },
+        solanaV14: {
+          environment: "prod" as const,
+          network: "mainnet" as const,
+          asset,
+          maxFeeLamports: 1_000_000n,
+          onPrepared: async (x: Aifp1SolanaPaymentRecovery) => {
+            recovery = x;
+            expect(f.sends).toBe(0);
+          },
+        },
+      };
+      expect((await agent.fetchPaid(url, {}, options))!.status).toBe(200);
+      expect(f.sends).toBe(1);
+      expect(receiptCalls).toBe(1);
+      const restarted = await AiFinPayAgent.fromSeed("42".repeat(32), {
+        solanaRpc: "https://solana.example",
+        fetchImpl,
+      });
+      await restarted.recoverPaidPayment(recovery!, { solanaNetwork: "mainnet", solanaEnvironment: "prod" });
+      expect(f.sends).toBe(1);
+      expect(receiptCalls).toBe(2);
+    }
+  );
   it.each(["immediate", "late-first-proof"])(
     "canonical finalized failure %s commits fees once, survives restart and never becomes paid",
     async (timing) => {
