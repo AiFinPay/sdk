@@ -1,3 +1,9 @@
+## 2.9.4 — Arc Testnet receipts
+
+- The default Arc Testnet RPC is now `rpc.drpc.testnet.arc.io`; the previous
+  one served a stale "no receipt yet" for minutes after a transaction was
+  mined. Matches `@aifinpay/agent` 2.12.4.
+
 ## 2.9.3 — existing Solana payer nonce accounts
 
 - The deployed Solana splitter stores 0 in `PayerNonce.bump`. The pre-payment

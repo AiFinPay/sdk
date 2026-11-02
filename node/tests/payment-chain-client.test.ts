@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AiFinPayAgent } from "../src/unifiedAgent.js";
 import { PAYMENT_CHAINS, paymentStableAsset, type PaymentChain } from "../src/paymentChains.js";
 import { V14_DEPLOYMENTS } from "../src/generated/v14Deployments.generated.js";
+import { arcTestnet } from "../src/chains.js";
 
 describe("canonical chain names select the matching owner RPC and signer context", () => {
   it.each(Object.keys(PAYMENT_CHAINS) as PaymentChain[])("selects %s without a network request", async (chain) => {
@@ -25,5 +26,14 @@ describe("canonical chain names select the matching owner RPC and signer context
       expect(paymentStableAsset(chain, "unknown")).toBeUndefined();
     }
     expect(paymentStableAsset("xrplevm", "USDC")).toBeUndefined();
+  });
+  // rpc.blockdaemon.testnet.arc.io keeps answering a receipt query with the
+  // first null it served (seen 8+ minutes after the tx was mined), so a
+  // payment there always outlived the 180 s receipt wait.
+  it("Arc Testnet reads receipts from drpc by default", async () => {
+    expect(PAYMENT_CHAINS.arctestnet.defaultRpc).toBe("https://rpc.drpc.testnet.arc.io");
+    expect(arcTestnet.rpcUrls.default.http[0]).toBe("https://rpc.drpc.testnet.arc.io");
+    const agent = await AiFinPayAgent.fromSeed("07".repeat(32));
+    expect((agent as any).evmClients("arctestnet").publicClient.transport.url).toBe("https://rpc.drpc.testnet.arc.io");
   });
 });
