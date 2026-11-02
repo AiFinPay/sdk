@@ -7,7 +7,13 @@ HTTP/Streamable transport wrapper around `@aifinpay/mcp` for `https://mcp.aifinp
 - Do not touch `gate/`, `wallet/`, `node/`, `python/`.
 
 ## Commands
-- `npm start` — `node server.js` (Node >= 20)
+- Install the linked upstream package first: `npm ci --no-audit --no-fund` in
+  `mcp/`, then the same command in this directory. Each lockfile owns its
+  package's dependencies.
+- `npm run build` — build the linked `../mcp` package, including its bundled skill.
+- `npm test` — rebuild that upstream package via `pretest`, then run the HTTP
+  transport tests against its compiled exports.
+- `npm start` — `node server.js` (Node >= 22); run the build first.
 
 ## Rules
 - Preserve rate limiting (`express-rate-limit`) and `ws` / `fast-uri` / `ip-address` overrides (security pins).

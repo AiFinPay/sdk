@@ -33,6 +33,7 @@ const csv = evmRegistry.exportAsCsv();
 // Query artifacts
 const abi = artifacts.getEvmAbi("B2BSplitterV14", "1.4");
 const solanaIdl = artifacts.getSolanaIdl("mainnet");
+const nearAbi = artifacts.getNearAbi("aifinpay-near-contract");
 ```
 
 See [USAGE.md](./USAGE.md) for complete documentation.
@@ -83,9 +84,14 @@ registry/
 │   │   ├── v1.2/deployments.json  # EVM v1.2 legacy
 │   │   └── v1.1/deployments.json  # EVM v1.1 legacy
 │   ├── solana/deployments.json # Solana v1.4 program deployments
-│   └── casper/deployments.json # Casper deployments
+│   ├── casper/deployments.json # Casper deployments
+│   ├── near/deployments.json   # Curated NEAR account/WASM snapshots
+│   └── aptos/                  # Aptos deployment snapshots
+│       ├── deployments.json
+│       └── multisig-deployments.json
 ├── abi/
-│   ├── evm/         # EVM ABI bundles (B2BSplitterV14, TimelockWrapper)
+│   ├── aptos/       # Aptos splitter ABI snapshots
+│   ├── evm/         # EVM ABI bundles (including the linted B2BSplitterV14 ABI)
 │   └── tron/        # Tron ABI bundles when applicable
 └── idl/
     ├── solana/      # Solana IDL (splitter-v14 mainnet/devnet)
@@ -99,6 +105,15 @@ Schema](src/reference/payment-deployments.schema.json) describes their
 ecosystem-specific record shapes. Output selection is implemented in the
 [grabber](src/grabber.ts) and [build CLI](src/build.ts); upstream provenance is
 stored in the generated JSON rather than this README.
+
+Aptos records are curated package data, not outputs of `registry:build`. See the
+[Aptos registry guide](registry/splitter/aptos/README.md) for snapshot
+provenance and refresh instructions.
+
+NEAR deployment records are curated package data, not grabber outputs or
+programmatic deployment lookup APIs. NEAR ABI documents are available through
+`ArtifactRegistry`. See the [NEAR registry guide](registry/splitter/near/README.md)
+for provenance, field normalization, governance caveats, and refresh instructions.
 
 ## Exports
 
@@ -128,6 +143,8 @@ stored in the generated JSON rather than this README.
 - `getCasperIdl(network)` — Casper IDL (mainnet/testnet)
 - `getAptosIdl(contractName, version?)` — Aptos IDL
 - `getTronAbi(contractName, version?)` — Tron ABI
+- `getNearAbi(contractName, version?)` — NEAR ABI document
+- `getAllNearAbis()` — all loaded NEAR ABI documents
 
 ### Legacy grabber (deprecated)
 
@@ -140,4 +157,4 @@ stored in the generated JSON rather than this README.
 ### Types
 
 - `DeploymentRegistry`, `EcosystemRegistry`, `Deployment`, `EvmDeployment`, `SolanaDeployment`, `Stablecoin`
-- `EvmDeploymentRecord`, `SolanaDeploymentRecord`, `EvmAbiArtifact`, `SolanaIdlArtifact`
+- `EvmDeploymentRecord`, `SolanaDeploymentRecord`, `EvmAbiArtifact`, `SolanaIdlArtifact`, `NearAbiArtifact`

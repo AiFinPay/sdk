@@ -1,0 +1,79 @@
+{
+  "$schema": "../../../src/reference/aptos-multisig-deployment.schema.json",
+  "version": "1.0.0",
+  "description": "AiFinPay Aptos multisig wallet creation registry.",
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-30T18:08:58Z",
+  "ecosystem": "aptos",
+  "source": {
+    "repo": "AiFinPay/aptos-contract",
+    "commit": "ec2ce8c6ad79408ec51c282caa4be66961b18c39",
+    "path": "scripts/ts/create-multisig-mainnet.ts",
+    "url": "https://github.com/AiFinPay/aptos-contract/blob/ec2ce8c6ad79408ec51c282caa4be66961b18c39/scripts/ts/create-multisig-mainnet.ts",
+    "localPath": "scripts/ts/create-multisig-mainnet.ts"
+  },
+  "deployments": [
+    {
+      "network": "mainnet",
+      "chainId": 1,
+      "timestamp": "2026-10-30T18:08:58Z",
+      "multisig": {
+        "address": "0x751742211e90f70793958c10470da99f8ad01cd31483338d61e723c65e30a380",
+        "type": "0x1::multisig_account::MultisigAccount",
+        "numSignaturesRequired": 3,
+        "owners": [
+          "0xbc7834488eeca9b2b18b278b73ca594a991fd56cdd8dc3d39a5de683ad629bc4",
+          "0x7860627f1ff4dcfaab7c8adf68ffbd8fe2d68a0a19b67ec59b4f593829656004",
+          "0x6e2c91c1983ca16d837f59bc08029eb1fd423e30c2b389ac4d49989577030bb3",
+          "0x21b5b723bfd26687456932edcaf0d329cb69d64b8ac4e142caf821e6f8a33702"
+        ],
+        "bootstrapperIsOwner": false,
+        "authenticationKeyDisabled": true
+      },
+      "createTx": "0xc58f66b85435235f731acea4eab0b77ec804631343004b598cb9760d42476e0b",
+      "creationFunction": "0x1::multisig_account::create_with_owners_then_remove_bootstrapper",
+      "creationVersion": "7834613874",
+      "status": "created",
+      "contractPublished": false,
+      "explorerUrl": "https://explorer.aptoslabs.com/account/0x751742211e90f70793958c10470da99f8ad01cd31483338d61e723c65e30a380?network=mainnet",
+      "source": {
+        "repo": "AiFinPay/aptos-contract",
+        "commit": "ec2ce8c6ad79408ec51c282caa4be66961b18c39",
+        "path": "scripts/ts/create-multisig-mainnet.ts",
+        "url": "https://github.com/AiFinPay/aptos-contract/blob/ec2ce8c6ad79408ec51c282caa4be66961b18c39/scripts/ts/create-multisig-mainnet.ts",
+        "localPath": "scripts/ts/create-multisig-mainnet.ts"
+      }
+    },
+    {
+      "network": "testnet",
+      "chainId": 2,
+      "timestamp": "2026-10-30T11:19:21Z",
+      "multisig": {
+        "address": "0x4170116a68ea3c158091031366f3f60df624c382fece1f69dc962dc1bf051d31",
+        "type": "0x1::multisig_account::MultisigAccount",
+        "numSignaturesRequired": 3,
+        "owners": [
+          "0xbc7834488eeca9b2b18b278b73ca594a991fd56cdd8dc3d39a5de683ad629bc4",
+          "0x7860627f1ff4dcfaab7c8adf68ffbd8fe2d68a0a19b67ec59b4f593829656004",
+          "0x6e2c91c1983ca16d837f59bc08029eb1fd423e30c2b389ac4d49989577030bb3",
+          "0x21b5b723bfd26687456932edcaf0d329cb69d64b8ac4e142caf821e6f8a33702"
+        ],
+        "bootstrapperIsOwner": false,
+        "authenticationKeyDisabled": true
+      },
+      "creationFunction": "0x1::multisig_account::create_with_owners_then_remove_bootstrapper",
+      "createTx": "0xb45125d7491b0a3a1b9ee4bdcf07394ae4efc285106865514d323b6495cb0e87",
+      "creationVersion": "233634798",
+      "status": "created",
+      "contractPublished": false,
+      "explorerUrl": "https://explorer.aptoslabs.com/account/0x4170116a68ea3c158091031366f3f60df624c382fece1f69dc962dc1bf051d31?network=testnet",
+      "source": {
+        "repo": "AiFinPay/aptos-contract",
+        "commit": "57b913566fde511df564822d98f238596490146d",
+        "path": "scripts/ts/create-multisig.ts",
+        "url": "https://github.com/AiFinPay/aptos-contract/blob/57b913566fde511df564822d98f238596490146d/scripts/ts/create-multisig.ts",
+        "localPath": "scripts/ts/create-multisig.ts"
+      }
+    }
+  ]
+}

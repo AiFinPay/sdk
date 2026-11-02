@@ -11,6 +11,6 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@daochild/agents-config": "^1.2.1"
+    "@daochild/agents-config": "^2.1.0"
   }
 }

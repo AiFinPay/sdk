@@ -30,4 +30,5 @@ export type {
   CasperIdlArtifact,
   AptosIdlArtifact,
   TronAbiArtifact,
+  NearAbiArtifact,
 } from "./artifacts.js";

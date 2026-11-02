@@ -1,10 +1,8 @@
-# AiFinPay SDK — agent guide
+# Agent Notes
 
 Primary instructions: `node_modules/@daochild/agents-config/AGENTS.md` — read in full and follow unless overridden below.
 
-Payment rail for AI agents (AIFP-1 gross-inclusive settlement, AIFP-2/x402 negotiation).
-Optional observational context grants no payment authority. Canonical domain is
-`aifinpay.io`.
+Main domain is `aifinpay.io`.
 
 ## Evidence, not status snapshots
 
@@ -67,7 +65,7 @@ Monorepo of independent packages. Each package owns its own `AGENTS.md`; respect
   - `npm run build` then `npm test` in `node/`, `wallet/`, `mcp/`, `gate/`, `analytics/`, `deployments/`.
   - `python -m pip install -e . pytest` then `python -m pytest tests -q` in `python/`.
 - `node/`: run `npm run registry:check` **before** `npm run build`. It verifies `src/generated/*.generated.ts` against the installed `@aifinpay/deployments` package. Never hand-edit generated files; change the `@aifinpay/deployments` inputs or `scripts/generate-*.mjs`, then run `registry:sync`.
-- `node/`: `npm run registry:sync` regenerates `src/generated/splitterRoutes.generated.ts`, `src/generated/v14Deployments.generated.ts` and `src/generated/solanaV14Deployments.generated.ts` from `@aifinpay/deployments`. `npm run registry:check` verifies them in CI.
+- `node/`: `npm run registry:sync` regenerates `src/generated/splitterRoutes.generated.ts` and the EVM/Solana/Aptos/NEAR deployment tables in `src/generated/` from `@aifinpay/deployments`. `npm run registry:check` verifies them in CI.
 - `deployments/`: run `npm run build` then `npm run registry:build` to refresh `registry/splitter/evm/v1.4/deployments.json` and `registry/splitter/solana/deployments.json` from upstream repos.
 - `mcp-against-source` flow: when changing `node/` in a way that affects `mcp/`, pack the agent (`cd node && npm pack --pack-destination /tmp`), install the tarball into `mcp/` (`npm install --no-save /tmp/aifinpay-agent-*.tgz`), then build and test `mcp/`. CI already runs this; verify locally when touching the Node/MCP boundary.
 - Version gate: changing published files without a version bump fails CI (`node scripts/check-version-bump.mjs`). Bump `package.json` (or `python/pyproject.toml`) and the package/root `CHANGELOG.md` together.

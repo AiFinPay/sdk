@@ -3,8 +3,39 @@
 Entries record changes and release context at the time they were written.
 They are not current publication, deployment or acceptance evidence. Resolve
 versions from manifests/registries, deployment metadata from
-[the registry](deployments/registry/splitter/INDEX.md), and execution results
+[the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
+
+## Agent 2.12.0 — Aptos and NEAR deployment resolution
+
+- Generate typed Aptos and NEAR deployment pins from the installed deployment
+  package, preserving per-network provenance, module/ABI digests and WASM pins.
+- Add explicit environment/version-bound inspection and enabled-record selection.
+  Keep payment execution unsupported pending backend and verified executor support.
+
+## Deployments 2.1.5 — NEAR ABI artifact access
+
+- Load NEAR ABI JSON documents through `ArtifactRegistry` with lookup and
+  enumeration methods.
+
+## Deployments 2.1.4 — NEAR registry snapshots
+
+- Package curated NEAR mainnet/testnet deployment records and council membership
+  input with immutable upstream provenance and the shared deployment schema.
+- Preserve upstream settlement metadata without adding SDK execution support or
+  changing the EVM/Solana grabber.
+
+## Deployments 2.1.2 — Aptos registry snapshots
+
+- Package mainnet/testnet payment and multisig deployment records with their
+  referenced ABI artifacts and multisig schema.
+- Document that Aptos snapshots are curated data and are not refreshed by the
+  EVM/Solana registry grabber.
+
+## Deployments 2.1.3 — linted EVM splitter ABI
+
+- Document the linted B2BSplitterV14 ABI as required for Arc and subsequent EVM
+  chain deployments.
 
 ## Deployments 2.1.1 — Aptos and NEAR schema coverage
 

@@ -25,7 +25,10 @@ deployments/
     │   │   ├── v1.2/deployments.json  # EVM v1.2 legacy
     │   │   └── v1.1/deployments.json  # EVM v1.1 legacy
     │   ├── solana/deployments.json # Solana v1.4 program deployments
-    │   └── casper/deployments.json # Casper deployments
+    │   ├── casper/deployments.json # Casper deployments
+    │   └── near/                  # Curated NEAR deployment snapshots
+    │       ├── README.md
+    │       └── deployments.json
     ├── abi/               # EVM / Tron ABI bundles
     └── idl/               # Solana / Aptos / Casper IDL artifacts
 ```
@@ -66,6 +69,8 @@ verification checklist; this layout is not an availability report.
 - `evm/v1.1/deployments.json` — EVM v1.1 initial production release
 - `solana/deployments.json` — Solana v1.4 program deployments
 - `casper/deployments.json` — Casper deployment records
+- `aptos/` — curated Aptos mainnet/testnet payment and multisig snapshots
+- `near/` — curated NEAR mainnet/testnet account/WASM and council snapshots
 - `INDEX.md` — registry links and verification checklist
 - Each deployment JSON references `src/reference/payment-deployments.schema.json` using a relative `$schema` link.
 
@@ -80,8 +85,13 @@ not proof of activation.
 
 ```
 registry/abi/
+├── aptos/
+│   └── splitter/
+│       ├── splitter-mainnet-<address>.json
+│       └── splitter-testnet-<address>.json
 ├── evm/
 │   ├── B2BSplitterV14/B2BSplitterV14.json
+│   ├── B2BSplitterV14/B2BSplitterV14-linted.json # Required for Arc and subsequent EVM deployments
 │   └── TimelockWrapper/TimelockWrapper.json
 └── tron/
     └── .gitkeep
@@ -122,11 +132,19 @@ STRUCTURE.md             # This file
 package-lock.json
 package.json
 registry/abi/evm/B2BSplitterV14/B2BSplitterV14.json
+registry/abi/evm/B2BSplitterV14/B2BSplitterV14-linted.json
 registry/abi/evm/TimelockWrapper/TimelockWrapper.json
 registry/abi/tron/.gitkeep
+registry/abi/aptos/splitter/splitter-mainnet-<address>.json
+registry/abi/aptos/splitter/splitter-testnet-<address>.json
 registry/splitter/INDEX.md
+registry/splitter/aptos/README.md
+registry/splitter/aptos/deployments.json
+registry/splitter/aptos/multisig-deployments.json
 registry/splitter/casper/deployments.json
 registry/splitter/casper/README.md
+registry/splitter/near/README.md
+registry/splitter/near/deployments.json
 registry/splitter/evm/v1.1/deployments.json
 registry/splitter/evm/v1.1/README.md
 registry/splitter/evm/v1.2/deployments.json
@@ -137,7 +155,6 @@ registry/splitter/evm/v1.4/deployments.json
 registry/splitter/evm/v1.4/README.md
 registry/splitter/solana/deployments.json
 registry/splitter/solana/README.md
-registry/idl/aptos/.gitkeep
 registry/idl/casper/.gitkeep
 registry/idl/casper/aifinpay-casper-schema.json
 registry/idl/solana/splitter-v14/splitter.devnet.json
@@ -149,6 +166,7 @@ src/types.ts
 src/registry.ts            # AifinpayRegistry class
 src/artifacts.ts            # ArtifactRegistry class
 src/reference/payment-deployments.schema.json
+src/reference/aptos-multisig-deployment.schema.json
 tests/grabber.test.ts
 tests/registry.test.ts      # AifinpayRegistry tests
 tests/artifacts.test.ts     # ArtifactRegistry tests

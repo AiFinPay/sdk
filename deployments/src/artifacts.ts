@@ -40,6 +40,12 @@ export interface TronAbiArtifact {
   abi: unknown[];
 }
 
+export interface NearAbiArtifact {
+  contractName: string;
+  version: string;
+  abi: unknown;
+}
+
 /**
  * Programmatic interface to query ABI and IDL artifacts.
  * Provides type-safe access to contract interface definitions.
@@ -50,6 +56,7 @@ export class ArtifactRegistry {
   private casperIdlCache: Map<"mainnet" | "testnet", CasperIdlArtifact>;
   private aptosIdlCache: Map<string, AptosIdlArtifact>;
   private tronAbiCache: Map<string, TronAbiArtifact>;
+  private nearAbiCache: Map<string, NearAbiArtifact>;
 
   private constructor() {
     this.evmAbiCache = new Map();
@@ -57,6 +64,7 @@ export class ArtifactRegistry {
     this.casperIdlCache = new Map();
     this.aptosIdlCache = new Map();
     this.tronAbiCache = new Map();
+    this.nearAbiCache = new Map();
   }
 
   static load(): ArtifactRegistry {
@@ -66,6 +74,7 @@ export class ArtifactRegistry {
     registry.loadCasperIdlArtifacts();
     registry.loadAptosIdlArtifacts();
     registry.loadTronAbiArtifacts();
+    registry.loadNearAbiArtifacts();
     return registry;
   }
 
@@ -170,6 +179,24 @@ export class ArtifactRegistry {
     }
   }
 
+  private loadNearAbiArtifacts(): void {
+    const nearDir = join(ABI_DIR, "near");
+    if (!existsSync(nearDir)) return;
+
+    const jsonFiles = this.readJsonFiles(nearDir);
+    for (const file of jsonFiles) {
+      const content = JSON.parse(readFileSync(file, "utf-8"));
+      const contractName = content.metadata.name;
+      const version = content.metadata.version;
+      const artifact: NearAbiArtifact = {
+        contractName,
+        version,
+        abi: content,
+      };
+      this.nearAbiCache.set(`${contractName}@${version}`, artifact);
+    }
+  }
+
   getEvmAbi(contractName: string, version: string = "1.4"): EvmAbiArtifact | null {
     const key = `${contractName}@${version}`;
     return this.evmAbiCache.get(key) ?? null;
@@ -227,6 +254,23 @@ export class ArtifactRegistry {
 
   getAllTronAbis(): TronAbiArtifact[] {
     return Array.from(this.tronAbiCache.values());
+  }
+
+  getNearAbi(contractName: string, version?: string): NearAbiArtifact | null {
+    if (version) {
+      const key = `${contractName}@${version}`;
+      return this.nearAbiCache.get(key) ?? null;
+    }
+    for (const [key, artifact] of this.nearAbiCache.entries()) {
+      if (key.startsWith(`${contractName}@`)) {
+        return artifact;
+      }
+    }
+    return null;
+  }
+
+  getAllNearAbis(): NearAbiArtifact[] {
+    return Array.from(this.nearAbiCache.values());
   }
 
   private readDirectories(dir: string): string[] {

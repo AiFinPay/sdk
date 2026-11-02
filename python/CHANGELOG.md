@@ -4,7 +4,7 @@
   even when its quote no longer verifies (`SOLANA_V14_INVALID`). Such a quote
   was never signed or sent, but the failed check left the admission open and
   every later Solana payment from that ledger was refused. Matches
-  `@aifinpay/agent` 2.11.3.
+  `@aifinpay/agent` 2.12.1.
 
 ## 2.9.1 — Arc splitter getters
 

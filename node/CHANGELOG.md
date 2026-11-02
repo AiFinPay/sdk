@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.11.3 — expired Solana admissions that no longer verify
+## 2.12.1 — expired Solana admissions that no longer verify
 
 - A Solana quote admission that expired without being reserved is now closed
   even when its quote no longer verifies (`SOLANA_V14_INVALID`). Such a quote

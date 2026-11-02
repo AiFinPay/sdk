@@ -40,6 +40,12 @@ activation.
 
 ## Interface
 
-- [Splitter ABI](../../../abi/evm/B2BSplitterV14/B2BSplitterV14.json)
+- [Linted splitter ABI](../../../abi/evm/B2BSplitterV14/B2BSplitterV14-linted.json) — use this ABI for Arc and every subsequent EVM chain deployment.
+- [Original splitter ABI](../../../abi/evm/B2BSplitterV14/B2BSplitterV14.json) — retained as a separate artifact; it is not the deployment ABI for Arc or subsequent EVM chains.
 - [Timelock ABI](../../../abi/evm/TimelockWrapper/TimelockWrapper.json)
 - [Registry types](../../../../src/types.ts)
+
+Using this ABI defines the contract interface for a deployment; it does not
+verify deployment bytecode or authorize settlement activation. Follow the
+[verification checklist](../../INDEX.md) and runtime/backend checks before
+claiming availability.

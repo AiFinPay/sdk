@@ -1,5 +1,5 @@
-// Directory profile end to end: the real @aifinpay/mcp (file:../mcp — run
-// `npm ci && npm run build` in mcp/ first) behind this transport, exactly as
+// Directory profile end to end: the real @aifinpay/mcp (file:../mcp, rebuilt
+// by npm test's pretest hook) behind this transport, exactly as
 // mcp-http-directory.service runs it. Nothing here reaches the network: only
 // initialize, tools/list and the toolspec are exercised, none of which call
 // the API.

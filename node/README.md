@@ -24,6 +24,37 @@ block signing. These are preflight estimates, not inclusion-time guarantees.
 Current admin profiles remain mutable; receipt and recovery policy is unchanged.
 See [payment configuration and recovery](./PAYMENT_RECEIPTS.md).
 
+### Aptos and NEAR deployment support
+
+The Node SDK generates typed Aptos and NEAR deployment pins from the installed
+`@aifinpay/deployments` package. Wallet derivation and Agent Passport already
+provide identifiers for both families. Select deployment metadata explicitly:
+
+```ts
+import { getAptosDeployment, getNearDeployment, resolveAptosDeployment } from "@aifinpay/agent";
+
+const aptos = getAptosDeployment({ environment: "prod", network: "mainnet" });
+const near = getNearDeployment({ environment: "dev", network: "testnet" });
+// Selection additionally requires settlementEnabled in the packaged record.
+const selected = resolveAptosDeployment({ environment: "prod", network: "mainnet", version: "v1.4" });
+```
+
+`get*Deployment` permits read-only inspection of disabled records.
+`resolveAptosDeployment` and `resolveNearDeployment` reject disabled records,
+unknown networks, environment mismatches, and unsupported versions; no legacy
+fallback or default network is selected. Aptos pins include module hashes, the
+referenced ABI digest, and per-network source provenance. NEAR pins include the
+account and WASM hash; council membership is not treated as governance authority.
+See the [Aptos](../deployments/registry/splitter/aptos/README.md) and
+[NEAR](../deployments/registry/splitter/near/README.md) registry guides.
+
+**Payment execution is not implemented for Aptos or NEAR.** These resolvers read
+packaged metadata, not current chain state. Neither family is an EVM `v14.chain`,
+and `fetchPaid` cannot sign or settle their payments. Executable support requires
+backend quote/receipt contracts, independently verified runtime/profile checks,
+chain-specific signing, fee caps, and durable recovery; a registry flag or payout
+address does not supply these.
+
 ### Stablecoin-only chains
 
 On a `stablecoinOnly` chain (Arc) the gas token is the pinned stablecoin itself:
