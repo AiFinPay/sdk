@@ -1924,6 +1924,8 @@ export class AiFinPayAgent {
 
   /** Recover receipt issuance for an existing payment; never sends a transaction. */
   async recoverPaidPayment(recovery: Aifp1PaymentRecovery, opts: Aifp1RecoveryOptions = {}): Promise<Aifp1PayResult> {
+    // The purchase was reserved in the durable ledger fetchPaid opens for Solana; a new process must read that one.
+    if (recovery.family === "solana" && !this.ledgerOverride) this._ledger = FileSpendLedger.forAgent(this.evmAddress);
     if (recovery.family !== "solana" && recovery.budgetReservationId !== undefined) {
       const chain = recovery.chain ?? "polygon";
       await assertPreparedV14Recovery(
