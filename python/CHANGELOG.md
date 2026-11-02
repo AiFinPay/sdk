@@ -1,3 +1,11 @@
+## 2.9.2 — expired Solana admissions that no longer verify
+
+- A Solana quote admission that expired without being reserved is now closed
+  even when its quote no longer verifies (`SOLANA_V14_INVALID`). Such a quote
+  was never signed or sent, but the failed check left the admission open and
+  every later Solana payment from that ledger was refused. Matches
+  `@aifinpay/agent` 2.12.1.
+
 ## 2.9.1 — Arc splitter getters
 
 - The pre-payment deployment check reads `TOKEN_LIST()` / `PROFILES()` (the

@@ -1022,6 +1022,29 @@ def test_only_exact_expired_nonadmission_closes_local_phase(monkeypatch, tmp_pat
     assert sent == [sent[0], sent[0]] and not f.sends
 
 
+def test_expired_unverifiable_quote_admission_closes_without_post(monkeypatch, tmp_path):
+    f = Fixture()
+    approved(monkeypatch, f)
+    now = time.time()
+    pd = s.pdas(f.d["programId"], str(PAYER.pubkey()), "0")
+    f.data[str(pd["config"])][233] = 1
+    with pytest.raises(s.SolanaV14Error, match="paused"):
+        fetch(AiFinPayAgent.from_seed("42" * 32, solana_rpc=RPC), tmp_path)
+    f.data[str(pd["config"])][233] = 0
+    path = tmp_path / "spend.json"
+    original = json.loads(path.read_text())["quote_admissions"][0]
+    monkeypatch.setattr(a.time, "time", lambda: now + 700)
+
+    def unverifiable(*args, **kwargs):
+        raise s.SolanaV14Error("Solana account metas disagree with independently derived accounts")
+
+    monkeypatch.setattr(s, "verify_historical_quote", unverifiable)
+    with pytest.raises(a.Aifp1QuoteError, match="expired"):
+        fetch(AiFinPayAgent.from_seed("42" * 32, solana_rpc=RPC), tmp_path)
+    terminal = json.loads(path.read_text())["quote_admissions"][0]
+    assert terminal == {**original, "terminal": "expired-unbroadcast"} and not f.sends and len(f.quotes) == 1
+
+
 def test_expired_adopted_quote_local_nonbroadcast_terminal_without_post(monkeypatch, tmp_path):
     f = Fixture()
     approved(monkeypatch, f)

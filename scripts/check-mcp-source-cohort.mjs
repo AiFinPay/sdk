@@ -27,8 +27,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const BASE = "baff2043ca0170bc35e1603f3fa75f81ab54c2ea";
 export const COHORT = {
   mcp: "2.15.3",
-  agent: "2.11.2",
-  python: "2.9.1",
+  agent: "2.12.1",
+  python: "2.9.2",
   skill: "2.12.0",
 };
 // Real CLI subprocess tests retain their default five-second limit. Serialize

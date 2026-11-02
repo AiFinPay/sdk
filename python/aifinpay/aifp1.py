@@ -1697,13 +1697,20 @@ def aifp1_fetch(
                 deployment,
                 historical=True,
             )
-            verify_historical_quote(
-                quote["settlement_call"],
-                rpc=client,
-                deployment=deployment,
-                payer=account.address,
-                order_id=quote["quote_id"],
-            )
+            from .settlement_solana_v14 import SolanaV14Error
+
+            try:
+                verify_historical_quote(
+                    quote["settlement_call"],
+                    rpc=client,
+                    deployment=deployment,
+                    payer=account.address,
+                    order_id=quote["quote_id"],
+                )
+            except SolanaV14Error as e:
+                # Never reserved, so never signed: a quote that cannot verify was never payable.
+                if e.code != "SOLANA_V14_INVALID":
+                    raise
             ledger.close_quote_admission(
                 admission["id"], admission_binding, admission_context, "expired-unbroadcast", admission["quote_json"]
             )

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.12.1 — expired Solana admissions that no longer verify
+
+- A Solana quote admission that expired without being reserved is now closed
+  even when its quote no longer verifies (`SOLANA_V14_INVALID`). Such a quote
+  was never signed or sent, but the failed check left the admission open and
+  every later Solana payment from that state directory was refused.
+
 ## 2.11.2 — Arc splitter getters
 
 - The splitter on Arc and Arc Testnet uses the linted ABI published in
