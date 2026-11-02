@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.12.4 — Arc Testnet receipts
+
+- The default Arc Testnet RPC (`rpc.blockdaemon.testnet.arc.io`) kept answering
+  a receipt query with the first `null` it served for that transaction, for
+  minutes after it was mined, so every Arc Testnet purchase ended in
+  `V14_APPROVAL_PENDING` or "payment broadcast; recover…" although it had
+  succeeded. The default is now `rpc.drpc.testnet.arc.io`.
+
 ## 2.12.3 — Solana recovery in a new process
 
 - `recoverPaidPayment` for a Solana payment read the in-memory ledger when no
