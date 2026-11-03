@@ -61,8 +61,9 @@ _OptionalStr = Optional[str]
 _OptionalInt = Optional[int]
 
 DEFAULT_API_BASE = "https://api.aifinpay.io"
-DEFAULT_BATCH_USD = Decimal("0.1")
-FALLBACK_UNITS = 200
+# Fallback when a 402 states no minimum; the server answers 400 naming its real minimum.
+DEFAULT_BATCH_USD = Decimal("0.02")
+FALLBACK_UNITS = 40
 CHAINLINK_POL_USD_POLYGON = "0xAB594600376Ec9fD91F8e885dADF0CE036862dE0"
 MAX_FEED_AGE_S = 3600
 
@@ -225,7 +226,21 @@ def solana_quote_authorization_message(body, auth, issuer):
     )
 
 
+def _positive_int(value: Any) -> Optional[int]:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0 or value > 2**53 - 1:
+        return None
+    return value
+
+
 def default_units_for(challenge: Dict[str, Any]) -> int:
+    """The 402's advertised minimum batch in billing units, else about DEFAULT_BATCH_USD worth."""
+    min_units = _positive_int(challenge.get("min_units"))
+    if min_units is not None:
+        return min_units
+    min_requests = _positive_int(challenge.get("min_requests"))
+    weight = _positive_int(challenge.get("unit_weight")) or 1
+    if min_requests is not None and _positive_int(min_requests * weight) is not None:
+        return min_requests * weight
     try:
         base = Decimal(str(challenge.get("base_unit_price_usd")))
     except (InvalidOperation, TypeError):
@@ -1456,7 +1471,7 @@ def aifp1_fetch(
     ``receipts`` maps merchant_id → receipts bought from it; one that covers the
     challenged resource is tried before anything new is bought. ``scope`` is
     "prefix" by default for the same reason as in Node: an "exact" batch per URL
-    costs the $0.10 floor and a transaction for every distinct page.
+    costs a minimum batch and a transaction for every distinct page.
 
     With ``merchant_pins`` a hosted-gateway site is pinned to the merchant it
     was first paid as; a 402 naming another raises

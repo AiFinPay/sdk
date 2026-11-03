@@ -6,6 +6,13 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## Minimum batch $0.02 — agent 2.14.0, Python 2.11.0, gate 0.9.0, aifinpay-gate 0.6.0, MCP 2.16.0
+
+- The agent SDKs buy the minimum batch the 402 advertises, falling back to
+  $0.02 worth; the gates advertise a $0.02 minimum (`minBatchUnits` /
+  `min_batch_units` to match another server minimum); MCP funding advice uses
+  $0.02.
+
 ## Agent 2.12.0 — Aptos and NEAR deployment resolution
 
 - Generate typed Aptos and NEAR deployment pins from the installed deployment

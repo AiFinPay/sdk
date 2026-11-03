@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.14.0 — the default batch is the minimum the 402 advertises
+
+- `fetchPaid` without `units` buys the smallest batch the 402 states: `min_units`
+  billing units, or `min_requests` × `unit_weight` (`@aifinpay/gate`, the
+  backend gate). Previously it always bought about $0.10.
+- A 402 without a minimum (the hosted gateway) buys $0.02 worth at
+  `base_unit_price_usd`, 40 units at $0.0005; without a price, 40 units.
+- A server whose minimum is higher still answers `/v1/quote` with 400 naming
+  it; nothing is signed or paid.
+
 ## 2.13.0 — an already-paid purchase is a typed outcome
 
 - Within a minute of a settled purchase, `/v1/quote` answers the same payer and

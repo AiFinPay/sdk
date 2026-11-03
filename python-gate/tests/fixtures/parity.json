@@ -1,5 +1,5 @@
 {
- "generated_from": "@aifinpay/gate 0.8.0",
+ "generated_from": "@aifinpay/gate 0.9.0",
  "jwks": {
   "keys": [
    {
@@ -218,9 +218,9 @@
    "premium": "0.005"
   },
   "min_requests": {
-   "standard": 200,
-   "complex": 50,
-   "premium": 20
+   "standard": 40,
+   "complex": 10,
+   "premium": 4
   },
   "REDIS_INCRBY_SCRIPT": "local v = redis.call('INCRBY', KEYS[1], ARGV[1])\nif redis.call('PTTL', KEYS[1]) < 0 then\n  redis.call('PEXPIRE', KEYS[1], ARGV[2])\nend\nreturn v"
  },
@@ -244,13 +244,13 @@
     "tier": "standard",
     "unit_weight": 1,
     "unit_price_usd": "0.0005",
-    "min_requests": 200,
+    "min_requests": 40,
     "scope": "exact",
     "protocol_fee_bps": 100,
     "no_minimum_fee": true,
     "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
     "how_to_pay": [
-     "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/api/x\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":200,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+     "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/api/x\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
      "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
      "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
      "retry this request with header: AIFP-Receipt: <receipt JWT>"
@@ -280,13 +280,13 @@
     "tier": "standard",
     "unit_weight": 7,
     "unit_price_usd": "0.0005",
-    "min_requests": 200,
+    "min_requests": 40,
     "scope": "prefix",
     "protocol_fee_bps": 100,
     "no_minimum_fee": true,
     "settlement_terms_from": "POST https://staging.example/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
     "how_to_pay": [
-     "POST https://staging.example/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/api/*\",\"tier\":\"standard\",\"scope\":\"prefix\",\"requests\":200,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+     "POST https://staging.example/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/api/*\",\"tier\":\"standard\",\"scope\":\"prefix\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
      "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
      "POST https://staging.example/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
      "retry this request with header: AIFP-Receipt: <receipt JWT>"
@@ -313,13 +313,13 @@
     "tier": "complex",
     "unit_weight": 4,
     "unit_price_usd": "0.002",
-    "min_requests": 50,
+    "min_requests": 10,
     "scope": "exact",
     "protocol_fee_bps": 100,
     "no_minimum_fee": true,
     "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
     "how_to_pay": [
-     "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/api/x\",\"tier\":\"complex\",\"scope\":\"exact\",\"requests\":50,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+     "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/api/x\",\"tier\":\"complex\",\"scope\":\"exact\",\"requests\":10,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
      "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
      "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
      "retry this request with header: AIFP-Receipt: <receipt JWT>"
@@ -349,13 +349,13 @@
     "tier": "complex",
     "unit_weight": 7,
     "unit_price_usd": "0.002",
-    "min_requests": 50,
+    "min_requests": 10,
     "scope": "prefix",
     "protocol_fee_bps": 100,
     "no_minimum_fee": true,
     "settlement_terms_from": "POST https://staging.example/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
     "how_to_pay": [
-     "POST https://staging.example/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/api/*\",\"tier\":\"complex\",\"scope\":\"prefix\",\"requests\":50,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+     "POST https://staging.example/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/api/*\",\"tier\":\"complex\",\"scope\":\"prefix\",\"requests\":10,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
      "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
      "POST https://staging.example/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
      "retry this request with header: AIFP-Receipt: <receipt JWT>"
@@ -382,13 +382,13 @@
     "tier": "premium",
     "unit_weight": 10,
     "unit_price_usd": "0.005",
-    "min_requests": 20,
+    "min_requests": 4,
     "scope": "exact",
     "protocol_fee_bps": 100,
     "no_minimum_fee": true,
     "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
     "how_to_pay": [
-     "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/api/x\",\"tier\":\"premium\",\"scope\":\"exact\",\"requests\":20,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+     "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/api/x\",\"tier\":\"premium\",\"scope\":\"exact\",\"requests\":4,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
      "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
      "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
      "retry this request with header: AIFP-Receipt: <receipt JWT>"
@@ -418,13 +418,13 @@
     "tier": "premium",
     "unit_weight": 7,
     "unit_price_usd": "0.005",
-    "min_requests": 20,
+    "min_requests": 4,
     "scope": "prefix",
     "protocol_fee_bps": 100,
     "no_minimum_fee": true,
     "settlement_terms_from": "POST https://staging.example/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
     "how_to_pay": [
-     "POST https://staging.example/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/api/*\",\"tier\":\"premium\",\"scope\":\"prefix\",\"requests\":20,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+     "POST https://staging.example/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/api/*\",\"tier\":\"premium\",\"scope\":\"prefix\",\"requests\":4,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
      "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
      "POST https://staging.example/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
      "retry this request with header: AIFP-Receipt: <receipt JWT>"
@@ -1637,13 +1637,13 @@
        "tier": "standard",
        "unit_weight": 1,
        "unit_price_usd": "0.0005",
-       "min_requests": 200,
+       "min_requests": 40,
        "scope": "exact",
        "protocol_fee_bps": 100,
        "no_minimum_fee": true,
        "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
        "how_to_pay": [
-        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":200,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
         "retry this request with header: AIFP-Receipt: <receipt JWT>"
@@ -1818,13 +1818,13 @@
        "tier": "standard",
        "unit_weight": 1,
        "unit_price_usd": "0.0005",
-       "min_requests": 200,
+       "min_requests": 40,
        "scope": "exact",
        "protocol_fee_bps": 100,
        "no_minimum_fee": true,
        "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
        "how_to_pay": [
-        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":200,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
         "retry this request with header: AIFP-Receipt: <receipt JWT>"
@@ -1961,13 +1961,13 @@
        "tier": "premium",
        "unit_weight": 10,
        "unit_price_usd": "0.005",
-       "min_requests": 20,
+       "min_requests": 4,
        "scope": "exact",
        "protocol_fee_bps": 100,
        "no_minimum_fee": true,
        "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
        "how_to_pay": [
-        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"premium\",\"scope\":\"exact\",\"requests\":20,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"premium\",\"scope\":\"exact\",\"requests\":4,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
         "retry this request with header: AIFP-Receipt: <receipt JWT>"
@@ -2064,13 +2064,13 @@
        "tier": "standard",
        "unit_weight": 2,
        "unit_price_usd": "0.0005",
-       "min_requests": 200,
+       "min_requests": 40,
        "scope": "exact",
        "protocol_fee_bps": 100,
        "no_minimum_fee": true,
        "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
        "how_to_pay": [
-        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":200,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
         "retry this request with header: AIFP-Receipt: <receipt JWT>"
@@ -2208,13 +2208,13 @@
        "tier": "standard",
        "unit_weight": 1,
        "unit_price_usd": "0.0005",
-       "min_requests": 200,
+       "min_requests": 40,
        "scope": "exact",
        "protocol_fee_bps": 100,
        "no_minimum_fee": true,
        "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
        "how_to_pay": [
-        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":200,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
         "retry this request with header: AIFP-Receipt: <receipt JWT>"
@@ -3094,13 +3094,13 @@
        "tier": "standard",
        "unit_weight": 1,
        "unit_price_usd": "0.0005",
-       "min_requests": 200,
+       "min_requests": 40,
        "scope": "exact",
        "protocol_fee_bps": 100,
        "no_minimum_fee": true,
        "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
        "how_to_pay": [
-        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":200,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
         "retry this request with header: AIFP-Receipt: <receipt JWT>"
@@ -3154,13 +3154,13 @@
        "tier": "standard",
        "unit_weight": 1,
        "unit_price_usd": "0.0005",
-       "min_requests": 200,
+       "min_requests": 40,
        "scope": "exact",
        "protocol_fee_bps": 100,
        "no_minimum_fee": true,
        "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
        "how_to_pay": [
-        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":200,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
         "retry this request with header: AIFP-Receipt: <receipt JWT>"
@@ -3264,13 +3264,13 @@
        "tier": "standard",
        "unit_weight": 1,
        "unit_price_usd": "0.0005",
-       "min_requests": 200,
+       "min_requests": 40,
        "scope": "exact",
        "protocol_fee_bps": 100,
        "no_minimum_fee": true,
        "settlement_terms_from": "POST https://staging.example/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
        "how_to_pay": [
-        "POST https://staging.example/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":200,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "POST https://staging.example/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://staging.example/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
         "retry this request with header: AIFP-Receipt: <receipt JWT>"
@@ -3882,13 +3882,13 @@
        "tier": "standard",
        "unit_weight": 1,
        "unit_price_usd": "0.0005",
-       "min_requests": 200,
+       "min_requests": 40,
        "scope": "exact",
        "protocol_fee_bps": 100,
        "no_minimum_fee": true,
        "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
        "how_to_pay": [
-        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":200,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
         "retry this request with header: AIFP-Receipt: <receipt JWT>"
@@ -4075,13 +4075,13 @@
        "tier": "standard",
        "unit_weight": 1,
        "unit_price_usd": "0.0005",
-       "min_requests": 200,
+       "min_requests": 40,
        "scope": "exact",
        "protocol_fee_bps": 100,
        "no_minimum_fee": true,
        "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
        "how_to_pay": [
-        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":200,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
         "retry this request with header: AIFP-Receipt: <receipt JWT>"
@@ -4354,13 +4354,13 @@
        "tier": "standard",
        "unit_weight": 1,
        "unit_price_usd": "0.0005",
-       "min_requests": 200,
+       "min_requests": 40,
        "scope": "exact",
        "protocol_fee_bps": 100,
        "no_minimum_fee": true,
        "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
        "how_to_pay": [
-        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":200,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
         "retry this request with header: AIFP-Receipt: <receipt JWT>"

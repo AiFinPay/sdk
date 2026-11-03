@@ -99,6 +99,10 @@ class Server:
         self.quote_answer = None  # answered by /v1/quote instead of a quote
         self.call = None
         self.last_quote = None
+        # A $0.10 minimum keeps the fixed AMOUNT below; the minimum tests override it.
+        self.challenge_extra = {"min_units": 200}
+        self.min_units = 200
+        self.quoted_units = []
 
     def get(self, url, headers=None, timeout=None, allow_redirects=True):
         headers = headers or {}
@@ -124,7 +128,7 @@ class Server:
                         and a.scope_covers(claims["scope"], claims["resource"], path)):
                     return Resp(200, {"data": "paid content", "path": path})
             return Resp(402, {"protocol": "AIFP-1", "merchant_id": merchant, "resource": path,
-                              "base_unit_price_usd": "0.0005"})
+                              "base_unit_price_usd": "0.0005", **self.challenge_extra})
         if url.startswith(SHOP):
             receipt = headers.get("AIFP-Receipt")
             self.merchant_hits.append(receipt)
@@ -137,7 +141,7 @@ class Server:
                         and a.scope_covers(claims["scope"], claims["resource"], path)):
                     return Resp(200, {"data": "paid content", "path": path})
             return Resp(402, {"protocol": "AIFP-1", "merchant_id": "mrch_acme", "resource": path,
-                              "base_unit_price_usd": "0.0005"})
+                              "base_unit_price_usd": "0.0005", **self.challenge_extra})
         raise AssertionError(f"unexpected GET {url}")
 
     def post(self, url, json=None, headers=None, timeout=None, allow_redirects=True):
@@ -158,7 +162,10 @@ class Server:
             return Resp(200, self.quote_answer)
         # Like the backend: a stablecoin-only chain (Arc) never quotes msg.value.
         stable = body.get("asset") not in (None, self.native_asset) or PAYMENT_CHAINS[self.chain].get("stablecoinOnly")
-        assert body["payer"] == PAYER.address and body["units"] == 200
+        self.quoted_units.append(body["units"])
+        if not isinstance(body["units"], int) or body["units"] < self.min_units:
+            return Resp(400, {"error": "AIFP-400", "detail": f"units must be an integer {self.min_units}..100000000"})
+        assert body["payer"] == PAYER.address
         order = f"qt_{self.quotes:016d}"
         asset = body.get("asset") or self.native_asset
         self.last_quote_request = body
@@ -290,10 +297,26 @@ def test_authorization_message_is_a_compact_json_array():
                    '"polygon","0xabc","POL","aifp1-x","0xpayer",123]')
 
 
-def test_default_units_buy_a_ten_cent_batch():
-    assert a.default_units_for({"base_unit_price_usd": "0.0005"}) == 200
-    assert a.default_units_for({"base_unit_price_usd": "0.03"}) == 4
-    assert a.default_units_for({}) == a.FALLBACK_UNITS
+def test_default_units_follow_the_advertised_minimum():
+    assert a.default_units_for({"min_units": 40, "base_unit_price_usd": "0.0005"}) == 40
+    # @aifinpay/gate at a $0.02 minimum: 40 standard / 10 complex / 4 premium.
+    assert a.default_units_for({"min_requests": 40, "unit_weight": 1}) == 40
+    assert a.default_units_for({"min_requests": 10, "unit_weight": 4}) == 40
+    assert a.default_units_for({"min_requests": 4, "unit_weight": 10}) == 40
+    assert a.default_units_for({"min_requests": 25, "unit_weight": 1, "base_unit_price_usd": "0.0005"}) == 25
+
+
+def test_default_units_fall_back_to_two_cents():
+    assert a.default_units_for({"base_unit_price_usd": "0.0005"}) == 40
+    assert a.default_units_for({"base_unit_price_usd": "0.0001"}) == 200
+    assert a.default_units_for({"base_unit_price_usd": "0.03"}) == 1
+    assert a.default_units_for({}) == a.FALLBACK_UNITS == 40
+
+
+@pytest.mark.parametrize("bad", [None, 0, -40, 1.5, "40", True, 2**53])
+def test_default_units_ignore_an_unusable_minimum(bad):
+    assert a.default_units_for({"min_units": bad, "base_unit_price_usd": "0.0005"}) == 40
+    assert a.default_units_for({"min_requests": bad, "unit_weight": 1}) == 40
 
 
 # ── A gateway site keeps the merchant it was first paid as ──────────────────
@@ -312,6 +335,30 @@ def test_the_first_payment_pins_each_gateway_site(pinned, tmp_path):
     assert gateway(h, pins, url=f"{GATEWAY}/other/data").status_code == 200
     assert pins.get(f"{GATEWAY}/acme") == "mrch_acme" and pins.get(f"{GATEWAY}/other") == "mrch_other"
     assert all(stat.S_IMODE(os.stat(p).st_mode) == 0o600 for p in tmp_path.iterdir())
+
+
+def test_a_payment_quotes_the_advertised_minimum(pinned, tmp_path):
+    h = Harness(pinned)
+    h.server.challenge_extra = {"min_requests": 10, "unit_weight": 4}
+    h.server.min_units = 40
+    assert gateway(h, a.MerchantPins(str(tmp_path))).status_code == 200
+    assert h.server.quoted_units == [40]
+
+
+def test_a_payment_without_an_advertised_minimum_quotes_two_cents(pinned, tmp_path):
+    h = Harness(pinned)
+    h.server.challenge_extra = {}
+    h.server.min_units = 40
+    assert gateway(h, a.MerchantPins(str(tmp_path))).status_code == 200
+    assert h.server.quoted_units == [40]
+
+
+def test_a_higher_server_minimum_fails_loudly_before_paying(pinned, tmp_path):
+    h = Harness(pinned)
+    h.server.challenge_extra = {}
+    with pytest.raises(a.Aifp1QuoteError, match=r"units must be an integer 200\.\."):
+        gateway(h, a.MerchantPins(str(tmp_path)))
+    assert h.server.quoted_units == [40] and not h.server.pays
 
 
 def test_another_merchant_for_a_pinned_site_is_refused_before_any_quote(pinned, tmp_path):

@@ -1,3 +1,11 @@
+## 2.11.0 — the default batch is the minimum the 402 advertises
+
+- `fetch_paid` without `units` buys the smallest batch the 402 states:
+  `min_units`, or `min_requests` × `unit_weight`. Without one it buys $0.02
+  worth at `base_unit_price_usd` (40 units at $0.0005), previously $0.10. A
+  higher server minimum still fails at `/v1/quote` with a 400 naming it.
+  Matches `@aifinpay/agent` 2.14.0.
+
 ## 2.10.0 — an already-paid purchase is a typed outcome
 
 - Within a minute of a settled purchase, `/v1/quote` answers the same payer and

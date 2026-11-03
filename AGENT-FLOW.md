@@ -188,11 +188,11 @@ reissued, so stop and report it; buying again is the owner's decision.
 
 ## 6. Knowing what a payment buys, not just the amount
 
-The quote answers "1.06 POL" — `describeQuote(quote)` turns it into the terms.
+The quote answers "0.21 POL" — `describeQuote(quote)` turns it into the terms.
 It returns a summary object; its `headline` reads:
 
 ```
-Pay 1.055375555391386 POL ($0.10) for 200 requests to /api/agent/genres
+Pay 0.2110751110782772 POL ($0.02) for 40 requests to /api/agent/genres
 (incl. 1.00% fee), valid until 2026-09-04T13:00:00Z.
 ```
 

@@ -26,6 +26,8 @@ export function buildChallenge(args: {
   detail?: string;
   unitPriceUsd?: string;
   minRequests?: number;
+  /** Minimum batch in 6-dp stable minor units; ignored when minRequests is set. */
+  minBatchUnits?: number;
   /** Origin that serves /v1/quote and /v1/pay. MUST be absolute: this gate
    *  runs on the PARTNER's host, so a relative "/v1/quote" would point the
    *  agent at the partner's own server, where nothing answers it. (The paths
@@ -35,6 +37,7 @@ export function buildChallenge(args: {
 }): GateErrorBody {
   const { merchantId, resource, tier, weight } = args;
   const api = (args.apiBase ?? "https://api.aifinpay.io").replace(/\/+$/, "");
+  const minRequests = args.minRequests ?? minRequestsForTier(tier, args.minBatchUnits);
   return {
     error: "AIFP-402",
     detail: args.detail || "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
@@ -48,7 +51,7 @@ export function buildChallenge(args: {
     tier,
     unit_weight: weight,
     unit_price_usd: args.unitPriceUsd ?? unitPriceUsd(tier),
-    min_requests: args.minRequests ?? minRequestsForTier(tier),
+    min_requests: minRequests,
     // Which paths a receipt bought for THIS resource will open.
     //
     // Unlike the chain list below, a self-hosted gate DOES know this: scope is
@@ -82,7 +85,7 @@ export function buildChallenge(args: {
     // requires it — and could not tell that `requests` buys more than the
     // minimum, so the cheap mistake is six minimum batches instead of one.
     how_to_pay: [
-      `POST ${api}/v1/quote {"merchant_id":"${merchantId}","resource":"${resource}","tier":"${tier}","scope":"${args.scope ?? "exact"}","requests":${args.minRequests ?? minRequestsForTier(tier)},"payer":"<your wallet address>"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying`,
+      `POST ${api}/v1/quote {"merchant_id":"${merchantId}","resource":"${resource}","tier":"${tier}","scope":"${args.scope ?? "exact"}","requests":${minRequests},"payer":"<your wallet address>"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying`,
       "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
       `POST ${api}/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again`,
       "retry this request with header: AIFP-Receipt: <receipt JWT>",

@@ -24,8 +24,8 @@ Nobody edits the MCP client config to turn payments on. Signing happens only in
 step 5, only with a persistent, funded wallet, and never above the ceiling.
 
 1. **Read the price.** `GET` the resource. The `402` names the merchant
-   (`merchant_id`), the price per request and the smallest batch (`$0.10` for
-   200 standard requests).
+   (`merchant_id`), the price per request and the smallest batch (`$0.02` for
+   40 standard requests).
 2. **Check the setup.** Call `payment_setup_status`. It returns the wallet
    (persistent or ephemeral), the ceiling and each limit with its source
    (`default` or the owner's `env`), the balance when the RPC answers,
@@ -38,12 +38,12 @@ step 5, only with a persistent, funded wallet, and never above the ceiling.
    reload opens the payment journal for the new wallet. Never fund an
    ephemeral address.
 4. **Fund and link.** Tell the owner `addresses.evm` and the amount from
-   `payment_setup_status`'s `funding`: the smallest batch (`$0.10`) in POL at
+   `payment_setup_status`'s `funding`: the smallest batch (`$0.02`) in POL at
    today's rate plus the gas cap (0.3 POL by default; the SDK refuses before
-   signing if the worst-case fee exceeds it). The rate moves — `$0.10` was
-   1.08 POL on 2026-10-19 — so never quote a remembered number; if `funding`
-   carries a `rate_error` instead of an `amount`, ask the owner to fund "the
-   batch price in POL at today's rate plus the gas cap" and name no number.
+   signing if the worst-case fee exceeds it). The rate moves, so never quote a
+   remembered number; if `funding` carries a `rate_error` instead of an
+   `amount`, ask the owner to fund "the batch price in POL at today's rate plus
+   the gas cap" and name no number.
    Offer the dashboard link too: the owner generates a one-time URL under
    **My Agents → Claim via MCP** at https://dash.aifinpay.io and the agent
    passes it to `agent_claim_self`; from then on the owner sets the working
@@ -182,7 +182,7 @@ runtime/signer verification and owner limits. It persists the prepared transacti
 before sending, verifies the receipt, and reuses the purchased batch. No special
 merchant script, alternate contract or facilitator fallback is used. GET on the
 configured chain; EVM receipt payments use live mode and its native currency or
-the configured stablecoin. The smallest batch is $0.10 plus gas, well inside
+the configured stablecoin. The smallest batch is $0.02 plus gas, well inside
 the $5 per-payment ceiling.
 
 To buy access to a whole site rather than one endpoint, call

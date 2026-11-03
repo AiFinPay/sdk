@@ -139,15 +139,15 @@ describe("payment_setup_status", () => {
       address,
       chain: "polygon",
       asset: "POL",
-      batch_usd: 0.1,
+      batch_usd: 0.02,
       rate_usd: 0.2,
       rate_source: "coinbase",
-      batch_native: "0.5000",
+      batch_native: "0.1000",
       gas_cap: "0.3",
-      amount: "0.80",
-      advice: `Fund ${address} on Polygon with about 0.80 POL: the smallest batch ($0.10) ≈ 0.5000 POL at today's rate ($0.2000/POL) plus up to 0.3 POL gas.`,
+      amount: "0.40",
+      advice: `Fund ${address} on Polygon with about 0.40 POL: the smallest batch ($0.02) ≈ 0.1000 POL at today's rate ($0.2000/POL) plus up to 0.3 POL gas.`,
     });
-    expect(status.next_step).toMatch(new RegExp(`^Fund ${address} on Polygon with about 0\\.80 POL`));
+    expect(status.next_step).toMatch(new RegExp(`^Fund ${address} on Polygon with about 0\\.40 POL`));
     expect(status.next_step).not.toMatch(/AIFINPAY_/);
   });
 
@@ -182,7 +182,7 @@ describe("payment_setup_status", () => {
     expect(status.funding!.amount).toBeUndefined();
     expect(status.funding!.batch_native).toBeUndefined();
     expect(status.funding!.advice).toBe(
-      `The POL/USD rate could not be read here, so name no amount: ask the owner to fund ${address} on Polygon with the price of the smallest batch ($0.10) in POL at today's rate plus the gas cap of 0.3 POL.`
+      `The POL/USD rate could not be read here, so name no amount: ask the owner to fund ${address} on Polygon with the price of the smallest batch ($0.02) in POL at today's rate plus the gas cap of 0.3 POL.`
     );
     expect(status.next_step).toContain("must hold the batch price plus up to the gas cap");
     // No fixed rate anywhere in the answer.
@@ -194,7 +194,7 @@ describe("payment_setup_status", () => {
       ctx({ paymentsEnabled: true, ...limits, maxGasPol: "lots" }, "legacy-keystore"),
       { readBalance: true }
     );
-    expect(status.funding).toMatchObject({ batch_native: "0.5000" });
+    expect(status.funding).toMatchObject({ batch_native: "0.1000" });
     expect(status.funding!.gas_cap).toBeUndefined();
     expect(status.funding!.amount).toBeUndefined();
   });
@@ -222,23 +222,23 @@ describe("payment_setup_status", () => {
       chain: "polygon",
       rpc: "https://polygon.drpc.org",
     });
-    // $0.10 at $0.20/POL is 0.5 POL, plus the 0.3 POL gas cap. This context has
+    // $0.02 at $0.20/POL is 0.1 POL, plus the 0.3 POL gas cap. This context has
     // no signer, so the dashboard read reports unknown and adds one sentence.
     expect(status.next_step.split(" The dashboard Controls could not be read")[0]).toBe(
-      `Fund ${address} on Polygon with about 0.80 POL (the smallest batch is $0.10 ≈ 0.5000 POL at today's rate plus up to 0.3 POL gas; it holds 0.0000), then call payment_setup_status again.`
+      `Fund ${address} on Polygon with about 0.40 POL (the smallest batch is $0.02 ≈ 0.1000 POL at today's rate plus up to 0.3 POL gas; it holds 0.0000), then call payment_setup_status again.`
     );
     expect(status.dashboard).toMatchObject({ linked: "unknown" });
     expect(status.funding).toEqual({
       address,
       chain: "polygon",
       asset: "POL",
-      batch_usd: 0.1,
+      batch_usd: 0.02,
       rate_usd: 0.2,
       rate_source: "coinbase",
-      batch_native: "0.5000",
+      batch_native: "0.1000",
       gas_cap: "0.3",
-      amount: "0.80",
-      advice: `Fund ${address} on Polygon with about 0.80 POL: the smallest batch ($0.10) ≈ 0.5000 POL at today's rate ($0.2000/POL) plus up to 0.3 POL gas.`,
+      amount: "0.40",
+      advice: `Fund ${address} on Polygon with about 0.40 POL: the smallest batch ($0.02) ≈ 0.1000 POL at today's rate ($0.2000/POL) plus up to 0.3 POL gas.`,
     });
   });
 
@@ -253,7 +253,7 @@ describe("payment_setup_status", () => {
     expect(status.next_step).toContain(origin);
     expect(status.next_step).toContain("$0.15 per call");
     expect(status.next_step).toContain("dashboard Controls");
-    expect(status.funding).toMatchObject({ amount: "0.80" });
+    expect(status.funding).toMatchObject({ amount: "0.40" });
   });
 
   it("reads the balance over the owner's RPC when set, and reports an unreadable RPC without failing", async () => {

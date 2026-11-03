@@ -78,6 +78,10 @@ export interface GateOptions {
    *  to name an absolute AiFinPay URL — a relative path would send the agent
    *  looking for a quote endpoint on your own server. */
   apiBase?: string;
+  /** Minimum batch the 402 advertises, in 6-dp stable minor units. Default
+   *  20000 ($0.02). Set it only to match the server's AIFP_MIN_BATCH_UNITS:
+   *  a smaller number is refused at /v1/quote. */
+  minBatchUnits?: number;
   /** What to do while the registry has NEVER loaded (control plane unreachable,
    *  API key rotated). Default "error" answers 503 rather than guessing a price:
    *  metering a premium route at the standard weight bills a tenth of it. Set
@@ -199,6 +203,13 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     throw new Error(`createGate: mode must be "shadow" or "enforce": ${JSON.stringify(options.mode)}`);
   }
 
+  if (
+    options.minBatchUnits !== undefined &&
+    !(Number.isSafeInteger(options.minBatchUnits) && options.minBatchUnits > 0)
+  ) {
+    throw new Error(`createGate: minBatchUnits must be a positive integer: ${JSON.stringify(options.minBatchUnits)}`);
+  }
+
   const tier: Tier = options.tier ?? "standard";
   // A typo such as "Premium" would otherwise price the mount as standard: a
   // tenth of the premium price, with nothing in the response to show it.
@@ -297,6 +308,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
           weight,
           detail,
           apiBase: options.apiBase,
+          minBatchUnits: options.minBatchUnits,
         }),
       });
     };

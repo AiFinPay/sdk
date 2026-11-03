@@ -48,7 +48,7 @@ describe("the 402 body", () => {
     expect(body.protocol).toBe("AIFP-1");
     expect(body.unit_weight).toBe(4);
     expect(body.unit_price_usd).toBe("0.002");
-    expect(body.min_requests).toBe(50);
+    expect(body.min_requests).toBe(10);
     // 1% of the gross the agent pays, withheld from it — the merchant
     // receives 99%. (Unified-economics ТЗ 2026-08-23; this comment said
     // "on top, never deducted" and described the superseded model.)
@@ -95,7 +95,7 @@ describe("the 402 body", () => {
     const quote = body.how_to_pay![0]!;
     expect(quote).toContain('"resource":"/movies/*"');
     expect(quote).toContain('"scope":"prefix"');
-    expect(quote).toContain('"requests":20');
+    expect(quote).toContain('"requests":4');
     expect(quote).toContain('"payer":');
     expect(body.how_to_pay![2]).toContain("Idempotency-Key");
     expect(body.how_to_pay![2]).toMatch(/never pay again/);

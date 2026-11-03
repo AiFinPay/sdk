@@ -355,13 +355,13 @@ of a redeploy when we rotate keys).
   "tier": "complex",
   "unit_weight": 4,
   "unit_price_usd": "0.002",
-  "min_requests": 50,
+  "min_requests": 10,
   "scope": "exact",
   "protocol_fee_bps": 100,
   "no_minimum_fee": true,
   "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
   "how_to_pay": [
-    "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_acme\",\"resource\":\"/api/search\",\"tier\":\"complex\",\"scope\":\"exact\",\"requests\":50,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+    "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_acme\",\"resource\":\"/api/search\",\"tier\":\"complex\",\"scope\":\"exact\",\"requests\":10,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
     "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
     "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
     "retry this request with header: AIFP-Receipt: <receipt JWT>"
@@ -429,6 +429,7 @@ genuinely more expensive than its tier.
 | `jwks`              | fetched       | Pin the key set; removes all runtime network dependency on us.                                                                        |
 | `requireAgentMatch` | `false`       | Compares `AIFP-Agent-Id` to the receipt subject. Anti-accident, not anti-theft — the header is not authenticated.                     |
 | `refundOnError`     | `false`       | Give the call's units back on a 5xx (Express adapter). Read the warning below first.                                                  |
+| `minBatchUnits`     | `20000`       | Minimum batch the 402 advertises, in 6-dp stable minor units ($0.02). Match the server's minimum; never go below it.                  |
 
 **Operator rules.** Once a site sees which operators read it, the owner
 decides per operator on the dashboard (Access rules → Operators): `allow` —

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.16.0 — $0.02 smallest batch
+
+- `payment_setup_status` prices `funding` at a $0.02 smallest batch (was
+  $0.10); the README and `init` text say the same.
+
 ## 2.15.4 — installs agent 2.12.3, so Solana payments recover
 
 - `@aifinpay/agent` ^2.12.3 (lock resolved from the registry, with
