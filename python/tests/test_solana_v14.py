@@ -308,6 +308,7 @@ class Fixture:
                     "merchant_id": "mrch_sol",
                     "resource": "/api/items",
                     "base_unit_price_usd": "0.0005",
+                    "min_units": 200,
                 },
                 402,
             )

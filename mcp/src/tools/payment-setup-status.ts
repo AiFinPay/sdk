@@ -20,7 +20,7 @@ import { dashboardRefusal, dashboardSentence, readDashboardPolicy, type Dashboar
  */
 
 /** The smallest AIFP-1 batch the backend sells, in USD. */
-export const SMALLEST_BATCH_USD = 0.1;
+export const SMALLEST_BATCH_USD = 0.02;
 
 // Optional env the owner may add to narrow the defaults; none of it is needed
 // for a first payment. init prints it as a reference and README "Optional

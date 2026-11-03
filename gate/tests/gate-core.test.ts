@@ -22,6 +22,35 @@ async function gateWith(overrides: Record<string, unknown> = {}) {
   return { gate, iss };
 }
 
+describe("the advertised minimum batch", () => {
+  it("is $0.02 by default: 40 standard / 10 complex / 4 premium requests", async () => {
+    for (const [tier, min] of [
+      ["standard", 40],
+      ["complex", 10],
+      ["premium", 4],
+    ] as const) {
+      const { gate } = await gateWith({ tier });
+      const r = await gate(req("/api/search"));
+      if (r.ok) throw new Error("expected a 402");
+      expect(r.body.min_requests).toBe(min);
+      expect(r.body.how_to_pay![0]).toContain(`"requests":${min},`);
+    }
+  });
+
+  it("follows minBatchUnits when the server's minimum differs", async () => {
+    const { gate } = await gateWith({ minBatchUnits: 100_000 });
+    const r = await gate(req("/api/search"));
+    if (r.ok) throw new Error("expected a 402");
+    expect(r.body.min_requests).toBe(200);
+  });
+
+  it("refuses an unusable minBatchUnits at construction", async () => {
+    for (const bad of [0, -1, 1.5, "20000", Number.NaN]) {
+      await expect(gateWith({ minBatchUnits: bad })).rejects.toThrow(/minBatchUnits/);
+    }
+  });
+});
+
 describe("the four answers a gate can give", () => {
   it("402s with a payable challenge when there is no receipt at all", async () => {
     const { gate } = await gateWith();

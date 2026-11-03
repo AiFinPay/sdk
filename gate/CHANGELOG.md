@@ -1,5 +1,15 @@
 # Changelog
 
+## @aifinpay/gate 0.9.0 — $0.02 minimum batch
+
+- The 402 advertises a $0.02 minimum batch: `min_requests` 40 standard, 10
+  complex, 4 premium (was 200 / 50 / 20), and the `how_to_pay` quote example
+  uses the same number.
+- New option `minBatchUnits` (6-dp stable minor units, default 20000) for a
+  server whose minimum differs; `createGate` refuses a non-positive or
+  fractional value. `minRequestsForTier(tier, minBatchUnits?)` and
+  `MIN_BATCH_UNITS` are exported.
+
 ## @aifinpay/gate 0.8.0 — unreleased
 
 - Agent discovery from any HTML page. `aifpGate` and `aifpDiscovery` add one

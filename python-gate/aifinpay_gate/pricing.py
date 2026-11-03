@@ -12,7 +12,7 @@ PROTOCOL_FEE_BPS = 100
 MERCHANT_SHARE_BPS = 9_900
 
 _UNIT_PRICE_UNITS = {"standard": 500, "complex": 2000, "premium": 5000}
-_MIN_BATCH_UNITS = 100_000  # $0.10 in 6-dp minor units
+MIN_BATCH_UNITS = 20_000  # $0.02 in 6-dp minor units (server AIFP_MIN_BATCH_UNITS)
 
 
 def weight_for_tier(tier: Optional[str]) -> int:
@@ -20,9 +20,9 @@ def weight_for_tier(tier: Optional[str]) -> int:
     return TIER_WEIGHTS.get(tier or "", 1)
 
 
-def min_requests_for_tier(tier: Optional[str]) -> int:
+def min_requests_for_tier(tier: Optional[str], min_batch_units: int = MIN_BATCH_UNITS) -> int:
     unit = _UNIT_PRICE_UNITS.get(tier or "standard", _UNIT_PRICE_UNITS["standard"])
-    return math.ceil(_MIN_BATCH_UNITS / unit)
+    return math.ceil(min_batch_units / unit)
 
 
 def unit_price_usd(tier: Optional[str]) -> str:

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BASE_UNIT_PRICE_USD,
+  MIN_BATCH_UNITS,
   PROTOCOL_FEE_BPS,
   TIER_WEIGHTS,
   UNIT_PRICE_USD,
@@ -36,12 +37,19 @@ describe("the tier-weight invariant", () => {
     expect(weightForTier("enterprise")).toBe(1);
   });
 
-  it("min_requests clears the $0.10 batch floor at every tier", () => {
-    expect(minRequestsForTier("standard")).toBe(200);
-    expect(minRequestsForTier("complex")).toBe(50);
-    expect(minRequestsForTier("premium")).toBe(20);
+  it("min_requests clears the $0.02 batch floor at every tier", () => {
+    expect(MIN_BATCH_UNITS).toBe(20_000);
+    expect(minRequestsForTier("standard")).toBe(40);
+    expect(minRequestsForTier("complex")).toBe(10);
+    expect(minRequestsForTier("premium")).toBe(4);
     for (const tier of ["standard", "complex", "premium"] as const) {
-      expect(minRequestsForTier(tier) * Number(UNIT_PRICE_USD[tier])).toBeGreaterThanOrEqual(0.1);
+      expect(minRequestsForTier(tier) * Number(UNIT_PRICE_USD[tier])).toBeGreaterThanOrEqual(0.02);
     }
+  });
+
+  it("min_requests follows an overridden minimum batch", () => {
+    expect(minRequestsForTier("standard", 100_000)).toBe(200);
+    expect(minRequestsForTier("complex", 100_000)).toBe(50);
+    expect(minRequestsForTier("premium", 100_000)).toBe(20);
   });
 });

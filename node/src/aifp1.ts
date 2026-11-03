@@ -18,10 +18,10 @@
 //
 // It carries `unit_quota` billing units and each call spends the weight of the
 // route it hits (routes/gateway.js meters `aifp:used:<receipt_id>` by the
-// weight from the merchant's own registry). The minimum batch is $0.10
-// (aifp/pricing.js MIN_BATCH_UNITS) and settling costs gas on top, so a client
-// that quotes-settles-pays per request turns a $0.0001 page view into eleven
-// cents and a chain transaction. Reuse is not an optimisation here; it is the
+// weight from the merchant's own registry). Every batch has a server-side
+// minimum (aifp/pricing.js MIN_BATCH_UNITS) and settling costs gas on top, so a
+// client that quotes-settles-pays per request pays that minimum plus a chain
+// transaction for every page view. Reuse is not an optimisation here; it is the
 // difference between a payable site and an unpayable one.
 //
 // So this module keeps receipts and spends them down: it matches on merchant +
@@ -420,6 +420,10 @@ export interface Aifp1Challenge {
   resource: string; // the merchant-relative path, no slug
   unit_weight: number; // billing units this route costs per call
   base_unit_price_usd?: string;
+  /** Smallest batch in billing units, when the 402 states it that way. */
+  min_units?: number;
+  /** Smallest batch in calls at unit_weight (@aifinpay/gate, backend gate). */
+  min_requests?: number;
   how_to_pay?: string[];
   scopes?: { note?: string; examples?: string[] };
 }
@@ -1065,12 +1069,7 @@ export interface Aifp1FetchOptions {
   scope?: Aifp1Scope;
   /** Override the resource the batch is scoped to (ignored for "merchant"). */
   resource?: string;
-  /**
-   * Billing units to prepay. Omit it and the client buys roughly
-   * DEFAULT_BATCH_USD worth, computed from the base unit price the gateway
-   * states in its own 402 — so the batch stays the same amount of MONEY when
-   * the tiers move.
-   */
+  /** Billing units to prepay. Default: the minimum batch the 402 advertises (see defaultUnitsFor). */
   units?: number;
   /** Maximum quoted batch cost in USD; only tightens the agent's budget caps. */
   maxAmountUsd?: number;
@@ -1116,27 +1115,23 @@ export interface Aifp1FetchOptions {
   settlementConfirmMs?: number;
 }
 
-/** Default batch size: 1000 billing units — the $0.10 floor, and the size the
- *  gateway's own how_to_pay examples suggest (routes/gateway.js). If an
- *  operator has raised AIFP_MIN_BATCH_UNITS, /v1/quote answers 400 naming the
- *  real minimum, which is loud rather than silently underpaid. */
-/**
- * What a default batch costs, in USD — not how many units it is.
- *
- * This was a fixed 1000 units, "= $0.10 at the base unit price", and it was.
- * Then the tiers were re-priced on 2026-08-07 and the base unit went from
- * $0.0001 to $0.0005, so the same constant silently became a $0.50 batch:
- * five times the money, with the comment beside it still saying ten cents.
- * A unit count is a number about our internal accounting; an agent budgets in
- * dollars. Fixing the constant would have fixed today and broken the next
- * re-price, so the count is derived instead.
- */
-const DEFAULT_BATCH_USD = 0.1;
-/** Used only when a 402 omits base_unit_price_usd — matches $0.10 at $0.0005. */
-const FALLBACK_UNITS = 200;
+/** Fallback batch value in USD when a 402 states no minimum; the server answers 400 naming its real minimum. */
+const DEFAULT_BATCH_USD = 0.02;
+/** Used only when a 402 states neither a minimum nor base_unit_price_usd: $0.02 at $0.0005. */
+const FALLBACK_UNITS = 40;
 
-/** Units to buy so the batch is worth about DEFAULT_BATCH_USD. */
-export function defaultUnitsFor(challenge: Pick<Aifp1Challenge, "base_unit_price_usd">): number {
+const positiveInt = (v: unknown): number | undefined =>
+  typeof v === "number" && Number.isSafeInteger(v) && v > 0 ? v : undefined;
+
+/** Units for a default batch: the 402's advertised minimum, else about DEFAULT_BATCH_USD worth. */
+export function defaultUnitsFor(
+  challenge: Partial<Pick<Aifp1Challenge, "base_unit_price_usd" | "min_units" | "min_requests" | "unit_weight">>
+): number {
+  const minUnits = positiveInt(challenge.min_units);
+  if (minUnits !== undefined) return minUnits;
+  const minRequests = positiveInt(challenge.min_requests);
+  const weight = positiveInt(challenge.unit_weight) ?? 1;
+  if (minRequests !== undefined && Number.isSafeInteger(minRequests * weight)) return minRequests * weight;
   const base = Number(challenge.base_unit_price_usd);
   if (!Number.isFinite(base) || base <= 0) return FALLBACK_UNITS;
   return Math.max(1, Math.ceil(DEFAULT_BATCH_USD / base));
@@ -1151,8 +1146,8 @@ const DEFAULT_SETTLEMENT_CONFIRM_MS = 60_000;
  * every pre-scope client sent and back-compat had to hold. It is the right
  * shape for an API an agent hammers, and the wrong one for everything else:
  * each distinct URL then needs its own quote, its own on-chain settlement and
- * its own $0.10 floor, so an agent reading a hundred articles pays $10 for
- * $0.01 of content and burns a hundred transactions' gas doing it. A client
+ * its own minimum batch, so an agent reading a hundred articles pays a hundred
+ * minimum batches for $0.01 of content and burns a hundred transactions' gas. A client
  * that inherits the server's default inherits that bill, so this one does not.
  *
  * "prefix" over "merchant" is the deliberate part. Both cost exactly the same

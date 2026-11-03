@@ -1,3 +1,9 @@
+## 0.6.0 — $0.02 minimum batch
+
+- Port of `@aifinpay/gate` 0.9.0: `min_requests` 40 / 10 / 4 (was
+  200 / 50 / 20), `Gate(min_batch_units=...)`, `min_requests_for_tier(tier,
+  min_batch_units)` and `MIN_BATCH_UNITS`. Parity fixture regenerated.
+
 ## 0.5.0 — unreleased
 
 - Port of `@aifinpay/gate` 0.8.0: `AifpGateMiddleware` and `AifpGateWSGI` add

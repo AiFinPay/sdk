@@ -136,6 +136,7 @@ class Gate:
         key_prefix: str = "aifp:",
         clock_tolerance_s: int = 30,
         api_base: Optional[str] = None,
+        min_batch_units: Optional[int] = None,
         replay: str = "auto",
         require_agent_match: bool = False,
         on_store_error: str = "closed",
@@ -156,6 +157,10 @@ class Gate:
             raise ValueError("Gate: reporting requires the explicit v2 producer")
         if resource is not None and routes is not None:
             raise ValueError("Gate: pass either resource (one mount) or routes (middleware), not both")
+        # Minimum batch the 402 advertises, 6-dp stable minor units; match the server's AIFP_MIN_BATCH_UNITS.
+        if min_batch_units is not None and (
+                isinstance(min_batch_units, bool) or not isinstance(min_batch_units, int) or min_batch_units <= 0):
+            raise ValueError(f"min_batch_units must be a positive integer: {min_batch_units!r}")
         if replay not in ("auto", "always", "off"):
             raise ValueError("replay must be auto, always or off")
         if on_store_error not in ("closed", "open"):
@@ -183,6 +188,7 @@ class Gate:
         self.store = store if store is not None else MemoryStore()
         self.key_prefix = key_prefix
         self.api_base = api_base
+        self.min_batch_units = min_batch_units
         self.replay = replay
         self.require_agent_match = require_agent_match
         self.on_store_error = on_store_error
@@ -294,7 +300,8 @@ class Gate:
     def _challenge(self, resource: str, weight: int, tier: str, detail: Optional[str] = None, *,
                    who: Dict[str, Any], agent: Optional[str] = None) -> GateResult:
         self._emit({"kind": "402", "resource": resource, "weight": weight, "detail": detail}, who)
-        body = build_challenge(self.merchant_id, resource, tier, weight, detail=detail, api_base=self.api_base)
+        body = build_challenge(self.merchant_id, resource, tier, weight, detail=detail, api_base=self.api_base,
+                               min_batch_units=self.min_batch_units)
         return self._refuse(resource, weight, GateResult(False, 402, _json_headers(), body=body), agent)
 
     def _forbid(self, resource: str, weight: int, detail: str, *, who: Dict[str, Any],

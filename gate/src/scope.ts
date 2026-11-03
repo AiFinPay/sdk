@@ -47,8 +47,8 @@ export function scopeCovers(scope: string | undefined, resource: string, path: s
  * A merchant registers "/movies/*" as ONE resource, and the quote's resource is
  * that pattern rather than the URL the agent hit. Comparing them literally means
  * a receipt bought for the pattern matches nothing, and every URL beneath it
- * needs its own batch — which at the $0.10 minimum turns a 670k-page catalogue
- * into $67,000. The wildcard is kept in the receipt on purpose; this is what
+ * needs its own batch — which at a $0.02 minimum turns a 670k-page catalogue
+ * into $13,400. The wildcard is kept in the receipt on purpose; this is what
  * makes it mean something.
  *
  * "/movies/*" covers "/movies" itself as well as everything under "/movies/",

@@ -48,6 +48,26 @@ def req(tok=None, path="/paid", method="GET", **headers):
     return g.SimpleRequest(path, headers, method)
 
 
+# ── minimum batch ──────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("tier,minimum", [("standard", 40), ("complex", 10), ("premium", 4)])
+def test_the_402_advertises_a_two_cent_minimum_batch(tier, minimum):
+    body = gate(tier=tier).decide(req()).body
+    assert g.MIN_BATCH_UNITS == 20_000
+    assert body["min_requests"] == minimum and f'"requests":{minimum},' in body["how_to_pay"][0]
+
+
+def test_min_batch_units_follows_the_server_minimum():
+    assert gate(min_batch_units=100_000).decide(req()).body["min_requests"] == 200
+
+
+@pytest.mark.parametrize("bad", [0, -1, 1.5, "20000", True])
+def test_an_unusable_min_batch_units_is_refused(bad):
+    with pytest.raises(ValueError, match="min_batch_units"):
+        gate(min_batch_units=bad)
+
+
 # ── metering ────────────────────────────────────────────────────────────────
 
 

@@ -431,7 +431,7 @@ if (arg === "init") {
       `hours (a built-in ceiling, not a budget), only to merchants registered with\n` +
       `AiFinPay. It holds nothing yet, so it can spend nothing. To let it pay, fund\n` +
       `the EVM address on Polygon with the batch price at today's rate plus the gas\n` +
-      `cap, in POL; payment_setup_status prices it (the smallest batch is $0.10).\n` +
+      `cap, in POL; payment_setup_status prices it (the smallest batch is $0.02).\n` +
       `To pay in USDC, set "AIFINPAY_PAY_ASSET": "USDC" and hold USDC for the batch\n` +
       `plus POL up to the gas cap. Check the balance before funding or paying.\n\n` +
       `Set the working limits in your dashboard:\n` +

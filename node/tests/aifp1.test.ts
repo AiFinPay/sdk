@@ -84,6 +84,12 @@ interface MockServer {
   payNetworkErrors?: number;
   provedPayers?: string[];
   receipts: Map<string, MockReceipt>;
+  /** Server minimum batch in billing units (pricing.js MIN_BATCH_UNITS_COUNT). */
+  minUnits: number;
+  /** Extra fields for the gateway 402, e.g. min_requests. */
+  challengeExtra: Record<string, unknown>;
+  /** Units of every /v1/quote request, in order. */
+  quotedUnits: unknown[];
   fetch: typeof fetch;
 }
 
@@ -131,6 +137,10 @@ function mockServer(): MockServer {
     retired: [],
     payNotConfirmedTimes: 0,
     receipts: new Map(),
+    // A $0.10 minimum keeps the money figures below; the minimum tests override it.
+    minUnits: 200,
+    challengeExtra: { min_units: 200 },
+    quotedUnits: [],
     fetch: null as unknown as typeof fetch,
   };
   let seq = 0;
@@ -148,9 +158,10 @@ function mockServer(): MockServer {
       if (!["exact", "prefix", "merchant"].includes(scope)) {
         return json({ error: "AIFP-400", detail: "bad scope" }, 400);
       }
-      // The real server refuses a batch under the $0.10 floor (200 units at $0.0005).
-      if (!Number.isInteger(body.units) || body.units < 200) {
-        return json({ error: "AIFP-400", detail: "units must be an integer 200..100000000" }, 400);
+      s.quotedUnits.push(body.units);
+      // The real server refuses a batch under MIN_BATCH_UNITS_COUNT.
+      if (!Number.isInteger(body.units) || body.units < s.minUnits) {
+        return json({ error: "AIFP-400", detail: `units must be an integer ${s.minUnits}..100000000` }, 400);
       }
       const resource = scope === "merchant" ? "*" : String(body.resource ?? "");
       if (scope !== "merchant" && !resource.startsWith("/")) {
@@ -158,9 +169,8 @@ function mockServer(): MockServer {
       }
       const quote_id = `qt_${String(++seq).padStart(16, "0")}`;
       const expiresAt = new Date(Date.now() + 900_000).toISOString();
-      const quotedTotalWei = s.inflateWeiBy
-        ? BigInt(Math.round(1379310344827586206 * s.inflateWeiBy))
-        : 1379310344827586206n;
+      const batchWei = (1379310344827586206n * BigInt(body.units)) / 200n;
+      const quotedTotalWei = s.inflateWeiBy ? BigInt(Math.round(Number(batchWei) * s.inflateWeiBy)) : batchWei;
       const quotedTreasuryWei = quotedTotalWei / 100n;
       const quotedMerchantWei = quotedTotalWei - quotedTreasuryWei;
       const grossUnits = BigInt(body.units) * 500n;
@@ -352,6 +362,7 @@ function mockServer(): MockServer {
             base_unit_price_usd: "0.0005",
             how_to_pay: [`POST ${API}/v1/quote {"merchant_id":"${merchantId}","resource":"${resource}","units":200}`],
             scopes: { note: "a batch can cover more than this one path", examples: [] },
+            ...s.challengeExtra,
           },
           402
         );
@@ -1755,33 +1766,60 @@ describe("aifp1: the caps must bound what the wallet actually pays", () => {
   });
 });
 
-describe("aifp1: a default batch is an amount of money, not a unit count", () => {
-  it("buys ~$0.10 at the current base price", () => {
-    // 1000 units was correct at $0.0001 and became $0.50 when the tiers were
-    // re-priced to $0.0005 on 2026-08-07 — five times the money, with the
-    // comment beside it still claiming ten cents. The count is derived now, so
-    // the next re-price cannot repeat it.
-    expect(defaultUnitsFor({ base_unit_price_usd: "0.0005" })).toBe(200);
-    expect(defaultUnitsFor({ base_unit_price_usd: "0.0001" })).toBe(1000);
-    expect(defaultUnitsFor({ base_unit_price_usd: "0.001" })).toBe(100);
+describe("aifp1: the default batch is the minimum the 402 advertises", () => {
+  it("buys the advertised minimum, not a fixed dollar amount", () => {
+    expect(defaultUnitsFor({ min_units: 40, base_unit_price_usd: "0.0005" })).toBe(40);
+    // @aifinpay/gate at a $0.02 minimum: 40 standard / 10 complex / 4 premium.
+    expect(defaultUnitsFor({ min_requests: 40, unit_weight: 1 })).toBe(40);
+    expect(defaultUnitsFor({ min_requests: 10, unit_weight: 4 })).toBe(40);
+    expect(defaultUnitsFor({ min_requests: 4, unit_weight: 10 })).toBe(40);
+    expect(defaultUnitsFor({ min_requests: 25, unit_weight: 1, base_unit_price_usd: "0.0005" })).toBe(25);
   });
 
-  it("the derived batch is worth about a dime whatever the base price", () => {
-    for (const base of ["0.0001", "0.0005", "0.002", "0.01"]) {
-      const usd = defaultUnitsFor({ base_unit_price_usd: base }) * Number(base);
-      expect(usd).toBeGreaterThanOrEqual(0.1);
-      expect(usd).toBeLessThan(0.2);
+  it("falls back to $0.02 worth when the 402 states no minimum", () => {
+    expect(defaultUnitsFor({ base_unit_price_usd: "0.0005" })).toBe(40);
+    expect(defaultUnitsFor({ base_unit_price_usd: "0.0001" })).toBe(200);
+    expect(defaultUnitsFor({ base_unit_price_usd: "0.001" })).toBe(20);
+  });
+
+  it("ignores an unusable minimum or price rather than quoting Infinity", () => {
+    for (const bad of [undefined, 0, -40, 1.5, Number.NaN, "40", Number.MAX_SAFE_INTEGER + 1]) {
+      expect(defaultUnitsFor({ min_units: bad as number, base_unit_price_usd: "0.0005" })).toBe(40);
+      expect(defaultUnitsFor({ min_requests: bad as number, unit_weight: 1 })).toBe(40);
     }
-  });
-
-  it("falls back rather than dividing by a missing or absurd price", () => {
-    // A 402 that omits the price, or states one we cannot use, must not produce
-    // Infinity units and a quote for the agent's whole balance.
     for (const bad of [undefined, "", "0", "-1", "not-a-number"]) {
-      const n = defaultUnitsFor({ base_unit_price_usd: bad as string });
-      expect(Number.isFinite(n)).toBe(true);
-      expect(n).toBe(200);
+      expect(defaultUnitsFor({ base_unit_price_usd: bad as string })).toBe(40);
     }
+  });
+
+  it("quotes the gateway's advertised minimum end to end", async () => {
+    const server = mockServer();
+    server.minUnits = 25;
+    server.challengeExtra = { min_units: 25 };
+    const { agent, settlements } = await agentFor(server);
+    const res = await agent.fetchPaid(`${GATEWAY}/acme/articles/one`);
+    expect(res!.status).toBe(200);
+    expect(server.quotedUnits).toEqual([25]);
+    expect(settlements.length).toBe(1);
+  });
+
+  it("quotes $0.02 worth against a 402 without a minimum", async () => {
+    const server = mockServer();
+    server.minUnits = 40;
+    server.challengeExtra = {};
+    const { agent } = await agentFor(server);
+    const res = await agent.fetchPaid(`${GATEWAY}/acme/articles/one`);
+    expect(res!.status).toBe(200);
+    expect(server.quotedUnits).toEqual([40]);
+  });
+
+  it("fails loudly with the server's real minimum when it is higher", async () => {
+    const server = mockServer();
+    server.challengeExtra = {};
+    const { agent, settlements } = await agentFor(server);
+    await expect(agent.fetchPaid(`${GATEWAY}/acme/articles/one`)).rejects.toThrow(/units must be an integer 200\.\./);
+    expect(server.quotedUnits).toEqual([40]);
+    expect(settlements.length).toBe(0);
   });
 });
 

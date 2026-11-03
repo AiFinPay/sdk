@@ -22,12 +22,18 @@ def build_challenge(
     unit_price: Optional[str] = None,
     min_requests: Optional[int] = None,
     api_base: Optional[str] = None,
+    min_batch_units: Optional[int] = None,
 ) -> Dict[str, Any]:
     # Absolute on purpose: this gate runs on the merchant's host, so a relative
     # "/v1/quote" would send the agent to the merchant's own server.
     api = (api_base or DEFAULT_API_BASE).rstrip("/")
     scope = scope or "exact"
-    requests_ = min_requests if min_requests is not None else min_requests_for_tier(tier)
+    if min_requests is not None:
+        requests_ = min_requests
+    elif min_batch_units is not None:
+        requests_ = min_requests_for_tier(tier, min_batch_units)
+    else:
+        requests_ = min_requests_for_tier(tier)
     return {
         "error": "AIFP-402",
         "detail": detail or DEFAULT_DETAIL,

@@ -120,7 +120,7 @@ r = agent.fetch_paid(
 print(r.status_code, r.json())
 ```
 
-On an AIFP-1 `402` it buys one batch (from $0.10) scoped to the path's section
+On an AIFP-1 `402` it buys one batch (the minimum the 402 advertises, $0.02 by default) scoped to the path's section
 (`/articles/`), settles it on the Polygon v1.4 splitter, exchanges it for a
 receipt and retries. Later requests the receipt covers cost no transaction.
 Nothing is signed unless the origin is allowed, the signed quote matches the

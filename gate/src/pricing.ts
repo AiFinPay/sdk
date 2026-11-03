@@ -52,8 +52,8 @@ export const FEE_MODE = "gross-inclusive" as const;
  *  its batch math in, kept here only so min_requests can be computed locally. */
 const UNIT_PRICE_UNITS: Record<Tier, number> = { standard: 500, complex: 2000, premium: 5000 };
 
-/** Default minimum batch: $0.10 in 6-dp minor units. */
-const MIN_BATCH_UNITS = 100_000;
+/** Default minimum batch: $0.02 in 6-dp minor units (server AIFP_MIN_BATCH_UNITS). */
+export const MIN_BATCH_UNITS = 20_000;
 
 /** Billing units per call for a tier preset; unknown/absent → 1, matching the
  *  server. An unweighted mount therefore meters exactly 1 per call. */
@@ -61,12 +61,12 @@ export function weightForTier(tier?: string): number {
   return (TIER_WEIGHTS as Record<string, number>)[tier ?? ""] ?? 1;
 }
 
-/** Smallest whole request count that clears the $0.10 batch floor, so a 402
+/** Smallest whole request count that clears the minimum batch, so a 402
  *  can quote a real number without a control-plane round-trip. The 402 is the
  *  hot path when an agent first arrives, and it must not depend on us. */
-export function minRequestsForTier(tier?: string): number {
+export function minRequestsForTier(tier?: string, minBatchUnits: number = MIN_BATCH_UNITS): number {
   const unit = UNIT_PRICE_UNITS[(tier as Tier) ?? "standard"] ?? UNIT_PRICE_UNITS.standard;
-  return Math.ceil(MIN_BATCH_UNITS / unit);
+  return Math.ceil(minBatchUnits / unit);
 }
 
 /** Per-call gross AIFP-1 price as a USD string; unknown tier falls back to the base rate. */
