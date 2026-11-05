@@ -59,7 +59,7 @@ test("canonical mirror and both CI refs bind the reviewed reporting producer; wr
 });
 test("reporting source target refuses every stale package version without claiming registry availability", () => {
   verifyCohortVersions({
-    mcp: "2.16.0",
+    mcp: "2.16.1",
     agent: "2.14.0",
     python: "2.11.0",
     skill: "2.12.0",
@@ -112,9 +112,9 @@ test("MCP candidate metadata preserves the real registry lock of the published c
     );
     assert.deepEqual(skillEdges, baselineSkillEdges);
   }
-  // The lock follows the published agent 2.12.3. Besides its registry identity,
+  // The lock follows the published agent 2.14.0. Besides its registry identity,
   // its one dependency change from the baseline is deployments 1.1.4 -> 2.1.4.
-  const registryAgent = "2.12.3";
+  const registryAgent = "2.14.0";
   assert.equal(manifest.dependencies["@aifinpay/agent"], `^${registryAgent}`);
   const { version, resolved, integrity, ...agentEdges } =
     lock.packages["node_modules/@aifinpay/agent"];
@@ -130,7 +130,7 @@ test("MCP candidate metadata preserves the real registry lock of the published c
       version: registryAgent,
       resolved: `https://registry.npmjs.org/@aifinpay/agent/-/agent-${registryAgent}.tgz`,
       integrity:
-        "sha512-go5MxkbdSZGby1YneJVw/z7yuPXtExDrrklVt/Fafg64ruStf/00pClTXl2XpVI6pXpLkXJdhRLSEtRLJnwiyg==",
+        "sha512-fyuyrAxL3+4Irqp47ZmwqHAJYoHT0AqD51BAvAWVVm6j04aPmDTvQRs/eprT9N3cJUFgoWW7qJIIq2ZVY4u6kg==",
     },
   );
   assert.deepEqual(agentEdges, {
