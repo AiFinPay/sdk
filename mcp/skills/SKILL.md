@@ -6,7 +6,7 @@ description: Pay for x402-gated APIs and sites as an agent (AIFP-1 on an owner-s
   wallet, payment history, prepaid quotas and Agent Passport records through
   the AiFinPay MCP server or SDK.
 license: MIT
-version: 2.12.0
+version: 2.12.2
 author: AiFinPay Support
 metadata:
   hermes:
@@ -112,11 +112,11 @@ network set, verified payout, a served deployment and a working verifier/rate.
 If the backend refuses a network, retain the refusal and ask the owner to
 resolve readiness; do not switch networks or construct a manual payment.
 `@aifinpay/deployments` 2.1.0 (agent 2.10.0 and later) enables the Solana
-mainnet and devnet records; the backend must still serve the network. At the
-2026-10-29 check `/api/payment-capabilities` reported `payment_supported:
-true` only for Polygon, Base and Amoy; Solana, Arc and the other networks
-returned `network_not_served`, BOT Chain `deployment_disabled`. Read it again
-before paying anywhere but Polygon. NEAR, Aptos and current Casper payment
+mainnet and devnet records; the backend must still serve the network.
+`/api/payment-capabilities` lists only the networks it takes payments on, with
+no status fields: a network that is absent is not served, and a row without
+`native` is paid in its listed tokens only. Read it again before paying
+anywhere but Polygon. NEAR, Aptos and current Casper payment
 executors are outside this cohort.
 `botchain` is BOT Chain, not an alias for Robinhood. Wallet derivation on a
 network does not establish payment support.
@@ -288,9 +288,9 @@ into ratersapp.com", "купи доступ до цього сайту". Handle 
    with "How to pay".
 3. **Say what the money buys, then wait for a yes.** One site-wide batch: the
    price (a standard resource's `unit_price_usd` × its `min_requests`, e.g.
-   $0.10 for 200 standard requests), that it covers every path on the origin,
+   $0.02 for 40 standard requests), that it covers every path on the origin,
    and how it drains — each request costs its own listed `unit_price_usd`, so
-   the same $0.10 is 200 standard or 20 premium requests in any mix. Gas is
+   the same $0.02 is 40 standard or 4 premium requests in any mix. Gas is
    separate, in the selected network's native currency. Use the display rules
    in "Transaction display" below.
 4. **Check readiness.** Call `payment_setup_status`. If it is not `ready`,
@@ -358,7 +358,7 @@ budgets. `AIFINPAY_GATEWAY_ORIGINS` narrows the sites to exact https origins;
 gateway.aifinpay.io, `direct` elsewhere) unless set. `AIFINPAY_PAYMENTS_ENABLED=0`
 switches payments off. Never ask the owner to add any of these to pay; only
 mention them when the owner asks for a different ceiling or a site allowlist.
-The smallest batch is **$0.10 plus gas** on **Polygon**;
+The smallest batch is **$0.02 plus gas** on **Polygon**;
 `AIFINPAY_MAX_USD` only has to be at or above the batch. The gas cap has to cover the
 worst-case fee: at ~280 gwei that is about 0.10 POL for a POL payment and
 0.21 POL for USDC, and a lower cap refuses before anything is signed. The fee
@@ -522,7 +522,7 @@ price, AiFinPay takes **1 %** (100 bps) from it, and the merchant receives
 do not prove production activation; check issuer capabilities and merchant
 authorization. This source cohort adds a Solana v1.4 adapter with explicit
 network, asset and fee/rent limits; its published deployment records are
-enabled, but the backend did not serve Solana at that check. The smallest paid batch is $0.10, plus network fees and any
+enabled, but the backend did not serve Solana at that check. The smallest paid batch is $0.02, plus network fees and any
 required account rent.
 
 (The older "98.99 / 1 / 0.01" figure was the v1.2 fee-on-top model.)
@@ -590,12 +590,12 @@ When asked to pay for a paid API or crawl a paywalled site:
   `SEED_HEX`/`AIFINPAY_AGENT_SECRET`, keystore JSON, or signing-secret
   inputs. Public addresses and transaction hashes only.
 - Before sending, show the payload summary and wait for approval: sender,
-  recipient, amount (rounded, e.g. `1.055 POL`), amount (exact base units,
+  recipient, amount (rounded, e.g. `0.211 POL`), amount (exact base units,
   as a string), currency/token, network — plus the invoice as a table:
 
   | resource | qty | price | total |
   |---|---|---|---|
-  | /api/agent/genres | 200 | $0.0005 | $0.10 |
+  | /api/agent/genres | 40 | $0.0005 | $0.02 |
 
 - After sending, show payment id, transaction hash, status, and the
   explorer link (from the quote/receipt `explorer_url`, or chain explorer +
@@ -644,7 +644,7 @@ so an agent (or a human watching it) sees what the money buys, not just a
 number:
 
 ```
-Pay 1.055375555391386 POL ($0.10) for 200 requests to /api/agent/genres
+Pay 0.211075111078277 POL ($0.02) for 40 requests to /api/agent/genres
 (incl. 1.00% fee), valid until 2026-09-04T13:00:00Z.
 ```
 

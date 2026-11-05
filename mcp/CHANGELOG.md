@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.16.2 — bundles skill 2.12.2
+
+- `@aifinpay/skill` ^2.12.2, and `aifinpay://skill` serves it: the smallest
+  batch is $0.02 (40 standard, 10 complex or 4 premium requests). 2.16.1 still
+  bundled the older guide that said $0.10.
+
 ## 2.16.1 — installs agent 2.14.0
 
 - `@aifinpay/agent` ^2.14.0 (lock resolved from the registry). Without an
