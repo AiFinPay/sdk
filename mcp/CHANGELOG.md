@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.16.1 — installs agent 2.14.0
+
+- `@aifinpay/agent` ^2.14.0 (lock resolved from the registry). Without an
+  explicit `units`, a purchase now buys the minimum the site's 402 states,
+  or $0.02 worth when it states none, instead of a fixed $0.10.
+
 ## 2.16.0 — $0.02 smallest batch
 
 - `payment_setup_status` prices `funding` at a $0.02 smallest batch (was
