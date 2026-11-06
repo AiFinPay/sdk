@@ -37,6 +37,10 @@ import {
   parseGatewayUrl,
   defaultUnitsFor,
   type Aifp1CachedReceipt,
+  readPath,
+  readResource,
+  aifp1Fetch,
+  type Aifp1Deps,
 } from "../src/aifp1.js";
 
 const GATEWAY = "https://gateway.aifinpay.io";
@@ -2065,3 +2069,123 @@ describe("AIFP-Agent-Framework", () => {
     }
   );
 });
+
+describe("reading a gate's answers as the gate does", () => {
+  const PAYER = "0x00000000000000000000000000000000000000AA";
+  const entry = (over: Partial<Aifp1CachedReceipt> = {}): Aifp1CachedReceipt => ({
+    site: `${GATEWAY}/acme`,
+    merchantId: "mrch_acme",
+    receiptId: "rcpt_1",
+    jwt: "jwt.1",
+    scope: "exact",
+    resource: "/paid/*",
+    unitQuota: 10,
+    remaining: 10,
+    expiresAt: Date.now() + 60_000,
+    amountUsd: 0.1,
+    ...over,
+  });
+
+  it.each([
+    ["/paid/a", "/paid/a"],
+    ["/PAID/A", "/paid/a"],
+    ["/paid/a/", "/paid/a"],
+    ["//paid//a", "/paid/a"],
+    ["/paid/a?x=/b", "/paid/a"],
+    ["/%70aid/a", "/paid/a"],
+    ["/paid%2fa", "/paid/a"],
+    ["/paid\\a", "/paid/a"],
+    ["/paid;x=1/a", "/paid/a"],
+    ["/x/../paid/a", "/paid/a"],
+    ["/paid/./a", "/paid/a"],
+    ["", "/"],
+  ])("reads %s as %s", (raw, read) => {
+    expect(readPath(raw)).toBe(read);
+  });
+
+  it.each([
+    ["/Paid/*", "/paid/*"],
+    ["/*", "/*"],
+    ["/report/", "/report"],
+    ["/my%20report", "/my report"],
+    ["*", "*"],
+  ])("reads the resource %s as %s", (raw, read) => {
+    expect(readResource(raw)).toBe(read);
+  });
+
+  it("a prefix batch opens the section page, and a section as discovery lists it", () => {
+    expect(scopeCovers("prefix", "/paid/", "/paid")).toBe(true);
+    expect(scopeCovers("prefix", "/paid/", "/paid-internal")).toBe(false);
+    expect(scopeCovers("prefix", "/x/*", "/x/a")).toBe(true);
+    expect(scopeCovers("prefix", "/x/*", "/xy")).toBe(false);
+  });
+
+  it("finds a held batch for the section page and for another spelling", () => {
+    const cache = new Aifp1ReceiptCache();
+    const section = entry({ scope: "prefix", resource: "/paid/" });
+    cache.put(section);
+    expect(cache.find(section.site, "/paid")).toBe(section);
+    expect(cache.find(section.site, "/PAID/a/")).toBe(section);
+    const exact = entry({ site: "other", resource: "/data/my%20report" });
+    cache.put(exact);
+    expect(cache.find("other", "/data/my%20report")).toBe(exact);
+    expect(cache.find("other", "/data/other")).toBeUndefined();
+  });
+
+  it("does not hand one payer's batch to another", () => {
+    const cache = new Aifp1ReceiptCache();
+    const held = entry({ payer: PAYER });
+    cache.put(held);
+    expect(cache.find(held.site, "/paid/a", undefined, PAYER.toLowerCase())).toBe(held);
+    expect(cache.find(held.site, "/paid/a", undefined, "0x00000000000000000000000000000000000000bb")).toBeUndefined();
+  });
+
+  function depsFor(cache: Aifp1ReceiptCache, answer: () => Response) {
+    const seen: Headers[] = [];
+    const deps = {
+      cache,
+      agentId: "my-bot",
+      payerAddress: PAYER,
+      fetchImpl: async (_url: string, init?: RequestInit) => {
+        seen.push(new Headers(init?.headers));
+        return answer();
+      },
+    } as unknown as Aifp1Deps;
+    return { deps, seen };
+  }
+
+  it("a request with a receipt names the account that paid, whatever agentId says", async () => {
+    const cache = new Aifp1ReceiptCache();
+    cache.put(entry({ payer: PAYER }));
+    const { deps, seen } = depsFor(cache, () => new Response("page", { status: 200 }));
+    await aifp1Fetch(deps, `${GATEWAY}/acme/paid/a`);
+    expect(seen[0]?.get("AIFP-Receipt")).toBe("jwt.1");
+    expect(seen[0]?.get("AIFP-Agent-Id")).toBe(PAYER);
+  });
+
+  it("a request with no receipt keeps the agent's own name", async () => {
+    const { deps, seen } = depsFor(new Aifp1ReceiptCache(), () => new Response("page", { status: 200 }));
+    await aifp1Fetch(deps, `${GATEWAY}/acme/free`);
+    expect(seen[0]?.get("AIFP-Agent-Id")).toBe("my-bot");
+  });
+
+  it("a direct 402 for a pattern in another spelling is payable, and another page is not", async () => {
+    const challenge = (resource: string) => () =>
+      new Response(JSON.stringify({ error: "AIFP-402", protocol: "AIFP-1", merchant_id: "mrch_acme", resource }), {
+        status: 402,
+        headers: { "content-type": "application/json" },
+      });
+    const attempt = async (url: string, resource: string) => {
+      const { deps } = depsFor(new Aifp1ReceiptCache(), challenge(resource));
+      return aifp1Fetch(deps, url, {}, { resourcePathMode: "direct", gatewayOrigins: ["https://shop.example"] }).then(
+        () => "",
+        (error: Error) => error.message
+      );
+    };
+    expect(await attempt("https://shop.example/Articles/x", "/articles/*")).not.toMatch(/must cover/);
+    expect(await attempt("https://shop.example/paid/a", "/Paid/*")).not.toMatch(/must cover/);
+    expect(await attempt("https://shop.example/docs/my%20report", "/docs/my%20report")).not.toMatch(/must cover/);
+    expect(await attempt("https://shop.example/other", "/articles/*")).toMatch(/must cover/);
+  });
+});
+
