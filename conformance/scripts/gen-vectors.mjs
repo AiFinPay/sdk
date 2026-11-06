@@ -302,6 +302,9 @@ add("discovery.llms", "should", "content-enforce", "/llms.txt is served as markd
 // ── proxies only ──────────────────────────────────────────────────────────
 add("pass.origin_error", "must", "content-shadow", "An origin error passes through unchanged", step(get("gptbot", "/paid/err503"), { status: 503, body: { text: "ORIGIN-503" } }), { needs: ["proxy"] });
 add("pass.shadow_odd_path", "must", "content-shadow", "Shadow does not refuse a path it finds odd", [step(get("gptbot", "/free/a%0Ab"), { status: 200, origin: true }), step(get("gptbot", "/free/50%2500"), { status: 200, origin: true })], { needs: ["proxy"] });
+add("pass.encoded_page", "must", "content-enforce", "A page with an escape outside every pattern is not refused", step(get("chrome", "/free/caf%C3%A9"), { status: [200, 402, 404] }));
+add("pass.dot_directory", "must", "content-enforce", "A directory that starts with a dot is not a dot segment", step(get("chrome", "/.well-known/acme-challenge/x"), { status: [200, 402, 403, 404] }));
+add("pass.reader_odd_path", "should", "content-enforce", "A reader is not refused over a dot segment", step(get("chrome", "/paid/./a"), { status: [200, 301, 302, 307, 308, 403, 404] }));
 add("pass.long_url", "must", "content-shadow", "Shadow does not refuse a long URL the origin accepts", step(get("gptbot", `/free/${"x".repeat(20000)}`), { status: 200, origin: true }), { needs: ["proxy"] });
 add("pass.post_body", "must", "content-enforce", "A POST body reaches the origin intact", step({ method: "POST", path: "/free/echo", ua: "chrome", body_bytes: 262144 }, { status: 200, origin: true, body_sha256: true }), { needs: ["proxy"] });
 add("pass.receipt_stripped", "should", "content-enforce", "A receipt is not forwarded to the origin", step(pay(), { status: 200, origin: true, origin_did_not_see: ["aifp-receipt"] }), { receipts: { r: R() }, needs: ["proxy"] });

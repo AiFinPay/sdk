@@ -5989,6 +5989,80 @@
    ]
   },
   {
+   "id": "pass.encoded_page",
+   "group": "pass",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A page with an escape outside every pattern is not refused",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/free/caf%C3%A9",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": [
+       200,
+       402,
+       404
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "pass.dot_directory",
+   "group": "pass",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A directory that starts with a dot is not a dot segment",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/.well-known/acme-challenge/x",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": [
+       200,
+       402,
+       403,
+       404
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "pass.reader_odd_path",
+   "group": "pass",
+   "level": "should",
+   "profile": "content-enforce",
+   "title": "A reader is not refused over a dot segment",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/./a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": [
+       200,
+       301,
+       302,
+       307,
+       308,
+       403,
+       404
+      ]
+     }
+    }
+   ]
+  },
+  {
    "id": "pass.long_url",
    "group": "pass",
    "level": "must",
