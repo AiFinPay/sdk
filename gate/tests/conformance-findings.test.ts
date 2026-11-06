@@ -84,6 +84,29 @@ describe("no answer that depends on who asked can be stored by a shared cache", 
     expect(response.headers.get("cache-control")).toBe(NO_STORE);
   });
 
+  for (const [label, inline] of [
+    ["an object", { "Cache-Control": "public, max-age=600" }],
+    ["an array of pairs", [["cache-control", "public, max-age=600"]]],
+  ] as const) {
+    it(`keeps it when a handler passes ${label} to writeHead`, async () => {
+      const { jwks, sign } = await issuer();
+      const app = express();
+      app.use(
+        aifpGate({ merchantId: MERCHANT, resource: "/page", jwks, store: new MemoryStore() }),
+        (_req: unknown, res: { writeHead: (s: number, h: unknown) => void; end: (b: string) => void }) => {
+          res.writeHead(200, inline);
+          res.end("paid page");
+        }
+      );
+      const base = await listen(app);
+      const response = await fetch(`${base}/page`, {
+        headers: { "AIFP-Receipt": await sign({ resource: "/page", unit_quota: 2 }) },
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe(NO_STORE);
+    });
+  }
+
   it("leaves an exempt reader's page alone", async () => {
     const { jwks } = await issuer();
     const gate = createGate({
@@ -193,6 +216,74 @@ describe("a router mounted at a prefix", () => {
     expect(response.status).toBe(402);
     expect([body.resource, body.tier, body.unit_weight]).toEqual(["/articles/*", "premium", 10]);
     expect(events[0].resource).toBe("/articles/*");
+  });
+});
+
+describe("a trailing slash", () => {
+  it("prices as the page it is", async () => {
+    const { jwks } = await issuer();
+    const app = express();
+    app.use(
+      aifpGate({ merchantId: MERCHANT, jwks, store: new MemoryStore(), registry: registry([["/report", "premium"]]) })
+    );
+    const base = await listen(app);
+    const body = await (await fetch(`${base}/report/`)).json();
+    expect([body.resource, body.unit_weight]).toEqual(["/report", 10]);
+  });
+});
+
+describe("a prefix receipt at the section page", () => {
+  it("opens it: the SDKs buy /paid/ for a /paid/* 402", async () => {
+    const { jwks, sign } = await issuer();
+    const gate = createGate({
+      merchantId: MERCHANT,
+      jwks,
+      store: new MemoryStore(),
+      registry: registry([["/paid/*", "standard"]]),
+    });
+    const token = await sign({ resource: "/paid/", scope: "prefix", unit_quota: 3 });
+    expect((await gate(req("/paid", { "AIFP-Receipt": token }))).status).toBe(200);
+    expect((await gate(req("/paid/", { "AIFP-Receipt": token }))).status).toBe(200);
+    expect((await gate(req("/paid-internal", { "AIFP-Receipt": token }))).status).toBe(403);
+  });
+});
+
+describe("a route with the paywall off", () => {
+  it("is not reported as a paid admission, and a reader on it is not reported", async () => {
+    const sent: Array<{ events: Array<{ exempt?: boolean; operator?: string }> }> = [];
+    vi.stubGlobal("fetch", async (_url: string, init: { body: string }) => {
+      const body = JSON.parse(init.body);
+      sent.push(body);
+      return new Response(JSON.stringify({ accepted: body.events.length, duplicates: 0 }), { status: 200 });
+    });
+    const reporter = createGateReporter({ merchantId: MERCHANT_HEX, merchantSecret: "secret" });
+    const { jwks } = await issuer();
+    const open = {
+      neverLoaded: false,
+      match: () => ({
+        id: "res",
+        route_pattern: "/open/*",
+        type: "page",
+        paywall_enabled: false,
+        tier: "standard",
+        unit_weight: null,
+        name: null,
+        created_at: "",
+      }),
+      operatorPolicy: () => null,
+    } as unknown as ResourceRegistry;
+    const gate = createGate({
+      merchantId: MERCHANT_HEX,
+      jwks,
+      store: new MemoryStore(),
+      registry: open,
+      onEvent: reporter.onEvent,
+    });
+    await gate(req("/open/x", BROWSER));
+    await gate(req("/open/x", GPTBOT));
+    await reporter.flush();
+    expect(sent.flatMap((b) => b.events).map((e) => [e.operator, e.exempt])).toEqual([["openai", true]]);
+    await reporter.close();
   });
 });
 

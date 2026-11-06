@@ -36,7 +36,8 @@ export function scopeCovers(scope: string | undefined, resource: string, path: s
     // /articles-internal, and a merchant's private routes get served on a
     // receipt bought for their blog.
     const boundary = resource.endsWith("/") ? resource : resource + "/";
-    return path.startsWith(boundary);
+    // The SDKs buy "/paid/" for a "/paid/*" 402, and that wildcard covers "/paid" itself.
+    return path === boundary.slice(0, -1) || path.startsWith(boundary);
   }
   return patternCovers(resource, path); // 'exact', and anything unrecognised
 }

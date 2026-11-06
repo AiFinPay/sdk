@@ -21,5 +21,7 @@ def scope_covers(scope: Optional[str], resource: str, path: str) -> bool:
         if resource == "/" or path == resource:
             return True
         # The trailing slash stops /articles covering /articles-internal.
-        return path.startswith(resource if resource.endswith("/") else resource + "/")
+        boundary = resource if resource.endswith("/") else resource + "/"
+        # The SDKs buy "/paid/" for a "/paid/*" 402, and that wildcard covers "/paid" itself.
+        return path == boundary[:-1] or path.startswith(boundary)
     return pattern_covers(resource, path)  # "exact", and anything unrecognised

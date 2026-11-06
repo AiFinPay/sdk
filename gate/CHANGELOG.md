@@ -20,6 +20,13 @@
   instead of answered 503.
 - A receipt with no `exp`, or a `unit_quota` that is not a positive number, is
   refused. Both needed the issuer to sign one.
+- A prefix receipt covers the section page: `/paid/` opens `/paid`. The SDKs buy
+  that receipt for a `/paid/*` 402, and that 402 is what `/paid` answers, so an
+  agent paid and got a 403.
+- A route with the paywall off reports an exempt serve, not a plain one: the
+  ingest counted it as a paid admission, and a reader on it was reported.
+- `aifpGate` treats `/x/` as `/x`, as Express does: a trailing slash priced a
+  registered page at the mount default.
 
 ## @aifinpay/gate 0.9.0 — $0.02 minimum batch
 

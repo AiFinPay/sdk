@@ -128,6 +128,9 @@ class GateReporter:
             return  # Never acquire a possibly inherited locked mutex after fork.
         if not isinstance(event, dict) or event.get("kind") not in ("402", "serve"):
             return
+        # A raw path is private, and one refused batch would stop this reporter for good.
+        if event.get("unregistered"):
+            return
         identity = None if self._legacy_only else _identity(event)
         exempt = event.get("exempt") is True
         if exempt and (event["kind"] != "serve" or identity is None

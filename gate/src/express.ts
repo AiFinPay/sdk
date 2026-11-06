@@ -22,8 +22,15 @@ declare global {
 function keepPaidUnstored(res: Response): void {
   const writeHead = res.writeHead;
   res.writeHead = function (this: Response, ...args: unknown[]) {
+    const isCacheControl = (name: unknown) => String(name).toLowerCase() === "cache-control";
+    const kept = args.map((arg) => {
+      if (Array.isArray(arg)) return arg.filter((pair) => !(Array.isArray(pair) && isCacheControl(pair[0])));
+      if (arg && typeof arg === "object")
+        return Object.fromEntries(Object.entries(arg).filter(([name]) => !isCacheControl(name)));
+      return arg;
+    });
     this.setHeader("Cache-Control", NO_STORE);
-    return (writeHead as (...a: unknown[]) => Response).apply(this, args);
+    return (writeHead as (...a: unknown[]) => Response).apply(this, kept);
   } as Response["writeHead"];
 }
 
@@ -57,7 +64,8 @@ export function aifpGate(options: GateOptions): RequestHandler {
     void (async () => {
       try {
         // A router mounted at a prefix strips it from req.path, and patterns name the whole path.
-        const fullPath = req.baseUrl + req.path;
+        // Express serves /x/ as /x, so it must not price as another resource.
+        const fullPath = (req.baseUrl + req.path).replace(/(?<=.)\/+$/, "");
         const result = await gate({
           path: fullPath,
           header: (name: string) => req.header(name) ?? undefined,

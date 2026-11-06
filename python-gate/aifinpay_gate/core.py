@@ -271,8 +271,10 @@ class Gate:
     def _emit(self, event: Dict[str, Any], who: Dict[str, Any]) -> None:
         if self.on_event is None:
             return
+        # A mount with no resource names the raw path, which is private.
+        unregistered = {"unregistered": True} if self.routes is None and not self.resource else {}
         try:
-            self.on_event({**event, **who})
+            self.on_event({**event, **who, **unregistered})
         except Exception:  # noqa: BLE001 — observability is never load-bearing
             pass
 
@@ -391,7 +393,8 @@ class Gate:
             if not self._allowed({"path": path, "resource": resource, "weight": weight,
                                   "agent": agent_header, "receipt_id": None}):
                 return self._forbid(resource, weight, "blocked by merchant policy", who=who, agent=agent_header)
-            self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": agent_header}, who)
+            # Not a paid admission: the ingest counts a plain serve as one, and a reader is never reported.
+            self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": agent_header, "exempt": True}, who)
             return self._free(resource, agent_header, "open", "off")
 
         # The merchant's operator rules: allow / charge / block per operator, as

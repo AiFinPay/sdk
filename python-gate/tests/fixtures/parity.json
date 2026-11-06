@@ -862,7 +862,7 @@
    "prefix",
    "/a/",
    "/a",
-   false
+   true
   ],
   [
    "prefix",

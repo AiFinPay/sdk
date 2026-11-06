@@ -443,7 +443,8 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       ) {
         return forbid(resource, weight, "blocked by merchant policy");
       }
-      note({ kind: "serve", resource, weight, agent: agentHeader });
+      // Not a paid admission: the ingest counts a plain serve as one, and a reader is never reported.
+      note({ kind: "serve", resource, weight, agent: agentHeader, exempt: true });
       return {
         ok: true,
         status: 200,

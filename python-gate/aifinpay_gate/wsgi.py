@@ -39,11 +39,13 @@ def _json(start_response, status: int, headers: Dict[str, str], body: Any, metho
     return [b"" if method == "HEAD" else raw]
 
 
-def _with_gate_headers(headers, extra):
-    """A handler's own Cache-Control must not make a paid response storable."""
-    ours = {k.lower() for k, _ in extra}
-    kept = [(k, v) for k, v in headers if not (k.lower() == "cache-control" and k.lower() in ours)]
-    return kept + extra
+def _with_gate_headers(headers, extra, paid):
+    """A handler's own Cache-Control must not make a paid response storable; anywhere else it wins."""
+    if paid:
+        headers = [(k, v) for k, v in headers if k.lower() != "cache-control"]
+    elif any(k.lower() == "cache-control" for k, _ in headers):
+        extra = [(k, v) for k, v in extra if k.lower() != "cache-control"]
+    return list(headers) + extra
 
 
 class _ReportingIterable:
@@ -140,7 +142,7 @@ class AifpGateWSGI:
         def start_with_headers(status, headers, exc_info=None):
             if self.refund_on_error and str(status)[:1] == "5":
                 self.gate.refund(result.aifp)
-            merged = _with_gate_headers(headers, extra)
+            merged = _with_gate_headers(headers, extra, (result.aifp or {}).get("mode") == "paid")
             return start_response(status, merged, exc_info) if exc_info else start_response(status, merged)
 
         return self.app(environ, start_with_headers)
@@ -172,7 +174,7 @@ class AifpGateWSGI:
                                              **({"reason": reason} if reason else {}))
 
         def start_observed(status, headers, exc_info=None):
-            merged = _with_gate_headers(headers, extra)
+            merged = _with_gate_headers(headers, extra, (result.aifp or {}).get("mode") == "paid")
             write = start_response(status, merged, exc_info) if exc_info else start_response(status, merged)
             state["status"] = int(str(status).split(" ", 1)[0])
             if self.refund_on_error and result.ok and str(status)[:1] == "5":
