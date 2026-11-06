@@ -115,13 +115,6 @@ describe("shadow never refuses", () => {
     expect([forged.ok, forged.status, forged.headers[HEADER_SHADOW_STATUS]]).toEqual([true, 200, "403"]);
     expect(forged.ok && forged.aifp.shadow).toMatchObject({ status: 403, error: "AIFP-403", weight: 1 });
 
-    const failing = { incrBy: async () => Promise.reject(new Error("store down")) } as unknown as GateStore;
-    const { gate: broken } = await gateWith({ mode: "shadow", store: failing });
-    const down = await broken(req("/api/search", { "AIFP-Receipt": await iss.sign({ unit_quota: 5 }) }));
-    expect([down.ok, down.status, down.headers[HEADER_SHADOW_STATUS]]).toEqual([true, 200, "503"]);
-    expect(down.ok && down.aifp.shadow).toMatchObject({ status: 503, error: "AIFP-503-METER" });
-    expect(down.headers).not.toHaveProperty("Retry-After");
-
     const { gate: unpriced, events } = await gateWith({
       mode: "shadow",
       resource: undefined,
@@ -133,11 +126,12 @@ describe("shadow never refuses", () => {
     expect(events.map((e) => e.kind)).toEqual(["pricing_unavailable"]);
   });
 
-  it("serves what enforce would serve exactly as enforce does, plus the mode header", async () => {
+  it("spends nothing on a good receipt, and serves a reader and an open route as enforce does", async () => {
     const { gate, iss } = await gateWith({ mode: "shadow", shouldCharge: knownAiAgent });
     const paid = await gate(req("/api/search", { "AIFP-Receipt": await iss.sign({ unit_quota: 5 }) }));
-    expect(paid.headers).toEqual({ [HEADER_QUOTA_REMAINING]: "4", "Cache-Control": NO_STORE, [HEADER_MODE]: "shadow" });
-    expect(paid.ok && paid.aifp).toMatchObject({ mode: "paid", used: 1, remaining: 4 });
+    expect(paid.headers).toEqual({ "Cache-Control": NO_STORE, [HEADER_MODE]: "shadow" });
+    expect(paid.ok && paid.aifp).toMatchObject({ mode: "shadow", used: 0, remaining: 5, unit_quota: 5 });
+    expect(paid.ok && paid.aifp.shadow).toBeUndefined();
 
     const human = await gate(req("/api/search", { "User-Agent": BROWSER_UA }));
     expect(human.headers).toEqual({ "AIFP-Paywall": "exempt", [HEADER_MODE]: "shadow" });
@@ -174,10 +168,10 @@ describe("shadow never refuses", () => {
   });
 });
 
-describe("shadow and enforce emit the identical event stream", () => {
+describe("shadow and enforce emit the same events until enforce would spend", () => {
   // The same script of requests runs through both gates, built from the same
-  // issuer key and the same receipts. Events must be deep-equal; only the
-  // responses differ.
+  // issuer key and the same receipts. Shadow never reaches the store, so an
+  // exhausted batch and a store outage read as serves there; the rest is deep-equal.
   async function script(mode: "shadow" | "enforce") {
     const iss = await issuer();
     const events: GateEvent[] = [];
@@ -209,8 +203,21 @@ describe("shadow and enforce emit the identical event stream", () => {
   it("same events, different responses", async () => {
     const enforce = await script("enforce");
     const shadow = await script("shadow");
-    expect(shadow.events).toEqual(enforce.events);
+    expect(shadow.events.slice(0, 7)).toEqual(enforce.events.slice(0, 7));
+    expect(shadow.events[9]).toEqual(enforce.events[9]);
     expect(shadow.events.map((e) => e.kind)).toEqual([
+      "402",
+      "serve",
+      "403",
+      "403",
+      "402",
+      "serve",
+      "serve",
+      "serve",
+      "serve",
+      "402",
+    ]);
+    expect(enforce.events.map((e) => e.kind)).toEqual([
       "402",
       "serve",
       "403",
@@ -233,8 +240,8 @@ describe("shadow and enforce emit the identical event stream", () => {
       "402",
       undefined,
       undefined,
-      "402",
-      "503",
+      undefined,
+      undefined,
       "402",
     ]);
   });

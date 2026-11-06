@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "reference": "@aifinpay/gate 0.9.0",
+ "reference": "@aifinpay/gate 0.10.0",
  "fixtures": {
   "merchant_id": "mrch_0123456789abcdef",
   "other_merchant_id": "mrch_fedcba9876543210",
@@ -292,7 +292,7 @@
     "POST {{api}}/v1/quote {\"merchant_id\":\"mrch_0123456789abcdef\",\"resource\":\"/paid/*\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
     "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
     "POST {{api}}/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-    "retry this request with header: AIFP-Receipt: <receipt JWT>"
+    "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
    ],
    "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
   },
@@ -317,7 +317,7 @@
     "POST {{api}}/v1/quote {\"merchant_id\":\"mrch_0123456789abcdef\",\"resource\":\"/paid/*\",\"tier\":\"complex\",\"scope\":\"exact\",\"requests\":10,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
     "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
     "POST {{api}}/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-    "retry this request with header: AIFP-Receipt: <receipt JWT>"
+    "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
    ],
    "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
   },
@@ -342,7 +342,7 @@
     "POST {{api}}/v1/quote {\"merchant_id\":\"mrch_0123456789abcdef\",\"resource\":\"/paid/*\",\"tier\":\"premium\",\"scope\":\"exact\",\"requests\":4,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
     "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
     "POST {{api}}/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-    "retry this request with header: AIFP-Receipt: <receipt JWT>"
+    "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
    ],
    "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
   },
@@ -367,7 +367,7 @@
     "POST {{api}}/v1/quote {\"merchant_id\":\"mrch_0123456789abcdef\",\"resource\":\"/paid/*\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
     "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
     "POST {{api}}/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-    "retry this request with header: AIFP-Receipt: <receipt JWT>"
+    "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
    ],
    "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
   },
@@ -392,7 +392,7 @@
     "POST {{api}}/v1/quote {\"merchant_id\":\"mrch_0123456789abcdef\",\"resource\":\"/paid/*\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
     "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
     "POST {{api}}/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-    "retry this request with header: AIFP-Receipt: <receipt JWT>"
+    "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
    ],
    "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
   },
@@ -877,32 +877,69 @@
    }
   },
   {
-   "id": "mode.shadow_valid_metered",
+   "id": "mode.shadow_spends_nothing",
    "group": "mode",
-   "level": "parity",
+   "level": "must",
    "profile": "content-shadow",
-   "title": "A valid receipt is metered in shadow as in enforce",
+   "title": "A good receipt is verified in shadow and nothing is spent",
    "steps": [
     {
      "request": {
       "method": "GET",
       "path": "/paid/a",
       "ua": "sdk",
-      "receipt": "r",
+      "receipt": "one",
       "agent": "payer"
      },
      "expect": {
       "status": 200,
       "origin": true,
       "headers": {
-       "aifp-quota-remaining": "2"
+       "aifp-shadow-status": null,
+       "aifp-quota-remaining": null
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "one",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-shadow-status": null,
+       "aifp-quota-remaining": null
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "one",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-shadow-status": null,
+       "aifp-quota-remaining": null
       }
      }
     }
    ],
    "receipts": {
-    "r": {
-     "claims": {}
+    "one": {
+     "claims": {
+      "unit_quota": 1
+     }
     }
    }
   },
@@ -1733,7 +1770,7 @@
    "group": "receipt",
    "level": "must",
    "profile": "content-enforce",
-   "title": "An agent that did what the 402 says is served: it names only the receipt header",
+   "title": "A receipt with no AIFP-Agent-Id is served, or the refusal says what to send, and it still opens the page with the header",
    "steps": [
     {
      "request": {
@@ -1744,11 +1781,25 @@
       "agent": null
      },
      "expect": {
+      "status": [
+       200,
+       403
+      ],
+      "refusal_names": "AIFP-Agent-Id"
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
       "status": 200,
       "origin": true,
-      "headers": {
-       "aifp-quota-remaining": "2"
-      }
+      "headers": {}
      }
     }
    ],
@@ -4104,6 +4155,46 @@
    "needs": [
     "events"
    ]
+  },
+  {
+   "id": "mode.shadow_receipt_event",
+   "group": "mode",
+   "level": "parity",
+   "profile": "content-shadow",
+   "title": "Shadow reports a good receipt as verified",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "events": [
+    {
+     "kind": "serve",
+     "resource": "/paid/*",
+     "operator": "aifinpay",
+     "ua_class": "aifp_agent",
+     "verified": true
+    }
+   ],
+   "needs": [
+    "events"
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
   },
   {
    "id": "events.open_route",

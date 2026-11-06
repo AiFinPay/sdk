@@ -17,9 +17,9 @@ Given a request and a merchant's configuration, the core decides. It does no I/O
 | Who pays | `charge: agents` exempts `human` with `AIFP-Paywall: exempt`. `charge: everyone` exempts nobody. |
 | Challenge | No receipt: the 402 body, field for field. |
 | Verification | EdDSA only, against the published JWKS, `iss` and `aud` checked, 30 s clock tolerance, `exp` required. Key set unreachable or answering an error: 503, never a 403. |
-| Receipt checks | `typ_aifp` absent or `quota`. `receipt_id` present. `AIFP-Agent-Id`, when sent, names the payer (`payer`, else `sub`), in the spelling each chain allows. When it is not sent the receipt is served: the 402 tells an agent to send the receipt, and refusing after that takes money for nothing. The header is a claim either way, so this stops mistakes, not theft. `network_mode` (absent means live) equals the merchant's. Scope covers the path. |
+| Receipt checks | `typ_aifp` absent or `quota`. `receipt_id` present. `AIFP-Agent-Id`, when sent, names the payer (`payer`, else `sub`), in the spelling each chain allows. When it is not sent a gate serves the receipt, or refuses in words that name the header and spends nothing, so the agent can retry with it. The 402 asks for both. The header is a claim either way, so this stops mistakes, not theft. `network_mode` (absent means live) equals the merchant's. Scope covers the path. |
 | Metering | Limit is `unit_quota`, else `quota` times the tier weight; anything but a positive number is refused. The weight comes from the merchant's resource, never from the receipt. A call that does not fit takes nothing and is a 402. |
-| Shadow | Same decision, same event, then served: `AIFP-Mode: shadow` on every response, `AIFP-Shadow-Status` on a would-be refusal. Enforce sends no `AIFP-Mode`. |
+| Shadow | Same decision, same event, then served: `AIFP-Mode: shadow` on every response, `AIFP-Shadow-Status` on a would-be refusal. A good receipt is verified and reported and spends nothing, because a shadow site promises not to touch money. Enforce sends no `AIFP-Mode`. |
 
 Refusals: 402 `AIFP-402`, 403 `AIFP-403`, 503 `AIFP-503-METER` with `Retry-After`. The sentences are in the vectors.
 

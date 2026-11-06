@@ -193,7 +193,7 @@ class Recorder:
 
 
 def real_gate(record, context=None):
-    return Gate(MID, routes=[Route("/paid")], jwks={"keys": [jwk(KEY)]}, now=lambda: NOW,
+    return Gate(MID, routes=[Route("/paid")], jwks={"keys": [jwk(KEY)]}, now=lambda: NOW, require_agent_match=False,
                 reporting=record, reporting_context=context)
 
 

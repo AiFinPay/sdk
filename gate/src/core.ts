@@ -20,6 +20,7 @@ import type {
   GateMode,
   GateRequest,
   GateResult,
+  NetworkMode,
   OperatorPolicy,
   Tier,
 } from "./types.js";
@@ -27,6 +28,7 @@ import { MemoryStore } from "./stores/memory.js";
 import type { GateStore } from "./stores/types.js";
 import { createVerifier } from "./verify.js";
 import { buildChallenge } from "./challenge.js";
+import { inspectPath } from "./path.js";
 import { scopeCovers } from "./scope.js";
 import { TIER_WEIGHTS, weightForTier } from "./pricing.js";
 import { classifyAgent, type AgentIdentity } from "./agents.js";
@@ -56,9 +58,9 @@ export interface GateOptions {
    * Every response from a shadow gate carries `AIFP-Mode: shadow`. One the
    * gate would have refused also carries `AIFP-Shadow-Status` (402, 403 or
    * 503) and hands your handler `req.aifp.mode === "shadow"` with the refusal
-   * in `req.aifp.shadow`. A request that WOULD have been served — a valid
-   * receipt, an open route, an exempt reader — is served exactly as in
-   * enforce, metered and all; shadow only changes refusals.
+   * in `req.aifp.shadow`. A good receipt is verified and reported as in enforce
+   * and spends nothing: `req.aifp.mode === "shadow"` with no `shadow`. An open
+   * route or an exempt reader is served exactly as in enforce.
    *
    * Omitting `mode` is enforce. An install that predates this option keeps
    * behaving as it always did; nothing flips a live paywall into shadow.
@@ -107,9 +109,19 @@ export interface GateOptions {
    *  nonce check. Multi-use batches are metered by the counter and need no
    *  replay check — spending them twice is just spending them. */
   replay?: "auto" | "always" | "off";
-  /** Compare the self-declared AIFP-Agent-Id header to the receipt `sub`.
-   *  Anti-accident, not anti-theft: the header is not authenticated. */
+  /** On by default: a caller whose AIFP-Agent-Id names someone other than the
+   *  receipt's payer is refused. A caller that names nobody is served, and
+   *  `false` switches the check off. Anti-accident, not anti-theft: the header
+   *  is not authenticated. */
   requireAgentMatch?: boolean;
+  /** Paths and patterns are compared in lower case, because most origins serve
+   *  /A and /a as one page and a case change must not buy a cheaper price or
+   *  walk around a pattern. Set true for an origin where they are two pages. */
+  caseSensitive?: boolean;
+  /** Which network this site charges on, so a testnet receipt does not open a
+   *  live site or the reverse. A gate with a `registry` reads it from the public
+   *  merchant view. Unknown (a static mount with nothing here) is not checked. */
+  networkMode?: NetworkMode | null | (() => NetworkMode | null | undefined);
   /** Give a unit back when your handler fails. Off by default — see README. */
   refundOnError?: boolean;
   /** What to do when the quota store rejects. Default "closed" → 503. */
@@ -222,6 +234,12 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     Number.isInteger(options.weight) && (options.weight as number) > 0
       ? (options.weight as number)
       : weightForTier(tier);
+  const staticNetwork = typeof options.networkMode === "function" ? null : options.networkMode;
+  if (staticNetwork != null && staticNetwork !== "live" && staticNetwork !== "test") {
+    throw new Error(`createGate: networkMode must be "live" or "test": ${JSON.stringify(staticNetwork)}`);
+  }
+  const caseSensitive = options.caseSensitive === true;
+  const requireAgentMatch = options.requireAgentMatch !== false;
   const keyPrefix = options.keyPrefix ?? "aifp:";
   const replayMode = options.replay ?? "auto";
   const onStoreError = options.onStoreError ?? "closed";
@@ -254,8 +272,15 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     return typeof registry?.operatorPolicy === "function" ? (registry.operatorPolicy() ?? null) : null;
   };
 
+  const networkFor = (): NetworkMode | null => {
+    const own = typeof options.networkMode === "function" ? options.networkMode() : options.networkMode;
+    if (own !== undefined) return own ?? null;
+    const registry = options.registry as { networkMode?: () => NetworkMode | null } | undefined;
+    return typeof registry?.networkMode === "function" ? (registry.networkMode() ?? null) : null;
+  };
+
   const decide = async function gate(req: GateRequest, resolved?: (resource: string) => void): Promise<GateResult> {
-    const path = req.path;
+    const { path, ambiguous } = inspectPath(req.path, { caseSensitive });
 
     // Who the request says it is: normalised enums, never the raw User-Agent,
     // IP or headers. Stamped on every event this request emits, and upgraded
@@ -274,7 +299,11 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // request instead. Same event stream as enforce; a 200 wherever enforce
     // would have sent 402, 403 or 503. Nothing is metered — a call enforce
     // refuses never consumed a unit either.
-    const refuse = (resource: string, weight: number, r: Extract<GateResult, { ok: false }>): GateResult => {
+    const refuse = (
+      resource: string,
+      weight: number,
+      r: Extract<GateResult, { ok: false }> & { status: 402 | 403 | 503 }
+    ): GateResult => {
       if (mode !== "shadow") return r;
       return {
         ok: true,
@@ -379,6 +408,16 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       }
     };
 
+    // An origin may read this path differently from the gate, so no price is safe to quote. A reader still gets the page.
+    if (ambiguous && mode === "enforce" && !options.resource && !(await exempted())) {
+      return {
+        ok: false,
+        status: 400,
+        headers: { "Content-Type": "application/json", "Cache-Control": NO_STORE },
+        body: { error: "noncanonical_path", detail: "this path means different things to different servers" },
+      };
+    }
+
     // ── 1. What is this path, and what does it cost? ──────────────────────
     let matched: AifpResource | null = null;
     if (options.registry) {
@@ -408,7 +447,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
           },
         });
       }
-      matched = options.registry.match(path);
+      matched = options.registry.match(path, { caseSensitive });
     }
 
     const resource = matched ? matched.route_pattern : (options.resource ?? path);
@@ -424,7 +463,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // In static-mount mode the declared resource is the path the merchant
     // published, which is what the receipt was quoted for, so it wins over
     // req.path (which a mounted router may have already stripped a prefix off).
-    const scopePath = options.registry ? path : (options.resource ?? path);
+    const scopePath = options.registry ? path : spelledAsPath(options.resource ?? path, caseSensitive);
 
     // ── 2. Explicitly free resources ──────────────────────────────────────
     // paywall_enabled:false is the merchant saying "serve this to anyone". No
@@ -575,8 +614,16 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       return forbid(resource, weight, "receipt carries no receipt_id and cannot be metered");
     }
 
+    // A test site takes test receipts and a live site live ones, whatever the signature says.
+    const network = networkFor();
+    if (network && (payload.network_mode === "test" ? "test" : "live") !== network) {
+      return forbid(resource, weight, "receipt was paid on another network than this site charges on");
+    }
+
     // ── 6. Scope ──────────────────────────────────────────────────────────
-    if (!scopeCovers(payload.scope, payload.resource, scopePath)) {
+    const bought =
+      typeof payload.resource === "string" ? spelledAsPath(payload.resource, caseSensitive) : payload.resource;
+    if (!scopeCovers(payload.scope, bought, scopePath)) {
       return forbid(
         resource,
         weight,
@@ -584,7 +631,14 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       );
     }
 
-    if (options.requireAgentMatch && agentHeader && payload.sub && agentHeader !== payload.sub) {
+    const payer = payload.payer ?? payload.sub;
+    if (
+      requireAgentMatch &&
+      agentHeader &&
+      typeof payer === "string" &&
+      payer &&
+      payerKey(payer, payload.chain) !== payerKey(agentHeader, payload.chain)
+    ) {
       return forbid(resource, weight, "AIFP-Agent-Id does not match the receipt subject");
     }
 
@@ -621,16 +675,37 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // checked explicitly. A multi-use batch does not need it: replaying it just
     // spends it, which is what it is for.
     const wantsReplayCheck = replayMode === "always" || (replayMode === "auto" && limit <= 1);
+    // No nonce means no way to tell a first spend from a replay. Keying on
+    // `undefined` would not fail open, it would fail WEIRD: every nonce-less
+    // receipt in the process shares one counter, so the first is served and
+    // the rest are refused as "already spent" — a receipt rejected because a
+    // different agent's receipt was also malformed.
+    if (wantsReplayCheck && (typeof payload.nonce !== "string" || payload.nonce === "")) {
+      return forbid(resource, weight, "single-use receipt carries no nonce");
+    }
+
+    // A shadow site promises not to touch money: the receipt is verified and reported, and nothing is spent.
+    if (mode === "shadow") {
+      note({ kind: "serve", resource, weight, agent: payload.sub, receipt_id: payload.receipt_id });
+      return {
+        ok: true,
+        status: 200,
+        headers: { "Cache-Control": NO_STORE },
+        aifp: {
+          agent: payload.sub ?? null,
+          receipt_id: payload.receipt_id,
+          resource,
+          weight: 0,
+          unit_quota: limit,
+          used: 0,
+          remaining: limit,
+          mode: "shadow",
+        },
+      };
+    }
+
     let nonceKey: string | undefined;
     if (wantsReplayCheck) {
-      // No nonce means no way to tell a first spend from a replay. Keying on
-      // `undefined` would not fail open, it would fail WEIRD: every nonce-less
-      // receipt in the process shares one counter, so the first is served and
-      // the rest are refused as "already spent" — a receipt rejected because a
-      // different agent's receipt was also malformed.
-      if (typeof payload.nonce !== "string" || payload.nonce === "") {
-        return forbid(resource, weight, "single-use receipt carries no nonce");
-      }
       nonceKey = `${keyPrefix}nonce:${payload.nonce}`;
       let seen: number;
       try {
@@ -743,6 +818,20 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     }
     return result;
   };
+}
+
+/** A receipt or a static mount names the resource as the merchant spelled it; a path is canonical. */
+function spelledAsPath(resource: string, caseSensitive: boolean): string {
+  const spelled = caseSensitive ? resource : resource.toLowerCase();
+  return spelled.endsWith("/*") ? spelled : spelled.replace(/\/+$/, "") || "/";
+}
+
+/** As the backend's payment-auth subject(): one account in the spelling each chain allows. */
+function payerKey(address: string, chain?: string): string {
+  if (chain === "aptos" && /^0x[0-9a-fA-F]+$/.test(address)) {
+    return `0x${address.slice(2).toLowerCase().padStart(64, "0")}`;
+  }
+  return /^0x[0-9a-fA-F]{40}$/.test(address) ? address.toLowerCase() : address;
 }
 
 /** A partner's veto must not become a 500 by throwing. A hook that blows up is

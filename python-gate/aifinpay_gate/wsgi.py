@@ -14,7 +14,7 @@ from typing import Any, Dict, Optional
 from .core import Gate
 from .discovery import DISCOVERY_PATH, build_discovery_document, discovery_link_header, is_html_content_type
 
-_STATUS = {200: "200 OK", 402: "402 Payment Required", 403: "403 Forbidden", 503: "503 Service Unavailable"}
+_STATUS = {200: "200 OK", 400: "400 Bad Request", 402: "402 Payment Required", 403: "403 Forbidden", 503: "503 Service Unavailable"}
 
 
 class _WsgiRequest:

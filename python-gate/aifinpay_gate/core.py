@@ -11,6 +11,7 @@ of truth for a rule the merchant edits in the dashboard.
 """
 
 import math
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -19,6 +20,7 @@ from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Pro
 from .agents import classify_agent
 from .challenge import build_challenge
 from .operator_policy import decide_operator, normalize_operator_policy
+from .path import inspect_path
 from .pricing import weight_for_tier
 from .reporter import GateReporter, GateReporterV2, _context, _utc_now
 from .scope import pattern_covers, scope_covers
@@ -38,6 +40,7 @@ HEADER_SHADOW_STATUS = "AIFP-Shadow-Status"
 # hand it to the next caller.
 NO_STORE = "private, no-store, max-age=0"
 MODES = ("shadow", "enforce")
+NETWORK_MODES = ("live", "test")
 TIERS = ("standard", "complex", "premium")
 
 
@@ -107,6 +110,19 @@ class GateResult:
         return out
 
 
+def _spelled_as_path(resource: str, case_sensitive: bool) -> str:
+    """A receipt or a mount names the resource as the merchant spelled it; a path is canonical."""
+    spelled = resource if case_sensitive else resource.lower()
+    return spelled if spelled.endswith("/*") else spelled.rstrip("/") or "/"
+
+
+def _payer_key(address: str, chain: Optional[str]) -> str:
+    """As the backend's payment-auth subject(): one account in the spelling each chain allows."""
+    if chain == "aptos" and re.fullmatch(r"0x[0-9a-fA-F]+", address):
+        return "0x" + address[2:].lower().rjust(64, "0")
+    return address.lower() if re.fullmatch(r"0x[0-9a-fA-F]{40}", address) else address
+
+
 def _json_headers(**extra: str) -> Dict[str, str]:
     return {"Content-Type": "application/json", "Cache-Control": NO_STORE, **extra}
 
@@ -141,7 +157,9 @@ class Gate:
         api_base: Optional[str] = None,
         min_batch_units: Optional[int] = None,
         replay: str = "auto",
-        require_agent_match: bool = False,
+        require_agent_match: bool = True,
+        case_sensitive: bool = False,
+        network_mode: Any = None,
         on_store_error: str = "closed",
         on_event: Optional[Callable[[Dict[str, Any]], None]] = None,
         reporting: Any = None,
@@ -173,6 +191,8 @@ class Gate:
         # meant to watch) or shadow (a paywall that stops charging).
         if mode not in MODES:
             raise ValueError(f'mode must be "shadow" or "enforce": {mode!r}')
+        if not callable(network_mode) and network_mode is not None and network_mode not in NETWORK_MODES:
+            raise ValueError(f'network_mode must be "live" or "test": {network_mode!r}')
         # As Route does: an unknown tier would price the mount as standard.
         if tier not in TIERS:
             raise ValueError(f"tier must be one of {TIERS}: {tier!r}")
@@ -193,7 +213,15 @@ class Gate:
         self.api_base = api_base
         self.min_batch_units = min_batch_units
         self.replay = replay
+        # A caller naming someone other than the payer is refused; a caller naming
+        # nobody is served. Anti-accident, not anti-theft: the header is a claim.
         self.require_agent_match = require_agent_match
+        # Most origins serve /A and /a as one page, so a case change must not buy
+        # a cheaper price or walk around a route. True for an origin where they differ.
+        self.case_sensitive = case_sensitive
+        # Which network this site charges on: "live", "test", or a callable
+        # returning the current one. None is not checked.
+        self.network_mode = network_mode
         self.on_store_error = on_store_error
         self.on_event = on_event
         self.reporting = reporting
@@ -212,11 +240,13 @@ class Gate:
     # ── routing ─────────────────────────────────────────────────────────────
 
     def route_for(self, path: str, method: Optional[str] = None) -> Optional[Route]:
+        asked = path if self.case_sensitive else path.lower()
         best: Optional[Route] = None
         for r in self.routes or ():
             if r.methods is not None and method is not None and method.upper() not in r.methods:
                 continue
-            if not pattern_covers(r.pattern, path):
+            pattern = r.pattern if self.case_sensitive else r.pattern.lower()
+            if not pattern_covers(pattern, asked) and (pattern.endswith("/*") or asked != pattern.rstrip("/")):
                 continue
             if best is None or len(r.pattern) > len(best.pattern):
                 best = r
@@ -277,6 +307,15 @@ class Gate:
             self.on_event({**event, **who, **unregistered})
         except Exception:  # noqa: BLE001 — observability is never load-bearing
             pass
+
+    def _charges(self, req: GateRequest) -> bool:
+        """WHO pays. A predicate that raises charges."""
+        if self.should_charge is None:
+            return True
+        try:
+            return bool(self.should_charge(req))
+        except Exception:  # noqa: BLE001
+            return True
 
     def _allowed(self, ctx: Dict[str, Any]) -> bool:
         if self.allow is None:
@@ -370,7 +409,13 @@ class Gate:
         return result
 
     def _decide(self, req: GateRequest) -> Optional[GateResult]:
-        path = req.path
+        path, ambiguous = inspect_path(req.path, case_sensitive=self.case_sensitive)
+        # An origin may read this path differently from the gate, so no price is
+        # safe to quote. A reader still gets the page.
+        if ambiguous and self.mode == "enforce" and not self.resource and self._charges(req):
+            return GateResult(False, 400, _json_headers(), body={
+                "error": "noncanonical_path", "detail": "this path means different things to different servers",
+            })
         # Who the request says it is: normalised values, never the raw
         # User-Agent, IP or headers. Upgraded to verified only once the receipt
         # checks out — a User-Agent or AIFP-Agent-Id header is a claim.
@@ -385,7 +430,7 @@ class Gate:
         else:
             route = None
             resource, tier, weight = (self.resource or path), self.tier, self.mount_weight
-            scope_path = self.resource or path
+            scope_path = _spelled_as_path(self.resource or path, self.case_sensitive)
         agent_header = req.header("AIFP-Agent-Id")
 
         # Explicitly free route: no metering, no batch spend.
@@ -416,14 +461,9 @@ class Gate:
                 return decided
 
         # WHO pays — before the missing-receipt challenge, or a human reader
-        # would meet the 402. A predicate that raises charges.
-        if self.should_charge is not None:
-            try:
-                charge = bool(self.should_charge(req))
-            except Exception:  # noqa: BLE001
-                charge = True
-            if not charge:
-                return self._serve_exempt(resource, weight, path, who=who, agent=agent_header)
+        # would meet the 402.
+        if not self._charges(req):
+            return self._serve_exempt(resource, weight, path, who=who, agent=agent_header)
 
         token = req.header("AIFP-Receipt")
         if not token:
@@ -473,7 +513,16 @@ class Gate:
         if not isinstance(receipt_id, str) or receipt_id == "":
             return self._forbid(resource, weight, "receipt carries no receipt_id and cannot be metered", who=who, agent=agent_header)
 
-        if not scope_covers(payload.get("scope"), payload.get("resource"), scope_path):
+        # A test site takes test receipts and a live site live ones, whatever the signature says.
+        network = self.network_mode() if callable(self.network_mode) else self.network_mode
+        if network and ("test" if payload.get("network_mode") == "test" else "live") != network:
+            return self._forbid(resource, weight, "receipt was paid on another network than this site charges on",
+                                who=who, agent=agent_header)
+
+        bought = payload.get("resource")
+        if isinstance(bought, str):
+            bought = _spelled_as_path(bought, self.case_sensitive)
+        if not scope_covers(payload.get("scope"), bought, scope_path):
             return self._forbid(
                 resource, weight,
                 f"receipt is scoped to {payload.get('resource')} ({payload.get('scope') or 'exact'}), not {scope_path}",
@@ -481,7 +530,9 @@ class Gate:
             )
 
         sub = payload.get("sub")
-        if self.require_agent_match and agent_header and sub and agent_header != sub:
+        payer = payload.get("payer") if payload.get("payer") is not None else sub
+        if (self.require_agent_match and agent_header and isinstance(payer, str) and payer
+                and _payer_key(payer, payload.get("chain")) != _payer_key(agent_header, payload.get("chain"))):
             return self._forbid(resource, weight, "AIFP-Agent-Id does not match the receipt subject", who=who, agent=agent_header)
 
         if not self._allowed({"path": path, "resource": resource, "weight": weight,
@@ -506,11 +557,22 @@ class Gate:
         # zero inside that window.
         ttl_ms = max(1000, int((payload["exp"] + self.verify.tolerance) * 1000 - self._now() * 1000))
 
+        wants_replay_check = self.replay == "always" or (self.replay == "auto" and limit <= 1)
+        nonce = payload.get("nonce")
+        if wants_replay_check and (not isinstance(nonce, str) or nonce == ""):
+            return self._forbid(resource, weight, "single-use receipt carries no nonce", who=who, agent=agent_header)
+
+        # A shadow site promises not to touch money: the receipt is verified and
+        # reported, and nothing is spent.
+        if self.mode == "shadow":
+            self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": sub, "receipt_id": receipt_id}, who)
+            return GateResult(True, 200, {"Cache-Control": NO_STORE}, aifp={
+                "agent": sub, "receipt_id": receipt_id, "resource": resource, "weight": 0,
+                "unit_quota": _int_if_whole(limit), "used": 0, "remaining": _int_if_whole(limit), "mode": "shadow",
+            })
+
         nonce_key: Optional[str] = None
-        if self.replay == "always" or (self.replay == "auto" and limit <= 1):
-            nonce = payload.get("nonce")
-            if not isinstance(nonce, str) or nonce == "":
-                return self._forbid(resource, weight, "single-use receipt carries no nonce", who=who, agent=agent_header)
+        if wants_replay_check:
             nonce_key = f"{self.key_prefix}nonce:{nonce}"
             try:
                 seen = self.store.incr_by(nonce_key, 1, ttl_ms)

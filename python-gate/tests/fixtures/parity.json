@@ -1,5 +1,5 @@
 {
- "generated_from": "@aifinpay/gate 0.9.1",
+ "generated_from": "@aifinpay/gate 0.10.0",
  "jwks": {
   "keys": [
    {
@@ -253,7 +253,7 @@
      "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/api/x\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
      "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
      "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-     "retry this request with header: AIFP-Receipt: <receipt JWT>"
+     "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
     ],
     "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
    }
@@ -289,7 +289,7 @@
      "POST https://staging.example/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/api/*\",\"tier\":\"standard\",\"scope\":\"prefix\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
      "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
      "POST https://staging.example/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-     "retry this request with header: AIFP-Receipt: <receipt JWT>"
+     "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
     ],
     "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
    }
@@ -322,7 +322,7 @@
      "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/api/x\",\"tier\":\"complex\",\"scope\":\"exact\",\"requests\":10,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
      "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
      "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-     "retry this request with header: AIFP-Receipt: <receipt JWT>"
+     "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
     ],
     "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
    }
@@ -358,7 +358,7 @@
      "POST https://staging.example/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/api/*\",\"tier\":\"complex\",\"scope\":\"prefix\",\"requests\":10,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
      "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
      "POST https://staging.example/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-     "retry this request with header: AIFP-Receipt: <receipt JWT>"
+     "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
     ],
     "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
    }
@@ -391,7 +391,7 @@
      "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/api/x\",\"tier\":\"premium\",\"scope\":\"exact\",\"requests\":4,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
      "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
      "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-     "retry this request with header: AIFP-Receipt: <receipt JWT>"
+     "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
     ],
     "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
    }
@@ -427,7 +427,7 @@
      "POST https://staging.example/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/api/*\",\"tier\":\"premium\",\"scope\":\"prefix\",\"requests\":4,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
      "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
      "POST https://staging.example/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-     "retry this request with header: AIFP-Receipt: <receipt JWT>"
+     "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
     ],
     "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
    }
@@ -1609,6 +1609,305 @@
    false
   ]
  ],
+ "path_cases": [
+  [
+   "/paid/a",
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   },
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/PAID/A",
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   },
+   {
+    "path": "/PAID/A",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/paid/a/",
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   },
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   }
+  ],
+  [
+   "//paid//a",
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   },
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/paid/a?x=/b",
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   },
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/paid/a#f",
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   },
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/%70aid/a",
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   },
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/%2570aid/a",
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   },
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/paid%2fa",
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   },
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/paid\\a",
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   },
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/paid/a;x=1",
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   },
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/paid;x=1/a",
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   },
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/;x/paid/a",
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   },
+   {
+    "path": "/paid/a",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/paid/./a",
+   {
+    "path": "/paid/a",
+    "ambiguous": true
+   },
+   {
+    "path": "/paid/a",
+    "ambiguous": true
+   }
+  ],
+  [
+   "/x/../paid/a",
+   {
+    "path": "/paid/a",
+    "ambiguous": true
+   },
+   {
+    "path": "/paid/a",
+    "ambiguous": true
+   }
+  ],
+  [
+   "/x/..;/paid/a",
+   {
+    "path": "/paid/a",
+    "ambiguous": true
+   },
+   {
+    "path": "/paid/a",
+    "ambiguous": true
+   }
+  ],
+  [
+   "/.;/paid/a",
+   {
+    "path": "/paid/a",
+    "ambiguous": true
+   },
+   {
+    "path": "/paid/a",
+    "ambiguous": true
+   }
+  ],
+  [
+   "/paid/..;/../a",
+   {
+    "path": "/a",
+    "ambiguous": true
+   },
+   {
+    "path": "/a",
+    "ambiguous": true
+   }
+  ],
+  [
+   "/paid//../a",
+   {
+    "path": "/a",
+    "ambiguous": true
+   },
+   {
+    "path": "/a",
+    "ambiguous": true
+   }
+  ],
+  [
+   "/paid/%252e%252e/../a",
+   {
+    "path": "/a",
+    "ambiguous": true
+   },
+   {
+    "path": "/a",
+    "ambiguous": true
+   }
+  ],
+  [
+   "/paid/x\\..\\../../a",
+   {
+    "path": "/a",
+    "ambiguous": true
+   },
+   {
+    "path": "/a",
+    "ambiguous": true
+   }
+  ],
+  [
+   "/a%00b",
+   {
+    "path": "/a\u0000b",
+    "ambiguous": true
+   },
+   {
+    "path": "/a\u0000b",
+    "ambiguous": true
+   }
+  ],
+  [
+   "/a%E2%82%ACb",
+   {
+    "path": "/a%e2%82%acb",
+    "ambiguous": false
+   },
+   {
+    "path": "/a%E2%82%ACb",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/",
+   {
+    "path": "/",
+    "ambiguous": false
+   },
+   {
+    "path": "/",
+    "ambiguous": false
+   }
+  ],
+  [
+   "",
+   {
+    "path": "/",
+    "ambiguous": false
+   },
+   {
+    "path": "/",
+    "ambiguous": false
+   }
+  ],
+  [
+   "/..",
+   {
+    "path": "/",
+    "ambiguous": true
+   },
+   {
+    "path": "/",
+    "ambiguous": true
+   }
+  ],
+  [
+   "/.",
+   {
+    "path": "/",
+    "ambiguous": true
+   },
+   {
+    "path": "/",
+    "ambiguous": true
+   }
+  ]
+ ],
  "scenarios": [
   {
    "name": "no receipt → 402",
@@ -1647,7 +1946,7 @@
         "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-        "retry this request with header: AIFP-Receipt: <receipt JWT>"
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
        ],
        "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
       }
@@ -1832,7 +2131,7 @@
         "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-        "retry this request with header: AIFP-Receipt: <receipt JWT>"
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
        ],
        "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
       }
@@ -1978,7 +2277,7 @@
         "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"premium\",\"scope\":\"exact\",\"requests\":4,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-        "retry this request with header: AIFP-Receipt: <receipt JWT>"
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
        ],
        "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
       }
@@ -2083,7 +2382,7 @@
         "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-        "retry this request with header: AIFP-Receipt: <receipt JWT>"
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
        ],
        "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
       }
@@ -2230,7 +2529,7 @@
         "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-        "retry this request with header: AIFP-Receipt: <receipt JWT>"
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
        ],
        "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
       }
@@ -3135,7 +3434,7 @@
         "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-        "retry this request with header: AIFP-Receipt: <receipt JWT>"
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
        ],
        "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
       }
@@ -3196,7 +3495,7 @@
         "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-        "retry this request with header: AIFP-Receipt: <receipt JWT>"
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
        ],
        "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
       }
@@ -3308,7 +3607,7 @@
         "POST https://staging.example/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://staging.example/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-        "retry this request with header: AIFP-Receipt: <receipt JWT>"
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
        ],
        "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
       }
@@ -3675,151 +3974,18 @@
       "ok": true,
       "status": 200,
       "headers": {
-       "AIFP-Quota-Remaining": "2",
        "Cache-Control": "private, no-store, max-age=0",
        "AIFP-Mode": "shadow"
       },
       "aifp": {
        "agent": "0x00000000000000000000000000000000000000a1",
        "receipt_id": "rcpt_0000000000000004",
-       "resource": "/paid",
-       "weight": 1,
-       "unit_quota": 3,
-       "used": 1,
-       "remaining": 2,
-       "mode": "paid"
-      }
-     },
-     "identity": {
-      "operator": "aifinpay",
-      "ua_class": "aifp_agent",
-      "verified": false
-     },
-     "events": [
-      {
-       "kind": "serve",
-       "resource": "/paid",
-       "weight": 1,
-       "agent": "0x00000000000000000000000000000000000000a1",
-       "receipt_id": "rcpt_0000000000000004",
-       "operator": "aifinpay",
-       "ua_class": "aifp_agent",
-       "verified": true
-      }
-     ]
-    },
-    {
-     "path": "/paid",
-     "headers": {
-      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwNCIsIm5vbmNlIjoibi0xIn0.PdIXXHtFrUzOVmHV98Rz3E32NUAyf3bE72mXSAzEGs1l9Nk7Le_2FxpGEthwajvo97hymb2mJ0yGYfq6THGhBw"
-     },
-     "result": {
-      "ok": true,
-      "status": 200,
-      "headers": {
-       "AIFP-Quota-Remaining": "1",
-       "Cache-Control": "private, no-store, max-age=0",
-       "AIFP-Mode": "shadow"
-      },
-      "aifp": {
-       "agent": "0x00000000000000000000000000000000000000a1",
-       "receipt_id": "rcpt_0000000000000004",
-       "resource": "/paid",
-       "weight": 1,
-       "unit_quota": 3,
-       "used": 2,
-       "remaining": 1,
-       "mode": "paid"
-      }
-     },
-     "identity": {
-      "operator": "aifinpay",
-      "ua_class": "aifp_agent",
-      "verified": false
-     },
-     "events": [
-      {
-       "kind": "serve",
-       "resource": "/paid",
-       "weight": 1,
-       "agent": "0x00000000000000000000000000000000000000a1",
-       "receipt_id": "rcpt_0000000000000004",
-       "operator": "aifinpay",
-       "ua_class": "aifp_agent",
-       "verified": true
-      }
-     ]
-    },
-    {
-     "path": "/paid",
-     "headers": {
-      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwNCIsIm5vbmNlIjoibi0xIn0.PdIXXHtFrUzOVmHV98Rz3E32NUAyf3bE72mXSAzEGs1l9Nk7Le_2FxpGEthwajvo97hymb2mJ0yGYfq6THGhBw"
-     },
-     "result": {
-      "ok": true,
-      "status": 200,
-      "headers": {
-       "AIFP-Quota-Remaining": "0",
-       "Cache-Control": "private, no-store, max-age=0",
-       "AIFP-Mode": "shadow"
-      },
-      "aifp": {
-       "agent": "0x00000000000000000000000000000000000000a1",
-       "receipt_id": "rcpt_0000000000000004",
-       "resource": "/paid",
-       "weight": 1,
-       "unit_quota": 3,
-       "used": 3,
-       "remaining": 0,
-       "mode": "paid"
-      }
-     },
-     "identity": {
-      "operator": "aifinpay",
-      "ua_class": "aifp_agent",
-      "verified": false
-     },
-     "events": [
-      {
-       "kind": "serve",
-       "resource": "/paid",
-       "weight": 1,
-       "agent": "0x00000000000000000000000000000000000000a1",
-       "receipt_id": "rcpt_0000000000000004",
-       "operator": "aifinpay",
-       "ua_class": "aifp_agent",
-       "verified": true
-      }
-     ]
-    },
-    {
-     "path": "/paid",
-     "headers": {
-      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwNCIsIm5vbmNlIjoibi0xIn0.PdIXXHtFrUzOVmHV98Rz3E32NUAyf3bE72mXSAzEGs1l9Nk7Le_2FxpGEthwajvo97hymb2mJ0yGYfq6THGhBw"
-     },
-     "result": {
-      "ok": true,
-      "status": 200,
-      "headers": {
-       "AIFP-Mode": "shadow",
-       "AIFP-Shadow-Status": "402",
-       "Cache-Control": "private, no-store, max-age=0"
-      },
-      "aifp": {
-       "agent": null,
-       "receipt_id": "",
        "resource": "/paid",
        "weight": 0,
-       "unit_quota": 0,
+       "unit_quota": 3,
        "used": 0,
-       "remaining": 0,
-       "mode": "shadow",
-       "shadow": {
-        "status": 402,
-        "error": "AIFP-402",
-        "detail": "quota exhausted — prepay the next batch",
-        "weight": 1
-       }
+       "remaining": 3,
+       "mode": "shadow"
       }
      },
      "identity": {
@@ -3829,10 +3995,134 @@
      },
      "events": [
       {
-       "kind": "402",
+       "kind": "serve",
        "resource": "/paid",
        "weight": 1,
-       "detail": "quota exhausted — prepay the next batch",
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000004",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwNCIsIm5vbmNlIjoibi0xIn0.PdIXXHtFrUzOVmHV98Rz3E32NUAyf3bE72mXSAzEGs1l9Nk7Le_2FxpGEthwajvo97hymb2mJ0yGYfq6THGhBw"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "Cache-Control": "private, no-store, max-age=0",
+       "AIFP-Mode": "shadow"
+      },
+      "aifp": {
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000004",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 3,
+       "used": 0,
+       "remaining": 3,
+       "mode": "shadow"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000004",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwNCIsIm5vbmNlIjoibi0xIn0.PdIXXHtFrUzOVmHV98Rz3E32NUAyf3bE72mXSAzEGs1l9Nk7Le_2FxpGEthwajvo97hymb2mJ0yGYfq6THGhBw"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "Cache-Control": "private, no-store, max-age=0",
+       "AIFP-Mode": "shadow"
+      },
+      "aifp": {
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000004",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 3,
+       "used": 0,
+       "remaining": 3,
+       "mode": "shadow"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000004",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwNCIsIm5vbmNlIjoibi0xIn0.PdIXXHtFrUzOVmHV98Rz3E32NUAyf3bE72mXSAzEGs1l9Nk7Le_2FxpGEthwajvo97hymb2mJ0yGYfq6THGhBw"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "Cache-Control": "private, no-store, max-age=0",
+       "AIFP-Mode": "shadow"
+      },
+      "aifp": {
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000004",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 3,
+       "used": 0,
+       "remaining": 3,
+       "mode": "shadow"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000004",
        "operator": "aifinpay",
        "ua_class": "aifp_agent",
        "verified": true
@@ -3937,7 +4227,7 @@
         "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-        "retry this request with header: AIFP-Receipt: <receipt JWT>"
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
        ],
        "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
       }
@@ -3955,6 +4245,893 @@
        "operator": "unknown",
        "ua_class": "unknown",
        "verified": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "agent mismatch refused by default",
+   "opts": {
+    "resource": "/paid"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwMSIsIm5vbmNlIjoibi0xIn0.6kIdvooN-bbmnv-yE9tV4BnRGtNMb4I-xdI72wOlaGVNG6EQbMzG_Ax49koSY7hX91NDguwAbEi8YE2bEmNPBg",
+      "AIFP-Agent-Id": "0xsomeoneelse"
+     },
+     "result": {
+      "ok": false,
+      "status": 403,
+      "headers": {
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "body": {
+       "error": "AIFP-403",
+       "detail": "AIFP-Agent-Id does not match the receipt subject"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "AIFP-Agent-Id does not match the receipt subject",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "agent mismatch served when switched off",
+   "opts": {
+    "resource": "/paid",
+    "requireAgentMatch": false
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwMSIsIm5vbmNlIjoibi0xIn0.6kIdvooN-bbmnv-yE9tV4BnRGtNMb4I-xdI72wOlaGVNG6EQbMzG_Ax49koSY7hX91NDguwAbEi8YE2bEmNPBg",
+      "AIFP-Agent-Id": "0xsomeoneelse"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Quota-Remaining": "2",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "aifp": {
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "resource": "/paid",
+       "weight": 1,
+       "unit_quota": 3,
+       "used": 1,
+       "remaining": 2,
+       "mode": "paid"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "no agent header served",
+   "opts": {
+    "resource": "/paid"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwMSIsIm5vbmNlIjoibi0xIn0.6kIdvooN-bbmnv-yE9tV4BnRGtNMb4I-xdI72wOlaGVNG6EQbMzG_Ax49koSY7hX91NDguwAbEi8YE2bEmNPBg"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Quota-Remaining": "2",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "aifp": {
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "resource": "/paid",
+       "weight": 1,
+       "unit_quota": 3,
+       "used": 1,
+       "remaining": 2,
+       "mode": "paid"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "agent id in another case",
+   "opts": {
+    "resource": "/paid"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMEFBIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwMSIsIm5vbmNlIjoibi0xIn0.RJNfYVRTAZU9STIzrreFsyn-5bLYw5Lqq87jM2D3cY3-touthm-j6IsreqqxoDRzmDdIl24LC0QeDAu6ZZDdDQ",
+      "AIFP-Agent-Id": "0x00000000000000000000000000000000000000aa"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Quota-Remaining": "2",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "aifp": {
+       "agent": "0x00000000000000000000000000000000000000AA",
+       "receipt_id": "rcpt_0000000000000001",
+       "resource": "/paid",
+       "weight": 1,
+       "unit_quota": 3,
+       "used": 1,
+       "remaining": 2,
+       "mode": "paid"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000AA",
+       "receipt_id": "rcpt_0000000000000001",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "payer claim before the subject",
+   "opts": {
+    "resource": "/paid"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiYWd0X290aGVyIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwMSIsIm5vbmNlIjoibi0xIiwicGF5ZXIiOiIweDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwYWEifQ.OjdmOSkyolG2cyw709mzr73h4cbjI9YjWukGRgn5r7ny-6GZZO1wMjRBK7oCpDAb0vZgSIqbyB2RVeDKTPcNCQ",
+      "AIFP-Agent-Id": "0x00000000000000000000000000000000000000aa"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Quota-Remaining": "2",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "aifp": {
+       "agent": "agt_other",
+       "receipt_id": "rcpt_0000000000000001",
+       "resource": "/paid",
+       "weight": 1,
+       "unit_quota": 3,
+       "used": 1,
+       "remaining": 2,
+       "mode": "paid"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "agt_other",
+       "receipt_id": "rcpt_0000000000000001",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiYWd0X290aGVyIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwMSIsIm5vbmNlIjoibi0xIiwicGF5ZXIiOiIweDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwYWEifQ.OjdmOSkyolG2cyw709mzr73h4cbjI9YjWukGRgn5r7ny-6GZZO1wMjRBK7oCpDAb0vZgSIqbyB2RVeDKTPcNCQ",
+      "AIFP-Agent-Id": "agt_other"
+     },
+     "result": {
+      "ok": false,
+      "status": 403,
+      "headers": {
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "body": {
+       "error": "AIFP-403",
+       "detail": "AIFP-Agent-Id does not match the receipt subject"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "AIFP-Agent-Id does not match the receipt subject",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "aptos address padded",
+   "opts": {
+    "resource": "/paid"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAxIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwMSIsIm5vbmNlIjoibi0xIiwiY2hhaW4iOiJhcHRvcyJ9.JcCcrF9MzUc_Rhu7rQPpxFjptENMNBZfVplw0MdN7g1XW-n2lXxsTjAjHpH6X4OBB5HCmteB-gUxI_x8HDNaCQ",
+      "AIFP-Agent-Id": "0x1"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Quota-Remaining": "2",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "aifp": {
+       "agent": "0x0000000000000000000000000000000000000000000000000000000000000001",
+       "receipt_id": "rcpt_0000000000000001",
+       "resource": "/paid",
+       "weight": 1,
+       "unit_quota": 3,
+       "used": 1,
+       "remaining": 2,
+       "mode": "paid"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x0000000000000000000000000000000000000000000000000000000000000001",
+       "receipt_id": "rcpt_0000000000000001",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "network: test receipt on a live site",
+   "opts": {
+    "resource": "/paid",
+    "networkMode": "live"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwMSIsIm5vbmNlIjoibi0xIiwibmV0d29ya19tb2RlIjoidGVzdCJ9.4znZ9I_YiTyJMqSXMWiWXV24Haw7apT1J3pE7zsiR-3kbiM20KgS_BcwG4Uf-qEPNpmU4ALsVopnwQzPL3OaDQ"
+     },
+     "result": {
+      "ok": false,
+      "status": 403,
+      "headers": {
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "body": {
+       "error": "AIFP-403",
+       "detail": "receipt was paid on another network than this site charges on"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "receipt was paid on another network than this site charges on",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "network: live receipt on a test site",
+   "opts": {
+    "resource": "/paid",
+    "networkMode": "test"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwMSIsIm5vbmNlIjoibi0xIn0.6kIdvooN-bbmnv-yE9tV4BnRGtNMb4I-xdI72wOlaGVNG6EQbMzG_Ax49koSY7hX91NDguwAbEi8YE2bEmNPBg"
+     },
+     "result": {
+      "ok": false,
+      "status": 403,
+      "headers": {
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "body": {
+       "error": "AIFP-403",
+       "detail": "receipt was paid on another network than this site charges on"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "receipt was paid on another network than this site charges on",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "network: each on its own",
+   "opts": {
+    "resource": "/paid",
+    "networkMode": "test"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwMSIsIm5vbmNlIjoibi0xIiwibmV0d29ya19tb2RlIjoidGVzdCJ9.4znZ9I_YiTyJMqSXMWiWXV24Haw7apT1J3pE7zsiR-3kbiM20KgS_BcwG4Uf-qEPNpmU4ALsVopnwQzPL3OaDQ"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Quota-Remaining": "2",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "aifp": {
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "resource": "/paid",
+       "weight": 1,
+       "unit_quota": 3,
+       "used": 1,
+       "remaining": 2,
+       "mode": "paid"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "shadow: a good receipt spends nothing",
+   "opts": {
+    "resource": "/paid",
+    "mode": "shadow"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MSwicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDBhOSIsIm5vbmNlIjoibi1hOSJ9.I91_IWPKkpz-WSbBcYkCEhYDztjXC_cg-rtiRn3XS9tg0WA3Es8vg9YeuQ3W6u_HpAlKP-NE-C_45IXpsZ0cBA"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "Cache-Control": "private, no-store, max-age=0",
+       "AIFP-Mode": "shadow"
+      },
+      "aifp": {
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_00000000000000a9",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 1,
+       "used": 0,
+       "remaining": 1,
+       "mode": "shadow"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_00000000000000a9",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MSwicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDBhOSIsIm5vbmNlIjoibi1hOSJ9.I91_IWPKkpz-WSbBcYkCEhYDztjXC_cg-rtiRn3XS9tg0WA3Es8vg9YeuQ3W6u_HpAlKP-NE-C_45IXpsZ0cBA"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "Cache-Control": "private, no-store, max-age=0",
+       "AIFP-Mode": "shadow"
+      },
+      "aifp": {
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_00000000000000a9",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 1,
+       "used": 0,
+       "remaining": 1,
+       "mode": "shadow"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_00000000000000a9",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MSwicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDBhOSIsIm5vbmNlIjoibi1hOSJ9.I91_IWPKkpz-WSbBcYkCEhYDztjXC_cg-rtiRn3XS9tg0WA3Es8vg9YeuQ3W6u_HpAlKP-NE-C_45IXpsZ0cBA"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "Cache-Control": "private, no-store, max-age=0",
+       "AIFP-Mode": "shadow"
+      },
+      "aifp": {
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_00000000000000a9",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 1,
+       "used": 0,
+       "remaining": 1,
+       "mode": "shadow"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_00000000000000a9",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "mount spelled with a capital and a slash",
+   "opts": {
+    "resource": "/Paid/"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwMSIsIm5vbmNlIjoibi0xIn0.6kIdvooN-bbmnv-yE9tV4BnRGtNMb4I-xdI72wOlaGVNG6EQbMzG_Ax49koSY7hX91NDguwAbEi8YE2bEmNPBg"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Quota-Remaining": "2",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "aifp": {
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "resource": "/Paid/",
+       "weight": 1,
+       "unit_quota": 3,
+       "used": 1,
+       "remaining": 2,
+       "mode": "paid"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/Paid/",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "no resource: the path as an origin reads it",
+   "opts": {},
+   "requests": [
+    {
+     "path": "/PAID/a/?x=1",
+     "headers": {},
+     "result": {
+      "ok": false,
+      "status": 402,
+      "headers": {
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "body": {
+       "error": "AIFP-402",
+       "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+       "protocol": "AIFP-1",
+       "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+       "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+       "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+       "merchant_id": "mrch_parity",
+       "resource": "/paid/a",
+       "tier": "standard",
+       "unit_weight": 1,
+       "unit_price_usd": "0.0005",
+       "min_requests": 40,
+       "scope": "exact",
+       "protocol_fee_bps": 100,
+       "no_minimum_fee": true,
+       "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+       "how_to_pay": [
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid/a\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+        "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
+       ],
+       "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "unknown",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid/a",
+       "weight": 1,
+       "operator": "unknown",
+       "ua_class": "unknown",
+       "verified": false,
+       "unregistered": true
+      }
+     ]
+    },
+    {
+     "path": "/%70aid;x=1/a",
+     "headers": {},
+     "result": {
+      "ok": false,
+      "status": 402,
+      "headers": {
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "body": {
+       "error": "AIFP-402",
+       "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+       "protocol": "AIFP-1",
+       "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+       "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+       "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+       "merchant_id": "mrch_parity",
+       "resource": "/paid/a",
+       "tier": "standard",
+       "unit_weight": 1,
+       "unit_price_usd": "0.0005",
+       "min_requests": 40,
+       "scope": "exact",
+       "protocol_fee_bps": 100,
+       "no_minimum_fee": true,
+       "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+       "how_to_pay": [
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid/a\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+        "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
+       ],
+       "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "unknown",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid/a",
+       "weight": 1,
+       "operator": "unknown",
+       "ua_class": "unknown",
+       "verified": false,
+       "unregistered": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "no resource: an ambiguous path",
+   "opts": {},
+   "requests": [
+    {
+     "path": "/x/../paid/a",
+     "headers": {},
+     "result": {
+      "ok": false,
+      "status": 400,
+      "headers": {
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "body": {
+       "error": "noncanonical_path",
+       "detail": "this path means different things to different servers"
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "unknown",
+      "verified": false
+     },
+     "events": []
+    }
+   ]
+  },
+  {
+   "name": "no resource: an ambiguous path in shadow",
+   "opts": {
+    "mode": "shadow"
+   },
+   "requests": [
+    {
+     "path": "/x/../paid/a",
+     "headers": {},
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Mode": "shadow",
+       "AIFP-Shadow-Status": "402",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid/a",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "shadow",
+       "shadow": {
+        "status": 402,
+        "error": "AIFP-402",
+        "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+        "weight": 1
+       }
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "unknown",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid/a",
+       "weight": 1,
+       "operator": "unknown",
+       "ua_class": "unknown",
+       "verified": false,
+       "unregistered": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "no resource: an ambiguous path for a reader",
+   "opts": {
+    "shouldCharge": "known"
+   },
+   "requests": [
+    {
+     "path": "/x/../paid/a",
+     "headers": {
+      "User-Agent": "Mozilla/5.0 (Macintosh) Safari/605.1.15"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Paywall": "exempt"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid/a",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "exempt"
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "human",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid/a",
+       "weight": 1,
+       "agent": null,
+       "exempt": true,
+       "operator": "unknown",
+       "ua_class": "human",
+       "verified": false,
+       "unregistered": true
       }
      ]
     }
@@ -4132,7 +5309,7 @@
         "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-        "retry this request with header: AIFP-Receipt: <receipt JWT>"
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
        ],
        "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
       }
@@ -4415,7 +5592,7 @@
         "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
         "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
         "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
-        "retry this request with header: AIFP-Receipt: <receipt JWT>"
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
        ],
        "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
       }

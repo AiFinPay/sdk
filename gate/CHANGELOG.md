@@ -1,5 +1,35 @@
 # Changelog
 
+## @aifinpay/gate 0.10.0 — a path as an origin reads it, payer binding on, network mode, shadow spends nothing
+
+Four things answer differently, each with a way back.
+
+- **A path is read as an origin could resolve it**: percent-decoded, `;params`
+  dropped, empty segments and a trailing slash dropped, lower case. A case change
+  no longer buys the mount default on a premium route, and a receipt opens the
+  page however it is spelled. A pattern and a receipt's resource are compared the
+  same way, so a mixed-case registry keeps working. `caseSensitive: true` for an
+  origin where `/A` and `/a` are two pages: there a path under `/a` is no longer
+  charged by a pattern for `/A`, as it is by default.
+- **A path with a dot segment** answers 400 `noncanonical_path` to an agent in
+  enforce: origins disagree on it, so no price is safe. A reader gets the page,
+  shadow observes it, and a static `resource` mount is not affected.
+- **`requireAgentMatch` is on by default.** A caller whose `AIFP-Agent-Id` names
+  someone other than the receipt's payer gets a 403. The header is compared to
+  `payer`, then `sub`, in the spelling each chain allows. A caller naming nobody
+  is still served. `requireAgentMatch: false` restores the old answer.
+- **A testnet receipt does not open a live site**, or the reverse, once the gate
+  knows which it is: from the registry's merchant view, or `networkMode`. Unknown
+  is not checked, so a static mount changes nothing until you pass it.
+- **Shadow spends nothing.** A good receipt is verified and reported and the store
+  is not touched: `req.aifp.mode === "shadow"` with no `req.aifp.shadow`, and no
+  `AIFP-Quota-Remaining`. A handler reading `req.aifp.mode === "paid"` in shadow
+  no longer sees a paid call.
+- The 402's `how_to_pay` now says to send `AIFP-Agent-Id` with the receipt. Text
+  only: no field changes, and an agent that sends only the receipt is still served.
+
+`inspectPath` is exported, also from `@aifinpay/gate/edge`.
+
 ## @aifinpay/gate 0.9.1 — differences the conformance vectors found
 
 - A 402, 403 or 503, a paid response and a shadow would-be refusal carry

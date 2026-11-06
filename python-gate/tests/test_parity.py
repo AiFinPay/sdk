@@ -46,6 +46,12 @@ def test_the_discovery_document_is_identical():
     assert json.dumps(g.build_discovery_document(**d["args"])) == json.dumps(d["body"])
 
 
+def test_path_reading_matches_on_every_case():
+    for raw, folded, cased in FIXTURE["path_cases"]:
+        assert g.inspect_path(raw)._asdict() == folded, raw
+        assert g.inspect_path(raw, case_sensitive=True)._asdict() == cased, raw
+
+
 def test_scope_coverage_matches_on_every_case():
     wrong = [c for c in FIXTURE["scope_cases"] if g.scope_covers(c[0], c[1], c[2]) != c[3]]
     assert not wrong
@@ -63,7 +69,7 @@ def test_every_node_scenario_replays_identically(scenario):
     events = []
     gate = g.Gate(
         FIXTURE["merchant_id"], jwks=FIXTURE["jwks"], resource=o.get("resource"), tier=o.get("tier") or "standard",
-        weight=o.get("weight"), require_agent_match=bool(o.get("requireAgentMatch")), api_base=o.get("apiBase"),
+        weight=o.get("weight"), require_agent_match=o.get("requireAgentMatch", True), network_mode=o.get("networkMode"), api_base=o.get("apiBase"),
         mode=o.get("mode") or "enforce", on_event=events.append, operator_policy=o.get("operatorPolicy"),
         should_charge=g.known_ai_agent if o.get("shouldCharge") == "known" else None,
     )

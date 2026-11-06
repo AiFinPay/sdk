@@ -125,7 +125,7 @@ add("mode.shadow_tampered", "must", "content-shadow", "Shadow never refuses a fo
 add("mode.shadow_other_agent", "must", "content-shadow", "Shadow never refuses another agent's receipt", step(pay("r", PAID, { agent: "other" }), served()), { receipts: { r: R() } });
 add("mode.shadow_tampered_status", "parity", "content-shadow", "Shadow verifies, so a forged receipt reads as a would-be 403", step(pay("forged"), served({ "aifp-shadow-status": "403" })), { receipts: { forged: R({}, { mutate: "tamper_payload" }) } });
 add("mode.shadow_expired_status", "parity", "content-shadow", "An expired receipt reads as a would-be 402", step(pay("old"), served({ "aifp-shadow-status": "402" })), { receipts: { old: R({ exp: 1000000000 }) } });
-add("mode.shadow_valid_metered", "parity", "content-shadow", "A valid receipt is metered in shadow as in enforce", step(pay(), quota(2)), { receipts: { r: R() } });
+add("mode.shadow_spends_nothing", "must", "content-shadow", "A good receipt is verified in shadow and nothing is spent", [1, 2, 3].map(() => step(pay("one"), served({ "aifp-shadow-status": null, "aifp-quota-remaining": null }))), { receipts: { one: R({ unit_quota: 1 }) } });
 add("mode.shadow_drained_served", "must", "content-shadow", "A drained receipt never turns shadow into a refusal", Array.from({ length: 5 }, () => step(pay(), served())), { receipts: { r: R() } });
 
 // ── receipts ──────────────────────────────────────────────────────────────
@@ -153,7 +153,7 @@ add("receipt.zero_quota", "must", "content-enforce", "A zero unit_quota never se
 add("receipt.legacy_quota", "parity", "content-enforce", "A legacy request quota converts at its tier weight", step(pay("x"), quota(7)), { receipts: { x: R({ unit_quota: null, quota: 2, tier: "complex" }) } });
 add("receipt.query", "must", "content-enforce", "A query string does not stop a receipt", step(pay("r", `${PAID}?x=1`), quota(2)), { receipts: { r: R() } });
 add("receipt.other_agent", "must", "content-enforce", "A receipt is not spent by an agent naming someone else", step(pay("r", PAID, { agent: "other" }), refused403()), { receipts: { r: R() } });
-add("receipt.no_agent_header", "must", "content-enforce", "An agent that did what the 402 says is served: it names only the receipt header", step(pay("r", PAID, { agent: null }), quota(2)), { receipts: { r: R() } });
+add("receipt.no_agent_header", "must", "content-enforce", "A receipt with no AIFP-Agent-Id is served, or the refusal says what to send, and it still opens the page with the header", [step(pay("r", PAID, { agent: null }), { status: [200, 403], refusal_names: "AIFP-Agent-Id" }), step(pay(), served())], { receipts: { r: R() } });
 add("receipt.agent_case", "should", "content-enforce", "An EVM payer compares without checksum case", step(pay("r", PAID, { agent: "payer_upper" }), served()), { receipts: { r: R() } });
 add("receipt.test_on_live", "must", "content-enforce", "A testnet receipt does not open a live site", step(pay("x"), refused403()), { receipts: { x: R({ network_mode: "test" }) } });
 add("receipt.test_on_test", "must", "testsite-enforce", "A testnet receipt opens a test site", step(pay("x"), served()), { receipts: { x: R({ network_mode: "test" }) } });
@@ -244,6 +244,7 @@ eventCase("events.operators", "parity", "content-enforce", "Operators and classe
   [ev("402", "anthropic", "ai_crawler", false), ev("402", "openai", "ai_agent_browser", false), ev("402", "perplexity", "ai_crawler", false)]);
 eventCase("events.refusal_off_wire", "must", "content-enforce", "A 403 is not sent to an ingest that would refuse the batch", step(pay("x"), noOrigin(403)), [], { receipts: { x: R({}, { mutate: "tamper_payload" }) } });
 eventCase("events.stray_path", "must", "content-enforce", "A crawler on an unregistered path does not cost the report", [step(get("gptbot", "/free/stray-token-abc"), {}), step(get("gptbot"), noOrigin(402))], [ev("402", "openai", "ai_crawler", false)]);
+eventCase("mode.shadow_receipt_event", "parity", "content-shadow", "Shadow reports a good receipt as verified", [step(pay(), served())], [{ kind: "serve", resource: PATTERN, operator: "aifinpay", ua_class: "aifp_agent", verified: true }], { receipts: { r: R() } });
 eventCase("events.open_route", "must", "mixed-enforce", "A free route is not a paid admission, and a reader is not reported on it", [step(get("chrome", "/open/x"), served()), step(get("gptbot", "/open/x"), served())], [{ kind: "serve", resource: "/open/*", operator: "openai", ua_class: "ai_crawler", verified: false, exempt: true }]);
 eventCase("events.table", "parity", "content-enforce", "Every marker reports its operator and class", G.AI_AGENT_UA_TABLE.map((row) => step(get(`Mozilla/5.0 (compatible; ${row.marker}/1.0)`), noOrigin(402))), G.AI_AGENT_UA_TABLE.map((row) => ev("402", row.operator, row.ua_class, false)));
 add("events.ingest_down", "must", "content-enforce", "An ingest outage changes no response", [step(get("gptbot"), noOrigin(402)), step(get("chrome"), served())], { fault: { ingest: 503 }, needs: ["events"] });

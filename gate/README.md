@@ -75,17 +75,19 @@ What shadow changes, exactly:
   `AIFP-Shadow-Status: 402` (or `403`, `503`); your handler gets
   `req.aifp.mode === "shadow"` and the refusal in `req.aifp.shadow`
   (`status`, `error`, `detail`, the `weight` it would have cost).
-- A request the gate **would serve** — a valid receipt, an open route, an
-  exempt human reader — is served exactly as in enforce, metered and all,
-  plus the `AIFP-Mode: shadow` header. Shadow only turns refusals into
-  pass-throughs.
-- The event stream is **identical** to enforce, request for request (the test
-  suite runs the same script through both and compares). The reporter sends
+- A **good receipt** is verified and reported as in enforce, and nothing is
+  spent: a shadow site promises not to touch money, and the page is free here
+  anyway. `req.aifp.mode === "shadow"` with no `req.aifp.shadow`. An exhausted
+  batch therefore reads as a serve until you enforce.
+- An open route and an exempt human reader are served exactly as in enforce,
+  plus the `AIFP-Mode: shadow` header.
+- The event stream is **the same** as enforce, request for request, up to the
+  point enforce would spend (the test suite runs the same script through both
+  and compares). The reporter sends
   the same `402` / `serve` events to the same endpoint, so the Funnel and the
   per-operator counts mean the same thing in both modes.
-- **Omitting `mode` is enforce.** Nothing in this version changes what an
-  existing install answers; a typo (`"Shadow"`, `"observe"`) throws at
-  construction instead of guessing.
+- **Omitting `mode` is enforce.** Nothing flips a live paywall into shadow; a typo
+  (`"Shadow"`, `"observe"`) throws at construction instead of guessing.
 
 Not on Node, or not ready to touch the app? The same observe-only step exists
 as a [Cloudflare Worker](../examples/cloudflare-worker-shadow) and as an
@@ -417,19 +419,29 @@ genuinely more expensive than its tier.
 
 ### Options worth knowing
 
-| Option              | Default       | Why you would change it                                                                                                               |
-| ------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `mode`              | `"enforce"`   | `"shadow"` observes: same decisions and events, every request served, nothing refused or metered for a would-be refusal. See §1a.     |
-| `store`             | `MemoryStore` | Anything beyond one process. See §3.                                                                                                  |
-| `registry`          | —             | Path-matched pricing from your registered endpoints, and the operator rules saved on the dashboard (below).                           |
-| `operatorPolicy`    | from registry | The merchant's allow / charge / block per operator for a gate without a registry; an object, or a function returning the current one. |
-| `onStoreError`      | `"closed"`    | `"open"` trades metering for availability, visibly.                                                                                   |
-| `onEvent`           | —             | `402` / `serve` / `403` / `meter_error` / `pricing_unavailable` for your own metrics; each carries who asked (below).                 |
-| `allow`             | —             | Your own veto, evaluated **before** any unit is metered, so a refused call costs the agent nothing.                                   |
-| `jwks`              | fetched       | Pin the key set; removes all runtime network dependency on us.                                                                        |
-| `requireAgentMatch` | `false`       | Compares `AIFP-Agent-Id` to the receipt subject. Anti-accident, not anti-theft — the header is not authenticated.                     |
-| `refundOnError`     | `false`       | Give the call's units back on a 5xx (Express adapter). Read the warning below first.                                                  |
-| `minBatchUnits`     | `20000`       | Minimum batch the 402 advertises, in 6-dp stable minor units ($0.02). Match the server's minimum; never go below it.                  |
+| Option              | Default       | Why you would change it                                                                                                                                                                                          |
+| ------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mode`              | `"enforce"`   | `"shadow"` observes: same decisions and events, every request served, nothing refused or metered for a would-be refusal. See §1a.                                                                                |
+| `store`             | `MemoryStore` | Anything beyond one process. See §3.                                                                                                                                                                             |
+| `registry`          | —             | Path-matched pricing from your registered endpoints, and the operator rules saved on the dashboard (below).                                                                                                      |
+| `operatorPolicy`    | from registry | The merchant's allow / charge / block per operator for a gate without a registry; an object, or a function returning the current one.                                                                            |
+| `onStoreError`      | `"closed"`    | `"open"` trades metering for availability, visibly.                                                                                                                                                              |
+| `onEvent`           | —             | `402` / `serve` / `403` / `meter_error` / `pricing_unavailable` for your own metrics; each carries who asked (below).                                                                                            |
+| `allow`             | —             | Your own veto, evaluated **before** any unit is metered, so a refused call costs the agent nothing.                                                                                                              |
+| `jwks`              | fetched       | Pin the key set; removes all runtime network dependency on us.                                                                                                                                                   |
+| `requireAgentMatch` | `true`        | Refuses a caller whose `AIFP-Agent-Id` names someone other than the receipt's payer. A caller naming nobody is served. `false` switches it off. Anti-accident, not anti-theft — the header is not authenticated. |
+| `caseSensitive`     | `false`       | Paths and patterns are compared in lower case, as most origins serve them. `true` for an origin where `/A` and `/a` are two pages.                                                                               |
+| `networkMode`       | from registry | `"live"` or `"test"`, or a function returning it, for a gate without a registry: a testnet receipt does not open a live site or the reverse. Unknown is not checked.                                             |
+| `refundOnError`     | `false`       | Give the call's units back on a 5xx (Express adapter). Read the warning below first.                                                                                                                             |
+| `minBatchUnits`     | `20000`       | Minimum batch the 402 advertises, in 6-dp stable minor units ($0.02). Match the server's minimum; never go below it.                                                                                             |
+
+**How a path is read.** A pattern is matched against the path as an origin
+could resolve it: percent-decoded, `;params` dropped, empty segments and a
+trailing slash dropped, in lower case. So `/PAID/PREMIUM/x` and `/%70aid/premium/x`
+are the premium section, at its price, and a receipt for it opens them. A path
+with a dot segment means different things to different servers, so in enforce
+an agent gets a 400 `noncanonical_path` and a reader gets the page. `inspectPath`
+is exported. A static `resource` mount charges whatever it is handed and reads no path.
 
 **Operator rules.** Once a site sees which operators read it, the owner
 decides per operator on the dashboard (Access rules → Operators): `allow` —

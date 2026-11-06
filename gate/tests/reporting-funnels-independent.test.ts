@@ -430,6 +430,7 @@ for (const major of ["express", "express4"]) {
           resource: "/paid",
           jwks: iss.jwks,
           store: memory,
+          requireAgentMatch: false,
           reporting: { version: 2, reporter: r },
         }),
         (_req: any, res: any) => {

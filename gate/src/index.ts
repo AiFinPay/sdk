@@ -56,6 +56,8 @@ export { decideOperator, normalizeOperatorPolicy, OPERATOR_ACTIONS, OPERATOR_DEF
 export type { OperatorDecision } from "./operator-policy.js";
 export { scopeCovers } from "./scope.js";
 export { matchResource } from "./match.js";
+export { inspectPath } from "./path.js";
+export type { InspectedPath } from "./path.js";
 export { buildChallenge } from "./challenge.js";
 export { createVerifier } from "./verify.js";
 export type { VerifyResult, VerifierOptions } from "./verify.js";

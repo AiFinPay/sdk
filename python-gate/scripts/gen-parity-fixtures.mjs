@@ -37,6 +37,7 @@ const t = async (over, opts) => sign({ ...base, ...over }, opts);
 
 const OP_POLICY = { operator_rules: [{ operator: "openai", action: "allow" }, { operator: "anthropic", action: "block" }], operator_default: "charge" };
 const OP_VERIFIED = { operator_rules: [{ operator: "aifinpay", action: "allow", verified_only: true }, { ua_class: "aifp_agent", action: "block" }], operator_default: "charge" };
+const singleUse = await t({ unit_quota: 1, receipt_id: "rcpt_00000000000000a9", nonce: "n-a9" });
 const scenarios = [
   { name: "no receipt → 402", opts: { resource: "/paid" }, reqs: [{ path: "/paid", headers: {} }] },
   { name: "batch of 3 drains then 402", opts: { resource: "/paid" }, reqs: Array(4).fill({ path: "/paid", headers: { "AIFP-Receipt": await t({}) } }) },
@@ -83,6 +84,21 @@ const scenarios = [
   { name: "shadow: agent mismatch served, would-be 403", opts: { resource: "/paid", mode: "shadow", requireAgentMatch: true },
     reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({ receipt_id: "rcpt_0000000000000005" }), "AIFP-Agent-Id": "0xsomeoneelse" } }] },
   { name: "explicit enforce is the default", opts: { resource: "/paid", mode: "enforce" }, reqs: [{ path: "/paid", headers: {} }] },
+  { name: "agent mismatch refused by default", opts: { resource: "/paid" }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({}), "AIFP-Agent-Id": "0xsomeoneelse" } }] },
+  { name: "agent mismatch served when switched off", opts: { resource: "/paid", requireAgentMatch: false }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({}), "AIFP-Agent-Id": "0xsomeoneelse" } }] },
+  { name: "no agent header served", opts: { resource: "/paid" }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({}) } }] },
+  { name: "agent id in another case", opts: { resource: "/paid" }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({ sub: "0x00000000000000000000000000000000000000AA" }), "AIFP-Agent-Id": "0x00000000000000000000000000000000000000aa" } }] },
+  { name: "payer claim before the subject", opts: { resource: "/paid" }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({ sub: "agt_other", payer: "0x00000000000000000000000000000000000000aa" }), "AIFP-Agent-Id": "0x00000000000000000000000000000000000000aa" } }, { path: "/paid", headers: { "AIFP-Receipt": await t({ sub: "agt_other", payer: "0x00000000000000000000000000000000000000aa" }), "AIFP-Agent-Id": "agt_other" } }] },
+  { name: "aptos address padded", opts: { resource: "/paid" }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({ sub: "0x" + "0".repeat(63) + "1", chain: "aptos" }), "AIFP-Agent-Id": "0x1" } }] },
+  { name: "network: test receipt on a live site", opts: { resource: "/paid", networkMode: "live" }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({ network_mode: "test" }) } }] },
+  { name: "network: live receipt on a test site", opts: { resource: "/paid", networkMode: "test" }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({}) } }] },
+  { name: "network: each on its own", opts: { resource: "/paid", networkMode: "test" }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({ network_mode: "test" }) } }] },
+  { name: "shadow: a good receipt spends nothing", opts: { resource: "/paid", mode: "shadow" }, reqs: [1, 2, 3].map(() => ({ path: "/paid", headers: { "AIFP-Receipt": singleUse } })) },
+  { name: "mount spelled with a capital and a slash", opts: { resource: "/Paid/" }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({ resource: "/paid" }) } }] },
+  { name: "no resource: the path as an origin reads it", opts: {}, reqs: [{ path: "/PAID/a/?x=1", headers: {} }, { path: "/%70aid;x=1/a", headers: {} }] },
+  { name: "no resource: an ambiguous path", opts: {}, reqs: [{ path: "/x/../paid/a", headers: {} }] },
+  { name: "no resource: an ambiguous path in shadow", opts: { mode: "shadow" }, reqs: [{ path: "/x/../paid/a", headers: {} }] },
+  { name: "no resource: an ambiguous path for a reader", opts: { shouldCharge: "known" }, reqs: [{ path: "/x/../paid/a", headers: { "User-Agent": "Mozilla/5.0 (Macintosh) Safari/605.1.15" } }] },
   // Operator policy: allow / charge / block per operator, the same decision
   // and event in both ports; verified_only decided after the receipt verified.
   { name: "operator policy: openai allowed, served exempt", opts: { resource: "/paid", shouldCharge: "known", operatorPolicy: OP_POLICY },
@@ -112,7 +128,7 @@ for (const s of scenarios) {
   let events = [];
   const gate = G.createGate({
     merchantId: MID, jwks: { keys: [pubJwk] }, resource: s.opts.resource, tier: s.opts.tier, weight: s.opts.weight,
-    requireAgentMatch: s.opts.requireAgentMatch, apiBase: s.opts.apiBase, mode: s.opts.mode, operatorPolicy: s.opts.operatorPolicy,
+    requireAgentMatch: s.opts.requireAgentMatch, networkMode: s.opts.networkMode, apiBase: s.opts.apiBase, mode: s.opts.mode, operatorPolicy: s.opts.operatorPolicy,
     onEvent: (e) => events.push(e),
     ...(s.opts.shouldCharge === "known" ? { shouldCharge: G.knownAiAgent } : {}),
   });
@@ -172,6 +188,9 @@ const fixture = {
       "application/json", "text/plain", "text/htmlx", ""].map((ct) => [ct, G.isHtmlContentType(ct)]),
   },
   scope_cases: scopeCases,
+  path_cases: ["/paid/a", "/PAID/A", "/paid/a/", "//paid//a", "/paid/a?x=/b", "/paid/a#f", "/%70aid/a", "/%2570aid/a", "/paid%2fa", "/paid\\a", "/paid/a;x=1", "/paid;x=1/a", "/;x/paid/a",
+    "/paid/./a", "/x/../paid/a", "/x/..;/paid/a", "/.;/paid/a", "/paid/..;/../a", "/paid//../a", "/paid/%252e%252e/../a", "/paid/x\\..\\../../a", "/a%00b", "/a%E2%82%ACb", "/", "", "/..", "/."]
+    .map((raw) => [raw, G.inspectPath(raw), G.inspectPath(raw, { caseSensitive: true })]),
   scenarios: results,
 };
 

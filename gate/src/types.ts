@@ -52,6 +52,10 @@ export interface AifpReceiptClaims {
   asset?: string;
   chain?: string;
   tx_ref?: string;
+  /** The account that paid; `sub` on a receipt that predates this claim. */
+  payer?: string;
+  /** "test" on a receipt paid on a testnet; absent means live. */
+  network_mode?: string;
   /** Absent on a quota receipt. The issuer signs other token kinds with the same
    *  key and the same audience — `"action"` is a per-call billing receipt, proof
    *  that a call was ALREADY served and charged. The gate refuses to spend
@@ -107,8 +111,8 @@ export interface AifpContext {
    *  false. "exempt" = this request was served free by the shouldCharge
    *  predicate (a human reader on a content site) — the route itself is
    *  still paid for everyone the predicate charges. "shadow" = the gate
-   *  runs in shadow mode and would have refused this request; it was served
-   *  instead, unmetered, and `shadow` says what the answer would have been. */
+   *  runs in shadow mode and spent nothing: `shadow` says what the answer
+   *  would have been, and is absent for a good receipt, which enforce serves. */
   mode: "paid" | "open" | "exempt" | "shadow";
   /** Only with mode "shadow": the refusal the gate decided on and did not
    *  send. `weight` is what the call would have been metered at. */
@@ -124,7 +128,7 @@ export interface ShadowOutcome {
 }
 
 export interface GateErrorBody {
-  error: "AIFP-402" | "AIFP-403" | "AIFP-503-METER" | "AIFP-503-PRICING";
+  error: "AIFP-402" | "AIFP-403" | "AIFP-503-METER" | "AIFP-503-PRICING" | "noncanonical_path";
   detail: string;
   protocol?: "AIFP-1";
   merchant_id?: string;
@@ -156,7 +160,7 @@ export type GateResult =
   | { ok: true; status: 200; headers: Record<string, string>; aifp: AifpContext; reportingResource?: string }
   | {
       ok: false;
-      status: 402 | 403 | 503;
+      status: 400 | 402 | 403 | 503;
       headers: Record<string, string>;
       body: GateErrorBody;
       reportingResource?: string;
@@ -222,6 +226,8 @@ export interface OperatorPolicy {
   operator_default: OperatorAction;
 }
 
+export type NetworkMode = "live" | "test";
+
 /** Public view of a merchant, as `GET /v1/merchants/:id` returns it. Loosely
  *  typed on purpose — the control plane may add fields, and a strict interface
  *  here would make a server-side addition look like a client-side break. */
@@ -234,6 +240,8 @@ export interface MerchantPublicView {
    *  that predates them; the gate then decides as it always has. */
   operator_rules?: OperatorRule[];
   operator_default?: OperatorAction;
+  /** Which network the site charges on. Absent on an older control plane. */
+  network_mode?: string;
   [k: string]: unknown;
 }
 

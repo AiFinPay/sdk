@@ -61,7 +61,7 @@ def build_challenge(
             f"POST {api}/v1/pay {{quote_id, chain, asset, tx_ref, payment_authorization}} + Idempotency-Key header "
             "-> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry "
             "with the same key and tx_ref — never pay again",
-            "retry this request with header: AIFP-Receipt: <receipt JWT>",
+            "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>",
         ],
         "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported "
                      "clients and payment availability. Wallet setup alone does not enable settlement.",

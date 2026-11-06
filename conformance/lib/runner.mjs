@@ -93,6 +93,7 @@ function compareBody(rule, res, ctx, errors) {
 
 function compareResponse(expect, res, ctx, errors) {
   const statuses = Array.isArray(expect.status) ? expect.status : [expect.status];
+  if (expect.refusal_names !== undefined && res.status >= 400 && !res.body.includes(expect.refusal_names)) errors.push(`a refusal must name ${expect.refusal_names}, got ${res.body.slice(0, 200)}`);
   if (expect.status !== undefined && !statuses.includes(res.status)) errors.push(`status: expected ${statuses.join("|")}, got ${res.status}`);
   const reached = originReached(res, ctx.vectors.fixtures.marker);
   if (expect.origin === true && !reached) errors.push("origin: expected the content, it did not arrive");

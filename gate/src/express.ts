@@ -64,8 +64,7 @@ export function aifpGate(options: GateOptions): RequestHandler {
     void (async () => {
       try {
         // A router mounted at a prefix strips it from req.path, and patterns name the whole path.
-        // Express serves /x/ as /x, so it must not price as another resource.
-        const fullPath = (req.baseUrl + req.path).replace(/(?<=.)\/+$/, "");
+        const fullPath = req.baseUrl + req.path;
         const result = await gate({
           path: fullPath,
           header: (name: string) => req.header(name) ?? undefined,
