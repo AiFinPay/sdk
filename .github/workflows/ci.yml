@@ -283,6 +283,38 @@ jobs:
       - name: Test (pytest)
         run: python -m pytest tests -q
 
+  gate-conformance:
+    name: gate — conformance vectors (Node + Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Install redis-server
+        run: sudo apt-get update -q && sudo apt-get install -y -q redis-server
+      - name: Build the reference gate
+        working-directory: gate
+        run: npm ci --no-audit --no-fund && npm run build
+      - name: Vectors match the reference
+        working-directory: conformance
+        run: node scripts/gen-vectors.mjs --check
+      - name: The runner goes red on a broken gate
+        working-directory: conformance
+        run: npm test
+      - name: Node gate
+        working-directory: conformance
+        run: node run.mjs --subject=subjects/gate-node.mjs --ratchet
+      - name: Python gate
+        working-directory: conformance
+        run: |
+          python -m venv .local/py313
+          .local/py313/bin/pip install -q -e ../python-gate uvicorn starlette redis waitress
+          node run.mjs --subject=subjects/python-gate.mjs --ratchet
+
   python-gate:
     name: python — aifinpay-gate (install + pytest + Node parity)
     runs-on: ubuntu-latest

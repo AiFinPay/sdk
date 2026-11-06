@@ -1,0 +1,35 @@
+{
+  "gate-node": {
+    "receipt.no_exp": "fixed by fix/gate-conformance-findings",
+    "receipt.bad_quota": "fixed by fix/gate-conformance-findings",
+    "cache.challenge": "fixed by fix/gate-conformance-findings",
+    "cache.refusal": "fixed by fix/gate-conformance-findings",
+    "cache.unavailable": "fixed by fix/gate-conformance-findings",
+    "cache.paid": "fixed by fix/gate-conformance-findings",
+    "cache.shadow_agent": "fixed by fix/gate-conformance-findings",
+    "events.stray_path": "fixed by fix/gate-conformance-findings",
+    "fail.jwks_receipt": "fixed by fix/gate-conformance-findings",
+    "fail.record_reader": "fixed by fix/gate-conformance-findings",
+    "receipt.other_agent": "decision: payer binding is opt-in here (requireAgentMatch), on in the hosted and PHP gates; on by default would refuse a caller without the header",
+    "receipt.no_agent_header": "decision: same; requireAgentMatch also lets a missing header through",
+    "receipt.test_on_live": "decision: this gate has no network_mode option",
+    "receipt.live_on_test": "decision: this gate has no network_mode option",
+    "cache.exempt": "decision: no-store on a reader's copy costs the site its CDN on protected paths",
+    "classify.unprotected": "by design: a root mount paywalls an unregistered path at the mount default",
+    "path.boundary": "by design: a root mount paywalls an unregistered path at the mount default",
+    "path.case_no_discount": "needs a canonical path in the core: an unregistered spelling is priced at the mount default"
+  },
+  "python-gate-asgi": {
+    "receipt.other_agent": "decision: payer binding is opt-in here (require_agent_match)",
+    "receipt.no_agent_header": "decision: same",
+    "receipt.test_on_live": "decision: this gate has no network_mode option",
+    "receipt.live_on_test": "decision: this gate has no network_mode option",
+    "cache.challenge": "fixed by fix/gate-conformance-findings",
+    "cache.refusal": "fixed by fix/gate-conformance-findings",
+    "cache.unavailable": "fixed by fix/gate-conformance-findings",
+    "cache.paid": "fixed by fix/gate-conformance-findings",
+    "cache.exempt": "decision: no-store on a reader's copy costs the site its CDN on protected paths",
+    "cache.shadow_agent": "fixed by fix/gate-conformance-findings",
+    "mode.shadow_elsewhere": "by design: a request outside every route never reaches the gate's decision"
+  }
+}
