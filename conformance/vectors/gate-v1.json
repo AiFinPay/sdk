@@ -3181,7 +3181,7 @@
    "group": "cache",
    "level": "must",
    "profile": "content-enforce",
-   "title": "A paid response drops the headers a CDN reads before Cache-Control",
+   "title": "A paid response carries nothing a CDN reads before Cache-Control as leave to store it",
    "steps": [
     {
      "request": {
@@ -3195,8 +3195,12 @@
       "status": 200,
       "origin": true,
       "headers": {
-       "cdn-cache-control": null,
-       "surrogate-control": null
+       "cdn-cache-control": {
+        "absentOr": "no-store"
+       },
+       "surrogate-control": {
+        "absentOr": "no-store"
+       }
       }
      }
     }
@@ -3205,8 +3209,7 @@
     "r": {
      "claims": {}
     }
-   },
-   "unless": "cannot_rewrite_origin_headers"
+   }
   },
   {
    "id": "cache.exempt",
@@ -3279,7 +3282,9 @@
       "status": 200,
       "origin": true,
       "headers": {
-       "cache-control": "public, max-age=600"
+       "cache-control": "public, max-age=600",
+       "cdn-cache-control": "public, max-age=600",
+       "surrogate-control": "max-age=600"
       }
      }
     }

@@ -43,6 +43,8 @@ function compareHeaders(expected, res, errors) {
       const seen = String(actual ?? "").toLowerCase();
       if (!seen.includes(rule.contains.toLowerCase())) errors.push(`header ${name}: expected to contain ${JSON.stringify(rule.contains)}, got ${JSON.stringify(actual)}`);
       if (rule.excludes && seen.includes(rule.excludes.toLowerCase())) errors.push(`header ${name}: expected no ${JSON.stringify(rule.excludes)}, got ${JSON.stringify(actual)}`);
+    } else if (rule.absentOr !== undefined) {
+      if (actual !== undefined && !String(actual).toLowerCase().includes(rule.absentOr)) errors.push(`header ${name}: expected absent or ${JSON.stringify(rule.absentOr)}, got ${JSON.stringify(actual)}`);
     } else if (rule.present && actual === undefined) {
       errors.push(`header ${name}: expected present`);
     }

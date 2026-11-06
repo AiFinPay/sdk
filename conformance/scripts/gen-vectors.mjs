@@ -203,10 +203,10 @@ add("cache.challenge", "must", "content-enforce", "A 402 is never stored", step(
 add("cache.refusal", "must", "content-enforce", "A 403 is never stored", step(pay("x"), { ...noOrigin(403), headers: noStore }), { receipts: { x: R({}, { mutate: "tamper_payload" }) } });
 add("cache.unavailable", "must", "content-enforce", "A 503 is never stored", step(pay(), { ...noOrigin(503), headers: noStore }), { receipts: { r: R() }, fault: { jwks: true }, needs: ["fault:jwks"] });
 add("cache.paid", "must", "content-enforce", "A paid response is never stored, whatever the origin says", step(pay(), { status: 200, origin: true, headers: noStore }), { receipts: { r: R() } });
-add("cache.paid_at_cdn", "must", "content-enforce", "A paid response drops the headers a CDN reads before Cache-Control", step(pay(), { status: 200, origin: true, headers: { "cdn-cache-control": null, "surrogate-control": null } }), { receipts: { r: R() }, unless: "cannot_rewrite_origin_headers" });
+add("cache.paid_at_cdn", "must", "content-enforce", "A paid response carries nothing a CDN reads before Cache-Control as leave to store it", step(pay(), { status: 200, origin: true, headers: { "cdn-cache-control": { absentOr: "no-store" }, "surrogate-control": { absentOr: "no-store" } } }), { receipts: { r: R() } });
 add("cache.exempt", "must", "content-enforce", "A reader's copy of a protected page cannot answer an agent", step(get("chrome"), { status: 200, origin: true, headers: noStore }), { unless: "pre_cache" });
 add("cache.shadow_agent", "should", "content-shadow", "An agent's shadow response is not stored", step(get("gptbot"), { status: 200, origin: true, headers: noStore }), { unless: "pre_cache" });
-add("cache.shadow_keeps_origin", "should", "content-shadow", "Shadow leaves the origin's cache header alone before a cache it runs ahead of", step(get("gptbot"), served({ "cache-control": "public, max-age=600" })), { needs: ["pre_cache", "proxy"] });
+add("cache.shadow_keeps_origin", "should", "content-shadow", "Shadow leaves the origin's cache header alone before a cache it runs ahead of", step(get("gptbot"), served({ "cache-control": "public, max-age=600", "cdn-cache-control": "public, max-age=600", "surrogate-control": "max-age=600" })), { needs: ["pre_cache", "proxy"] });
 add("cache.real_exempt_then_agent", "must", "content-enforce", "A real cache holding a reader's copy still answers an agent with a 402", [
   step(get("chrome", "/paid/cached"), { status: 200, origin: true }),
   step(get("chrome", "/paid/cached"), { status: 200, origin: true }),
