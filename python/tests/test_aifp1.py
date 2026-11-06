@@ -745,6 +745,37 @@ def test_the_ledger_persists_owner_only_and_survives_a_restart(tmp_path):
         a.SpendLedger(1.0, 1.0, path).check(0.4)
 
 
+# ── AIFP-Agent-Id: a gate binds a receipt to the account that paid ──
+
+
+class AgentIdRecorder(Server):
+    """The same fake, noting which id each GET to the merchant named."""
+
+    def __init__(self, dep):
+        super().__init__(dep)
+        self.named = []
+
+    def get(self, url, headers=None, **kw):
+        if url.startswith(SHOP):
+            self.named.append((headers or {}).get("AIFP-Agent-Id"))
+        return super().get(url, headers=headers, **kw)
+
+
+def test_a_fetch_with_no_agent_id_names_the_account_that_paid_on_every_get(pinned):
+    h = Harness(pinned)
+    h.server = AgentIdRecorder(pinned)
+    assert h.fetch().status_code == 200
+    assert len(h.server.named) == 2 and set(h.server.named) == {PAYER.address}
+
+
+def test_an_explicit_agent_id_is_kept(pinned):
+    h = Harness(pinned)
+    h.server = AgentIdRecorder(pinned)
+    other = "0x" + "b" * 40
+    assert h.fetch(agent_id=other).status_code == 200
+    assert set(h.server.named) == {other}
+
+
 # ── AIFP-Agent-Framework names the AI client on every request of the flow ──
 
 
