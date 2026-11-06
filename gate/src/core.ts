@@ -184,6 +184,8 @@ export const HEADER_QUOTA_REMAINING = "AIFP-Quota-Remaining";
 export const HEADER_MODE = "AIFP-Mode";
 /** On a shadow response the gate would have refused: the status it decided on. */
 export const HEADER_SHADOW_STATUS = "AIFP-Shadow-Status";
+/** On an answer that depends on who asked: a shared cache keyed by URL must not hand it to the next caller. */
+export const NO_STORE = "private, no-store, max-age=0";
 
 export function createGate(options: GateOptions): (req: GateRequest) => Promise<GateResult> {
   const merchantId = options.merchantId;
@@ -260,7 +262,9 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // to verified only once the receipt checks out in step 4 — a User-Agent
     // or an AIFP-Agent-Id header is a claim, and scanners make that claim.
     let who: AgentIdentity = classifyAgent(req);
-    const note = (e: GateEvent) => emit({ ...e, ...who });
+    // Set when `resource` is the raw request path: the ingest refuses it, and it is not ours to send.
+    let unregistered = false;
+    const note = (e: GateEvent) => emit({ ...e, ...who, ...(unregistered ? { unregistered: true } : {}) });
 
     const agentHeader = req.header("AIFP-Agent-Id") ?? null;
 
@@ -275,7 +279,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       return {
         ok: true,
         status: 200,
-        headers: { [HEADER_MODE]: "shadow", [HEADER_SHADOW_STATUS]: String(r.status) },
+        headers: { [HEADER_MODE]: "shadow", [HEADER_SHADOW_STATUS]: String(r.status), "Cache-Control": NO_STORE },
         aifp: {
           agent: agentHeader,
           receipt_id: "",
@@ -300,7 +304,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       return refuse(resource, weight, {
         ok: false,
         status: 402,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Cache-Control": NO_STORE },
         body: buildChallenge({
           merchantId,
           resource,
@@ -321,104 +325,20 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       return refuse(resource, weight, {
         ok: false,
         status: 403,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Cache-Control": NO_STORE },
         body: { error: "AIFP-403", detail },
       });
     };
 
-    // ── 1. What is this path, and what does it cost? ──────────────────────
-    let matched: AifpResource | null = null;
-    if (options.registry) {
-      // "Never loaded" is not "no endpoints". Until the first successful fetch
-      // we do not know what anything on this API costs, and falling through to
-      // the mount default silently meters a premium route at 1 unit — a tenth
-      // of its price — for as long as the control plane stays unreachable.
-      // Refusing to price is the honest answer; a partner who prefers
-      // availability over correct billing can opt in explicitly.
-      if (options.registry.neverLoaded && options.registryUnavailable !== "mount-default") {
-        note({
-          kind: "pricing_unavailable",
-          resource: path,
-          weight: 0,
-          detail: "registry never loaded",
-        });
-        return refuse(path, 0, {
-          ok: false,
-          status: 503,
-          headers: { "Content-Type": "application/json", "Retry-After": "30" },
-          body: {
-            error: "AIFP-503-PRICING",
-            detail: "pricing unavailable — this gate has not been able to reach the AiFinPay control plane yet",
-          },
-        });
-      }
-      matched = options.registry.match(path);
-    }
-
-    const resource = matched ? matched.route_pattern : (options.resource ?? path);
-    if (matched || options.resource) resolved?.(resource);
-    // One source of truth for "what does this call cost": the tier the weight
-    // is derived from is the tier the 402 advertises.
-    const effectiveTier: Tier = matched ? ((matched.tier as Tier) ?? tier) : tier;
-    const weight = matched ? (matched.unit_weight ?? weightForTier(effectiveTier)) : mountWeight;
-
-    // The scope test runs against the request PATH, not the route pattern —
-    // an agent's receipt names a real path, and "/api/lookup/*" is not one.
-    // In static-mount mode the declared resource is the path the merchant
-    // published, which is what the receipt was quoted for, so it wins over
-    // req.path (which a mounted router may have already stripped a prefix off).
-    const scopePath = options.registry ? path : (options.resource ?? path);
-
-    // ── 2. Explicitly free resources ──────────────────────────────────────
-    // paywall_enabled:false is the merchant saying "serve this to anyone". No
-    // metering and no free-allowance spend: a free route must not quietly eat
-    // an agent's prepaid units either.
-    if (matched && matched.paywall_enabled === false) {
-      if (
-        options.allow &&
-        !(await safeAllow(options.allow, {
-          path,
-          resource,
-          weight,
-          agent: agentHeader,
-          receipt_id: null,
-        }))
-      ) {
-        return forbid(resource, weight, "blocked by merchant policy");
-      }
-      note({ kind: "serve", resource, weight, agent: agentHeader });
-      return {
-        ok: true,
-        status: 200,
-        headers: { "AIFP-Paywall": "off" },
-        aifp: {
-          agent: agentHeader,
-          receipt_id: "",
-          resource,
-          weight: 0,
-          unit_quota: 0,
-          used: 0,
-          remaining: 0,
-          mode: "open",
-        },
-      };
-    }
-
-    // ── 2b. WHO pays — the content-site exemption ─────────────────────────
-    // Evaluated BEFORE the missing-receipt challenge, or a human reader would
-    // meet the 402 this option exists to spare them from — and AFTER the
-    // merchant-policy paywall_enabled check above, which is a stronger, per-
-    // route statement. A predicate that throws charges: of the two wrong
-    // answers, a 402 to one human is visible; a crawler served free is silent
-    // and forever.
-    //
-    // knownAiAgent returns true for anything carrying AIFP-Receipt or
-    // AIFP-Agent-Id, so a PAYING agent is never exempted into unmetered
-    // service by a browser-looking User-Agent.
     // Served free, unmetered: the merchant's `allow` veto still has the last
     // word. Shared by the shouldCharge exemption and an operator rule that
     // says allow — the one difference is the `detail` naming the rule.
-    const serveExempt = async (detail?: string, agent: string | null = agentHeader): Promise<GateResult> => {
+    const serveExempt = async (
+      resource: string,
+      weight: number,
+      detail?: string,
+      agent: string | null = agentHeader
+    ): Promise<GateResult> => {
       if (
         options.allow &&
         !(await safeAllow(options.allow, {
@@ -449,6 +369,110 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       };
     };
 
+    // A predicate that throws charges: see GateOptions.shouldCharge.
+    const exempted = async (): Promise<boolean> => {
+      if (!options.shouldCharge) return false;
+      try {
+        return !(await options.shouldCharge(req));
+      } catch {
+        return false;
+      }
+    };
+
+    // ── 1. What is this path, and what does it cost? ──────────────────────
+    let matched: AifpResource | null = null;
+    if (options.registry) {
+      // "Never loaded" is not "no endpoints". Until the first successful fetch
+      // we do not know what anything on this API costs, and falling through to
+      // the mount default silently meters a premium route at 1 unit — a tenth
+      // of its price — for as long as the control plane stays unreachable.
+      // Refusing to price is the honest answer; a partner who prefers
+      // availability over correct billing can opt in explicitly.
+      if (options.registry.neverLoaded && options.registryUnavailable !== "mount-default") {
+        unregistered = true;
+        // A reader is free whatever the price is, so an unreachable control plane stays the agents' problem.
+        if (await exempted()) return serveExempt(path, 0);
+        note({
+          kind: "pricing_unavailable",
+          resource: path,
+          weight: 0,
+          detail: "registry never loaded",
+        });
+        return refuse(path, 0, {
+          ok: false,
+          status: 503,
+          headers: { "Content-Type": "application/json", "Cache-Control": NO_STORE, "Retry-After": "30" },
+          body: {
+            error: "AIFP-503-PRICING",
+            detail: "pricing unavailable — this gate has not been able to reach the AiFinPay control plane yet",
+          },
+        });
+      }
+      matched = options.registry.match(path);
+    }
+
+    const resource = matched ? matched.route_pattern : (options.resource ?? path);
+    unregistered = !matched && !options.resource;
+    if (matched || options.resource) resolved?.(resource);
+    // One source of truth for "what does this call cost": the tier the weight
+    // is derived from is the tier the 402 advertises.
+    const effectiveTier: Tier = matched ? ((matched.tier as Tier) ?? tier) : tier;
+    const weight = matched ? (matched.unit_weight ?? weightForTier(effectiveTier)) : mountWeight;
+
+    // The scope test runs against the request PATH, not the route pattern —
+    // an agent's receipt names a real path, and "/api/lookup/*" is not one.
+    // In static-mount mode the declared resource is the path the merchant
+    // published, which is what the receipt was quoted for, so it wins over
+    // req.path (which a mounted router may have already stripped a prefix off).
+    const scopePath = options.registry ? path : (options.resource ?? path);
+
+    // ── 2. Explicitly free resources ──────────────────────────────────────
+    // paywall_enabled:false is the merchant saying "serve this to anyone". No
+    // metering and no free-allowance spend: a free route must not quietly eat
+    // an agent's prepaid units either.
+    if (matched && matched.paywall_enabled === false) {
+      if (
+        options.allow &&
+        !(await safeAllow(options.allow, {
+          path,
+          resource,
+          weight,
+          agent: agentHeader,
+          receipt_id: null,
+        }))
+      ) {
+        return forbid(resource, weight, "blocked by merchant policy");
+      }
+      // Not a paid admission: the ingest counts a plain serve as one, and a reader is never reported.
+      note({ kind: "serve", resource, weight, agent: agentHeader, exempt: true });
+      return {
+        ok: true,
+        status: 200,
+        headers: { "AIFP-Paywall": "off" },
+        aifp: {
+          agent: agentHeader,
+          receipt_id: "",
+          resource,
+          weight: 0,
+          unit_quota: 0,
+          used: 0,
+          remaining: 0,
+          mode: "open",
+        },
+      };
+    }
+
+    // ── 2b. WHO pays — the content-site exemption ─────────────────────────
+    // Evaluated BEFORE the missing-receipt challenge, or a human reader would
+    // meet the 402 this option exists to spare them from — and AFTER the
+    // merchant-policy paywall_enabled check above, which is a stronger, per-
+    // route statement. A predicate that throws charges: of the two wrong
+    // answers, a 402 to one human is visible; a crawler served free is silent
+    // and forever.
+    //
+    // knownAiAgent returns true for anything carrying AIFP-Receipt or
+    // AIFP-Agent-Id, so a PAYING agent is never exempted into unmetered
+    // service by a browser-looking User-Agent.
     // ── 2a. The merchant's operator rules ─────────────────────────────────
     // allow / charge / block per operator, as saved on the dashboard. Decided
     // on what the request CLAIMS to be — a User-Agent, an AIFP-Agent-Id — with
@@ -464,7 +488,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     const operatorPending = claimed.action !== onceVerified.action || claimed.matched !== onceVerified.matched;
     const applyOperator = (d: OperatorDecision, agent?: string | null): Promise<GateResult> | GateResult | null => {
       if (d.action === "block") return forbid(resource, weight, "blocked by merchant policy (operator rule)", d.detail);
-      if (d.action === "allow") return serveExempt(d.detail, agent);
+      if (d.action === "allow") return serveExempt(resource, weight, d.detail, agent);
       return null;
     };
     if (!operatorPending) {
@@ -472,15 +496,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       if (decided) return decided;
     }
 
-    if (options.shouldCharge) {
-      let charge = true;
-      try {
-        charge = await options.shouldCharge(req);
-      } catch {
-        charge = true;
-      }
-      if (!charge) return serveExempt();
-    }
+    if (await exempted()) return serveExempt(resource, weight);
 
     // ── 3. No receipt → the 402 that teaches an agent how to pay ──────────
     const token = req.header("AIFP-Receipt");
@@ -505,7 +521,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
         return refuse(resource, weight, {
           ok: false,
           status: 503,
-          headers: { "Content-Type": "application/json", "Retry-After": "30" },
+          headers: { "Content-Type": "application/json", "Cache-Control": NO_STORE, "Retry-After": "30" },
           body: {
             error: "AIFP-503-METER",
             detail: "receipt verification is temporarily unavailable — retry shortly",
@@ -596,6 +612,10 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // batch spendable again). The receipt lives until the verifier stops
     // accepting it — exp plus the clock tolerance — so that is the TTL.
     const ttlMs = Math.max(1000, (payload.exp + clockToleranceSec) * 1000 - Date.now());
+    // A non-numeric quota compares false with everything, so the batch would never run out.
+    if (!Number.isFinite(limit) || limit <= 0) {
+      return forbid(resource, weight, "receipt carries no usable unit_quota");
+    }
 
     // A single-use receipt has no counter headroom to protect it, so replay is
     // checked explicitly. A multi-use batch does not need it: replaying it just
@@ -659,7 +679,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     return {
       ok: true,
       status: 200,
-      headers: { [HEADER_QUOTA_REMAINING]: String(limit - used) },
+      headers: { [HEADER_QUOTA_REMAINING]: String(limit - used), "Cache-Control": NO_STORE },
       aifp,
     };
 
@@ -672,7 +692,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
         return {
           ok: true,
           status: 200,
-          headers: { "AIFP-Meter": "degraded" },
+          headers: { "AIFP-Meter": "degraded", "Cache-Control": NO_STORE },
           aifp: {
             agent: payload.sub ?? null,
             receipt_id: payload.receipt_id,
@@ -688,7 +708,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       return refuse(resource, weight, {
         ok: false,
         status: 503,
-        headers: { "Content-Type": "application/json", "Retry-After": "5" },
+        headers: { "Content-Type": "application/json", "Cache-Control": NO_STORE, "Retry-After": "5" },
         body: { error: "AIFP-503-METER", detail: "quota store unavailable — retry shortly" },
       });
     }

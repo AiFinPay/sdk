@@ -1,3 +1,18 @@
+## 0.6.1 — differences the conformance vectors found
+
+- Port of `@aifinpay/gate` 0.9.1: a 402, 403 or 503, a paid response and a
+  shadow would-be refusal carry `Cache-Control: private, no-store, max-age=0`,
+  and a handler's own `Cache-Control` does not make a paid response storable.
+  Exported as `NO_STORE`. Parity fixture regenerated.
+- `AifpGateWSGI` sends no body on a HEAD refusal. A server that writes what it
+  is given (waitress) otherwise broke the connection.
+- A prefix receipt covers the section page: `/paid/` opens `/paid`, which is
+  what the SDKs buy for a `/paid/*` 402.
+- A route with `paywall=False` reports an exempt serve, not a plain one: the
+  ingest counted it as a paid admission, and a reader on it was reported.
+- A mount with neither `resource` nor `routes` marks its events `unregistered`,
+  and the reporter drops them: the raw path is private.
+
 ## 0.6.0 — $0.02 minimum batch
 
 - Port of `@aifinpay/gate` 0.9.0: `min_requests` 40 / 10 / 4 (was

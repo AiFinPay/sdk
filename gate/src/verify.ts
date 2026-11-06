@@ -59,6 +59,8 @@ export function createVerifier(opts: VerifierOptions): (token: string) => Promis
         audience: opts.audience,
         algorithms: ["EdDSA"],
         clockTolerance: opts.clockToleranceSec,
+        // jose accepts a token with no exp, and the meter needs one for the counter's TTL.
+        requiredClaims: ["exp"],
       });
       return { ok: true, payload: payload as unknown as AifpReceiptClaims };
     } catch (e) {
@@ -68,12 +70,17 @@ export function createVerifier(opts: VerifierOptions): (token: string) => Promis
       // We could not REACH the key set, as opposed to reaching it and finding
       // the token bad. The two get different HTTP answers because only one of
       // them is the agent's fault.
-      if (code === "ERR_JWKS_TIMEOUT" || (!code && isNetworkish(msg))) {
+      if (code === "ERR_JWKS_TIMEOUT" || isKeySetAnswer(code, msg) || (!code && isNetworkish(msg))) {
         return { ok: false, kind: "jwks_unavailable", reason: msg };
       }
       return { ok: false, kind: "invalid", reason: msg };
     }
   };
+}
+
+/** The key set answered with an error or with garbage: an outage, as a 503 from a CDN in front of it usually is. */
+function isKeySetAnswer(code: string | undefined, msg: string): boolean {
+  return code === "ERR_JWKS_INVALID" || (code === "ERR_JOSE_GENERIC" && /JSON Web Key Set/.test(msg));
 }
 
 /** A fetch failure arrives as a plain TypeError with no jose code, so the

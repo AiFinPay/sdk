@@ -465,6 +465,15 @@ and understand that you are trading exact metering for generosity.
 
 ---
 
+### Shared caches
+
+A 402, a 403, a 503, a paid response and a shadow would-be refusal carry
+`Cache-Control: private, no-store, max-age=0`. `aifpGate` keeps it on a paid
+response whose handler sets its own. An exempt reader's page keeps whatever your
+app sets, so a CDN in front of this process can still answer an agent with a
+copy it stored for a reader, and the gate never runs. Keep protected paths out
+of that cache, or run the decision in front of it.
+
 ## 5. What this package does **not** do
 
 - **It does not hold money or keys.** No custody, no funds movement. Agents

@@ -1,5 +1,33 @@
 # Changelog
 
+## @aifinpay/gate 0.9.1 — differences the conformance vectors found
+
+- A 402, 403 or 503, a paid response and a shadow would-be refusal carry
+  `Cache-Control: private, no-store, max-age=0`. A shared cache keyed by URL
+  could otherwise hand a paid page to the next caller, or a 402 to the agent
+  that just paid. `aifpGate` keeps it on a paid response whose handler sets its
+  own. Exported as `NO_STORE`.
+- A key set that answers with an HTTP error is an outage: a 503 with
+  `Retry-After`, not a 403 telling a paying agent its receipt is bad.
+- A crawler on a path no registered pattern covers no longer stops the reporter
+  for the life of the process: the raw path reached the ingest, the ingest
+  refused the batch, and a refused batch is permanent. Such an event carries
+  `unregistered: true` for a local `onEvent` and is not sent.
+- `aifpGate` mounted at a prefix (`app.use("/articles", …)`, README 1a) matched
+  the registry against the path with the prefix stripped, so a premium section
+  was quoted as the mount default on a resource that does not exist.
+- While the registry has never loaded, a reader `shouldCharge` exempts is served
+  instead of answered 503.
+- A receipt with no `exp`, or a `unit_quota` that is not a positive number, is
+  refused. Both needed the issuer to sign one.
+- A prefix receipt covers the section page: `/paid/` opens `/paid`. The SDKs buy
+  that receipt for a `/paid/*` 402, and that 402 is what `/paid` answers, so an
+  agent paid and got a 403.
+- A route with the paywall off reports an exempt serve, not a plain one: the
+  ingest counted it as a paid admission, and a reader on it was reported.
+- `aifpGate` treats `/x/` as `/x`, as Express does: a trailing slash priced a
+  registered page at the mount default.
+
 ## @aifinpay/gate 0.9.0 — $0.02 minimum batch
 
 - The 402 advertises a $0.02 minimum batch: `min_requests` 40 standard, 10

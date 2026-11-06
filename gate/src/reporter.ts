@@ -389,6 +389,8 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
     onEvent(event) {
       if (!event || typeof event !== "object") return;
       if (event.kind !== "402" && event.kind !== "serve") return;
+      // A raw path is private, and one refused batch would stop this reporter for good.
+      if (event.unregistered) return;
       const identity = legacyOnly ? null : identityOf(event);
       const exempt = event.exempt === true;
       if (exempt && (event.kind !== "serve" || !identity || !FORWARDED_EXEMPT_CLASSES.has(identity.ua_class))) return;

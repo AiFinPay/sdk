@@ -21,6 +21,7 @@ import {
   knownAiAgent,
   MemoryStore,
 } from "../src/index.js";
+import { NO_STORE } from "../src/index.js";
 import type { GateEvent, GateOptions, GateResult, GateStore } from "../src/index.js";
 import { ISSUER, MERCHANT, issuer, req, signReceipt } from "./helpers.js";
 
@@ -51,15 +52,15 @@ describe("a config without `mode` is enforce — nothing flips a live paywall", 
       const noReceipt = await gate(req("/api/search", { "User-Agent": GPTBOT_UA }));
       expect(noReceipt.status).toBe(402);
       expect(noReceipt.ok).toBe(false);
-      expect(noReceipt.headers).toEqual({ "Content-Type": "application/json" });
+      expect(noReceipt.headers).toEqual({ "Content-Type": "application/json", "Cache-Control": NO_STORE });
 
       const bad = await gate(req("/api/search", { "AIFP-Receipt": await iss.sign({ resource: "/elsewhere" }) }));
       expect(bad.status).toBe(403);
-      expect(bad.headers).toEqual({ "Content-Type": "application/json" });
+      expect(bad.headers).toEqual({ "Content-Type": "application/json", "Cache-Control": NO_STORE });
 
       const paid = await gate(req("/api/search", { "AIFP-Receipt": await iss.sign({ unit_quota: 5 }) }));
       expect(paid.status).toBe(200);
-      expect(Object.keys(paid.headers)).toEqual([HEADER_QUOTA_REMAINING]);
+      expect(Object.keys(paid.headers)).toEqual([HEADER_QUOTA_REMAINING, "Cache-Control"]);
       expect(events.map((e) => e.kind)).toEqual(["402", "403", "serve"]);
     }
   });
@@ -77,7 +78,7 @@ describe("shadow never refuses", () => {
     const r = await gate(req("/api/search", { "User-Agent": GPTBOT_UA }));
     expect(r.ok).toBe(true);
     expect(r.status).toBe(200);
-    expect(r.headers).toEqual({ [HEADER_MODE]: "shadow", [HEADER_SHADOW_STATUS]: "402" });
+    expect(r.headers).toEqual({ [HEADER_MODE]: "shadow", [HEADER_SHADOW_STATUS]: "402", "Cache-Control": NO_STORE });
     if (!r.ok) throw new Error("unreachable");
     expect(r.aifp).toEqual({
       agent: null,
@@ -135,7 +136,7 @@ describe("shadow never refuses", () => {
   it("serves what enforce would serve exactly as enforce does, plus the mode header", async () => {
     const { gate, iss } = await gateWith({ mode: "shadow", shouldCharge: knownAiAgent });
     const paid = await gate(req("/api/search", { "AIFP-Receipt": await iss.sign({ unit_quota: 5 }) }));
-    expect(paid.headers).toEqual({ [HEADER_QUOTA_REMAINING]: "4", [HEADER_MODE]: "shadow" });
+    expect(paid.headers).toEqual({ [HEADER_QUOTA_REMAINING]: "4", "Cache-Control": NO_STORE, [HEADER_MODE]: "shadow" });
     expect(paid.ok && paid.aifp).toMatchObject({ mode: "paid", used: 1, remaining: 4 });
 
     const human = await gate(req("/api/search", { "User-Agent": BROWSER_UA }));

@@ -89,7 +89,7 @@ def test_charge_is_the_existing_402_path():
 def test_block_answers_403_with_the_aifp_403_body_and_a_403_event():
     gt, events = recording(operator_policy=RULES, should_charge=g.known_ai_agent)
     result, seen = run(gt, events, **{"User-Agent": CLAUDEBOT_UA})
-    assert (result["ok"], result["status"], result["headers"]) == (False, 403, {"Content-Type": "application/json"})
+    assert (result["ok"], result["status"], result["headers"]) == (False, 403, {"Content-Type": "application/json", "Cache-Control": g.NO_STORE})
     assert result["body"] == {"error": "AIFP-403", "detail": "blocked by merchant policy (operator rule)"}
     assert seen == [{"kind": "403", "resource": "/paid", "weight": 1,
                      "detail": "operator policy: block (operator=anthropic)",

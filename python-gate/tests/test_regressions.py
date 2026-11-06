@@ -149,3 +149,110 @@ def test_a_single_use_receipt_refused_for_weight_stays_usable_for_a_call_that_fi
     assert gt.decide(req(tok, path="/api/premium")).status == 402
     assert gt.decide(req(tok, path="/api/a")).ok
     assert gt.decide(req(tok, path="/api/a")).status == 403
+
+
+def test_wsgi_head_refusal_has_no_body():
+    gate = g.Gate("mrch_0123456789abcdef", routes=[g.Route("/paid/*")], jwks={"keys": []}, should_charge=g.known_ai_agent)
+    wsgi = g.AifpGateWSGI(lambda environ, start_response: [b"page"], gate)
+    environ = {"REQUEST_METHOD": "HEAD", "PATH_INFO": "/paid/a", "HTTP_USER_AGENT": "GPTBot/1.0"}
+    seen = {}
+    body = wsgi(environ, lambda status, headers, exc_info=None: seen.update(status=status, headers=dict(headers)))
+    assert seen["status"].startswith("402")
+    assert b"".join(body) == b""
+    assert seen["headers"]["Cache-Control"] == g.NO_STORE
+
+
+def _paid_gate():
+    return gate(routes=[g.Route("/paid")])
+
+
+def test_wsgi_handler_cache_control_cannot_make_a_paid_response_storable():
+    def app(environ, start_response):
+        start_response("200 OK", [("Cache-Control", "public, max-age=600"), ("X-Own", "1")])
+        return [b"page"]
+
+    wsgi = g.AifpGateWSGI(app, _paid_gate())
+    environ = {"REQUEST_METHOD": "GET", "PATH_INFO": "/paid", "HTTP_AIFP_RECEIPT": token()}
+    seen = {}
+    list(wsgi(environ, lambda status, headers, exc_info=None: seen.update(status=status, headers=list(headers))))
+    assert seen["status"].startswith("200")
+    assert [v for k, v in seen["headers"] if k.lower() == "cache-control"] == [g.NO_STORE]
+    assert ("X-Own", "1") in seen["headers"]
+
+
+def test_asgi_handler_cache_control_cannot_make_a_paid_response_storable():
+    import asyncio
+
+    async def app(scope, receive, send):
+        await send({"type": "http.response.start", "status": 200, "headers": [(b"cache-control", b"public, max-age=600")]})
+        await send({"type": "http.response.body", "body": b"page"})
+
+    asgi = g.AifpGateMiddleware(app, gate=_paid_gate())
+    scope = {"type": "http", "method": "GET", "path": "/paid", "headers": [(b"aifp-receipt", token().encode())]}
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+
+    async def receive():
+        return {"type": "http.request", "body": b""}
+
+    asyncio.run(asgi(scope, receive, send))
+    assert [v for k, v in sent[0]["headers"] if k == b"cache-control"] == [g.NO_STORE.encode()]
+
+
+def test_a_prefix_receipt_opens_the_section_page():
+    gated = gate(routes=[g.Route("/paid/*")])
+    receipt = token(resource="/paid/", scope="prefix", unit_quota=3)
+    assert gated.decide(req(receipt, "/paid")).status == 200
+    assert gated.decide(req(receipt, "/paid/")).status == 200
+    assert not g.scope_covers("prefix", "/paid/", "/paid-internal")
+
+
+def test_an_open_route_is_not_reported_as_a_paid_admission():
+    events = []
+    gated = gate(routes=[g.Route("/open/*", paywall=False)], on_event=events.append)
+    assert gated.decide(req(path="/open/x")).aifp["mode"] == "open"
+    assert [(e["kind"], e.get("exempt")) for e in events] == [("serve", True)]
+
+
+def test_a_mount_with_no_resource_does_not_report_the_raw_path():
+    events = []
+    reporter = g.GateReporter(merchant_id="mrch_0123456789abcdef", merchant_secret="test-secret")
+    gated = gate(resource=None, on_event=lambda e: (events.append(e), reporter.on_event(e)))
+    assert gated.decide(req(path="/private/customer-42")).status == 402
+    assert events[0]["unregistered"] is True
+    assert reporter.stats["queued"] == 0
+    reporter.close()
+
+
+def test_wsgi_handler_cache_control_wins_on_a_shadow_refusal():
+    def app(environ, start_response):
+        start_response("200 OK", [("Cache-Control", "public, max-age=600")])
+        return [b"page"]
+
+    wsgi = g.AifpGateWSGI(app, gate(routes=[g.Route("/paid")], mode="shadow"))
+    seen = {}
+    list(wsgi({"REQUEST_METHOD": "GET", "PATH_INFO": "/paid"}, lambda status, headers, exc_info=None: seen.update(headers=list(headers))))
+    assert [v for k, v in seen["headers"] if k.lower() == "cache-control"] == ["public, max-age=600"]
+    assert ("AIFP-Shadow-Status", "402") in seen["headers"]
+
+
+def test_asgi_handler_cache_control_wins_on_a_shadow_refusal():
+    import asyncio
+
+    async def app(scope, receive, send):
+        await send({"type": "http.response.start", "status": 200, "headers": [(b"cache-control", b"public, max-age=600")]})
+        await send({"type": "http.response.body", "body": b"page"})
+
+    asgi = g.AifpGateMiddleware(app, gate=gate(routes=[g.Route("/paid")], mode="shadow"))
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+
+    async def receive():
+        return {"type": "http.request", "body": b""}
+
+    asyncio.run(asgi({"type": "http", "method": "GET", "path": "/paid", "headers": []}, receive, send))
+    assert [v for k, v in sent[0]["headers"] if k == b"cache-control"] == [b"public, max-age=600"]
