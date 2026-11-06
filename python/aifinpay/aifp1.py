@@ -1510,6 +1510,8 @@ def aifp1_fetch(
     if not url.startswith("https://") or _origin(url) not in allowed_origins:
         raise Aifp1QuoteError("the URL must use an owner-approved exact HTTPS origin")
     site = _gateway_site(url)
+    # A receipt is bound to the account that paid, and a gate refuses it when that account goes unnamed.
+    agent_id = agent_id or account.address
     # Every request to the merchant says who is asking, first and paid alike —
     # what Node's aifp1Fetch does with AIFP-Agent-Id. A content site's gate
     # (gate/src/agents.ts knownAiAgent) decides from exactly these headers

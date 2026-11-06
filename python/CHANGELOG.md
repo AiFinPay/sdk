@@ -1,3 +1,10 @@
+## 2.11.1 — `aifp1_fetch` names the account that paid
+
+- `aifp1_fetch` without `agent_id` sends `AIFP-Agent-Id` with the account's address,
+  as `@aifinpay/agent` does. Without it a gate that binds a receipt to its payer
+  answered 403 after the agent had paid, and a content site's gate took the first
+  request for a human reader.
+
 ## 2.11.0 — the default batch is the minimum the 402 advertises
 
 - `fetch_paid` without `units` buys the smallest batch the 402 states:
