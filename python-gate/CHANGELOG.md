@@ -1,3 +1,8 @@
+## 0.7.0 — a path as an origin reads it, payer binding on, network mode, shadow spends nothing
+
+- Port of `@aifinpay/gate` 0.10.0, which lists what answers differently and the way back from each. Options: `case_sensitive`, `network_mode`, `require_agent_match` on by default. `inspect_path` exported. Parity fixture regenerated, with the path table added.
+- A route list no longer trusts the app's routing: `/PAID/a` and `/;x/paid/a` are `/paid/a`, on an app that resolves them or not.
+
 ## 0.6.1 — differences the conformance vectors found
 
 - Port of `@aifinpay/gate` 0.9.1: a 402, 403 or 503, a paid response and a

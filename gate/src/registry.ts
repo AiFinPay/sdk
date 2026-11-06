@@ -1,7 +1,7 @@
 import { matchResource } from "./match.js";
 import type { AifpMerchant } from "./management.js";
 import { normalizeOperatorPolicy } from "./operator-policy.js";
-import type { AifpResource, OperatorPolicy, Tier } from "./types.js";
+import type { AifpResource, NetworkMode, OperatorPolicy, Tier } from "./types.js";
 
 export interface ResourceRegistryOptions {
   merchant: AifpMerchant;
@@ -45,6 +45,8 @@ export class ResourceRegistry {
    *  leaves the gate deciding as it always has — a rule that is not applied
    *  yet costs the merchant nothing it was not already paying. */
   private policy: OperatorPolicy | null = null;
+  /** Which network the site charges on, as last read from the same view. */
+  private network: NetworkMode | null = null;
 
   constructor(opts: ResourceRegistryOptions) {
     this.merchant = opts.merchant;
@@ -72,7 +74,9 @@ export class ResourceRegistry {
       // cadence so a rule saved on the dashboard reaches the gate as fast as
       // a price change does. Only after the resources came back: the two
       // share a transport and a key, and one failure is one failure.
-      this.policy = normalizeOperatorPolicy(await this.merchant.merchant());
+      const view = await this.merchant.merchant();
+      this.policy = normalizeOperatorPolicy(view);
+      this.network = view?.network_mode === "test" || view?.network_mode === "live" ? view.network_mode : null;
     } catch (err) {
       // Keep the last good snapshot (see the class comment) but never swallow
       // the reason. A revoked API key raises here exactly like a network blip,
@@ -96,8 +100,13 @@ export class ResourceRegistry {
     return this.resources;
   }
 
-  match(path: string): AifpResource | null {
-    return matchResource(this.resources, path);
+  match(path: string, options?: { caseSensitive?: boolean }): AifpResource | null {
+    return matchResource(this.resources, path, options);
+  }
+
+  /** "live" or "test" as last read, or null before the first successful read. */
+  networkMode(): NetworkMode | null {
+    return this.network;
   }
 
   /** The merchant's operator rules (allow / charge / block per operator) as

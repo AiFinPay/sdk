@@ -61,25 +61,24 @@ def test_shadow_serves_a_would_be_402_and_hands_the_handler_the_refusal():
                        "operator": "openai", "ua_class": "ai_crawler", "verified": False}]
 
 
-def test_shadow_serves_a_would_be_403_and_503():
+def test_shadow_serves_a_would_be_403_and_never_reaches_the_store():
     gt, _ = recording(mode="shadow")
     forged = gt.decide(req(token(key=OTHER)))
     assert (forged.ok, forged.status, forged.headers[g.HEADER_SHADOW_STATUS]) == (True, 200, "403")
     assert forged.aifp["shadow"]["status"] == 403 and forged.aifp["shadow"]["error"] == "AIFP-403"
 
     broken, events = recording(mode="shadow", store=FailingStore())
-    down = broken.decide(req(token()))
-    assert (down.ok, down.status, down.headers) == (True, 200, {g.HEADER_MODE: "shadow", g.HEADER_SHADOW_STATUS: "503", "Cache-Control": g.NO_STORE})
-    assert down.aifp["shadow"] == {"status": 503, "error": "AIFP-503-METER",
-                                   "detail": "quota store unavailable — retry shortly", "weight": 1}
-    assert [e["kind"] for e in events] == ["meter_error"]
+    good = broken.decide(req(token()))
+    assert (good.ok, good.status, good.headers) == (True, 200, {g.HEADER_MODE: "shadow", "Cache-Control": g.NO_STORE})
+    assert [e["kind"] for e in events] == ["serve"]
 
 
-def test_shadow_serves_what_enforce_serves_exactly_as_enforce_does_plus_the_header():
+def test_shadow_spends_nothing_and_serves_a_reader_and_an_open_route_as_enforce_does():
     gt = gate(mode="shadow", should_charge=g.known_ai_agent)
     paid = gt.decide(req(token()))
-    assert paid.headers == {g.HEADER_QUOTA_REMAINING: "9", "Cache-Control": g.NO_STORE, g.HEADER_MODE: "shadow"}
-    assert paid.aifp["mode"] == "paid" and paid.aifp["remaining"] == 9
+    assert paid.headers == {"Cache-Control": g.NO_STORE, g.HEADER_MODE: "shadow"}
+    assert paid.aifp["mode"] == "shadow" and paid.aifp["remaining"] == 10 and paid.aifp["used"] == 0
+    assert "shadow" not in paid.aifp
     human = gt.decide(req(**{"User-Agent": BROWSER_UA}))
     assert human.headers == {"AIFP-Paywall": "exempt", g.HEADER_MODE: "shadow"} and human.aifp["mode"] == "exempt"
     free = gate(mode="shadow", routes=[g.Route("/free", paywall=False)]).decide(req(path="/free"))
@@ -107,17 +106,19 @@ def _script(mode):
     return events, results
 
 
-def test_shadow_and_enforce_emit_the_identical_event_stream():
+def test_shadow_and_enforce_emit_the_same_events_until_enforce_would_spend():
     enforce_events, enforce = _script("enforce")
     shadow_events, shadow = _script("shadow")
-    assert shadow_events == enforce_events
+    assert shadow_events[:7] == enforce_events[:7] and shadow_events[9] == enforce_events[9]
     assert [e["kind"] for e in shadow_events] == [
+        "402", "serve", "403", "403", "402", "serve", "serve", "serve", "serve", "402"]
+    assert [e["kind"] for e in enforce_events] == [
         "402", "serve", "403", "403", "402", "serve", "serve", "402", "meter_error", "402"]
     assert [r.status for r in enforce] == [402, 200, 403, 403, 402, 200, 200, 402, 503, 402]
     assert [r.status for r in shadow] == [200] * 10
     assert all(r.ok and r.headers[g.HEADER_MODE] == "shadow" for r in shadow)
     assert [r.headers.get(g.HEADER_SHADOW_STATUS) for r in shadow] == [
-        "402", None, "403", "403", "402", None, None, "402", "503", "402"]
+        "402", None, "403", "403", "402", None, None, None, None, "402"]
 
 
 def test_shadow_is_not_a_paid_admission_for_reporting_v2():

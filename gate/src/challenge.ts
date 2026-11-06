@@ -88,7 +88,7 @@ export function buildChallenge(args: {
       `POST ${api}/v1/quote {"merchant_id":"${merchantId}","resource":"${resource}","tier":"${tier}","scope":"${args.scope ?? "exact"}","requests":${minRequests},"payer":"<your wallet address>"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying`,
       "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
       `POST ${api}/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again`,
-      "retry this request with header: AIFP-Receipt: <receipt JWT>",
+      "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>",
     ],
     // Wallet creation does not imply an enabled payment executor. Keep the
     // current client capabilities in the linked skill, not a stale promise.

@@ -12,12 +12,19 @@ import type { AifpResource } from "./types.js";
  * what this costs" is "charge the mount's default", not "give it away". The
  * server-side test suite enforces the same rule on our side.
  */
-export function matchResource(resources: AifpResource[], path: string): AifpResource | null {
+export function matchResource(
+  resources: AifpResource[],
+  path: string,
+  { caseSensitive = false }: { caseSensitive?: boolean } = {}
+): AifpResource | null {
+  const asked = caseSensitive ? path : path.toLowerCase();
   let best: AifpResource | null = null;
   for (const r of resources) {
-    const pat = r.route_pattern;
-    if (!pat) continue;
-    const hit = pat.endsWith("/*") ? path === pat.slice(0, -2) || path.startsWith(pat.slice(0, -1)) : path === pat;
+    if (!r.route_pattern) continue;
+    const pat = caseSensitive ? r.route_pattern : r.route_pattern.toLowerCase();
+    const hit = pat.endsWith("/*")
+      ? asked === pat.slice(0, -2) || asked.startsWith(pat.slice(0, -1))
+      : asked === pat || asked === pat.replace(/\/+$/, "");
     if (!hit) continue;
     if (!best || pat.length > best.route_pattern.length) best = r;
   }

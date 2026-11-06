@@ -40,6 +40,9 @@ export interface SignArgs {
   receipt_id?: string | null;
   nonce?: string | null;
   typ_aifp?: string;
+  payer?: string;
+  chain?: string;
+  network_mode?: string;
   /** Seconds from now; negative for an already-expired receipt. */
   expiresInSec?: number;
 }
@@ -68,6 +71,9 @@ export async function signReceipt(privateKey: CryptoKey, a: SignArgs = {}): Prom
   if (a.typ_aifp !== undefined) body.typ_aifp = a.typ_aifp;
   if (a.unit_quota !== undefined) body.unit_quota = a.unit_quota;
   if (a.quota !== undefined) body.quota = a.quota;
+  if (a.payer !== undefined) body.payer = a.payer;
+  if (a.chain !== undefined) body.chain = a.chain;
+  if (a.network_mode !== undefined) body.network_mode = a.network_mode;
 
   return new jose.SignJWT(body)
     .setProtectedHeader({ alg: "EdDSA", typ: "JWT", kid: "test-key" })

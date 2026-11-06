@@ -111,11 +111,17 @@ and expires with the receipt.
 | `should_charge` | everyone pays | `known_ai_agent` for content sites: human browsers read free and never see a 402; self-identifying AI crawlers and anything speaking AIFP pay. A predicate that raises charges. |
 | `allow(ctx)` | — | Your veto after verification, before metering (a refused call costs nothing). Return `False` → 403. |
 | `on_store_error` | `"closed"` | `"open"` serves un-metered calls when the store is down (`AIFP-Meter: degraded`). |
-| `require_agent_match` | `False` | Refuse when `AIFP-Agent-Id` differs from the receipt subject (anti-accident, not anti-theft). |
+| `require_agent_match` | `True` | Refuse a caller whose `AIFP-Agent-Id` names someone other than the receipt's payer; a caller naming nobody is served (anti-accident, not anti-theft). |
+| `case_sensitive` | `False` | Paths and patterns are compared in lower case, as most origins serve them. `True` for an origin where `/A` and `/a` are two pages. |
+| `network_mode` | not checked | `"live"` or `"test"`, or a callable returning it: a testnet receipt does not open a live site or the reverse. Pass `network_mode` from `GET /v1/merchants/:id`. |
 | `replay` | `"auto"` | Single-use receipts get a one-shot nonce check. |
 | `jwks` | fetched | Pin the key set and skip network I/O (redeploy on key rotation). |
 | `on_event(e)` | — | `402` / `serve` / `403` / `meter_error` events for your metrics. |
 | `refund_on_error` (adapters) | `False` | Give the units back when your handler answers 5xx. |
+
+## How a path is read
+
+A route is matched against the path as an origin could resolve it: percent-decoded, `;params` dropped, empty segments and a trailing slash dropped, in lower case. So `/PAID/a` and `/%70aid/a` are `/paid/a`, whatever your framework does with them. A path with a dot segment means different things to different servers, so in enforce an agent gets a 400 `noncanonical_path` and a reader gets the page. In shadow a good receipt is verified and reported and nothing is spent.
 
 ## Shared caches
 
