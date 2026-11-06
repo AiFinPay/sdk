@@ -46,7 +46,8 @@ export async function startControlPlane({ fixtures, operators, uaClasses, jwk, d
   const record = () => ({
     merchant_id: merchant,
     name: "Conformance site",
-    network_mode: state.profile?.network_mode ?? "live",
+    // As the real API: the field is stored only for a test site.
+    ...(state.profile?.network_mode === "test" ? { network_mode: "test" } : {}),
     site_url: state.siteUrl,
     site_verified: state.profile?.site_verified ?? true,
     ...(state.profile?.operator_rules ? { operator_rules: state.profile.operator_rules, operator_default: state.profile.operator_default } : {}),

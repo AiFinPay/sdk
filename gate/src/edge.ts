@@ -9,7 +9,7 @@
 // unit; it only answers the questions an observe-only installation asks —
 // and builds the discovery `Link` header an HTML page carries.
 // ──────────────────────────────────────────────────────────────────────────
-export { inspectPath } from "./path.js";
+export { inspectPath, spelledAsPath } from "./path.js";
 export type { InspectedPath } from "./path.js";
 export {
   classifyAgent,

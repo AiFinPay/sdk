@@ -87,6 +87,7 @@ describe("no answer that depends on who asked can be stored by a shared cache", 
   for (const [label, inline] of [
     ["an object", { "Cache-Control": "public, max-age=600" }],
     ["an array of pairs", [["cache-control", "public, max-age=600"]]],
+    ["a flat array", ["Cache-Control", "public, max-age=600"]],
   ] as const) {
     it(`keeps it when a handler passes ${label} to writeHead`, async () => {
       const { jwks, sign } = await issuer();
@@ -103,6 +104,47 @@ describe("no answer that depends on who asked can be stored by a shared cache", 
         headers: { "AIFP-Receipt": await sign({ resource: "/page", unit_quota: 2 }) },
       });
       expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe(NO_STORE);
+    });
+  }
+
+  for (const [label, handler] of [
+    [
+      "writeHead",
+      (res: { writeHead: (s: number, h: unknown) => void }) =>
+        res.writeHead(200, { "CDN-Cache-Control": "max-age=600", "Surrogate-Control": "max-age=600" }),
+    ],
+    [
+      "a flat writeHead",
+      (res: { writeHead: (s: number, h: unknown) => void }) =>
+        res.writeHead(200, ["CDN-Cache-Control", "max-age=600", "X-Own", "1"]),
+    ],
+    [
+      "setHeader",
+      (res: { setHeader: (n: string, v: string) => void; writeHead: (s: number) => void }) => {
+        res.setHeader("CDN-Cache-Control", "max-age=600");
+        res.setHeader("Surrogate-Control", "max-age=600");
+        res.writeHead(200);
+      },
+    ],
+  ] as const) {
+    it(`drops a CDN's own cache header set through ${label}`, async () => {
+      const { jwks, sign } = await issuer();
+      const app = express();
+      app.use(
+        aifpGate({ merchantId: MERCHANT, resource: "/page", jwks, store: new MemoryStore() }),
+        (_req: unknown, res: { end: (b: string) => void }) => {
+          (handler as (r: unknown) => void)(res);
+          res.end("paid page");
+        }
+      );
+      const base = await listen(app);
+      const response = await fetch(`${base}/page`, {
+        headers: { "AIFP-Receipt": await sign({ resource: "/page", unit_quota: 2 }) },
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cdn-cache-control")).toBeNull();
+      expect(response.headers.get("surrogate-control")).toBeNull();
       expect(response.headers.get("cache-control")).toBe(NO_STORE);
     });
   }

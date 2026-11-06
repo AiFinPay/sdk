@@ -40,3 +40,15 @@ def inspect_path(raw_target: str, *, case_sensitive: bool = False) -> InspectedP
         out.append(segment)
     canonical = "/" + "/".join(out)
     return InspectedPath(canonical if case_sensitive else canonical.lower(), ambiguous)
+
+
+def spelled_as_path(resource: str, *, case_sensitive: bool = False) -> str:
+    """A pattern, a receipt or a mount names a resource as the merchant spelled
+    it: read it as a path is read, keeping a wildcard."""
+    if not resource.startswith("/"):
+        return resource
+    wild = resource.endswith("/*")
+    path = inspect_path(resource[:-2] if wild else resource, case_sensitive=case_sensitive).path
+    if not wild:
+        return path
+    return "/*" if path == "/" else f"{path}/*"

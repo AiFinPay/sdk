@@ -97,6 +97,8 @@ const scenarios = [
   { name: "mount spelled with a capital and a slash", opts: { resource: "/Paid/" }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({ resource: "/paid" }) } }] },
   { name: "no resource: the path as an origin reads it", opts: {}, reqs: [{ path: "/PAID/a/?x=1", headers: {} }, { path: "/%70aid;x=1/a", headers: {} }] },
   { name: "no resource: an ambiguous path", opts: {}, reqs: [{ path: "/x/../paid/a", headers: {} }] },
+  { name: "no resource: an encoded query mark does not end the path", opts: {}, reqs: [{ path: "/x%3F/../paid/a", headers: {} }, { path: "/x%23/../paid/a", headers: {} }] },
+  { name: "no resource: a receipt with an escape opens its page", opts: {}, reqs: [{ path: "/data/my%20report", headers: { "AIFP-Receipt": await t({ resource: "/data/my%20report" }) } }] },
   { name: "no resource: an ambiguous path in shadow", opts: { mode: "shadow" }, reqs: [{ path: "/x/../paid/a", headers: {} }] },
   { name: "no resource: an ambiguous path for a reader", opts: { shouldCharge: "known" }, reqs: [{ path: "/x/../paid/a", headers: { "User-Agent": "Mozilla/5.0 (Macintosh) Safari/605.1.15" } }] },
   // Operator policy: allow / charge / block per operator, the same decision
@@ -191,6 +193,8 @@ const fixture = {
   path_cases: ["/paid/a", "/PAID/A", "/paid/a/", "//paid//a", "/paid/a?x=/b", "/paid/a#f", "/%70aid/a", "/%2570aid/a", "/paid%2fa", "/paid\\a", "/paid/a;x=1", "/paid;x=1/a", "/;x/paid/a",
     "/paid/./a", "/x/../paid/a", "/x/..;/paid/a", "/.;/paid/a", "/paid/..;/../a", "/paid//../a", "/paid/%252e%252e/../a", "/paid/x\\..\\../../a", "/a%00b", "/a%E2%82%ACb", "/", "", "/..", "/."]
     .map((raw) => [raw, G.inspectPath(raw), G.inspectPath(raw, { caseSensitive: true })]),
+  spelled_cases: ["/Paid/*", "/*", "/report/", "/my%20report", "/%64ata/two", "/a;b=1/c", "/", "*", "/A/B/*"]
+    .map((raw) => [raw, G.spelledAsPath(raw), G.spelledAsPath(raw, { caseSensitive: true })]),
   scenarios: results,
 };
 

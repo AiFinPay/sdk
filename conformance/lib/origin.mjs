@@ -21,6 +21,8 @@ export function originAnswer({ marker, method, url, headers, body }) {
   const out = {
     "content-type": "text/html; charset=utf-8",
     "cache-control": "public, max-age=600",
+    "cdn-cache-control": "public, max-age=600",
+    "surrogate-control": "max-age=600",
     "x-origin-hit": "1",
     "x-origin-saw": Object.keys(headers).map((h) => h.toLowerCase()).join(","),
   };

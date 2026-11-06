@@ -41,3 +41,12 @@ export function inspectPath(
   const canonical = "/" + out.join("/");
   return { path: caseSensitive ? canonical : canonical.toLowerCase(), ambiguous };
 }
+
+/** A pattern, a receipt or a static mount names a resource as the merchant spelled it: read it as a path is read, keeping a wildcard. */
+export function spelledAsPath(resource: string, { caseSensitive = false }: { caseSensitive?: boolean } = {}): string {
+  if (!resource.startsWith("/")) return resource;
+  const wild = resource.endsWith("/*");
+  const { path } = inspectPath(wild ? resource.slice(0, -2) : resource, { caseSensitive });
+  if (!wild) return path;
+  return path === "/" ? "/*" : `${path}/*`;
+}

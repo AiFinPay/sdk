@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "reference": "@aifinpay/gate 0.10.0",
+ "reference": "@aifinpay/gate 0.10.1",
  "fixtures": {
   "merchant_id": "mrch_0123456789abcdef",
   "other_merchant_id": "mrch_fedcba9876543210",
@@ -2205,6 +2205,41 @@
    }
   },
   {
+   "id": "scope.encoded_resource",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A batch bought for an encoded spelling opens that page",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/my%20report",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       200,
+       301,
+       302,
+       307,
+       308,
+       404
+      ]
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/paid/my%20report"
+     }
+    }
+   }
+  },
+  {
    "id": "scope.other_path",
    "group": "scope",
    "level": "must",
@@ -3140,6 +3175,38 @@
      "claims": {}
     }
    }
+  },
+  {
+   "id": "cache.paid_at_cdn",
+   "group": "cache",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A paid response drops the headers a CDN reads before Cache-Control",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "cdn-cache-control": null,
+       "surrogate-control": null
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   },
+   "unless": "cannot_rewrite_origin_headers"
   },
   {
    "id": "cache.exempt",
@@ -5397,6 +5464,93 @@
      "request": {
       "method": "GET",
       "path": "/report?utm_source=x",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.encoded_query_mark",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An encoded question mark does not end the path",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/x%3F/../paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.encoded_hash",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An encoded hash does not end the path",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/x%23/../paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.dotdot_param_pop",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A dot-dot with a parameter does not move the price",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/..;/x",
       "ua": "gptbot"
      },
      "expect": {

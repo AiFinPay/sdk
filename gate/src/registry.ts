@@ -76,7 +76,9 @@ export class ResourceRegistry {
       // share a transport and a key, and one failure is one failure.
       const view = await this.merchant.merchant();
       this.policy = normalizeOperatorPolicy(view);
-      this.network = view?.network_mode === "test" || view?.network_mode === "live" ? view.network_mode : null;
+      // Absent is live: the control plane stores the field only for a test site.
+      const network = view?.network_mode ?? "live";
+      this.network = network === "test" || network === "live" ? network : null;
     } catch (err) {
       // Keep the last good snapshot (see the class comment) but never swallow
       // the reason. A revoked API key raises here exactly like a network blip,

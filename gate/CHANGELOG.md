@@ -1,5 +1,27 @@
 # Changelog
 
+## @aifinpay/gate 0.10.1 — what an independent review of 0.10.0 found
+
+0.10.0 was never published. Publish this one, after `@aifinpay/agent` 2.14.1.
+
+- A pattern and a receipt's resource are read the way a path is read, escapes
+  included. In 0.10.0 only the path was: a pattern for `/my%20report` cost the
+  default, and a receipt for `/data/my%20report` answered 403 on that page.
+- A gate with a `registry` and a `resource` default refuses an ambiguous path too.
+  `/premium/..;/../x` cost the default there.
+- An unregistered path is quoted as the agent asked for it, as before 0.10.0, so a
+  published payer finds its own URL in the 402.
+- A site whose merchant view has no `network_mode` is live, as the control plane
+  means it. 0.10.0 read that as unknown and let a test receipt through.
+- A paid response drops `CDN-Cache-Control`, `Surrogate-Control` and the
+  platform-specific ones, which outrank `Cache-Control` at the CDN they address,
+  and `writeHead` with a flat header array no longer gets past the guard.
+- A prefix receipt for `/x/*`, the way a discovery document lists a section, covers
+  the section.
+- Also in 0.10.0, and not listed there: a control character in a path is ambiguous
+  too (400 to an agent), and `allow` receives the canonical path. The 400 and
+  shadow's spend-nothing have no switch back.
+
 ## @aifinpay/gate 0.10.0 — a path as an origin reads it, payer binding on, network mode, shadow spends nothing
 
 Four things answer differently, each with a way back.

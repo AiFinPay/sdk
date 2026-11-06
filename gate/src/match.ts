@@ -1,4 +1,5 @@
 import type { AifpResource } from "./types.js";
+import { inspectPath, spelledAsPath } from "./path.js";
 
 /**
  * Path → registry record. Port of the matcher in backend/routes/gateway.js.
@@ -17,16 +18,18 @@ export function matchResource(
   path: string,
   { caseSensitive = false }: { caseSensitive?: boolean } = {}
 ): AifpResource | null {
-  const asked = caseSensitive ? path : path.toLowerCase();
+  const { path: asked } = inspectPath(path, { caseSensitive });
   let best: AifpResource | null = null;
+  let bestLength = -1;
   for (const r of resources) {
     if (!r.route_pattern) continue;
-    const pat = caseSensitive ? r.route_pattern : r.route_pattern.toLowerCase();
-    const hit = pat.endsWith("/*")
-      ? asked === pat.slice(0, -2) || asked.startsWith(pat.slice(0, -1))
-      : asked === pat || asked === pat.replace(/\/+$/, "");
+    const pat = spelledAsPath(r.route_pattern, { caseSensitive });
+    const hit = pat.endsWith("/*") ? asked === pat.slice(0, -2) || asked.startsWith(pat.slice(0, -1)) : asked === pat;
     if (!hit) continue;
-    if (!best || pat.length > best.route_pattern.length) best = r;
+    if (pat.length > bestLength) {
+      best = r;
+      bestLength = pat.length;
+    }
   }
   return best;
 }

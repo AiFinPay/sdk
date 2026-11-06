@@ -28,7 +28,7 @@ import { MemoryStore } from "./stores/memory.js";
 import type { GateStore } from "./stores/types.js";
 import { createVerifier } from "./verify.js";
 import { buildChallenge } from "./challenge.js";
-import { inspectPath } from "./path.js";
+import { inspectPath, spelledAsPath } from "./path.js";
 import { scopeCovers } from "./scope.js";
 import { TIER_WEIGHTS, weightForTier } from "./pricing.js";
 import { classifyAgent, type AgentIdentity } from "./agents.js";
@@ -198,6 +198,14 @@ export const HEADER_MODE = "AIFP-Mode";
 export const HEADER_SHADOW_STATUS = "AIFP-Shadow-Status";
 /** On an answer that depends on who asked: a shared cache keyed by URL must not hand it to the next caller. */
 export const NO_STORE = "private, no-store, max-age=0";
+/** These outrank Cache-Control at the CDN they address, so a paid answer must not carry them. */
+export const CDN_CACHE_HEADERS = [
+  "cdn-cache-control",
+  "surrogate-control",
+  "cloudflare-cdn-cache-control",
+  "vercel-cdn-cache-control",
+  "netlify-cdn-cache-control",
+];
 
 export function createGate(options: GateOptions): (req: GateRequest) => Promise<GateResult> {
   const merchantId = options.merchantId;
@@ -281,6 +289,8 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
 
   const decide = async function gate(req: GateRequest, resolved?: (resource: string) => void): Promise<GateResult> {
     const { path, ambiguous } = inspectPath(req.path, { caseSensitive });
+    // An unregistered path is quoted as the agent asked for it: its payer compares the 402 with its own URL.
+    const asked = String(req.path ?? "/").split(/[?#]/, 1)[0] || "/";
 
     // Who the request says it is: normalised enums, never the raw User-Agent,
     // IP or headers. Stamped on every event this request emits, and upgraded
@@ -409,7 +419,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     };
 
     // An origin may read this path differently from the gate, so no price is safe to quote. A reader still gets the page.
-    if (ambiguous && mode === "enforce" && !options.resource && !(await exempted())) {
+    if (ambiguous && mode === "enforce" && (!options.resource || options.registry) && !(await exempted())) {
       return {
         ok: false,
         status: 400,
@@ -450,7 +460,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       matched = options.registry.match(path, { caseSensitive });
     }
 
-    const resource = matched ? matched.route_pattern : (options.resource ?? path);
+    const resource = matched ? matched.route_pattern : (options.resource ?? asked);
     unregistered = !matched && !options.resource;
     if (matched || options.resource) resolved?.(resource);
     // One source of truth for "what does this call cost": the tier the weight
@@ -463,7 +473,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // In static-mount mode the declared resource is the path the merchant
     // published, which is what the receipt was quoted for, so it wins over
     // req.path (which a mounted router may have already stripped a prefix off).
-    const scopePath = options.registry ? path : spelledAsPath(options.resource ?? path, caseSensitive);
+    const scopePath = options.registry ? path : spelledAsPath(options.resource ?? path, { caseSensitive });
 
     // ── 2. Explicitly free resources ──────────────────────────────────────
     // paywall_enabled:false is the merchant saying "serve this to anyone". No
@@ -622,7 +632,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
 
     // ── 6. Scope ──────────────────────────────────────────────────────────
     const bought =
-      typeof payload.resource === "string" ? spelledAsPath(payload.resource, caseSensitive) : payload.resource;
+      typeof payload.resource === "string" ? spelledAsPath(payload.resource, { caseSensitive }) : payload.resource;
     if (!scopeCovers(payload.scope, bought, scopePath)) {
       return forbid(
         resource,
@@ -818,12 +828,6 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     }
     return result;
   };
-}
-
-/** A receipt or a static mount names the resource as the merchant spelled it; a path is canonical. */
-function spelledAsPath(resource: string, caseSensitive: boolean): string {
-  const spelled = caseSensitive ? resource : resource.toLowerCase();
-  return spelled.endsWith("/*") ? spelled : spelled.replace(/\/+$/, "") || "/";
 }
 
 /** As the backend's payment-auth subject(): one account in the spelling each chain allows. */

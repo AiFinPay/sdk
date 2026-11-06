@@ -14,13 +14,14 @@ import asyncio
 import json
 from typing import Any, Dict, Optional
 
-from .core import Gate, GateResult
+from .core import CDN_CACHE_HEADERS, Gate, GateResult
 from .discovery import DISCOVERY_PATH, build_discovery_document, discovery_link_header, is_html_content_type
 
 
 class _AsgiRequest:
     def __init__(self, scope: Dict[str, Any]):
-        self.path = scope.get("path") or "/"
+        # The server decoded this, so a "?" or "#" in it is part of the path, not its end.
+        self.path = (scope.get("path") or "/").replace("?", "%3F").replace("#", "%23")
         self.method = scope.get("method", "GET")
         self._headers: Dict[str, str] = {}
         for k, v in scope.get("headers") or []:
@@ -129,7 +130,8 @@ class AifpGateMiddleware:
                 # A handler's own Cache-Control must not make a paid response storable; anywhere else it wins.
                 kept, gate_headers = list(message.get("headers") or []), extra
                 if (result.aifp or {}).get("mode") == "paid":
-                    kept = [(k, v) for k, v in kept if k.lower() != b"cache-control"]
+                    kept = [(k, v) for k, v in kept
+                            if k.lower() != b"cache-control" and k.decode("latin-1").lower() not in CDN_CACHE_HEADERS]
                 elif any(k.lower() == b"cache-control" for k, _ in kept):
                     gate_headers = [(k, v) for k, v in extra if k.lower() != b"cache-control"]
                 message = {**message, "headers": kept + gate_headers}

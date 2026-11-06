@@ -18,10 +18,12 @@ def scope_covers(scope: Optional[str], resource: str, path: str) -> bool:
     if scope == "merchant":
         return True
     if scope == "prefix":
-        if resource == "/" or path == resource:
+        # A discovery document lists a section as "/x/*" with scope prefix.
+        base = resource[:-1] if resource.endswith("/*") else resource
+        if base == "/" or path == base:
             return True
         # The trailing slash stops /articles covering /articles-internal.
-        boundary = resource if resource.endswith("/") else resource + "/"
+        boundary = base if base.endswith("/") else base + "/"
         # The SDKs buy "/paid/" for a "/paid/*" 402, and that wildcard covers "/paid" itself.
         return path == boundary[:-1] or path.startswith(boundary)
     return pattern_covers(resource, path)  # "exact", and anything unrecognised
