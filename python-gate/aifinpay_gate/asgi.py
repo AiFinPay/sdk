@@ -126,7 +126,13 @@ class AifpGateMiddleware:
         async def send_with_headers(message):
             if message["type"] == "http.response.start":
                 status_seen["status"] = message.get("status", 200)
-                message = {**message, "headers": list(message.get("headers") or []) + extra}
+                # A handler's own Cache-Control must not make a paid response storable; anywhere else it wins.
+                kept, gate_headers = list(message.get("headers") or []), extra
+                if (result.aifp or {}).get("mode") == "paid":
+                    kept = [(k, v) for k, v in kept if k.lower() != b"cache-control"]
+                elif any(k.lower() == b"cache-control" for k, _ in kept):
+                    gate_headers = [(k, v) for k, v in extra if k.lower() != b"cache-control"]
+                message = {**message, "headers": kept + gate_headers}
             try:
                 await send(message)
             except BaseException:

@@ -1,0 +1,13 @@
+{
+  "name": "@aifinpay/gate-conformance",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Language-neutral conformance vectors and an HTTP runner for AiFinPay gates. No dependencies.",
+  "scripts": {
+    "vectors": "node scripts/gen-vectors.mjs",
+    "vectors:check": "node scripts/gen-vectors.mjs --check",
+    "test": "node --test tests/runner.test.mjs"
+  },
+  "engines": { "node": ">=22" }
+}

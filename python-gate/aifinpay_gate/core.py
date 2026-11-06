@@ -34,6 +34,9 @@ HEADER_QUOTA_REMAINING = "AIFP-Quota-Remaining"
 HEADER_MODE = "AIFP-Mode"
 # On a shadow response the gate would have refused: the status it decided on.
 HEADER_SHADOW_STATUS = "AIFP-Shadow-Status"
+# On an answer that depends on who asked: a shared cache keyed by URL must not
+# hand it to the next caller.
+NO_STORE = "private, no-store, max-age=0"
 MODES = ("shadow", "enforce")
 TIERS = ("standard", "complex", "premium")
 
@@ -105,7 +108,7 @@ class GateResult:
 
 
 def _json_headers(**extra: str) -> Dict[str, str]:
-    return {"Content-Type": "application/json", **extra}
+    return {"Content-Type": "application/json", "Cache-Control": NO_STORE, **extra}
 
 
 class Gate:
@@ -268,8 +271,10 @@ class Gate:
     def _emit(self, event: Dict[str, Any], who: Dict[str, Any]) -> None:
         if self.on_event is None:
             return
+        # A mount with no resource names the raw path, which is private.
+        unregistered = {"unregistered": True} if self.routes is None and not self.resource else {}
         try:
-            self.on_event({**event, **who})
+            self.on_event({**event, **who, **unregistered})
         except Exception:  # noqa: BLE001 — observability is never load-bearing
             pass
 
@@ -290,7 +295,7 @@ class Gate:
         if self.mode != "shadow":
             return result
         body = result.body or {}
-        return GateResult(True, 200, {HEADER_MODE: "shadow", HEADER_SHADOW_STATUS: str(result.status)}, aifp={
+        return GateResult(True, 200, {HEADER_MODE: "shadow", HEADER_SHADOW_STATUS: str(result.status), "Cache-Control": NO_STORE}, aifp={
             "agent": agent, "receipt_id": "", "resource": resource, "weight": 0,
             "unit_quota": 0, "used": 0, "remaining": 0, "mode": "shadow",
             "shadow": {"status": result.status, "error": body.get("error"), "detail": body.get("detail"),
@@ -388,7 +393,8 @@ class Gate:
             if not self._allowed({"path": path, "resource": resource, "weight": weight,
                                   "agent": agent_header, "receipt_id": None}):
                 return self._forbid(resource, weight, "blocked by merchant policy", who=who, agent=agent_header)
-            self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": agent_header}, who)
+            # Not a paid admission: the ingest counts a plain serve as one, and a reader is never reported.
+            self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": agent_header, "exempt": True}, who)
             return self._free(resource, agent_header, "open", "off")
 
         # The merchant's operator rules: allow / charge / block per operator, as
@@ -536,7 +542,7 @@ class Gate:
 
         self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": sub, "receipt_id": receipt_id}, who)
         remaining = _int_if_whole(limit - used)
-        return GateResult(True, 200, {HEADER_QUOTA_REMAINING: str(remaining)}, aifp={
+        return GateResult(True, 200, {HEADER_QUOTA_REMAINING: str(remaining), "Cache-Control": NO_STORE}, aifp={
             "agent": sub, "receipt_id": receipt_id, "resource": resource, "weight": weight,
             "unit_quota": _int_if_whole(limit), "used": used, "remaining": remaining, "mode": "paid",
         })
@@ -546,7 +552,7 @@ class Gate:
         self._emit({"kind": "meter_error", "resource": resource, "weight": weight, "detail": str(e)}, who)
         if self.on_store_error == "open":
             # Availability chosen over metering: served and NOT counted.
-            return GateResult(True, 200, {"AIFP-Meter": "degraded"}, aifp={
+            return GateResult(True, 200, {"AIFP-Meter": "degraded", "Cache-Control": NO_STORE}, aifp={
                 "agent": payload.get("sub"), "receipt_id": payload["receipt_id"], "resource": resource,
                 "weight": weight, "unit_quota": _int_if_whole(limit), "used": 0,
                 "remaining": _int_if_whole(limit), "mode": "paid",

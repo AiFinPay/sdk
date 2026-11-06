@@ -179,6 +179,9 @@ export interface GateEvent {
   agent?: string | null;
   receipt_id?: string;
   detail?: string;
+  /** `resource` is the raw request path because no registered pattern covers
+   *  it. For a local consumer only: the reporter never sends one. */
+  unregistered?: boolean;
   /** True on a "serve" that shouldCharge exempted (a human on a content
    *  site). Kept as a flag rather than a kind: consumers counting serves
    *  should count these, consumers counting REVENUE serves must filter. */

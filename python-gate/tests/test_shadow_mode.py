@@ -32,11 +32,11 @@ def recording(**kw):
 def test_a_config_without_mode_is_enforce_and_unchanged(mode):
     gt, events = recording(**({"mode": mode} if mode else {}))
     no_receipt = gt.decide(req(**{"User-Agent": GPTBOT_UA}))
-    assert (no_receipt.ok, no_receipt.status, no_receipt.headers) == (False, 402, {"Content-Type": "application/json"})
+    assert (no_receipt.ok, no_receipt.status, no_receipt.headers) == (False, 402, {"Content-Type": "application/json", "Cache-Control": g.NO_STORE})
     bad = gt.decide(req(token(resource="/elsewhere")))
-    assert (bad.ok, bad.status, bad.headers) == (False, 403, {"Content-Type": "application/json"})
+    assert (bad.ok, bad.status, bad.headers) == (False, 403, {"Content-Type": "application/json", "Cache-Control": g.NO_STORE})
     paid = gt.decide(req(token()))
-    assert paid.status == 200 and list(paid.headers) == [g.HEADER_QUOTA_REMAINING]
+    assert paid.status == 200 and list(paid.headers) == [g.HEADER_QUOTA_REMAINING, "Cache-Control"]
     assert [e["kind"] for e in events] == ["402", "403", "serve"]
 
 
@@ -50,7 +50,7 @@ def test_shadow_serves_a_would_be_402_and_hands_the_handler_the_refusal():
     gt, events = recording(mode="shadow")
     r = gt.decide(req(**{"User-Agent": GPTBOT_UA}))
     assert (r.ok, r.status) == (True, 200)
-    assert r.headers == {g.HEADER_MODE: "shadow", g.HEADER_SHADOW_STATUS: "402"}
+    assert r.headers == {g.HEADER_MODE: "shadow", g.HEADER_SHADOW_STATUS: "402", "Cache-Control": g.NO_STORE}
     assert r.aifp == {
         "agent": None, "receipt_id": "", "resource": "/paid", "weight": 0, "unit_quota": 0, "used": 0,
         "remaining": 0, "mode": "shadow",
@@ -69,7 +69,7 @@ def test_shadow_serves_a_would_be_403_and_503():
 
     broken, events = recording(mode="shadow", store=FailingStore())
     down = broken.decide(req(token()))
-    assert (down.ok, down.status, down.headers) == (True, 200, {g.HEADER_MODE: "shadow", g.HEADER_SHADOW_STATUS: "503"})
+    assert (down.ok, down.status, down.headers) == (True, 200, {g.HEADER_MODE: "shadow", g.HEADER_SHADOW_STATUS: "503", "Cache-Control": g.NO_STORE})
     assert down.aifp["shadow"] == {"status": 503, "error": "AIFP-503-METER",
                                    "detail": "quota store unavailable — retry shortly", "weight": 1}
     assert [e["kind"] for e in events] == ["meter_error"]
@@ -78,7 +78,7 @@ def test_shadow_serves_a_would_be_403_and_503():
 def test_shadow_serves_what_enforce_serves_exactly_as_enforce_does_plus_the_header():
     gt = gate(mode="shadow", should_charge=g.known_ai_agent)
     paid = gt.decide(req(token()))
-    assert paid.headers == {g.HEADER_QUOTA_REMAINING: "9", g.HEADER_MODE: "shadow"}
+    assert paid.headers == {g.HEADER_QUOTA_REMAINING: "9", "Cache-Control": g.NO_STORE, g.HEADER_MODE: "shadow"}
     assert paid.aifp["mode"] == "paid" and paid.aifp["remaining"] == 9
     human = gt.decide(req(**{"User-Agent": BROWSER_UA}))
     assert human.headers == {"AIFP-Paywall": "exempt", g.HEADER_MODE: "shadow"} and human.aifp["mode"] == "exempt"

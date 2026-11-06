@@ -1,0 +1,6297 @@
+{
+ "schema": 1,
+ "reference": "@aifinpay/gate 0.9.0",
+ "fixtures": {
+  "merchant_id": "mrch_0123456789abcdef",
+  "other_merchant_id": "mrch_fedcba9876543210",
+  "merchant_secret": "msec_c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+  "issuer": "https://api.aifinpay.io",
+  "marker": "AIFP-CONFORMANCE-ORIGIN",
+  "keys": {
+   "issuer": {
+    "kid": "fixture-1",
+    "seed_hex": "0707070707070707070707070707070707070707070707070707070707070707"
+   },
+   "other": {
+    "kid": "fixture-1",
+    "seed_hex": "0909090909090909090909090909090909090909090909090909090909090909"
+   }
+  },
+  "user_agents": {
+   "chrome": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "gptbot": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.2; +https://openai.com/gptbot)",
+   "claudebot": "Mozilla/5.0 (compatible; ClaudeBot/1.0; +claudebot@anthropic.com)",
+   "perplexity": "Mozilla/5.0 (compatible; PerplexityBot/1.0)",
+   "chatgpt": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0",
+   "sdk": "aifinpay-agent-node/2.14.0",
+   "none": null
+  }
+ },
+ "profiles": {
+  "content-enforce": {
+   "network_mode": "live",
+   "site_verified": true,
+   "mode": "enforce",
+   "charge": "agents",
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
+    }
+   ]
+  },
+  "content-shadow": {
+   "network_mode": "live",
+   "site_verified": true,
+   "mode": "shadow",
+   "charge": "agents",
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
+    }
+   ]
+  },
+  "api-enforce": {
+   "network_mode": "live",
+   "site_verified": true,
+   "mode": "enforce",
+   "charge": "everyone",
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
+    }
+   ]
+  },
+  "premium-enforce": {
+   "network_mode": "live",
+   "site_verified": true,
+   "mode": "enforce",
+   "charge": "agents",
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "premium"
+    }
+   ]
+  },
+  "complex-enforce": {
+   "network_mode": "live",
+   "site_verified": true,
+   "mode": "enforce",
+   "charge": "agents",
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "complex"
+    }
+   ]
+  },
+  "mixed-enforce": {
+   "network_mode": "live",
+   "site_verified": true,
+   "mode": "enforce",
+   "charge": "agents",
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/paid/premium/*",
+     "tier": "premium"
+    },
+    {
+     "pattern": "/open/*",
+     "tier": "standard",
+     "paywall": false
+    }
+   ]
+  },
+  "testsite-enforce": {
+   "network_mode": "test",
+   "site_verified": false,
+   "mode": "enforce",
+   "charge": "agents",
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
+    }
+   ]
+  },
+  "policy-enforce": {
+   "network_mode": "live",
+   "site_verified": true,
+   "mode": "enforce",
+   "charge": "agents",
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
+    }
+   ],
+   "operator_rules": [
+    {
+     "operator": "openai",
+     "action": "allow"
+    },
+    {
+     "operator": "anthropic",
+     "action": "block"
+    }
+   ],
+   "operator_default": "charge"
+  },
+  "policy-shadow": {
+   "network_mode": "live",
+   "site_verified": true,
+   "mode": "shadow",
+   "charge": "agents",
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
+    }
+   ],
+   "operator_rules": [
+    {
+     "operator": "openai",
+     "action": "allow"
+    },
+    {
+     "operator": "anthropic",
+     "action": "block"
+    }
+   ],
+   "operator_default": "charge"
+  },
+  "policy-block-all": {
+   "network_mode": "live",
+   "site_verified": true,
+   "mode": "enforce",
+   "charge": "agents",
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
+    }
+   ],
+   "operator_rules": [],
+   "operator_default": "block"
+  },
+  "policy-verified": {
+   "network_mode": "live",
+   "site_verified": true,
+   "mode": "enforce",
+   "charge": "agents",
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
+    }
+   ],
+   "operator_rules": [
+    {
+     "operator": "aifinpay",
+     "action": "allow",
+     "verified_only": true
+    },
+    {
+     "ua_class": "aifp_agent",
+     "action": "block"
+    }
+   ],
+   "operator_default": "charge"
+  }
+ },
+ "golden": {
+  "challenge.standard": {
+   "error": "AIFP-402",
+   "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+   "protocol": "AIFP-1",
+   "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+   "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+   "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+   "merchant_id": "mrch_0123456789abcdef",
+   "resource": "/paid/*",
+   "tier": "standard",
+   "unit_weight": 1,
+   "unit_price_usd": "0.0005",
+   "min_requests": 40,
+   "scope": "exact",
+   "protocol_fee_bps": 100,
+   "no_minimum_fee": true,
+   "settlement_terms_from": "POST {{api}}/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+   "how_to_pay": [
+    "POST {{api}}/v1/quote {\"merchant_id\":\"mrch_0123456789abcdef\",\"resource\":\"/paid/*\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+    "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+    "POST {{api}}/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+    "retry this request with header: AIFP-Receipt: <receipt JWT>"
+   ],
+   "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+  },
+  "challenge.complex": {
+   "error": "AIFP-402",
+   "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+   "protocol": "AIFP-1",
+   "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+   "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+   "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+   "merchant_id": "mrch_0123456789abcdef",
+   "resource": "/paid/*",
+   "tier": "complex",
+   "unit_weight": 4,
+   "unit_price_usd": "0.002",
+   "min_requests": 10,
+   "scope": "exact",
+   "protocol_fee_bps": 100,
+   "no_minimum_fee": true,
+   "settlement_terms_from": "POST {{api}}/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+   "how_to_pay": [
+    "POST {{api}}/v1/quote {\"merchant_id\":\"mrch_0123456789abcdef\",\"resource\":\"/paid/*\",\"tier\":\"complex\",\"scope\":\"exact\",\"requests\":10,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+    "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+    "POST {{api}}/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+    "retry this request with header: AIFP-Receipt: <receipt JWT>"
+   ],
+   "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+  },
+  "challenge.premium": {
+   "error": "AIFP-402",
+   "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+   "protocol": "AIFP-1",
+   "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+   "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+   "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+   "merchant_id": "mrch_0123456789abcdef",
+   "resource": "/paid/*",
+   "tier": "premium",
+   "unit_weight": 10,
+   "unit_price_usd": "0.005",
+   "min_requests": 4,
+   "scope": "exact",
+   "protocol_fee_bps": 100,
+   "no_minimum_fee": true,
+   "settlement_terms_from": "POST {{api}}/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+   "how_to_pay": [
+    "POST {{api}}/v1/quote {\"merchant_id\":\"mrch_0123456789abcdef\",\"resource\":\"/paid/*\",\"tier\":\"premium\",\"scope\":\"exact\",\"requests\":4,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+    "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+    "POST {{api}}/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+    "retry this request with header: AIFP-Receipt: <receipt JWT>"
+   ],
+   "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+  },
+  "challenge.expired": {
+   "error": "AIFP-402",
+   "detail": "receipt expired — prepay a new batch",
+   "protocol": "AIFP-1",
+   "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+   "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+   "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+   "merchant_id": "mrch_0123456789abcdef",
+   "resource": "/paid/*",
+   "tier": "standard",
+   "unit_weight": 1,
+   "unit_price_usd": "0.0005",
+   "min_requests": 40,
+   "scope": "exact",
+   "protocol_fee_bps": 100,
+   "no_minimum_fee": true,
+   "settlement_terms_from": "POST {{api}}/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+   "how_to_pay": [
+    "POST {{api}}/v1/quote {\"merchant_id\":\"mrch_0123456789abcdef\",\"resource\":\"/paid/*\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+    "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+    "POST {{api}}/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+    "retry this request with header: AIFP-Receipt: <receipt JWT>"
+   ],
+   "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+  },
+  "challenge.exhausted": {
+   "error": "AIFP-402",
+   "detail": "quota exhausted — prepay the next batch",
+   "protocol": "AIFP-1",
+   "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+   "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+   "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+   "merchant_id": "mrch_0123456789abcdef",
+   "resource": "/paid/*",
+   "tier": "standard",
+   "unit_weight": 1,
+   "unit_price_usd": "0.0005",
+   "min_requests": 40,
+   "scope": "exact",
+   "protocol_fee_bps": 100,
+   "no_minimum_fee": true,
+   "settlement_terms_from": "POST {{api}}/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+   "how_to_pay": [
+    "POST {{api}}/v1/quote {\"merchant_id\":\"mrch_0123456789abcdef\",\"resource\":\"/paid/*\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+    "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+    "POST {{api}}/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+    "retry this request with header: AIFP-Receipt: <receipt JWT>"
+   ],
+   "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+  },
+  "discovery.standard": {
+   "x402_version": 1,
+   "protocol": "AIFP-1",
+   "merchant_id": "mrch_0123456789abcdef",
+   "quote_endpoint": "{{api}}/v1/quote",
+   "pay_endpoint": "{{api}}/v1/pay",
+   "onboarding": "npx @aifinpay/mcp init",
+   "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+   "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+   "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+   "resources": [
+    {
+     "resource": "/paid/*",
+     "tier": "standard",
+     "scope": "prefix",
+     "unit_price_usd": "0.0005"
+    }
+   ],
+   "settlement_terms_from": "{{api}}/v1/quote"
+  }
+ },
+ "operators": [
+  "openai",
+  "anthropic",
+  "perplexity",
+  "google",
+  "microsoft",
+  "meta",
+  "bytedance",
+  "apple",
+  "amazon",
+  "commoncrawl",
+  "aifinpay",
+  "unknown"
+ ],
+ "ua_classes": [
+  "ai_crawler",
+  "ai_agent_browser",
+  "aifp_agent",
+  "human",
+  "unknown"
+ ],
+ "cases": [
+  {
+   "id": "challenge.payable",
+   "group": "challenge",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An agent without a receipt gets a 402 it can act on",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "headers": {
+       "content-type": {
+        "contains": "application/json"
+       }
+      },
+      "body": {
+       "subset": {
+        "error": "AIFP-402",
+        "protocol": "AIFP-1",
+        "merchant_id": "mrch_0123456789abcdef",
+        "resource": "/paid/*",
+        "tier": "standard",
+        "unit_weight": 1,
+        "unit_price_usd": "0.0005",
+        "min_requests": 40,
+        "scope": "exact"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "challenge.exact",
+   "group": "challenge",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "The 402 body equals the reference, key order included",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "golden": "challenge.standard",
+       "order": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "challenge.complex",
+   "group": "challenge",
+   "level": "must",
+   "profile": "complex-enforce",
+   "title": "A complex tier advertises its own price and weight",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "subset": {
+        "tier": "complex",
+        "unit_weight": 4,
+        "unit_price_usd": "0.002",
+        "min_requests": 10
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "challenge.premium",
+   "group": "challenge",
+   "level": "must",
+   "profile": "premium-enforce",
+   "title": "A premium tier advertises its own price and weight",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "subset": {
+        "tier": "premium",
+        "unit_weight": 10,
+        "unit_price_usd": "0.005",
+        "min_requests": 4
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "challenge.premium_exact",
+   "group": "challenge",
+   "level": "parity",
+   "profile": "premium-enforce",
+   "title": "The premium 402 equals the reference",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "golden": "challenge.premium",
+       "order": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "challenge.query",
+   "group": "challenge",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A query string changes nothing about the 402",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a?utm_source=x",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "headers": {
+       "cache-control": {
+        "contains": "no-store",
+        "excludes": "public"
+       }
+      },
+      "body": {
+       "subset": {
+        "error": "AIFP-402",
+        "resource": "/paid/*"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "challenge.no_link",
+   "group": "challenge",
+   "level": "should",
+   "profile": "content-enforce",
+   "title": "A JSON 402 carries no discovery Link",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "headers": {
+       "link": null
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "mode.enforce_silent",
+   "group": "mode",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "Enforce sends no AIFP-Mode",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "headers": {
+       "aifp-mode": null
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "mode.shadow_serves_agent",
+   "group": "mode",
+   "level": "must",
+   "profile": "content-shadow",
+   "title": "Shadow serves the agent enforce would have refused",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-mode": "shadow"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "mode.shadow_status",
+   "group": "mode",
+   "level": "parity",
+   "profile": "content-shadow",
+   "title": "Shadow names the status enforce would have sent",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-shadow-status": "402"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "mode.shadow_human",
+   "group": "mode",
+   "level": "must",
+   "profile": "content-shadow",
+   "title": "Shadow serves a reader with no would-be status",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-mode": "shadow",
+       "aifp-shadow-status": null
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "mode.shadow_elsewhere",
+   "group": "mode",
+   "level": "parity",
+   "profile": "content-shadow",
+   "title": "Shadow says so outside the protected paths too",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/free/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-mode": "shadow"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "mode.shadow_tampered",
+   "group": "mode",
+   "level": "must",
+   "profile": "content-shadow",
+   "title": "Shadow never refuses a forged receipt",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "forged",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "forged": {
+     "claims": {},
+     "sign": {
+      "mutate": "tamper_payload"
+     }
+    }
+   }
+  },
+  {
+   "id": "mode.shadow_other_agent",
+   "group": "mode",
+   "level": "must",
+   "profile": "content-shadow",
+   "title": "Shadow never refuses another agent's receipt",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "other"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "mode.shadow_tampered_status",
+   "group": "mode",
+   "level": "parity",
+   "profile": "content-shadow",
+   "title": "Shadow verifies, so a forged receipt reads as a would-be 403",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "forged",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-shadow-status": "403"
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "forged": {
+     "claims": {},
+     "sign": {
+      "mutate": "tamper_payload"
+     }
+    }
+   }
+  },
+  {
+   "id": "mode.shadow_expired_status",
+   "group": "mode",
+   "level": "parity",
+   "profile": "content-shadow",
+   "title": "An expired receipt reads as a would-be 402",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "old",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-shadow-status": "402"
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "old": {
+     "claims": {
+      "exp": 1000000000
+     }
+    }
+   }
+  },
+  {
+   "id": "mode.shadow_valid_metered",
+   "group": "mode",
+   "level": "parity",
+   "profile": "content-shadow",
+   "title": "A valid receipt is metered in shadow as in enforce",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "2"
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "mode.shadow_drained_served",
+   "group": "mode",
+   "level": "must",
+   "profile": "content-shadow",
+   "title": "A drained receipt never turns shadow into a refusal",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "receipt.valid",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A valid receipt opens the page and meters one unit",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "2"
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "receipt.tampered",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A changed payload is refused",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {},
+     "sign": {
+      "mutate": "tamper_payload"
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.tampered_detail",
+   "group": "receipt",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "The refusal uses the reference sentence",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false,
+      "body": {
+       "subset": {
+        "error": "AIFP-403",
+        "detail": "receipt verification failed (signature/issuer/audience)"
+       }
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {},
+     "sign": {
+      "mutate": "tamper_payload"
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.wrong_merchant",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A receipt for another merchant is refused",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "aud": "$other_merchant"
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.wrong_issuer",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A receipt from another issuer is refused",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "iss": "https://evil.example"
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.expired",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An expired receipt gets a new 402",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "subset": {
+        "error": "AIFP-402",
+        "detail": "receipt expired — prepay a new batch"
+       }
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "exp": 1000000000
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.expired_exact",
+   "group": "receipt",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "The expired 402 equals the reference",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "golden": "challenge.expired",
+       "order": true
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "exp": 1000000000
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.past_tolerance",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "Two minutes past exp is expired",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "subset": {
+        "error": "AIFP-402",
+        "detail": "receipt expired — prepay a new batch"
+       }
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "exp_in": -120
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.clock_tolerance",
+   "group": "receipt",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "A receipt ten seconds past exp still verifies",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "exp_in": -10
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.nbf_future",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A receipt not valid yet is refused",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "nbf": 4102444800
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.iat_future",
+   "group": "receipt",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "A future iat alone does not refuse",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "iat": 4102444000
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.alg_none",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "alg none is refused",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {},
+     "sign": {
+      "mutate": "alg_none"
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.alg_hs256",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "HS256 over the public key bytes is refused",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {},
+     "sign": {
+      "mutate": "alg_hs256"
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.unknown_key",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A signature by an unknown key is refused",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {},
+     "sign": {
+      "key": "other"
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.garbage",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A token that is not a JWT is refused",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {},
+     "sign": {
+      "mutate": "garbage"
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.action_type",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A per-action billing receipt buys nothing",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "typ_aifp": "action"
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.quota_type",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An explicit quota type is spendable",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "typ_aifp": "quota"
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.no_receipt_id",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A receipt with no id cannot be metered",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "receipt_id": null
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.no_exp",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A receipt with no exp is refused",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "exp": null
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.bad_quota",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A non-numeric unit_quota never serves",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       402,
+       403
+      ],
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "unit_quota": "abc"
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.zero_quota",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A zero unit_quota never serves",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       402,
+       403
+      ],
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "unit_quota": 0
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.legacy_quota",
+   "group": "receipt",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "A legacy request quota converts at its tier weight",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "7"
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "unit_quota": null,
+      "quota": 2,
+      "tier": "complex"
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.query",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A query string does not stop a receipt",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a?x=1",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "2"
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "receipt.other_agent",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A receipt is not spent by an agent naming someone else",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "other"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "receipt.no_agent_header",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An agent that did what the 402 says is served: it names only the receipt header",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": null
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "2"
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "receipt.agent_case",
+   "group": "receipt",
+   "level": "should",
+   "profile": "content-enforce",
+   "title": "An EVM payer compares without checksum case",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer_upper"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "receipt.test_on_live",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A testnet receipt does not open a live site",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "network_mode": "test"
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.test_on_test",
+   "group": "receipt",
+   "level": "must",
+   "profile": "testsite-enforce",
+   "title": "A testnet receipt opens a test site",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "network_mode": "test"
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.live_on_test",
+   "group": "receipt",
+   "level": "parity",
+   "profile": "testsite-enforce",
+   "title": "A live receipt does not open a test site",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "receipt.no_kid",
+   "group": "receipt",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "A signed token with no kid verifies against a one-key set",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {},
+     "sign": {
+      "header": {
+       "kid": null
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.no_typ",
+   "group": "receipt",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "A signed token with no typ verifies",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {},
+     "sign": {
+      "header": {
+       "typ": null
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "scope.section_protected",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A wildcard protects the section root",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "scope.section_root_spend",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A wildcard receipt covers the section root",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "scope.prefix_section_root",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A batch the SDKs buy for a section opens the section page: they buy prefix /paid/ for a /paid/* 402",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/paid/",
+      "scope": "prefix"
+     }
+    }
+   }
+  },
+  {
+   "id": "scope.prefix_section_slash",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "The same batch opens the section page with a slash",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       200,
+       301,
+       302,
+       307,
+       308
+      ]
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/paid/",
+      "scope": "prefix"
+     }
+    }
+   }
+  },
+  {
+   "id": "scope.spelling_case",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A paid batch is not refused over the case of a path",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/PAID/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       200,
+       301,
+       302,
+       307,
+       308,
+       404
+      ]
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "scope.spelling_slash",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A paid batch is not refused over a trailing slash",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a/",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       200,
+       301,
+       302,
+       307,
+       308,
+       404
+      ]
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "scope.spelling_exact_slash",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A paid batch for an exact pattern is not refused over a trailing slash",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/report/",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       200,
+       301,
+       302,
+       307,
+       308,
+       404
+      ]
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/report"
+     }
+    }
+   }
+  },
+  {
+   "id": "scope.other_path",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An exact receipt for another path is refused",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/other"
+     }
+    }
+   }
+  },
+  {
+   "id": "scope.other_path_detail",
+   "group": "scope",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "The scope refusal names the scope",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false,
+      "body": {
+       "subset": {
+        "error": "AIFP-403",
+        "detail": "receipt is scoped to /other (exact), not /paid/a"
+       }
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/other"
+     }
+    }
+   }
+  },
+  {
+   "id": "scope.prefix_slash",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A prefix receipt covers paths under it",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/paid/",
+      "scope": "prefix"
+     }
+    }
+   }
+  },
+  {
+   "id": "scope.prefix_bare",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A prefix without a slash covers paths under it",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/paid",
+      "scope": "prefix"
+     }
+    }
+   }
+  },
+  {
+   "id": "scope.prefix_boundary",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A prefix stops at the segment boundary",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid-internal/x",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/paid",
+      "scope": "prefix"
+     }
+    }
+   }
+  },
+  {
+   "id": "scope.merchant",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A merchant receipt covers every path",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "*",
+      "scope": "merchant"
+     }
+    }
+   }
+  },
+  {
+   "id": "scope.unknown_degrades",
+   "group": "scope",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "An unknown scope reads as exact",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid-internal/x",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "scope": "bogus"
+     }
+    }
+   }
+  },
+  {
+   "id": "scope.missing_resource",
+   "group": "scope",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "A receipt with no resource covers nothing",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": null
+     }
+    }
+   }
+  },
+  {
+   "id": "meter.drain",
+   "group": "meter",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A batch of three serves three times, then a 402",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "2"
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "1"
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "0"
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "subset": {
+        "error": "AIFP-402"
+       }
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "meter.exhausted_exact",
+   "group": "meter",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "The exhausted 402 equals the reference",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "1"
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "0"
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "golden": "challenge.exhausted",
+       "order": true
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {
+      "unit_quota": 2
+     }
+    }
+   }
+  },
+  {
+   "id": "meter.weight",
+   "group": "meter",
+   "level": "must",
+   "profile": "premium-enforce",
+   "title": "A premium call takes ten units",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "15"
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "5"
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {
+      "unit_quota": 25,
+      "tier": "premium"
+     }
+    }
+   }
+  },
+  {
+   "id": "meter.weight_over_quota",
+   "group": "meter",
+   "level": "must",
+   "profile": "premium-enforce",
+   "title": "A call heavier than the batch is not served",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {
+      "unit_quota": 5,
+      "tier": "premium"
+     }
+    }
+   }
+  },
+  {
+   "id": "meter.refused_keeps_units",
+   "group": "meter",
+   "level": "must",
+   "profile": "mixed-enforce",
+   "title": "A call that does not fit takes nothing",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/premium/x",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "4"
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {
+      "unit_quota": 5,
+      "resource": "*",
+      "scope": "merchant"
+     }
+    }
+   }
+  },
+  {
+   "id": "meter.longest_match",
+   "group": "meter",
+   "level": "must",
+   "profile": "mixed-enforce",
+   "title": "The longest pattern sets the price",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/premium/x",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "subset": {
+        "resource": "/paid/premium/*",
+        "tier": "premium",
+        "unit_weight": 10
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "meter.open_route",
+   "group": "meter",
+   "level": "parity",
+   "profile": "mixed-enforce",
+   "title": "A route with the paywall off is served to an agent",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/open/x",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-paywall": "off"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "meter.concurrent",
+   "group": "meter",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "Twenty concurrent calls on five units serve exactly five",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "concurrent": 20,
+      "served": 5,
+      "refused": 15,
+      "refused_status": [
+       402
+      ]
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {
+      "unit_quota": 5
+     }
+    }
+   }
+  },
+  {
+   "id": "meter.shared_counter",
+   "group": "meter",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "One receipt has one counter across paths",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "2"
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/b",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "1"
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {
+      "resource": "/paid",
+      "scope": "prefix"
+     }
+    }
+   }
+  },
+  {
+   "id": "meter.single_use_replay",
+   "group": "meter",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A single-use receipt is served once",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       402,
+       403
+      ],
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {
+      "unit_quota": 1
+     }
+    }
+   }
+  },
+  {
+   "id": "meter.single_use_no_nonce",
+   "group": "meter",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "A single-use receipt with no nonce is refused",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {
+      "unit_quota": 1,
+      "nonce": null
+     }
+    }
+   }
+  },
+  {
+   "id": "meter.survives_restart",
+   "group": "meter",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "Spent units stay spent after a restart",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "2"
+      }
+     }
+    },
+    {
+     "action": "restart"
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "1"
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   },
+   "needs": [
+    "restart"
+   ]
+  },
+  {
+   "id": "cache.challenge",
+   "group": "cache",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A 402 is never stored",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "headers": {
+       "cache-control": {
+        "contains": "no-store",
+        "excludes": "public"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cache.refusal",
+   "group": "cache",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A 403 is never stored",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false,
+      "headers": {
+       "cache-control": {
+        "contains": "no-store",
+        "excludes": "public"
+       }
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {},
+     "sign": {
+      "mutate": "tamper_payload"
+     }
+    }
+   }
+  },
+  {
+   "id": "cache.unavailable",
+   "group": "cache",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A 503 is never stored",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 503,
+      "origin": false,
+      "headers": {
+       "cache-control": {
+        "contains": "no-store",
+        "excludes": "public"
+       }
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   },
+   "fault": {
+    "jwks": true
+   },
+   "needs": [
+    "fault:jwks"
+   ]
+  },
+  {
+   "id": "cache.paid",
+   "group": "cache",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A paid response is never stored, whatever the origin says",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "cache-control": {
+        "contains": "no-store",
+        "excludes": "public"
+       }
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "cache.exempt",
+   "group": "cache",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A reader's copy of a protected page cannot answer an agent",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "cache-control": {
+        "contains": "no-store",
+        "excludes": "public"
+       }
+      }
+     }
+    }
+   ],
+   "unless": "pre_cache"
+  },
+  {
+   "id": "cache.shadow_agent",
+   "group": "cache",
+   "level": "should",
+   "profile": "content-shadow",
+   "title": "An agent's shadow response is not stored",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "cache-control": {
+        "contains": "no-store",
+        "excludes": "public"
+       }
+      }
+     }
+    }
+   ],
+   "unless": "pre_cache"
+  },
+  {
+   "id": "cache.shadow_keeps_origin",
+   "group": "cache",
+   "level": "should",
+   "profile": "content-shadow",
+   "title": "Shadow leaves the origin's cache header alone before a cache it runs ahead of",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "cache-control": "public, max-age=600"
+      }
+     }
+    }
+   ],
+   "needs": [
+    "pre_cache",
+    "proxy"
+   ]
+  },
+  {
+   "id": "cache.real_exempt_then_agent",
+   "group": "cache",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A real cache holding a reader's copy still answers an agent with a 402",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/cached",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/cached",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/cached",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "needs": [
+    "real_cache"
+   ]
+  },
+  {
+   "id": "cache.real_decision_not_cached",
+   "group": "cache",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A cached decision does not admit the next agent",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/decision",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/decision",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/decision",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true
+     }
+    }
+   ],
+   "needs": [
+    "real_cache"
+   ]
+  },
+  {
+   "id": "cache.real_paid_not_stored",
+   "group": "cache",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A real cache never hands a paid response to the next caller",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/stored",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "2"
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/stored",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   },
+   "needs": [
+    "real_cache"
+   ]
+  },
+  {
+   "id": "cache.real_challenge_not_stored",
+   "group": "cache",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A real cache never hands a 402 to the agent that paid",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/held",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/held",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "2"
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   },
+   "needs": [
+    "real_cache"
+   ]
+  },
+  {
+   "id": "classify.reader_exempt",
+   "group": "classify",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A browser is served free on a content site",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": null
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "classify.reader_header",
+   "group": "classify",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "A reader's response says it was exempt",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-paywall": "exempt"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "classify.table",
+   "group": "classify",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "Every marker in the table is charged",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; gptbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; oai-searchbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; chatgpt-user/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; claudebot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; claude-searchbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; claude-user/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; claude-web/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; anthropic-ai/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; perplexitybot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; perplexity-user/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; ccbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; bytespider/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; google-extended/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; applebot-extended/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; meta-externalagent/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; facebookbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; amazonbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; youbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; diffbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; timpibot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; omgilibot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; cohere-ai/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; ai2bot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; mistralai/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; aifinpay-agent/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; headlesschrome/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; phantomjs/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "classify.empty_ua",
+   "group": "classify",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "No User-Agent is charged",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "none"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "classify.ua_case",
+   "group": "classify",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "Markers match in any case",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; GPTBOT/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "classify.browser_agent_id",
+   "group": "classify",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A browser User-Agent with an agent id pays",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "classify.browser_receipt",
+   "group": "classify",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A browser User-Agent with a receipt is metered",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "2"
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "classify.charge_everyone",
+   "group": "classify",
+   "level": "must",
+   "profile": "api-enforce",
+   "title": "An API charges a browser too",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "classify.unprotected",
+   "group": "classify",
+   "level": "should",
+   "profile": "content-enforce",
+   "title": "A path outside every pattern is not gated",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/free/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ]
+  },
+  {
+   "id": "events.challenge",
+   "group": "events",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A 402 reports who asked",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "events": [
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false
+    }
+   ],
+   "needs": [
+    "events"
+   ]
+  },
+  {
+   "id": "events.serve",
+   "group": "events",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A paid serve reports a verified AIFP agent",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "events": [
+    {
+     "kind": "serve",
+     "resource": "/paid/*",
+     "operator": "aifinpay",
+     "ua_class": "aifp_agent",
+     "verified": true
+    }
+   ],
+   "needs": [
+    "events"
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "events.reader_silent",
+   "group": "events",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A reader is never reported",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "events": [],
+   "needs": [
+    "events"
+   ]
+  },
+  {
+   "id": "events.shadow_challenge",
+   "group": "events",
+   "level": "must",
+   "profile": "content-shadow",
+   "title": "Shadow reports the same 402",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "events": [
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false
+    }
+   ],
+   "needs": [
+    "events"
+   ]
+  },
+  {
+   "id": "events.operators",
+   "group": "events",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "Operators and classes follow the table",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "claudebot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chatgpt"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "perplexity"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "events": [
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "anthropic",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "perplexity",
+     "ua_class": "ai_crawler",
+     "verified": false
+    }
+   ],
+   "needs": [
+    "events"
+   ]
+  },
+  {
+   "id": "events.refusal_off_wire",
+   "group": "events",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A 403 is not sent to an ingest that would refuse the batch",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "events": [],
+   "needs": [
+    "events"
+   ],
+   "receipts": {
+    "x": {
+     "claims": {},
+     "sign": {
+      "mutate": "tamper_payload"
+     }
+    }
+   }
+  },
+  {
+   "id": "events.stray_path",
+   "group": "events",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A crawler on an unregistered path does not cost the report",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/free/stray-token-abc",
+      "ua": "gptbot"
+     },
+     "expect": {}
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "events": [
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false
+    }
+   ],
+   "needs": [
+    "events"
+   ]
+  },
+  {
+   "id": "events.open_route",
+   "group": "events",
+   "level": "must",
+   "profile": "mixed-enforce",
+   "title": "A free route is not a paid admission, and a reader is not reported on it",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/open/x",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/open/x",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "events": [
+    {
+     "kind": "serve",
+     "resource": "/open/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false,
+     "exempt": true
+    }
+   ],
+   "needs": [
+    "events"
+   ]
+  },
+  {
+   "id": "events.table",
+   "group": "events",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "Every marker reports its operator and class",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; gptbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; oai-searchbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; chatgpt-user/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; claudebot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; claude-searchbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; claude-user/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; claude-web/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; anthropic-ai/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; perplexitybot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; perplexity-user/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; ccbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; bytespider/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; google-extended/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; applebot-extended/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; meta-externalagent/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; facebookbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; amazonbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; youbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; diffbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; timpibot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; omgilibot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; cohere-ai/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; ai2bot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; mistralai/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; aifinpay-agent/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; headlesschrome/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; phantomjs/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "events": [
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "anthropic",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "anthropic",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "anthropic",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "anthropic",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "anthropic",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "perplexity",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "perplexity",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "commoncrawl",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "bytedance",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "google",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "apple",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "meta",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "meta",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "amazon",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "aifinpay",
+     "ua_class": "aifp_agent",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "unknown",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "unknown",
+     "verified": false
+    }
+   ],
+   "needs": [
+    "events"
+   ]
+  },
+  {
+   "id": "events.ingest_down",
+   "group": "events",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An ingest outage changes no response",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "fault": {
+    "ingest": 503
+   },
+   "needs": [
+    "events"
+   ]
+  },
+  {
+   "id": "policy.allow",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-enforce",
+   "title": "An allowed operator is served free",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-paywall": "exempt"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "policy.block",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-enforce",
+   "title": "A blocked operator gets a 403",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "claudebot"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false,
+      "body": {
+       "subset": {
+        "error": "AIFP-403",
+        "detail": "blocked by merchant policy (operator rule)"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "policy.charge",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-enforce",
+   "title": "An operator with no rule is charged",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "perplexity"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "policy.allow_event",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-enforce",
+   "title": "An allowed operator is reported as an exempt serve",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "events": [
+    {
+     "kind": "serve",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false,
+     "exempt": true
+    }
+   ],
+   "needs": [
+    "events"
+   ]
+  },
+  {
+   "id": "policy.default_block_reader",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-block-all",
+   "title": "A default block never reaches a reader",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "none"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "policy.shadow_block",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-shadow",
+   "title": "Shadow serves what a rule would block and says so",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "claudebot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-shadow-status": "403"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "policy.verified_only",
+   "group": "policy",
+   "level": "parity",
+   "profile": "policy-verified",
+   "title": "A verified_only rule answers only after the receipt verifies",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-paywall": "exempt"
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "path.case",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A case change does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/PAID/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.trailing_slash",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A trailing slash does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a/",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.double_slash",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A doubled slash does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "//paid//a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.encoded",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An encoded letter does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/%70aid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.dot",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A dot segment does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/./a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.dotdot",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A dot-dot segment does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/x/../paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.matrix_end",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A matrix parameter does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a;x=1",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.matrix_mid",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A matrix parameter mid-path does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid;x=1/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.matrix_start",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A leading matrix segment does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/;x/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.dot_matrix",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A dot with a parameter does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/.;/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.dotdot_matrix",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A dot-dot with a parameter does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/x/..;/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.encoded_slash",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An encoded slash does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid%2fa",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.exact_trailing_slash",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A trailing slash does not walk around an exact pattern",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/report/",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.exact_case",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A case change does not walk around an exact pattern",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/Report",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.exact_query",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A query string does not walk around an exact pattern",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/report?utm_source=x",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.matrix_dotdot_pop",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A dot-dot behind a parameter does not pop past the pattern",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/..;/../a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.empty_dotdot",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A dot-dot behind an empty segment does not pop past the pattern",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid//../a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.double_encoded_dotdot",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A double-encoded dot-dot does not pop past the pattern",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/%252e%252e/../a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.backslash",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A backslash does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid\\a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.backslash_dotdot",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "Backslashes and dot-dots do not pop past the pattern",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/x\\..\\../../a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.double_encoded",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A double-encoded letter does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/%2570aid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.case_no_discount",
+   "group": "path",
+   "level": "must",
+   "profile": "mixed-enforce",
+   "title": "A case change does not buy the cheap price",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/PAID/PREMIUM/x",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false,
+      "weight_at_least": 10
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.boundary",
+   "group": "path",
+   "level": "should",
+   "profile": "content-enforce",
+   "title": "A similar path outside the pattern is not charged as it",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paidx/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ]
+  },
+  {
+   "id": "discovery.x402",
+   "group": "discovery",
+   "level": "should",
+   "profile": "content-enforce",
+   "title": "The discovery document names the merchant and the quote endpoint",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/.well-known/x402.json",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": false,
+      "headers": {
+       "content-type": {
+        "contains": "application/json"
+       }
+      },
+      "body": {
+       "subset": {
+        "protocol": "AIFP-1",
+        "merchant_id": "mrch_0123456789abcdef",
+        "quote_endpoint": "{{api}}/v1/quote",
+        "pay_endpoint": "{{api}}/v1/pay"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "discovery.x402_query",
+   "group": "discovery",
+   "level": "should",
+   "profile": "content-enforce",
+   "title": "A query string does not lose the discovery document",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/.well-known/x402.json?x=1",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": false,
+      "body": {
+       "subset": {
+        "protocol": "AIFP-1"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "discovery.x402_tier",
+   "group": "discovery",
+   "level": "parity",
+   "profile": "premium-enforce",
+   "title": "The document prices each resource at its tier",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/.well-known/x402.json",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": false,
+      "body": {
+       "resource_tier": {
+        "/paid/*": "premium"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "discovery.link",
+   "group": "discovery",
+   "level": "should",
+   "profile": "content-enforce",
+   "title": "An HTML page points at the agent documents",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/free/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "link": {
+        "contains": "/llms.txt"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "discovery.llms",
+   "group": "discovery",
+   "level": "should",
+   "profile": "content-enforce",
+   "title": "/llms.txt is served as markdown",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/llms.txt",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "headers": {
+       "content-type": {
+        "contains": "text/markdown"
+       }
+      }
+     }
+    }
+   ],
+   "needs": [
+    "llms_txt"
+   ]
+  },
+  {
+   "id": "pass.origin_error",
+   "group": "pass",
+   "level": "must",
+   "profile": "content-shadow",
+   "title": "An origin error passes through unchanged",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/err503",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 503,
+      "body": {
+       "text": "ORIGIN-503"
+      }
+     }
+    }
+   ],
+   "needs": [
+    "proxy"
+   ]
+  },
+  {
+   "id": "pass.shadow_odd_path",
+   "group": "pass",
+   "level": "must",
+   "profile": "content-shadow",
+   "title": "Shadow does not refuse a path it finds odd",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/free/a%0Ab",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/free/50%2500",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true
+     }
+    }
+   ],
+   "needs": [
+    "proxy"
+   ]
+  },
+  {
+   "id": "pass.long_url",
+   "group": "pass",
+   "level": "must",
+   "profile": "content-shadow",
+   "title": "Shadow does not refuse a long URL the origin accepts",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/free/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true
+     }
+    }
+   ],
+   "needs": [
+    "proxy"
+   ]
+  },
+  {
+   "id": "pass.post_body",
+   "group": "pass",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A POST body reaches the origin intact",
+   "steps": [
+    {
+     "request": {
+      "method": "POST",
+      "path": "/free/echo",
+      "ua": "chrome",
+      "body_bytes": 262144
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "body_sha256": true
+     }
+    }
+   ],
+   "needs": [
+    "proxy"
+   ]
+  },
+  {
+   "id": "pass.receipt_stripped",
+   "group": "pass",
+   "level": "should",
+   "profile": "content-enforce",
+   "title": "A receipt is not forwarded to the origin",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "origin_did_not_see": [
+       "aifp-receipt"
+      ]
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   },
+   "needs": [
+    "proxy"
+   ]
+  },
+  {
+   "id": "pass.spoofed_uri",
+   "group": "pass",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A client cannot name another path to the decision",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot",
+      "headers": {
+       "X-Original-URI": "/free/a",
+       "X-Original-Method": "OPTIONS"
+      }
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "needs": [
+    "proxy"
+   ]
+  },
+  {
+   "id": "fail.jwks_no_receipt",
+   "group": "fail",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A key outage does not touch a 402",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "fault": {
+    "jwks": true
+   },
+   "needs": [
+    "fault:jwks"
+   ]
+  },
+  {
+   "id": "fail.jwks_receipt",
+   "group": "fail",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A key outage fails closed",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 503,
+      "origin": false,
+      "headers": {
+       "retry-after": {
+        "present": true
+       }
+      },
+      "body": {
+       "subset": {
+        "error": "AIFP-503-METER"
+       }
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   },
+   "fault": {
+    "jwks": true
+   },
+   "needs": [
+    "fault:jwks"
+   ]
+  },
+  {
+   "id": "fail.jwks_reader",
+   "group": "fail",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A key outage does not touch a reader",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "fault": {
+    "jwks": true
+   },
+   "needs": [
+    "fault:jwks"
+   ]
+  },
+  {
+   "id": "fail.jwks_shadow",
+   "group": "fail",
+   "level": "must",
+   "profile": "content-shadow",
+   "title": "A key outage does not touch a shadow site",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   },
+   "fault": {
+    "jwks": true
+   },
+   "needs": [
+    "fault:jwks"
+   ]
+  },
+  {
+   "id": "fail.store_receipt",
+   "group": "fail",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A meter outage fails closed",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 503,
+      "origin": false,
+      "headers": {
+       "retry-after": {
+        "present": true
+       }
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   },
+   "fault": {
+    "store": true
+   },
+   "needs": [
+    "fault:store"
+   ]
+  },
+  {
+   "id": "fail.store_shadow",
+   "group": "fail",
+   "level": "must",
+   "profile": "content-shadow",
+   "title": "A meter outage does not touch a shadow site",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   },
+   "fault": {
+    "store": true
+   },
+   "needs": [
+    "fault:store"
+   ]
+  },
+  {
+   "id": "fail.record_reader",
+   "group": "fail",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A control plane outage at boot does not touch a reader",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "fault": {
+    "record": true
+   },
+   "needs": [
+    "fault:record"
+   ]
+  },
+  {
+   "id": "fail.record_shadow",
+   "group": "fail",
+   "level": "must",
+   "profile": "content-shadow",
+   "title": "A control plane outage at boot does not touch a shadow site",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "fault": {
+    "record": true
+   },
+   "needs": [
+    "fault:record"
+   ]
+  },
+  {
+   "id": "fail.origin_keeps_units",
+   "group": "fail",
+   "level": "should",
+   "profile": "content-enforce",
+   "title": "An origin that cannot be reached costs no units",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       502,
+       503,
+       504
+      ],
+      "origin": false
+     }
+    },
+    {
+     "action": "origin_up"
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "2"
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   },
+   "fault": {
+    "origin": true
+   },
+   "needs": [
+    "fault:origin"
+   ]
+  },
+  {
+   "id": "fail.decision_down_shadow",
+   "group": "fail",
+   "level": "must",
+   "profile": "content-shadow",
+   "title": "A decision service outage does not touch a shadow site",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "fault": {
+    "decision": true
+   },
+   "needs": [
+    "fault:decision"
+   ]
+  },
+  {
+   "id": "fail.decision_down_enforce",
+   "group": "fail",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A decision service outage fails closed for an agent",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       500,
+       502,
+       503,
+       504
+      ],
+      "origin": false
+     }
+    }
+   ],
+   "fault": {
+    "decision": true
+   },
+   "needs": [
+    "fault:decision"
+   ]
+  },
+  {
+   "id": "method.post",
+   "group": "method",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A POST is charged like a GET",
+   "steps": [
+    {
+     "request": {
+      "method": "POST",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "method.head",
+   "group": "method",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A HEAD is charged like a GET",
+   "steps": [
+    {
+     "request": {
+      "method": "HEAD",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "method.options",
+   "group": "method",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "An OPTIONS is charged like a GET",
+   "steps": [
+    {
+     "request": {
+      "method": "OPTIONS",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ]
+  }
+ ]
+}

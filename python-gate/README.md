@@ -117,6 +117,14 @@ and expires with the receipt.
 | `on_event(e)` | — | `402` / `serve` / `403` / `meter_error` events for your metrics. |
 | `refund_on_error` (adapters) | `False` | Give the units back when your handler answers 5xx. |
 
+## Shared caches
+
+A 402, a 403, a 503, a paid response and a shadow would-be refusal carry
+`Cache-Control: private, no-store, max-age=0`, and a handler's own value does not
+replace it on a paid response. An exempt reader's page keeps whatever your app
+sets, so a CDN in front of this process can answer an agent with a copy it stored
+for a reader, and the gate never runs. Keep protected paths out of that cache.
+
 ## What it guarantees
 
 - Fails **closed**: if the JWKS cannot be reached, paid routes answer 503, never free.

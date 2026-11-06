@@ -410,7 +410,7 @@ def test_a_store_failure_on_the_nonce_check_fails_closed_by_default():
 
 def test_a_store_failure_on_the_nonce_check_serves_uncounted_only_when_opened():
     r = gate(store=FailingNonceStore(), on_store_error="open").decide(req(token(unit_quota=1)))
-    assert r.ok and r.headers == {"AIFP-Meter": "degraded"} and r.aifp["used"] == 0
+    assert r.ok and r.headers == {"AIFP-Meter": "degraded", "Cache-Control": g.NO_STORE} and r.aifp["used"] == 0
 
 
 # ── refunds are best effort and never raise ─────────────────────────────────

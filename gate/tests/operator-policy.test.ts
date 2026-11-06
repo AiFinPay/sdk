@@ -1,3 +1,4 @@
+import { NO_STORE } from "../src/core.js";
 // ──────────────────────────────────────────────────────────────────────────
 // Per-operator access policy — allow / charge / block, decided by the merchant.
 //
@@ -163,7 +164,7 @@ describe("enforce: allow, charge, block", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.status).toBe(403);
-    expect(result.headers).toEqual({ "Content-Type": "application/json" });
+    expect(result.headers).toEqual({ "Content-Type": "application/json", "Cache-Control": NO_STORE });
     expect(result.body).toEqual({ error: "AIFP-403", detail: "blocked by merchant policy (operator rule)" });
     expect(events).toEqual([
       {

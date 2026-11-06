@@ -1,5 +1,5 @@
 {
- "generated_from": "@aifinpay/gate 0.9.0",
+ "generated_from": "@aifinpay/gate 0.9.1",
  "jwks": {
   "keys": [
    {
@@ -862,7 +862,7 @@
    "prefix",
    "/a/",
    "/a",
-   false
+   true
   ],
   [
    "prefix",
@@ -1623,7 +1623,8 @@
       "ok": false,
       "status": 402,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-402",
@@ -1684,7 +1685,8 @@
       "ok": true,
       "status": 200,
       "headers": {
-       "AIFP-Quota-Remaining": "2"
+       "AIFP-Quota-Remaining": "2",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": "0x00000000000000000000000000000000000000a1",
@@ -1724,7 +1726,8 @@
       "ok": true,
       "status": 200,
       "headers": {
-       "AIFP-Quota-Remaining": "1"
+       "AIFP-Quota-Remaining": "1",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": "0x00000000000000000000000000000000000000a1",
@@ -1764,7 +1767,8 @@
       "ok": true,
       "status": 200,
       "headers": {
-       "AIFP-Quota-Remaining": "0"
+       "AIFP-Quota-Remaining": "0",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": "0x00000000000000000000000000000000000000a1",
@@ -1804,7 +1808,8 @@
       "ok": false,
       "status": 402,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-402",
@@ -1867,7 +1872,8 @@
       "ok": true,
       "status": 200,
       "headers": {
-       "AIFP-Quota-Remaining": "15"
+       "AIFP-Quota-Remaining": "15",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": "0x00000000000000000000000000000000000000a1",
@@ -1907,7 +1913,8 @@
       "ok": true,
       "status": 200,
       "headers": {
-       "AIFP-Quota-Remaining": "5"
+       "AIFP-Quota-Remaining": "5",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": "0x00000000000000000000000000000000000000a1",
@@ -1947,7 +1954,8 @@
       "ok": false,
       "status": 402,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-402",
@@ -2010,7 +2018,8 @@
       "ok": true,
       "status": 200,
       "headers": {
-       "AIFP-Quota-Remaining": "1"
+       "AIFP-Quota-Remaining": "1",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": "0x00000000000000000000000000000000000000a1",
@@ -2050,7 +2059,8 @@
       "ok": false,
       "status": 402,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-402",
@@ -2112,7 +2122,8 @@
       "ok": false,
       "status": 403,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-403",
@@ -2153,7 +2164,8 @@
       "ok": false,
       "status": 403,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-403",
@@ -2194,7 +2206,8 @@
       "ok": false,
       "status": 402,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-402",
@@ -2256,7 +2269,8 @@
       "ok": false,
       "status": 403,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-403",
@@ -2297,7 +2311,8 @@
       "ok": false,
       "status": 403,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-403",
@@ -2338,7 +2353,8 @@
       "ok": true,
       "status": 200,
       "headers": {
-       "AIFP-Quota-Remaining": "2"
+       "AIFP-Quota-Remaining": "2",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": "0x00000000000000000000000000000000000000a1",
@@ -2386,7 +2402,8 @@
       "ok": false,
       "status": 403,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-403",
@@ -2427,7 +2444,8 @@
       "ok": true,
       "status": 200,
       "headers": {
-       "AIFP-Quota-Remaining": "2"
+       "AIFP-Quota-Remaining": "2",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": "0x00000000000000000000000000000000000000a1",
@@ -2475,7 +2493,8 @@
       "ok": true,
       "status": 200,
       "headers": {
-       "AIFP-Quota-Remaining": "2"
+       "AIFP-Quota-Remaining": "2",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": "0x00000000000000000000000000000000000000a1",
@@ -2523,7 +2542,8 @@
       "ok": false,
       "status": 403,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-403",
@@ -2564,7 +2584,8 @@
       "ok": false,
       "status": 403,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-403",
@@ -2605,7 +2626,8 @@
       "ok": false,
       "status": 403,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-403",
@@ -2646,7 +2668,8 @@
       "ok": false,
       "status": 403,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-403",
@@ -2687,7 +2710,8 @@
       "ok": false,
       "status": 403,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-403",
@@ -2728,7 +2752,8 @@
       "ok": true,
       "status": 200,
       "headers": {
-       "AIFP-Quota-Remaining": "2"
+       "AIFP-Quota-Remaining": "2",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": "0x00000000000000000000000000000000000000a1",
@@ -2776,7 +2801,8 @@
       "ok": false,
       "status": 403,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-403",
@@ -2817,7 +2843,8 @@
       "ok": true,
       "status": 200,
       "headers": {
-       "AIFP-Quota-Remaining": "0"
+       "AIFP-Quota-Remaining": "0",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": "0x00000000000000000000000000000000000000a1",
@@ -2857,7 +2884,8 @@
       "ok": false,
       "status": 403,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-403",
@@ -2898,7 +2926,8 @@
       "ok": false,
       "status": 403,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-403",
@@ -2939,7 +2968,8 @@
       "ok": true,
       "status": 200,
       "headers": {
-       "AIFP-Quota-Remaining": "7"
+       "AIFP-Quota-Remaining": "7",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": "0x00000000000000000000000000000000000000a1",
@@ -2989,7 +3019,8 @@
       "ok": false,
       "status": 403,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-403",
@@ -3080,7 +3111,8 @@
       "ok": false,
       "status": 402,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-402",
@@ -3140,7 +3172,8 @@
       "ok": false,
       "status": 402,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-402",
@@ -3203,7 +3236,8 @@
       "ok": true,
       "status": 200,
       "headers": {
-       "AIFP-Quota-Remaining": "2"
+       "AIFP-Quota-Remaining": "2",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": "0x00000000000000000000000000000000000000a1",
@@ -3250,7 +3284,8 @@
       "ok": false,
       "status": 402,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-402",
@@ -3311,7 +3346,8 @@
       "status": 200,
       "headers": {
        "AIFP-Mode": "shadow",
-       "AIFP-Shadow-Status": "402"
+       "AIFP-Shadow-Status": "402",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": null,
@@ -3366,7 +3402,8 @@
       "status": 200,
       "headers": {
        "AIFP-Mode": "shadow",
-       "AIFP-Shadow-Status": "402"
+       "AIFP-Shadow-Status": "402",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": null,
@@ -3471,7 +3508,8 @@
       "status": 200,
       "headers": {
        "AIFP-Mode": "shadow",
-       "AIFP-Shadow-Status": "403"
+       "AIFP-Shadow-Status": "403",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": null,
@@ -3526,7 +3564,8 @@
       "status": 200,
       "headers": {
        "AIFP-Mode": "shadow",
-       "AIFP-Shadow-Status": "403"
+       "AIFP-Shadow-Status": "403",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": null,
@@ -3581,7 +3620,8 @@
       "status": 200,
       "headers": {
        "AIFP-Mode": "shadow",
-       "AIFP-Shadow-Status": "402"
+       "AIFP-Shadow-Status": "402",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": null,
@@ -3636,6 +3676,7 @@
       "status": 200,
       "headers": {
        "AIFP-Quota-Remaining": "2",
+       "Cache-Control": "private, no-store, max-age=0",
        "AIFP-Mode": "shadow"
       },
       "aifp": {
@@ -3677,6 +3718,7 @@
       "status": 200,
       "headers": {
        "AIFP-Quota-Remaining": "1",
+       "Cache-Control": "private, no-store, max-age=0",
        "AIFP-Mode": "shadow"
       },
       "aifp": {
@@ -3718,6 +3760,7 @@
       "status": 200,
       "headers": {
        "AIFP-Quota-Remaining": "0",
+       "Cache-Control": "private, no-store, max-age=0",
        "AIFP-Mode": "shadow"
       },
       "aifp": {
@@ -3759,7 +3802,8 @@
       "status": 200,
       "headers": {
        "AIFP-Mode": "shadow",
-       "AIFP-Shadow-Status": "402"
+       "AIFP-Shadow-Status": "402",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": null,
@@ -3816,7 +3860,8 @@
       "status": 200,
       "headers": {
        "AIFP-Mode": "shadow",
-       "AIFP-Shadow-Status": "403"
+       "AIFP-Shadow-Status": "403",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": "0xsomeoneelse",
@@ -3868,7 +3913,8 @@
       "ok": false,
       "status": 402,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-402",
@@ -4006,7 +4052,8 @@
       "ok": false,
       "status": 403,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-403",
@@ -4061,7 +4108,8 @@
       "ok": false,
       "status": 402,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-402",
@@ -4165,7 +4213,8 @@
       "ok": false,
       "status": 403,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-403",
@@ -4261,7 +4310,8 @@
       "ok": false,
       "status": 403,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-403",
@@ -4294,7 +4344,8 @@
       "ok": false,
       "status": 403,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-403",
@@ -4340,7 +4391,8 @@
       "ok": false,
       "status": 402,
       "headers": {
-       "Content-Type": "application/json"
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "body": {
        "error": "AIFP-402",
@@ -4457,7 +4509,8 @@
       "status": 200,
       "headers": {
        "AIFP-Mode": "shadow",
-       "AIFP-Shadow-Status": "403"
+       "AIFP-Shadow-Status": "403",
+       "Cache-Control": "private, no-store, max-age=0"
       },
       "aifp": {
        "agent": null,
