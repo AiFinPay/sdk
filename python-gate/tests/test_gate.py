@@ -144,7 +144,7 @@ def test_a_failing_store_closes_by_default():
 
 def test_a_failing_store_can_be_opened_explicitly_and_says_so():
     r = gate(store=BrokenStore(), on_store_error="open").decide(req(token()))
-    assert r.ok and r.headers == {"AIFP-Meter": "degraded"} and r.aifp["used"] == 0
+    assert r.ok and r.headers == {"AIFP-Meter": "degraded", "Cache-Control": g.NO_STORE} and r.aifp["used"] == 0
 
 
 def test_a_refused_call_spends_nothing():

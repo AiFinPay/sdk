@@ -1,3 +1,12 @@
+## 0.6.1 — differences the conformance vectors found
+
+- Port of `@aifinpay/gate` 0.9.1: a 402, 403 or 503, a paid response and a
+  shadow would-be refusal carry `Cache-Control: private, no-store, max-age=0`,
+  and a handler's own `Cache-Control` does not make a paid response storable.
+  Exported as `NO_STORE`. Parity fixture regenerated.
+- `AifpGateWSGI` sends no body on a HEAD refusal. A server that writes what it
+  is given (waitress) otherwise broke the connection.
+
 ## 0.6.0 — $0.02 minimum batch
 
 - Port of `@aifinpay/gate` 0.9.0: `min_requests` 40 / 10 / 4 (was

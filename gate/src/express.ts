@@ -1,5 +1,5 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
-import { createGate, refundUnits, type GateOptions } from "./core.js";
+import { createGate, NO_STORE, refundUnits, type GateOptions } from "./core.js";
 import { MemoryStore } from "./stores/memory.js";
 import type { AifpContext } from "./types.js";
 import { linkHtmlResponse } from "./discovery.js";
@@ -16,6 +16,15 @@ declare global {
       aifp?: AifpContext;
     }
   }
+}
+
+/** A handler that sets its own Cache-Control must not make a paid response storable. */
+function keepPaidUnstored(res: Response): void {
+  const writeHead = res.writeHead;
+  res.writeHead = function (this: Response, ...args: unknown[]) {
+    this.setHeader("Cache-Control", NO_STORE);
+    return (writeHead as (...a: unknown[]) => Response).apply(this, args);
+  } as Response["writeHead"];
 }
 
 /**
@@ -47,8 +56,10 @@ export function aifpGate(options: GateOptions): RequestHandler {
     linkHtmlResponse(res, link);
     void (async () => {
       try {
+        // A router mounted at a prefix strips it from req.path, and patterns name the whole path.
+        const fullPath = req.baseUrl + req.path;
         const result = await gate({
-          path: req.path,
+          path: fullPath,
           header: (name: string) => req.header(name) ?? undefined,
         });
 
@@ -57,7 +68,7 @@ export function aifpGate(options: GateOptions): RequestHandler {
           const reporting = options.reporting;
           let context: ReportingContext = { channel: "unknown", consent: "unknown" };
           try {
-            const claimed = reporting.context?.({ path: req.path, header: (name) => req.header(name) ?? undefined });
+            const claimed = reporting.context?.({ path: fullPath, header: (name) => req.header(name) ?? undefined });
             if (claimed && validReportingContext(claimed)) context = { ...claimed };
             const token = req.header("AIFP-Reporting-Token");
             if (!context.reporting_token && token && validReportingContext({ ...context, reporting_token: token })) {
@@ -131,6 +142,7 @@ export function aifpGate(options: GateOptions): RequestHandler {
         }
 
         req.aifp = result.aifp;
+        if (result.aifp.mode === "paid") keepPaidUnstored(res);
 
         if (options.refundOnError) {
           // 5xx only: a 4xx is the caller's mistake and the merchant did the
