@@ -41,6 +41,10 @@
     {
      "pattern": "/paid-internal/*",
      "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
     }
    ]
   },
@@ -57,6 +61,10 @@
     {
      "pattern": "/paid-internal/*",
      "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
     }
    ]
   },
@@ -72,6 +80,10 @@
     },
     {
      "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
      "tier": "standard"
     }
    ]
@@ -134,6 +146,10 @@
     {
      "pattern": "/paid-internal/*",
      "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
     }
    ]
   },
@@ -149,6 +165,10 @@
     },
     {
      "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
      "tier": "standard"
     }
    ],
@@ -177,6 +197,10 @@
     {
      "pattern": "/paid-internal/*",
      "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
     }
    ],
    "operator_rules": [
@@ -204,6 +228,10 @@
     {
      "pattern": "/paid-internal/*",
      "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
     }
    ],
    "operator_rules": [],
@@ -221,6 +249,10 @@
     },
     {
      "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
      "tier": "standard"
     }
    ],
@@ -406,1195 +438,6 @@
   "human",
   "unknown"
  ],
- "ua_table": [
-  [
-   "gptbot",
-   "openai",
-   "ai_crawler"
-  ],
-  [
-   "oai-searchbot",
-   "openai",
-   "ai_crawler"
-  ],
-  [
-   "chatgpt-user",
-   "openai",
-   "ai_agent_browser"
-  ],
-  [
-   "claudebot",
-   "anthropic",
-   "ai_crawler"
-  ],
-  [
-   "claude-searchbot",
-   "anthropic",
-   "ai_crawler"
-  ],
-  [
-   "claude-user",
-   "anthropic",
-   "ai_agent_browser"
-  ],
-  [
-   "claude-web",
-   "anthropic",
-   "ai_agent_browser"
-  ],
-  [
-   "anthropic-ai",
-   "anthropic",
-   "ai_crawler"
-  ],
-  [
-   "perplexitybot",
-   "perplexity",
-   "ai_crawler"
-  ],
-  [
-   "perplexity-user",
-   "perplexity",
-   "ai_agent_browser"
-  ],
-  [
-   "ccbot",
-   "commoncrawl",
-   "ai_crawler"
-  ],
-  [
-   "bytespider",
-   "bytedance",
-   "ai_crawler"
-  ],
-  [
-   "google-extended",
-   "google",
-   "ai_crawler"
-  ],
-  [
-   "applebot-extended",
-   "apple",
-   "ai_crawler"
-  ],
-  [
-   "meta-externalagent",
-   "meta",
-   "ai_crawler"
-  ],
-  [
-   "facebookbot",
-   "meta",
-   "ai_crawler"
-  ],
-  [
-   "amazonbot",
-   "amazon",
-   "ai_crawler"
-  ],
-  [
-   "youbot",
-   "unknown",
-   "ai_crawler"
-  ],
-  [
-   "diffbot",
-   "unknown",
-   "ai_crawler"
-  ],
-  [
-   "timpibot",
-   "unknown",
-   "ai_crawler"
-  ],
-  [
-   "omgilibot",
-   "unknown",
-   "ai_crawler"
-  ],
-  [
-   "cohere-ai",
-   "unknown",
-   "ai_agent_browser"
-  ],
-  [
-   "ai2bot",
-   "unknown",
-   "ai_crawler"
-  ],
-  [
-   "mistralai",
-   "unknown",
-   "ai_agent_browser"
-  ],
-  [
-   "aifinpay-agent",
-   "aifinpay",
-   "aifp_agent"
-  ],
-  [
-   "headlesschrome",
-   "unknown",
-   "unknown"
-  ],
-  [
-   "phantomjs",
-   "unknown",
-   "unknown"
-  ]
- ],
- "scope_table": [
-  [
-   "exact",
-   "/",
-   "/",
-   true
-  ],
-  [
-   "exact",
-   "/",
-   "/a",
-   false
-  ],
-  [
-   "exact",
-   "/",
-   "/a/",
-   false
-  ],
-  [
-   "exact",
-   "/",
-   "/a/b",
-   false
-  ],
-  [
-   "exact",
-   "/",
-   "/a/b/c",
-   false
-  ],
-  [
-   "exact",
-   "/",
-   "/ab",
-   false
-  ],
-  [
-   "exact",
-   "/",
-   "/b",
-   false
-  ],
-  [
-   "exact",
-   "/a",
-   "/",
-   false
-  ],
-  [
-   "exact",
-   "/a",
-   "/a",
-   true
-  ],
-  [
-   "exact",
-   "/a",
-   "/a/",
-   false
-  ],
-  [
-   "exact",
-   "/a",
-   "/a/b",
-   false
-  ],
-  [
-   "exact",
-   "/a",
-   "/a/b/c",
-   false
-  ],
-  [
-   "exact",
-   "/a",
-   "/ab",
-   false
-  ],
-  [
-   "exact",
-   "/a",
-   "/b",
-   false
-  ],
-  [
-   "exact",
-   "/a/",
-   "/",
-   false
-  ],
-  [
-   "exact",
-   "/a/",
-   "/a",
-   false
-  ],
-  [
-   "exact",
-   "/a/",
-   "/a/",
-   true
-  ],
-  [
-   "exact",
-   "/a/",
-   "/a/b",
-   false
-  ],
-  [
-   "exact",
-   "/a/",
-   "/a/b/c",
-   false
-  ],
-  [
-   "exact",
-   "/a/",
-   "/ab",
-   false
-  ],
-  [
-   "exact",
-   "/a/",
-   "/b",
-   false
-  ],
-  [
-   "exact",
-   "/a/*",
-   "/",
-   false
-  ],
-  [
-   "exact",
-   "/a/*",
-   "/a",
-   true
-  ],
-  [
-   "exact",
-   "/a/*",
-   "/a/",
-   true
-  ],
-  [
-   "exact",
-   "/a/*",
-   "/a/b",
-   true
-  ],
-  [
-   "exact",
-   "/a/*",
-   "/a/b/c",
-   true
-  ],
-  [
-   "exact",
-   "/a/*",
-   "/ab",
-   false
-  ],
-  [
-   "exact",
-   "/a/*",
-   "/b",
-   false
-  ],
-  [
-   "exact",
-   "/a/b",
-   "/",
-   false
-  ],
-  [
-   "exact",
-   "/a/b",
-   "/a",
-   false
-  ],
-  [
-   "exact",
-   "/a/b",
-   "/a/",
-   false
-  ],
-  [
-   "exact",
-   "/a/b",
-   "/a/b",
-   true
-  ],
-  [
-   "exact",
-   "/a/b",
-   "/a/b/c",
-   false
-  ],
-  [
-   "exact",
-   "/a/b",
-   "/ab",
-   false
-  ],
-  [
-   "exact",
-   "/a/b",
-   "/b",
-   false
-  ],
-  [
-   "prefix",
-   "/",
-   "/",
-   true
-  ],
-  [
-   "prefix",
-   "/",
-   "/a",
-   true
-  ],
-  [
-   "prefix",
-   "/",
-   "/a/",
-   true
-  ],
-  [
-   "prefix",
-   "/",
-   "/a/b",
-   true
-  ],
-  [
-   "prefix",
-   "/",
-   "/a/b/c",
-   true
-  ],
-  [
-   "prefix",
-   "/",
-   "/ab",
-   true
-  ],
-  [
-   "prefix",
-   "/",
-   "/b",
-   true
-  ],
-  [
-   "prefix",
-   "/a",
-   "/",
-   false
-  ],
-  [
-   "prefix",
-   "/a",
-   "/a",
-   true
-  ],
-  [
-   "prefix",
-   "/a",
-   "/a/",
-   true
-  ],
-  [
-   "prefix",
-   "/a",
-   "/a/b",
-   true
-  ],
-  [
-   "prefix",
-   "/a",
-   "/a/b/c",
-   true
-  ],
-  [
-   "prefix",
-   "/a",
-   "/ab",
-   false
-  ],
-  [
-   "prefix",
-   "/a",
-   "/b",
-   false
-  ],
-  [
-   "prefix",
-   "/a/",
-   "/",
-   false
-  ],
-  [
-   "prefix",
-   "/a/",
-   "/a",
-   false
-  ],
-  [
-   "prefix",
-   "/a/",
-   "/a/",
-   true
-  ],
-  [
-   "prefix",
-   "/a/",
-   "/a/b",
-   true
-  ],
-  [
-   "prefix",
-   "/a/",
-   "/a/b/c",
-   true
-  ],
-  [
-   "prefix",
-   "/a/",
-   "/ab",
-   false
-  ],
-  [
-   "prefix",
-   "/a/",
-   "/b",
-   false
-  ],
-  [
-   "prefix",
-   "/a/*",
-   "/",
-   false
-  ],
-  [
-   "prefix",
-   "/a/*",
-   "/a",
-   false
-  ],
-  [
-   "prefix",
-   "/a/*",
-   "/a/",
-   false
-  ],
-  [
-   "prefix",
-   "/a/*",
-   "/a/b",
-   false
-  ],
-  [
-   "prefix",
-   "/a/*",
-   "/a/b/c",
-   false
-  ],
-  [
-   "prefix",
-   "/a/*",
-   "/ab",
-   false
-  ],
-  [
-   "prefix",
-   "/a/*",
-   "/b",
-   false
-  ],
-  [
-   "prefix",
-   "/a/b",
-   "/",
-   false
-  ],
-  [
-   "prefix",
-   "/a/b",
-   "/a",
-   false
-  ],
-  [
-   "prefix",
-   "/a/b",
-   "/a/",
-   false
-  ],
-  [
-   "prefix",
-   "/a/b",
-   "/a/b",
-   true
-  ],
-  [
-   "prefix",
-   "/a/b",
-   "/a/b/c",
-   true
-  ],
-  [
-   "prefix",
-   "/a/b",
-   "/ab",
-   false
-  ],
-  [
-   "prefix",
-   "/a/b",
-   "/b",
-   false
-  ],
-  [
-   "merchant",
-   "/",
-   "/",
-   true
-  ],
-  [
-   "merchant",
-   "/",
-   "/a",
-   true
-  ],
-  [
-   "merchant",
-   "/",
-   "/a/",
-   true
-  ],
-  [
-   "merchant",
-   "/",
-   "/a/b",
-   true
-  ],
-  [
-   "merchant",
-   "/",
-   "/a/b/c",
-   true
-  ],
-  [
-   "merchant",
-   "/",
-   "/ab",
-   true
-  ],
-  [
-   "merchant",
-   "/",
-   "/b",
-   true
-  ],
-  [
-   "merchant",
-   "/a",
-   "/",
-   true
-  ],
-  [
-   "merchant",
-   "/a",
-   "/a",
-   true
-  ],
-  [
-   "merchant",
-   "/a",
-   "/a/",
-   true
-  ],
-  [
-   "merchant",
-   "/a",
-   "/a/b",
-   true
-  ],
-  [
-   "merchant",
-   "/a",
-   "/a/b/c",
-   true
-  ],
-  [
-   "merchant",
-   "/a",
-   "/ab",
-   true
-  ],
-  [
-   "merchant",
-   "/a",
-   "/b",
-   true
-  ],
-  [
-   "merchant",
-   "/a/",
-   "/",
-   true
-  ],
-  [
-   "merchant",
-   "/a/",
-   "/a",
-   true
-  ],
-  [
-   "merchant",
-   "/a/",
-   "/a/",
-   true
-  ],
-  [
-   "merchant",
-   "/a/",
-   "/a/b",
-   true
-  ],
-  [
-   "merchant",
-   "/a/",
-   "/a/b/c",
-   true
-  ],
-  [
-   "merchant",
-   "/a/",
-   "/ab",
-   true
-  ],
-  [
-   "merchant",
-   "/a/",
-   "/b",
-   true
-  ],
-  [
-   "merchant",
-   "/a/*",
-   "/",
-   true
-  ],
-  [
-   "merchant",
-   "/a/*",
-   "/a",
-   true
-  ],
-  [
-   "merchant",
-   "/a/*",
-   "/a/",
-   true
-  ],
-  [
-   "merchant",
-   "/a/*",
-   "/a/b",
-   true
-  ],
-  [
-   "merchant",
-   "/a/*",
-   "/a/b/c",
-   true
-  ],
-  [
-   "merchant",
-   "/a/*",
-   "/ab",
-   true
-  ],
-  [
-   "merchant",
-   "/a/*",
-   "/b",
-   true
-  ],
-  [
-   "merchant",
-   "/a/b",
-   "/",
-   true
-  ],
-  [
-   "merchant",
-   "/a/b",
-   "/a",
-   true
-  ],
-  [
-   "merchant",
-   "/a/b",
-   "/a/",
-   true
-  ],
-  [
-   "merchant",
-   "/a/b",
-   "/a/b",
-   true
-  ],
-  [
-   "merchant",
-   "/a/b",
-   "/a/b/c",
-   true
-  ],
-  [
-   "merchant",
-   "/a/b",
-   "/ab",
-   true
-  ],
-  [
-   "merchant",
-   "/a/b",
-   "/b",
-   true
-  ],
-  [
-   null,
-   "/",
-   "/",
-   true
-  ],
-  [
-   null,
-   "/",
-   "/a",
-   false
-  ],
-  [
-   null,
-   "/",
-   "/a/",
-   false
-  ],
-  [
-   null,
-   "/",
-   "/a/b",
-   false
-  ],
-  [
-   null,
-   "/",
-   "/a/b/c",
-   false
-  ],
-  [
-   null,
-   "/",
-   "/ab",
-   false
-  ],
-  [
-   null,
-   "/",
-   "/b",
-   false
-  ],
-  [
-   null,
-   "/a",
-   "/",
-   false
-  ],
-  [
-   null,
-   "/a",
-   "/a",
-   true
-  ],
-  [
-   null,
-   "/a",
-   "/a/",
-   false
-  ],
-  [
-   null,
-   "/a",
-   "/a/b",
-   false
-  ],
-  [
-   null,
-   "/a",
-   "/a/b/c",
-   false
-  ],
-  [
-   null,
-   "/a",
-   "/ab",
-   false
-  ],
-  [
-   null,
-   "/a",
-   "/b",
-   false
-  ],
-  [
-   null,
-   "/a/",
-   "/",
-   false
-  ],
-  [
-   null,
-   "/a/",
-   "/a",
-   false
-  ],
-  [
-   null,
-   "/a/",
-   "/a/",
-   true
-  ],
-  [
-   null,
-   "/a/",
-   "/a/b",
-   false
-  ],
-  [
-   null,
-   "/a/",
-   "/a/b/c",
-   false
-  ],
-  [
-   null,
-   "/a/",
-   "/ab",
-   false
-  ],
-  [
-   null,
-   "/a/",
-   "/b",
-   false
-  ],
-  [
-   null,
-   "/a/*",
-   "/",
-   false
-  ],
-  [
-   null,
-   "/a/*",
-   "/a",
-   true
-  ],
-  [
-   null,
-   "/a/*",
-   "/a/",
-   true
-  ],
-  [
-   null,
-   "/a/*",
-   "/a/b",
-   true
-  ],
-  [
-   null,
-   "/a/*",
-   "/a/b/c",
-   true
-  ],
-  [
-   null,
-   "/a/*",
-   "/ab",
-   false
-  ],
-  [
-   null,
-   "/a/*",
-   "/b",
-   false
-  ],
-  [
-   null,
-   "/a/b",
-   "/",
-   false
-  ],
-  [
-   null,
-   "/a/b",
-   "/a",
-   false
-  ],
-  [
-   null,
-   "/a/b",
-   "/a/",
-   false
-  ],
-  [
-   null,
-   "/a/b",
-   "/a/b",
-   true
-  ],
-  [
-   null,
-   "/a/b",
-   "/a/b/c",
-   false
-  ],
-  [
-   null,
-   "/a/b",
-   "/ab",
-   false
-  ],
-  [
-   null,
-   "/a/b",
-   "/b",
-   false
-  ],
-  [
-   "bogus",
-   "/",
-   "/",
-   true
-  ],
-  [
-   "bogus",
-   "/",
-   "/a",
-   false
-  ],
-  [
-   "bogus",
-   "/",
-   "/a/",
-   false
-  ],
-  [
-   "bogus",
-   "/",
-   "/a/b",
-   false
-  ],
-  [
-   "bogus",
-   "/",
-   "/a/b/c",
-   false
-  ],
-  [
-   "bogus",
-   "/",
-   "/ab",
-   false
-  ],
-  [
-   "bogus",
-   "/",
-   "/b",
-   false
-  ],
-  [
-   "bogus",
-   "/a",
-   "/",
-   false
-  ],
-  [
-   "bogus",
-   "/a",
-   "/a",
-   true
-  ],
-  [
-   "bogus",
-   "/a",
-   "/a/",
-   false
-  ],
-  [
-   "bogus",
-   "/a",
-   "/a/b",
-   false
-  ],
-  [
-   "bogus",
-   "/a",
-   "/a/b/c",
-   false
-  ],
-  [
-   "bogus",
-   "/a",
-   "/ab",
-   false
-  ],
-  [
-   "bogus",
-   "/a",
-   "/b",
-   false
-  ],
-  [
-   "bogus",
-   "/a/",
-   "/",
-   false
-  ],
-  [
-   "bogus",
-   "/a/",
-   "/a",
-   false
-  ],
-  [
-   "bogus",
-   "/a/",
-   "/a/",
-   true
-  ],
-  [
-   "bogus",
-   "/a/",
-   "/a/b",
-   false
-  ],
-  [
-   "bogus",
-   "/a/",
-   "/a/b/c",
-   false
-  ],
-  [
-   "bogus",
-   "/a/",
-   "/ab",
-   false
-  ],
-  [
-   "bogus",
-   "/a/",
-   "/b",
-   false
-  ],
-  [
-   "bogus",
-   "/a/*",
-   "/",
-   false
-  ],
-  [
-   "bogus",
-   "/a/*",
-   "/a",
-   true
-  ],
-  [
-   "bogus",
-   "/a/*",
-   "/a/",
-   true
-  ],
-  [
-   "bogus",
-   "/a/*",
-   "/a/b",
-   true
-  ],
-  [
-   "bogus",
-   "/a/*",
-   "/a/b/c",
-   true
-  ],
-  [
-   "bogus",
-   "/a/*",
-   "/ab",
-   false
-  ],
-  [
-   "bogus",
-   "/a/*",
-   "/b",
-   false
-  ],
-  [
-   "bogus",
-   "/a/b",
-   "/",
-   false
-  ],
-  [
-   "bogus",
-   "/a/b",
-   "/a",
-   false
-  ],
-  [
-   "bogus",
-   "/a/b",
-   "/a/",
-   false
-  ],
-  [
-   "bogus",
-   "/a/b",
-   "/a/b",
-   true
-  ],
-  [
-   "bogus",
-   "/a/b",
-   "/a/b/c",
-   false
-  ],
-  [
-   "bogus",
-   "/a/b",
-   "/ab",
-   false
-  ],
-  [
-   "bogus",
-   "/a/b",
-   "/b",
-   false
-  ]
- ],
  "cases": [
   {
    "id": "challenge.payable",
@@ -1733,6 +576,38 @@
       "body": {
        "golden": "challenge.premium",
        "order": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "challenge.query",
+   "group": "challenge",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A query string changes nothing about the 402",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a?utm_source=x",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "headers": {
+       "cache-control": {
+        "contains": "no-store",
+        "excludes": "public"
+       }
+      },
+      "body": {
+       "subset": {
+        "error": "AIFP-402",
+        "resource": "/paid/*"
+       }
       }
      }
     }
@@ -1905,6 +780,34 @@
      "sign": {
       "mutate": "tamper_payload"
      }
+    }
+   }
+  },
+  {
+   "id": "mode.shadow_other_agent",
+   "group": "mode",
+   "level": "must",
+   "profile": "content-shadow",
+   "title": "Shadow never refuses another agent's receipt",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "other"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
     }
    }
   },
@@ -2305,6 +1208,41 @@
     "x": {
      "claims": {
       "exp": 1000000000
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.past_tolerance",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "Two minutes past exp is expired",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "subset": {
+        "error": "AIFP-402",
+        "detail": "receipt expired — prepay a new batch"
+       }
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "exp_in": -120
      }
     }
    }
@@ -2734,11 +1672,41 @@
    }
   },
   {
+   "id": "receipt.query",
+   "group": "receipt",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A query string does not stop a receipt",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a?x=1",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "2"
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
    "id": "receipt.other_agent",
    "group": "receipt",
    "level": "must",
    "profile": "content-enforce",
-   "title": "A receipt is spent only by the agent that paid",
+   "title": "A receipt is not spent by an agent naming someone else",
    "steps": [
     {
      "request": {
@@ -2765,7 +1733,7 @@
    "group": "receipt",
    "level": "must",
    "profile": "content-enforce",
-   "title": "A receipt without the payer's id is refused",
+   "title": "An agent that did what the 402 says is served: it names only the receipt header",
    "steps": [
     {
      "request": {
@@ -2776,8 +1744,11 @@
       "agent": null
      },
      "expect": {
-      "status": 403,
-      "origin": false
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "2"
+      }
      }
     }
    ],
@@ -3012,6 +1983,173 @@
    "receipts": {
     "r": {
      "claims": {}
+    }
+   }
+  },
+  {
+   "id": "scope.prefix_section_root",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A batch the SDKs buy for a section opens the section page: they buy prefix /paid/ for a /paid/* 402",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/paid/",
+      "scope": "prefix"
+     }
+    }
+   }
+  },
+  {
+   "id": "scope.prefix_section_slash",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "The same batch opens the section page with a slash",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       200,
+       301,
+       302,
+       307,
+       308
+      ]
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/paid/",
+      "scope": "prefix"
+     }
+    }
+   }
+  },
+  {
+   "id": "scope.spelling_case",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A paid batch is not refused over the case of a path",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/PAID/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       200,
+       301,
+       302,
+       307,
+       308,
+       404
+      ]
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "scope.spelling_slash",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A paid batch is not refused over a trailing slash",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a/",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       200,
+       301,
+       302,
+       307,
+       308,
+       404
+      ]
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "scope.spelling_exact_slash",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A paid batch for an exact pattern is not refused over a trailing slash",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/report/",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       200,
+       301,
+       302,
+       307,
+       308,
+       404
+      ]
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/report"
+     }
     }
    }
   },
@@ -3342,8 +2480,7 @@
       "origin": false,
       "body": {
        "subset": {
-        "error": "AIFP-402",
-        "detail": "quota exhausted — prepay the next batch"
+        "error": "AIFP-402"
        }
       }
      }
@@ -3837,7 +2974,8 @@
       "origin": false,
       "headers": {
        "cache-control": {
-        "contains": "no-store"
+        "contains": "no-store",
+        "excludes": "public"
        }
       }
      }
@@ -3864,7 +3002,8 @@
       "origin": false,
       "headers": {
        "cache-control": {
-        "contains": "no-store"
+        "contains": "no-store",
+        "excludes": "public"
        }
       }
      }
@@ -3899,7 +3038,8 @@
       "origin": false,
       "headers": {
        "cache-control": {
-        "contains": "no-store"
+        "contains": "no-store",
+        "excludes": "public"
        }
       }
      }
@@ -3937,7 +3077,8 @@
       "origin": true,
       "headers": {
        "cache-control": {
-        "contains": "no-store"
+        "contains": "no-store",
+        "excludes": "public"
        }
       }
      }
@@ -3967,7 +3108,8 @@
       "origin": true,
       "headers": {
        "cache-control": {
-        "contains": "no-store"
+        "contains": "no-store",
+        "excludes": "public"
        }
       }
      }
@@ -3993,13 +3135,41 @@
       "origin": true,
       "headers": {
        "cache-control": {
-        "contains": "no-store"
+        "contains": "no-store",
+        "excludes": "public"
        }
       }
      }
     }
    ],
    "unless": "pre_cache"
+  },
+  {
+   "id": "cache.shadow_keeps_origin",
+   "group": "cache",
+   "level": "should",
+   "profile": "content-shadow",
+   "title": "Shadow leaves the origin's cache header alone before a cache it runs ahead of",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "cache-control": "public, max-age=600"
+      }
+     }
+    }
+   ],
+   "needs": [
+    "pre_cache",
+    "proxy"
+   ]
   },
   {
    "id": "cache.real_exempt_then_agent",
@@ -4039,6 +3209,51 @@
      "expect": {
       "status": 402,
       "origin": false
+     }
+    }
+   ],
+   "needs": [
+    "real_cache"
+   ]
+  },
+  {
+   "id": "cache.real_decision_not_cached",
+   "group": "cache",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A cached decision does not admit the next agent",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/decision",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/decision",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/decision",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true
      }
     }
    ],
@@ -4891,6 +4106,552 @@
    ]
   },
   {
+   "id": "events.open_route",
+   "group": "events",
+   "level": "must",
+   "profile": "mixed-enforce",
+   "title": "A free route is not a paid admission, and a reader is not reported on it",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/open/x",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/open/x",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "events": [
+    {
+     "kind": "serve",
+     "resource": "/open/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false,
+     "exempt": true
+    }
+   ],
+   "needs": [
+    "events"
+   ]
+  },
+  {
+   "id": "events.table",
+   "group": "events",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "Every marker reports its operator and class",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; gptbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; oai-searchbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; chatgpt-user/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; claudebot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; claude-searchbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; claude-user/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; claude-web/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; anthropic-ai/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; perplexitybot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; perplexity-user/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; ccbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; bytespider/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; google-extended/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; applebot-extended/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; meta-externalagent/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; facebookbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; amazonbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; youbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; diffbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; timpibot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; omgilibot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; cohere-ai/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; ai2bot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; mistralai/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; aifinpay-agent/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; headlesschrome/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; phantomjs/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "events": [
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "anthropic",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "anthropic",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "anthropic",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "anthropic",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "anthropic",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "perplexity",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "perplexity",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "commoncrawl",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "bytedance",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "google",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "apple",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "meta",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "meta",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "amazon",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "aifinpay",
+     "ua_class": "aifp_agent",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "unknown",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "unknown",
+     "verified": false
+    }
+   ],
+   "needs": [
+    "events"
+   ]
+  },
+  {
    "id": "events.ingest_down",
    "group": "events",
    "level": "must",
@@ -5477,6 +5238,267 @@
    ]
   },
   {
+   "id": "path.exact_trailing_slash",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A trailing slash does not walk around an exact pattern",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/report/",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.exact_case",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A case change does not walk around an exact pattern",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/Report",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.exact_query",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A query string does not walk around an exact pattern",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/report?utm_source=x",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.matrix_dotdot_pop",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A dot-dot behind a parameter does not pop past the pattern",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/..;/../a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.empty_dotdot",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A dot-dot behind an empty segment does not pop past the pattern",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid//../a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.double_encoded_dotdot",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A double-encoded dot-dot does not pop past the pattern",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/%252e%252e/../a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.backslash",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A backslash does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid\\a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.backslash_dotdot",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "Backslashes and dot-dots do not pop past the pattern",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/x\\..\\../../a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.double_encoded",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A double-encoded letter does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/%2570aid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
    "id": "path.case_no_discount",
    "group": "path",
    "level": "must",
@@ -5554,6 +5576,31 @@
         "merchant_id": "mrch_0123456789abcdef",
         "quote_endpoint": "{{api}}/v1/quote",
         "pay_endpoint": "{{api}}/v1/pay"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "discovery.x402_query",
+   "group": "discovery",
+   "level": "should",
+   "profile": "content-enforce",
+   "title": "A query string does not lose the discovery document",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/.well-known/x402.json?x=1",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": false,
+      "body": {
+       "subset": {
+        "protocol": "AIFP-1"
        }
       }
      }
@@ -5655,6 +5702,63 @@
       "body": {
        "text": "ORIGIN-503"
       }
+     }
+    }
+   ],
+   "needs": [
+    "proxy"
+   ]
+  },
+  {
+   "id": "pass.shadow_odd_path",
+   "group": "pass",
+   "level": "must",
+   "profile": "content-shadow",
+   "title": "Shadow does not refuse a path it finds odd",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/free/a%0Ab",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/free/50%2500",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true
+     }
+    }
+   ],
+   "needs": [
+    "proxy"
+   ]
+  },
+  {
+   "id": "pass.long_url",
+   "group": "pass",
+   "level": "must",
+   "profile": "content-shadow",
+   "title": "Shadow does not refuse a long URL the origin accepts",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/free/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true
      }
     }
    ],
@@ -6013,6 +6117,62 @@
    },
    "needs": [
     "fault:record"
+   ]
+  },
+  {
+   "id": "fail.origin_keeps_units",
+   "group": "fail",
+   "level": "should",
+   "profile": "content-enforce",
+   "title": "An origin that cannot be reached costs no units",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       502,
+       503,
+       504
+      ],
+      "origin": false
+     }
+    },
+    {
+     "action": "origin_up"
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "2"
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   },
+   "fault": {
+    "origin": true
+   },
+   "needs": [
+    "fault:origin"
    ]
   },
   {

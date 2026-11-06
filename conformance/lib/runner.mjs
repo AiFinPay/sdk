@@ -40,7 +40,9 @@ function compareHeaders(expected, res, errors) {
     } else if (typeof rule === "string") {
       if (actual !== rule) errors.push(`header ${name}: expected ${JSON.stringify(rule)}, got ${JSON.stringify(actual)}`);
     } else if (rule.contains !== undefined) {
-      if (!String(actual ?? "").toLowerCase().includes(rule.contains.toLowerCase())) errors.push(`header ${name}: expected to contain ${JSON.stringify(rule.contains)}, got ${JSON.stringify(actual)}`);
+      const seen = String(actual ?? "").toLowerCase();
+      if (!seen.includes(rule.contains.toLowerCase())) errors.push(`header ${name}: expected to contain ${JSON.stringify(rule.contains)}, got ${JSON.stringify(actual)}`);
+      if (rule.excludes && seen.includes(rule.excludes.toLowerCase())) errors.push(`header ${name}: expected no ${JSON.stringify(rule.excludes)}, got ${JSON.stringify(actual)}`);
     } else if (rule.present && actual === undefined) {
       errors.push(`header ${name}: expected present`);
     }
@@ -133,6 +135,10 @@ async function runSteps(testCase, c, instance, errors) {
   for (const [index, step] of testCase.steps.entries()) {
     if (step.action === "restart") {
       await instance.restart({ cold: false });
+      continue;
+    }
+    if (step.action === "origin_up") {
+      await c.origin.start();
       continue;
     }
     const request = buildRequest(step, c);
@@ -233,7 +239,7 @@ export async function runSubject(subject, { only = null, log = () => {} } = {}) 
         const errors = [];
         const seed = `${runId}:${testCase.id}`;
         const payer = "0x" + uniqueHex(`payer:${seed}`, 40);
-        const c = { vectors, api, seed, payer, tokens: {}, observed: [], pathPrefix: instance.pathPrefix };
+        const c = { vectors, api, seed, payer, tokens: {}, observed: [], pathPrefix: instance.pathPrefix, origin };
         const now = Math.floor(Date.now() / 1000);
         for (const [name, definition] of Object.entries(testCase.receipts ?? {})) {
           c.tokens[name] = mintReceipt(definition, { fixtures, keys, payer, seed: `${seed}:${name}`, now });
@@ -247,6 +253,7 @@ export async function runSubject(subject, { only = null, log = () => {} } = {}) 
             await instance.restart({ cold: true });
           }
           if (fault.ingest) cp.state.faults.ingest = fault.ingest;
+          if (fault.origin) await origin.stop();
           if (fault.store) await instance.breakStore();
           if (fault.decision) await instance.breakDecision();
           if (testCase.events) {
@@ -269,6 +276,7 @@ export async function runSubject(subject, { only = null, log = () => {} } = {}) 
               await instance.restart({ cold: true });
             }
             if (fault.ingest) cp.state.faults.ingest = 0;
+            if (fault.origin) await origin.start();
             if (fault.store) await instance.healStore();
             if (fault.decision) await instance.healDecision();
           } catch (err) {

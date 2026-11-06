@@ -33,7 +33,7 @@ export function originAnswer({ marker, method, url, headers, body }) {
 
 export function startOrigin(marker) {
   const seen = [];
-  const server = createServer(async (req, res) => {
+  const server = createServer({ maxHeaderSize: 256 * 1024 }, async (req, res) => {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     seen.push({ method: req.method, url: req.url });
@@ -41,10 +41,21 @@ export function startOrigin(marker) {
     res.writeHead(answer.status, answer.headers);
     res.end(answer.body);
   });
-  return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve({
-    url: `http://127.0.0.1:${server.address().port}`,
-    port: server.address().port,
-    seen,
-    close: () => new Promise((r) => { server.closeAllConnections(); server.close(r); }),
-  })));
+  let up = false;
+  let port = 0;
+  const start = () => new Promise((resolve) => {
+    if (up) return resolve();
+    server.listen(port, "127.0.0.1", () => {
+      up = true;
+      port = server.address().port;
+      resolve();
+    });
+  });
+  const stop = () => new Promise((resolve) => {
+    if (!up) return resolve();
+    up = false;
+    server.closeAllConnections();
+    server.close(resolve);
+  });
+  return start().then(() => ({ url: `http://127.0.0.1:${port}`, port, seen, start, stop, close: stop }));
 }

@@ -30,7 +30,7 @@ if (process.argv.includes("--ratchet")) {
   const known = JSON.parse(readFileSync(join(here, "known-differences.json"), "utf8"))[subject.id] ?? {};
   const failing = new Set(report.results.filter((x) => x.status === "fail" || x.status === "error").map((x) => x.id));
   const fresh = [...failing].filter((id) => !known[id]);
-  const fixed = Object.keys(known).filter((id) => !failing.has(id) && report.results.some((x) => x.id === id));
+  const fixed = Object.keys(known).filter((id) => !known[id].startsWith("flaky:") && !failing.has(id) && report.results.some((x) => x.id === id));
   for (const id of fresh) console.error(`new difference: ${id}`);
   for (const id of fixed) console.error(`known difference no longer fails, remove it from known-differences.json: ${id}`);
   process.exit(fresh.length || fixed.length ? 1 : 0);

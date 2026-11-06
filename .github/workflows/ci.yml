@@ -314,6 +314,7 @@ jobs:
           python -m venv .local/py313
           .local/py313/bin/pip install -q -e ../python-gate uvicorn starlette redis waitress
           node run.mjs --subject=subjects/python-gate.mjs --ratchet
+          node run.mjs --subject=subjects/python-gate-wsgi.mjs --ratchet
 
   python-gate:
     name: python — aifinpay-gate (install + pytest + Node parity)

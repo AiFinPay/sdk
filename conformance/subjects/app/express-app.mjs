@@ -33,7 +33,8 @@ app.use(express.raw({ type: () => true, limit: "2mb" }));
 app.use((req, res) => {
   const answer = originAnswer({ marker: env.AIFP_MARKER, method: req.method, url: req.originalUrl, headers: req.headers, body: Buffer.isBuffer(req.body) ? req.body : undefined });
   res.status(answer.status);
-  for (const [k, v] of Object.entries(answer.headers)) if (!(k === "cache-control" && res.get("Cache-Control"))) res.set(k, v);
+  // A handler sets what it likes, its own Cache-Control included: that is the case the gate has to survive.
+  for (const [k, v] of Object.entries(answer.headers)) res.set(k, v);
   res.end(answer.body);
 });
 app.listen(Number(env.PORT), "127.0.0.1");

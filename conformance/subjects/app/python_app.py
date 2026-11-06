@@ -119,6 +119,7 @@ METHODS = ["GET", "HEAD", "POST", "OPTIONS"]
 native = Starlette(routes=[
     Route_("/__conformance/flush", flush_handler),
     Route_("/paid", starlette_handler, methods=METHODS),
+    Route_("/report", starlette_handler, methods=METHODS),
     Route_("/paid/{rest:path}", starlette_handler, methods=METHODS),
     Route_("/paid-internal/{rest:path}", starlette_handler, methods=METHODS),
     Route_("/free/{rest:path}", starlette_handler, methods=METHODS),

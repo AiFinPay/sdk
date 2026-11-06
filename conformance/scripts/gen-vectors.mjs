@@ -37,7 +37,7 @@ const fixtures = {
   },
 };
 
-const STANDARD = [{ pattern: PATTERN, tier: "standard" }, { pattern: "/paid-internal/*", tier: "standard" }];
+const STANDARD = [{ pattern: PATTERN, tier: "standard" }, { pattern: "/paid-internal/*", tier: "standard" }, { pattern: "/report", tier: "standard" }];
 const base = { network_mode: "live", site_verified: true };
 const profiles = {
   "content-enforce": { ...base, mode: "enforce", charge: "agents", resources: STANDARD },
@@ -89,10 +89,13 @@ const get = (ua, path = PAID, more = {}) => ({ method: "GET", path, ua, ...more 
 const pay = (receipt = "r", path = PAID, more = {}) => ({ method: "GET", path, ua: "sdk", receipt, agent: "payer", ...more });
 const step = (request, expect) => ({ request, expect });
 const NOT_SERVED = [301, 302, 307, 308, 400, 402, 403, 404];
+// Served, redirected, or an origin with no such page: anything but a refusal of the receipt.
+const PAID_SPELLING = [200, 301, 302, 307, 308, 404];
 const noOrigin = (status) => ({ status, origin: false });
 const served = (headers = {}) => ({ status: 200, origin: true, headers });
 const refused403 = (bodyDetail) => ({ status: 403, origin: false, ...(bodyDetail ? { body: { subset: { error: "AIFP-403", detail: bodyDetail } } } : {}) });
 const quota = (n) => served({ "aifp-quota-remaining": String(n) });
+const noStore = { "cache-control": { contains: "no-store", excludes: "public" } };
 const R = (claims = {}, sign = {}) => ({ claims, ...(Object.keys(sign).length ? { sign } : {}) });
 
 // ── 402 body ──────────────────────────────────────────────────────────────
@@ -109,6 +112,7 @@ add("challenge.premium", "must", "premium-enforce", "A premium tier advertises i
   ...noOrigin(402), body: { subset: { tier: "premium", unit_weight: 10, unit_price_usd: "0.005", min_requests: 4 } },
 }));
 add("challenge.premium_exact", "parity", "premium-enforce", "The premium 402 equals the reference", step(get("gptbot"), { ...noOrigin(402), body: { golden: "challenge.premium", order: true } }));
+add("challenge.query", "must", "content-enforce", "A query string changes nothing about the 402", step(get("gptbot", `${PAID}?utm_source=x`), { ...noOrigin(402), headers: noStore, body: { subset: { error: "AIFP-402", resource: PATTERN } } }));
 add("challenge.no_link", "should", "content-enforce", "A JSON 402 carries no discovery Link", step(get("gptbot"), { ...noOrigin(402), headers: { link: null } }));
 
 // ── shadow versus enforce ─────────────────────────────────────────────────
@@ -118,6 +122,7 @@ add("mode.shadow_status", "parity", "content-shadow", "Shadow names the status e
 add("mode.shadow_human", "must", "content-shadow", "Shadow serves a reader with no would-be status", step(get("chrome"), served({ "aifp-mode": "shadow", "aifp-shadow-status": null })));
 add("mode.shadow_elsewhere", "parity", "content-shadow", "Shadow says so outside the protected paths too", step(get("gptbot", "/free/a"), served({ "aifp-mode": "shadow" })));
 add("mode.shadow_tampered", "must", "content-shadow", "Shadow never refuses a forged receipt", step(pay("forged"), served()), { receipts: { forged: R({}, { mutate: "tamper_payload" }) } });
+add("mode.shadow_other_agent", "must", "content-shadow", "Shadow never refuses another agent's receipt", step(pay("r", PAID, { agent: "other" }), served()), { receipts: { r: R() } });
 add("mode.shadow_tampered_status", "parity", "content-shadow", "Shadow verifies, so a forged receipt reads as a would-be 403", step(pay("forged"), served({ "aifp-shadow-status": "403" })), { receipts: { forged: R({}, { mutate: "tamper_payload" }) } });
 add("mode.shadow_expired_status", "parity", "content-shadow", "An expired receipt reads as a would-be 402", step(pay("old"), served({ "aifp-shadow-status": "402" })), { receipts: { old: R({ exp: 1000000000 }) } });
 add("mode.shadow_valid_metered", "parity", "content-shadow", "A valid receipt is metered in shadow as in enforce", step(pay(), quota(2)), { receipts: { r: R() } });
@@ -131,6 +136,7 @@ add("receipt.wrong_merchant", "must", "content-enforce", "A receipt for another 
 add("receipt.wrong_issuer", "must", "content-enforce", "A receipt from another issuer is refused", step(pay("x"), refused403()), { receipts: { x: R({ iss: "https://evil.example" }) } });
 add("receipt.expired", "must", "content-enforce", "An expired receipt gets a new 402", step(pay("x"), { ...noOrigin(402), body: { subset: { error: "AIFP-402", detail: detail.expired } } }), { receipts: { x: R({ exp: 1000000000 }) } });
 add("receipt.expired_exact", "parity", "content-enforce", "The expired 402 equals the reference", step(pay("x"), { ...noOrigin(402), body: { golden: "challenge.expired", order: true } }), { receipts: { x: R({ exp: 1000000000 }) } });
+add("receipt.past_tolerance", "must", "content-enforce", "Two minutes past exp is expired", step(pay("x"), { ...noOrigin(402), body: { subset: { error: "AIFP-402", detail: detail.expired } } }), { receipts: { x: R({ exp_in: -120 }) } });
 add("receipt.clock_tolerance", "parity", "content-enforce", "A receipt ten seconds past exp still verifies", step(pay("x"), served()), { receipts: { x: R({ exp_in: -10 }) } });
 add("receipt.nbf_future", "must", "content-enforce", "A receipt not valid yet is refused", step(pay("x"), refused403()), { receipts: { x: R({ nbf: 4102444800 }) } });
 add("receipt.iat_future", "parity", "content-enforce", "A future iat alone does not refuse", step(pay("x"), served()), { receipts: { x: R({ iat: 4102444000 }) } });
@@ -145,8 +151,9 @@ add("receipt.no_exp", "must", "content-enforce", "A receipt with no exp is refus
 add("receipt.bad_quota", "must", "content-enforce", "A non-numeric unit_quota never serves", step(pay("x"), noOrigin([402, 403])), { receipts: { x: R({ unit_quota: "abc" }) } });
 add("receipt.zero_quota", "must", "content-enforce", "A zero unit_quota never serves", step(pay("x"), noOrigin([402, 403])), { receipts: { x: R({ unit_quota: 0 }) } });
 add("receipt.legacy_quota", "parity", "content-enforce", "A legacy request quota converts at its tier weight", step(pay("x"), quota(7)), { receipts: { x: R({ unit_quota: null, quota: 2, tier: "complex" }) } });
-add("receipt.other_agent", "must", "content-enforce", "A receipt is spent only by the agent that paid", step(pay("r", PAID, { agent: "other" }), refused403()), { receipts: { r: R() } });
-add("receipt.no_agent_header", "must", "content-enforce", "A receipt without the payer's id is refused", step(pay("r", PAID, { agent: null }), refused403()), { receipts: { r: R() } });
+add("receipt.query", "must", "content-enforce", "A query string does not stop a receipt", step(pay("r", `${PAID}?x=1`), quota(2)), { receipts: { r: R() } });
+add("receipt.other_agent", "must", "content-enforce", "A receipt is not spent by an agent naming someone else", step(pay("r", PAID, { agent: "other" }), refused403()), { receipts: { r: R() } });
+add("receipt.no_agent_header", "must", "content-enforce", "An agent that did what the 402 says is served: it names only the receipt header", step(pay("r", PAID, { agent: null }), quota(2)), { receipts: { r: R() } });
 add("receipt.agent_case", "should", "content-enforce", "An EVM payer compares without checksum case", step(pay("r", PAID, { agent: "payer_upper" }), served()), { receipts: { r: R() } });
 add("receipt.test_on_live", "must", "content-enforce", "A testnet receipt does not open a live site", step(pay("x"), refused403()), { receipts: { x: R({ network_mode: "test" }) } });
 add("receipt.test_on_test", "must", "testsite-enforce", "A testnet receipt opens a test site", step(pay("x"), served()), { receipts: { x: R({ network_mode: "test" }) } });
@@ -157,6 +164,11 @@ add("receipt.no_typ", "parity", "content-enforce", "A signed token with no typ v
 // ── scope ─────────────────────────────────────────────────────────────────
 add("scope.section_protected", "must", "content-enforce", "A wildcard protects the section root", step(get("gptbot", "/paid"), noOrigin(402)));
 add("scope.section_root_spend", "must", "content-enforce", "A wildcard receipt covers the section root", step(pay("r", "/paid"), served()), { receipts: { r: R() } });
+add("scope.prefix_section_root", "must", "content-enforce", "A batch the SDKs buy for a section opens the section page: they buy prefix /paid/ for a /paid/* 402", step(pay("x", "/paid"), served()), { receipts: { x: R({ resource: "/paid/", scope: "prefix" }) } });
+add("scope.prefix_section_slash", "must", "content-enforce", "The same batch opens the section page with a slash", step(pay("x", "/paid/"), { status: [200, 301, 302, 307, 308] }), { receipts: { x: R({ resource: "/paid/", scope: "prefix" }) } });
+add("scope.spelling_case", "must", "content-enforce", "A paid batch is not refused over the case of a path", step(pay("r", "/PAID/a"), { status: PAID_SPELLING }), { receipts: { r: R() } });
+add("scope.spelling_slash", "must", "content-enforce", "A paid batch is not refused over a trailing slash", step(pay("r", "/paid/a/"), { status: PAID_SPELLING }), { receipts: { r: R() } });
+add("scope.spelling_exact_slash", "must", "content-enforce", "A paid batch for an exact pattern is not refused over a trailing slash", step(pay("x", "/report/"), { status: PAID_SPELLING }), { receipts: { x: R({ resource: "/report" }) } });
 add("scope.other_path", "must", "content-enforce", "An exact receipt for another path is refused", step(pay("x"), refused403()), { receipts: { x: R({ resource: "/other" }) } });
 add("scope.other_path_detail", "parity", "content-enforce", "The scope refusal names the scope", step(pay("x"), refused403("receipt is scoped to /other (exact), not /paid/a")), { receipts: { x: R({ resource: "/other" }) } });
 add("scope.prefix_slash", "must", "content-enforce", "A prefix receipt covers paths under it", step(pay("x"), served()), { receipts: { x: R({ resource: "/paid/", scope: "prefix" }) } });
@@ -169,7 +181,7 @@ add("scope.missing_resource", "parity", "content-enforce", "A receipt with no re
 // ── metering and exhaustion ───────────────────────────────────────────────
 add("meter.drain", "must", "content-enforce", "A batch of three serves three times, then a 402", [
   step(pay(), quota(2)), step(pay(), quota(1)), step(pay(), quota(0)),
-  step(pay(), { ...noOrigin(402), body: { subset: { error: "AIFP-402", detail: detail.exhausted } } }),
+  step(pay(), { ...noOrigin(402), body: { subset: { error: "AIFP-402" } } }),
 ], { receipts: { r: R() } });
 add("meter.exhausted_exact", "parity", "content-enforce", "The exhausted 402 equals the reference", [step(pay(), quota(1)), step(pay(), quota(0)), step(pay(), { ...noOrigin(402), body: { golden: "challenge.exhausted", order: true } })], { receipts: { r: R({ unit_quota: 2 }) } });
 add("meter.weight", "must", "premium-enforce", "A premium call takes ten units", [step(pay(), quota(15)), step(pay(), quota(5)), step(pay(), noOrigin(402))], { receipts: { r: R({ unit_quota: 25, tier: "premium" }) } });
@@ -186,17 +198,22 @@ add("meter.single_use_no_nonce", "parity", "content-enforce", "A single-use rece
 add("meter.survives_restart", "must", "content-enforce", "Spent units stay spent after a restart", [step(pay(), quota(2)), { action: "restart" }, step(pay(), quota(1))], { receipts: { r: R() }, needs: ["restart"] });
 
 // ── cache ─────────────────────────────────────────────────────────────────
-const noStore = { "cache-control": { contains: "no-store" } };
 add("cache.challenge", "must", "content-enforce", "A 402 is never stored", step(get("gptbot"), { ...noOrigin(402), headers: noStore }));
 add("cache.refusal", "must", "content-enforce", "A 403 is never stored", step(pay("x"), { ...noOrigin(403), headers: noStore }), { receipts: { x: R({}, { mutate: "tamper_payload" }) } });
 add("cache.unavailable", "must", "content-enforce", "A 503 is never stored", step(pay(), { ...noOrigin(503), headers: noStore }), { receipts: { r: R() }, fault: { jwks: true }, needs: ["fault:jwks"] });
 add("cache.paid", "must", "content-enforce", "A paid response is never stored, whatever the origin says", step(pay(), { status: 200, origin: true, headers: noStore }), { receipts: { r: R() } });
 add("cache.exempt", "must", "content-enforce", "A reader's copy of a protected page cannot answer an agent", step(get("chrome"), { status: 200, origin: true, headers: noStore }), { unless: "pre_cache" });
 add("cache.shadow_agent", "should", "content-shadow", "An agent's shadow response is not stored", step(get("gptbot"), { status: 200, origin: true, headers: noStore }), { unless: "pre_cache" });
+add("cache.shadow_keeps_origin", "should", "content-shadow", "Shadow leaves the origin's cache header alone before a cache it runs ahead of", step(get("gptbot"), served({ "cache-control": "public, max-age=600" })), { needs: ["pre_cache", "proxy"] });
 add("cache.real_exempt_then_agent", "must", "content-enforce", "A real cache holding a reader's copy still answers an agent with a 402", [
   step(get("chrome", "/paid/cached"), { status: 200, origin: true }),
   step(get("chrome", "/paid/cached"), { status: 200, origin: true }),
   step(get("gptbot", "/paid/cached"), noOrigin(402)),
+], { needs: ["real_cache"] });
+add("cache.real_decision_not_cached", "must", "content-enforce", "A cached decision does not admit the next agent", [
+  step(get("chrome", "/paid/decision"), { status: 200, origin: true }),
+  step(get("gptbot", "/paid/decision"), noOrigin(402)),
+  step(get("chrome", "/paid/decision"), { status: 200, origin: true }),
 ], { needs: ["real_cache"] });
 add("cache.real_paid_not_stored", "must", "content-enforce", "A real cache never hands a paid response to the next caller", [
   step(pay("r", "/paid/stored"), quota(2)), step(get("gptbot", "/paid/stored"), noOrigin(402)),
@@ -227,6 +244,8 @@ eventCase("events.operators", "parity", "content-enforce", "Operators and classe
   [ev("402", "anthropic", "ai_crawler", false), ev("402", "openai", "ai_agent_browser", false), ev("402", "perplexity", "ai_crawler", false)]);
 eventCase("events.refusal_off_wire", "must", "content-enforce", "A 403 is not sent to an ingest that would refuse the batch", step(pay("x"), noOrigin(403)), [], { receipts: { x: R({}, { mutate: "tamper_payload" }) } });
 eventCase("events.stray_path", "must", "content-enforce", "A crawler on an unregistered path does not cost the report", [step(get("gptbot", "/free/stray-token-abc"), {}), step(get("gptbot"), noOrigin(402))], [ev("402", "openai", "ai_crawler", false)]);
+eventCase("events.open_route", "must", "mixed-enforce", "A free route is not a paid admission, and a reader is not reported on it", [step(get("chrome", "/open/x"), served()), step(get("gptbot", "/open/x"), served())], [{ kind: "serve", resource: "/open/*", operator: "openai", ua_class: "ai_crawler", verified: false, exempt: true }]);
+eventCase("events.table", "parity", "content-enforce", "Every marker reports its operator and class", G.AI_AGENT_UA_TABLE.map((row) => step(get(`Mozilla/5.0 (compatible; ${row.marker}/1.0)`), noOrigin(402))), G.AI_AGENT_UA_TABLE.map((row) => ev("402", row.operator, row.ua_class, false)));
 add("events.ingest_down", "must", "content-enforce", "An ingest outage changes no response", [step(get("gptbot"), noOrigin(402)), step(get("chrome"), served())], { fault: { ingest: 503 }, needs: ["events"] });
 
 // ── operator rules ────────────────────────────────────────────────────────
@@ -252,6 +271,15 @@ alias("matrix_start", "A leading matrix segment does not walk around the gate", 
 alias("dot_matrix", "A dot with a parameter does not walk around the gate", "/.;/paid/a");
 alias("dotdot_matrix", "A dot-dot with a parameter does not walk around the gate", "/x/..;/paid/a");
 alias("encoded_slash", "An encoded slash does not walk around the gate", "/paid%2fa");
+alias("exact_trailing_slash", "A trailing slash does not walk around an exact pattern", "/report/");
+alias("exact_case", "A case change does not walk around an exact pattern", "/Report");
+alias("exact_query", "A query string does not walk around an exact pattern", "/report?utm_source=x");
+alias("matrix_dotdot_pop", "A dot-dot behind a parameter does not pop past the pattern", "/paid/..;/../a");
+alias("empty_dotdot", "A dot-dot behind an empty segment does not pop past the pattern", "/paid//../a");
+alias("double_encoded_dotdot", "A double-encoded dot-dot does not pop past the pattern", "/paid/%252e%252e/../a");
+alias("backslash", "A backslash does not walk around the gate", "/paid\\a");
+alias("backslash_dotdot", "Backslashes and dot-dots do not pop past the pattern", "/paid/x\\..\\../../a");
+alias("double_encoded", "A double-encoded letter does not walk around the gate", "/%2570aid/a");
 add("path.case_no_discount", "must", "mixed-enforce", "A case change does not buy the cheap price", step(get("gptbot", "/PAID/PREMIUM/x"), { ...noOrigin(NOT_SERVED), weight_at_least: 10 }));
 add("path.boundary", "should", "content-enforce", "A similar path outside the pattern is not charged as it", step(get("gptbot", "/paidx/a"), served()));
 
@@ -260,12 +288,15 @@ add("discovery.x402", "should", "content-enforce", "The discovery document names
   status: 200, origin: false, headers: { "content-type": { contains: "application/json" } },
   body: { subset: { protocol: "AIFP-1", merchant_id: MERCHANT, quote_endpoint: `${API}/v1/quote`, pay_endpoint: `${API}/v1/pay` } },
 }));
+add("discovery.x402_query", "should", "content-enforce", "A query string does not lose the discovery document", step(get("gptbot", "/.well-known/x402.json?x=1"), { status: 200, origin: false, body: { subset: { protocol: "AIFP-1" } } }));
 add("discovery.x402_tier", "parity", "premium-enforce", "The document prices each resource at its tier", step(get("gptbot", "/.well-known/x402.json"), { status: 200, origin: false, body: { resource_tier: { "/paid/*": "premium" } } }));
 add("discovery.link", "should", "content-enforce", "An HTML page points at the agent documents", step(get("chrome", "/free/a"), served({ link: { contains: "/llms.txt" } })));
 add("discovery.llms", "should", "content-enforce", "/llms.txt is served as markdown", step(get("chrome", "/llms.txt"), { status: 200, headers: { "content-type": { contains: "text/markdown" } } }), { needs: ["llms_txt"] });
 
 // ── proxies only ──────────────────────────────────────────────────────────
 add("pass.origin_error", "must", "content-shadow", "An origin error passes through unchanged", step(get("gptbot", "/paid/err503"), { status: 503, body: { text: "ORIGIN-503" } }), { needs: ["proxy"] });
+add("pass.shadow_odd_path", "must", "content-shadow", "Shadow does not refuse a path it finds odd", [step(get("gptbot", "/free/a%0Ab"), { status: 200, origin: true }), step(get("gptbot", "/free/50%2500"), { status: 200, origin: true })], { needs: ["proxy"] });
+add("pass.long_url", "must", "content-shadow", "Shadow does not refuse a long URL the origin accepts", step(get("gptbot", `/free/${"x".repeat(20000)}`), { status: 200, origin: true }), { needs: ["proxy"] });
 add("pass.post_body", "must", "content-enforce", "A POST body reaches the origin intact", step({ method: "POST", path: "/free/echo", ua: "chrome", body_bytes: 262144 }, { status: 200, origin: true, body_sha256: true }), { needs: ["proxy"] });
 add("pass.receipt_stripped", "should", "content-enforce", "A receipt is not forwarded to the origin", step(pay(), { status: 200, origin: true, origin_did_not_see: ["aifp-receipt"] }), { receipts: { r: R() }, needs: ["proxy"] });
 add("pass.spoofed_uri", "must", "content-enforce", "A client cannot name another path to the decision", step(get("gptbot", PAID, { headers: { "X-Original-URI": "/free/a", "X-Original-Method": "OPTIONS" } }), noOrigin(402)), { needs: ["proxy"] });
@@ -279,6 +310,7 @@ add("fail.store_receipt", "must", "content-enforce", "A meter outage fails close
 add("fail.store_shadow", "must", "content-shadow", "A meter outage does not touch a shadow site", step(pay(), served()), { receipts: { r: R() }, fault: { store: true }, needs: ["fault:store"] });
 add("fail.record_reader", "must", "content-enforce", "A control plane outage at boot does not touch a reader", step(get("chrome"), served()), { fault: { record: true }, needs: ["fault:record"] });
 add("fail.record_shadow", "must", "content-shadow", "A control plane outage at boot does not touch a shadow site", [step(get("chrome"), served()), step(get("gptbot"), served())], { fault: { record: true }, needs: ["fault:record"] });
+add("fail.origin_keeps_units", "should", "content-enforce", "An origin that cannot be reached costs no units", [step(pay(), noOrigin([502, 503, 504])), { action: "origin_up" }, step(pay(), quota(2))], { receipts: { r: R() }, fault: { origin: true }, needs: ["fault:origin"] });
 add("fail.decision_down_shadow", "must", "content-shadow", "A decision service outage does not touch a shadow site", step(get("gptbot"), served()), { fault: { decision: true }, needs: ["fault:decision"] });
 add("fail.decision_down_enforce", "must", "content-enforce", "A decision service outage fails closed for an agent", step(get("gptbot"), noOrigin([500, 502, 503, 504])), { fault: { decision: true }, needs: ["fault:decision"] });
 
@@ -286,12 +318,6 @@ add("fail.decision_down_enforce", "must", "content-enforce", "A decision service
 add("method.post", "must", "content-enforce", "A POST is charged like a GET", step({ method: "POST", path: PAID, ua: "gptbot" }, noOrigin(402)));
 add("method.head", "must", "content-enforce", "A HEAD is charged like a GET", step({ method: "HEAD", path: PAID, ua: "gptbot" }, noOrigin(402)));
 add("method.options", "parity", "content-enforce", "An OPTIONS is charged like a GET", step({ method: "OPTIONS", path: PAID, ua: "gptbot" }, noOrigin(402)));
-
-const scope_table = [];
-for (const scope of ["exact", "prefix", "merchant", null, "bogus"])
-  for (const resource of ["/", "/a", "/a/", "/a/*", "/a/b"])
-    for (const path of ["/", "/a", "/a/", "/a/b", "/a/b/c", "/ab", "/b"])
-      scope_table.push([scope, resource, path, G.scopeCovers(scope ?? undefined, resource, path)]);
 
 const vectors = {
   schema: 1,
@@ -301,8 +327,6 @@ const vectors = {
   golden,
   operators: G.GATE_OPERATORS,
   ua_classes: G.UA_CLASSES,
-  ua_table: G.AI_AGENT_UA_TABLE.map((row) => [row.marker, row.operator, row.ua_class]),
-  scope_table,
   cases,
 };
 
