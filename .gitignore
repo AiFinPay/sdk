@@ -39,3 +39,6 @@ logs/
 # package manager state
 .pnpm-store/
 .npm/
+
+# conformance runtime
+conformance/.local/
