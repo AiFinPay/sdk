@@ -1,5 +1,5 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
-import { createGate, NO_STORE, refundUnits, type GateOptions } from "./core.js";
+import { CDN_CACHE_HEADERS, createGate, NO_STORE, refundUnits, type GateOptions } from "./core.js";
 import { MemoryStore } from "./stores/memory.js";
 import type { AifpContext } from "./types.js";
 import { linkHtmlResponse } from "./discovery.js";
@@ -18,17 +18,25 @@ declare global {
   }
 }
 
-/** A handler that sets its own Cache-Control must not make a paid response storable. */
+/** A handler that sets its own cache headers must not make a paid response storable. */
 function keepPaidUnstored(res: Response): void {
   const writeHead = res.writeHead;
+  const dropped = (name: unknown) => {
+    const lower = String(name).toLowerCase();
+    return lower === "cache-control" || CDN_CACHE_HEADERS.includes(lower);
+  };
   res.writeHead = function (this: Response, ...args: unknown[]) {
-    const isCacheControl = (name: unknown) => String(name).toLowerCase() === "cache-control";
     const kept = args.map((arg) => {
-      if (Array.isArray(arg)) return arg.filter((pair) => !(Array.isArray(pair) && isCacheControl(pair[0])));
+      if (Array.isArray(arg)) {
+        // Node takes the flat [name, value, name, value], and pairs reach here too.
+        if (Array.isArray(arg[0])) return arg.filter((pair) => !dropped(pair[0]));
+        return arg.filter((_, i) => !dropped(arg[i - (i % 2)]));
+      }
       if (arg && typeof arg === "object")
-        return Object.fromEntries(Object.entries(arg).filter(([name]) => !isCacheControl(name)));
+        return Object.fromEntries(Object.entries(arg).filter(([name]) => !dropped(name)));
       return arg;
     });
+    for (const name of CDN_CACHE_HEADERS) this.removeHeader(name);
     this.setHeader("Cache-Control", NO_STORE);
     return (writeHead as (...a: unknown[]) => Response).apply(this, kept);
   } as Response["writeHead"];

@@ -52,6 +52,12 @@ def test_path_reading_matches_on_every_case():
         assert g.inspect_path(raw, case_sensitive=True)._asdict() == cased, raw
 
 
+def test_resource_reading_matches_on_every_case():
+    for raw, folded, cased in FIXTURE["spelled_cases"]:
+        assert g.spelled_as_path(raw) == folded, raw
+        assert g.spelled_as_path(raw, case_sensitive=True) == cased, raw
+
+
 def test_scope_coverage_matches_on_every_case():
     wrong = [c for c in FIXTURE["scope_cases"] if g.scope_covers(c[0], c[1], c[2]) != c[3]]
     assert not wrong

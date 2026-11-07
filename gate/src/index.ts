@@ -23,6 +23,7 @@ export {
   HEADER_QUOTA_REMAINING,
   HEADER_MODE,
   HEADER_SHADOW_STATUS,
+  CDN_CACHE_HEADERS,
   NO_STORE,
 } from "./core.js";
 
@@ -56,7 +57,7 @@ export { decideOperator, normalizeOperatorPolicy, OPERATOR_ACTIONS, OPERATOR_DEF
 export type { OperatorDecision } from "./operator-policy.js";
 export { scopeCovers } from "./scope.js";
 export { matchResource } from "./match.js";
-export { inspectPath } from "./path.js";
+export { inspectPath, spelledAsPath } from "./path.js";
 export type { InspectedPath } from "./path.js";
 export { buildChallenge } from "./challenge.js";
 export { createVerifier } from "./verify.js";

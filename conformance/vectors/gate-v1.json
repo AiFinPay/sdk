@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "reference": "@aifinpay/gate 0.10.0",
+ "reference": "@aifinpay/gate 0.10.1",
  "fixtures": {
   "merchant_id": "mrch_0123456789abcdef",
   "other_merchant_id": "mrch_fedcba9876543210",
@@ -2205,6 +2205,143 @@
    }
   },
   {
+   "id": "scope.encoded_mark",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A batch bought for a page with an encoded mark opens that page",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/what%3Fx",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       200,
+       301,
+       302,
+       307,
+       308,
+       404
+      ]
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/paid/what%3Fx"
+     }
+    }
+   }
+  },
+  {
+   "id": "scope.before_the_mark",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A batch for a page does not open a page that only starts like it",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/what%3Fx",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/paid/what"
+     }
+    }
+   }
+  },
+  {
+   "id": "scope.mark_buys_the_page",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A path priced as the page before an escaped mark opens with a batch for that page",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/report%3Fx",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       200,
+       301,
+       302,
+       307,
+       308,
+       404
+      ]
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/report"
+     }
+    }
+   }
+  },
+  {
+   "id": "scope.encoded_resource",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A batch bought for an encoded spelling opens that page",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/my%20report",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       200,
+       301,
+       302,
+       307,
+       308,
+       404
+      ]
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/paid/my%20report"
+     }
+    }
+   }
+  },
+  {
    "id": "scope.other_path",
    "group": "scope",
    "level": "must",
@@ -3142,6 +3279,65 @@
    }
   },
   {
+   "id": "cache.paid_at_cdn",
+   "group": "cache",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A paid response carries nothing a CDN reads before Cache-Control as leave to store it",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "cdn-cache-control": {
+        "absentOr": [
+         "no-store",
+         "0"
+        ]
+       },
+       "surrogate-control": {
+        "absentOr": [
+         "no-store",
+         "0"
+        ]
+       },
+       "edge-control": {
+        "absentOr": [
+         "no-store",
+         "0"
+        ]
+       },
+       "akamai-cache-control": {
+        "absentOr": [
+         "no-store",
+         "0"
+        ]
+       },
+       "x-accel-expires": {
+        "absentOr": [
+         "no-store",
+         "0"
+        ]
+       }
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
    "id": "cache.exempt",
    "group": "cache",
    "level": "must",
@@ -3212,7 +3408,9 @@
       "status": 200,
       "origin": true,
       "headers": {
-       "cache-control": "public, max-age=600"
+       "cache-control": "public, max-age=600",
+       "cdn-cache-control": "public, max-age=600",
+       "surrogate-control": "max-age=600"
       }
      }
     }
@@ -5416,6 +5614,296 @@
    ]
   },
   {
+   "id": "path.encoded_query_mark",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An encoded question mark does not end the path",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/x%3F/../paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.encoded_hash",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An encoded hash does not end the path",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/x%23/../paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.mark_ends_exact",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An escaped mark does not walk around an exact pattern behind a proxy that decodes",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/report%3Fx",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.mark_ends_section",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An escaped mark does not walk around a section behind a proxy that decodes",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid%3Fx",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.hash_ends_exact",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An escaped hash does not walk around an exact pattern behind a proxy that decodes",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/report%23x",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.mark_in_param",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An escaped mark in a parameter does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/report;a%3Fb/c",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.mark_in_encoded_param",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An escaped mark in an encoded parameter does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/report%3Ba%3Fb/c",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.still_encoded",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A dot segment still encoded after the last round does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/%2525252e%2525252e/x",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.still_encoded_deeper",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "One layer deeper, for a server that decodes before the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/%252525252e%252525252e/x",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.dotdot_param_pop",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A dot-dot with a parameter does not move the price",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/..;/x",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
    "id": "path.matrix_dotdot_pop",
    "group": "path",
    "level": "must",
@@ -5832,6 +6320,80 @@
    ],
    "needs": [
     "proxy"
+   ]
+  },
+  {
+   "id": "pass.encoded_page",
+   "group": "pass",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A page with an escape outside every pattern is not refused",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/free/caf%C3%A9",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": [
+       200,
+       402,
+       404
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "pass.dot_directory",
+   "group": "pass",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A directory that starts with a dot is not a dot segment",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/.well-known/acme-challenge/x",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": [
+       200,
+       402,
+       403,
+       404
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "pass.reader_odd_path",
+   "group": "pass",
+   "level": "should",
+   "profile": "content-enforce",
+   "title": "A reader is not refused over a dot segment",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/./a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": [
+       200,
+       301,
+       302,
+       307,
+       308,
+       403,
+       404
+      ]
+     }
+    }
    ]
   },
   {

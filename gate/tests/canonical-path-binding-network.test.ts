@@ -10,7 +10,10 @@ import {
   MemoryStore,
   refundUnits,
   ResourceRegistry,
+  scopeCovers,
+  spelledAsPath,
 } from "../src/index.js";
+import * as edge from "../src/edge.js";
 import type { AifpResource, GateEvent, GateOptions, GateStore } from "../src/index.js";
 import { ISSUER, MERCHANT, issuer, req } from "./helpers.js";
 
@@ -84,8 +87,144 @@ describe("inspectPath", () => {
     });
   }
 
-  it("keeps the case when asked to", () => {
+  it("keeps the case when asked to, and always lower-cases an escape", () => {
     expect(inspectPath("/PAID/A", { caseSensitive: true }).path).toBe("/PAID/A");
+    expect(inspectPath("/Caf%C3%A9", { caseSensitive: true }).path).toBe("/Caf%c3%a9");
+  });
+
+  for (const [raw, path] of [
+    ["/caf\u00e9/X", "/caf%c3%a9/x"],
+    ["/caf%C3%A9/X", "/caf%c3%a9/x"],
+    ["/caf\u00c3\u00a9/X", "/caf%c3%a9/x"],
+    ["/100%25", "/100%"],
+  ] as const) {
+    it(`${JSON.stringify(raw)} is its own page`, () => {
+      expect(inspectPath(raw)).toEqual({ path, ambiguous: false });
+    });
+  }
+
+  it("the character itself in a pattern is not guessed at as bytes", () => {
+    expect(spelledAsPath("/\u00d7\u00a9/*")).toBe("/%c3%97%c2%a9/*");
+    expect(inspectPath("/\u00d7\u00a9/x").path).toBe("/%d7%a9/x");
+  });
+
+  for (const [raw, path] of [
+    ["/docs/what%3F", "/docs/what%3f"],
+    ["/docs/what%253F", "/docs/what%3f"],
+    ["/wiki/C%23", "/wiki/c%23"],
+  ] as const) {
+    it(`${raw} keeps its mark`, () => {
+      expect(inspectPath(raw)).toEqual({ path, ambiguous: false });
+    });
+  }
+
+  for (const raw of [
+    "/report;a%3Fb/c",
+    "/report%3Ba%3Fb/c",
+    "/report;%3F/c",
+    "/paid/secret;a%23b/c",
+    "/paid/%2525252e%2525252e/x",
+    "/paid/%252525252e%252525252e/x",
+    "/%25252570aid/a",
+    "/z#/..;/paid/a",
+    "/paid/a#f",
+  ]) {
+    it(`${raw} cannot be read one way`, () => {
+      expect(inspectPath(raw).ambiguous).toBe(true);
+    });
+  }
+
+  it("a path read again reads the same", () => {
+    const pieces = ["paid", "A", "%2e", "%252e", "%2e%2e", "..", ".", ";x=1", "%3F", "%253F", "%23", "%25", "%2525", "%2f", "%252f", "\\", "caf\u00e9", "%C3%A9", "%", "%4", "%41", "%2541", "%3B", "%5C", ""];
+    for (const a of pieces) {
+      for (const b of pieces) {
+        for (const c of pieces) {
+          const raw = `/${a}/${b}${c}/x`;
+          for (const caseSensitive of [false, true]) {
+            const once = inspectPath(raw, { caseSensitive });
+            if (!once.ambiguous) expect(inspectPath(once.path, { caseSensitive }), raw).toEqual(once);
+          }
+        }
+      }
+    }
+  });
+});
+
+describe("which pattern a path falls under", () => {
+  const paywalled = (pattern: string, tier = "standard", paywall_enabled = true) => ({ ...resource(pattern, tier), paywall_enabled });
+
+  it("an exact pattern beats a wildcard in any order", () => {
+    const wild = paywalled("/x/*");
+    const exact = paywalled("/x/y", "premium");
+    expect(matchResource([wild, exact], "/x/y")).toBe(exact);
+    expect(matchResource([exact, wild], "/x/y")).toBe(exact);
+    const section = paywalled("/report/*");
+    const page = paywalled("/report", "complex");
+    expect(matchResource([section, page], "/report")).toBe(page);
+  });
+
+  it("on a tie the paid one wins", () => {
+    const open = paywalled("/Docs/*", "standard", false);
+    const paid = paywalled("/docs/*", "premium");
+    expect(matchResource([open, paid], "/docs/x")).toBe(paid);
+    expect(matchResource([paid, open], "/docs/x")).toBe(paid);
+  });
+
+  it("an escaped mark is part of the page, not the end of it", () => {
+    const page = paywalled("/wiki/C%23", "premium");
+    expect(matchResource([page], "/wiki/C%23")).toBe(page);
+    expect(matchResource([page], "/wiki/C")).toBeNull();
+    const paid = paywalled("/paid");
+    expect(matchResource([paid], "/paid%3Fx")).toBe(paid);
+    const open = paywalled("/open", "standard", false);
+    expect(matchResource([open], "/open%3Fx")).toBeNull();
+    expect(matchResource([paid], "/free%3F/paid")).toBeNull();
+    const cafe = paywalled("/caf\u00e9/*", "premium");
+    expect(matchResource([cafe], "/caf%C3%A9/x")).toBe(cafe);
+  });
+});
+
+describe("the same read at every step", () => {
+  it("a junk segment that decodes further is refused, not priced as what is left", async () => {
+    const { gate } = await gateWith();
+    const answer = await gate(req("/paid/%2525252e%2525252e/x", GPTBOT));
+    expect(answer.status).toBe(400);
+  });
+
+  it("an escaped mark costs the dearer of the two pages, and a receipt for that page opens it", async () => {
+    const { gate, iss } = await gateWith();
+    for (const spelled of ["/report%3Fx", "/report%23x", "/REPORT%3Fx"]) {
+      const asked = (await gate(req(spelled, GPTBOT))) as { status: number; body: { resource: string; unit_weight: number } };
+      expect([asked.status, asked.body.resource, asked.body.unit_weight]).toEqual([402, "/report", 4]);
+    }
+    const page = await iss.sign({ sub: "0xabc", resource: "/report", scope: "exact", unit_quota: 5, receipt_id: "r1" });
+    expect((await gate(req("/report%3Fx", { ...GPTBOT, "AIFP-Receipt": page }))).status).toBe(200);
+    expect(((await gate(req("/paid%3Fx", GPTBOT))) as { body: { resource: string } }).body.resource).toBe("/paid/*");
+  });
+
+  it("a page with its own price keeps it, and its own receipt opens it", async () => {
+    const list = [resource("/wiki/C%23", "premium"), resource("/wiki/C"), resource("/x%3Fy"), resource("/x", "premium")];
+    const { gate, iss } = await gateWith({ registry: registry(list) });
+    const own = (await gate(req("/wiki/C%23", GPTBOT))) as { body: { resource: string; unit_weight: number } };
+    expect([own.body.resource, own.body.unit_weight]).toEqual(["/wiki/C%23", 10]);
+    const claims = { sub: "0xabc", scope: "exact" as const, unit_quota: 50 };
+    const bought = await iss.sign({ ...claims, resource: "/wiki/C%23", receipt_id: "r1" });
+    expect((await gate(req("/wiki/C%23", { ...GPTBOT, "AIFP-Receipt": bought }))).status).toBe(200);
+    const cheaper = await iss.sign({ ...claims, resource: "/wiki/C", receipt_id: "r2" });
+    expect((await gate(req("/wiki/C%23", { ...GPTBOT, "AIFP-Receipt": cheaper }))).status).toBe(403);
+    const dearer = (await gate(req("/x%3Fy", GPTBOT))) as { body: { resource: string; unit_weight: number } };
+    expect([dearer.body.resource, dearer.body.unit_weight]).toEqual(["/x", 10]);
+  });
+
+  it("on a mount with no patterns a page with a mark is its own page", async () => {
+    const { gate, iss } = await gateWith({ registry: undefined, resource: undefined });
+    const asked = (await gate(req("/docs/what%3F", GPTBOT))) as { status: number; body: { resource: string } };
+    expect([asked.status, asked.body.resource]).toEqual([402, "/docs/what%3F"]);
+    const claims = { sub: "0xabc", scope: "exact" as const, unit_quota: 5 };
+    const named = await iss.sign({ ...claims, resource: "/docs/what%3F", receipt_id: "r1" });
+    expect((await gate(req("/docs/what%3F", { ...GPTBOT, "AIFP-Receipt": named }))).status).toBe(200);
+    const other = await iss.sign({ ...claims, resource: "/docs/what", receipt_id: "r2" });
+    expect((await gate(req("/docs/what%3F", { ...GPTBOT, "AIFP-Receipt": other }))).status).toBe(403);
   });
 });
 
@@ -174,6 +313,11 @@ describe("a path that means different things to different servers", () => {
     expect(answer.headers["AIFP-Shadow-Status"]).toBe("402");
   });
 
+  it("a registry with a mount default is priced by its patterns, so it is refused there too", async () => {
+    const { gate } = await gateWith({ resource: "/fallback" });
+    expect((await gate(req("/paid/premium/..;/../x", GPTBOT))).status).toBe(400);
+  });
+
   it("a static mount charges whatever it is handed", async () => {
     const { gate } = await gateWith({ registry: undefined, resource: "/api/search" });
     expect((await gate(req("/x/../y", GPTBOT))).status).toBe(402);
@@ -217,6 +361,77 @@ describe("AIFP-Agent-Id is compared to the payer by default", () => {
   });
 });
 
+describe("spelledAsPath", () => {
+  for (const [spelled, read] of [
+    ["/Paid/*", "/paid/*"],
+    ["/*", "/*"],
+    ["/report/", "/report"],
+    ["/my%20report", "/my report"],
+    ["/%64ata/two", "/data/two"],
+    ["/a;b=1/c", "/a/c"],
+    ["/", "/"],
+    ["*", "*"],
+  ] as const) {
+    it(`reads ${spelled} as ${read}`, () => expect(spelledAsPath(spelled)).toBe(read));
+  }
+
+  it("keeps the case when asked to", () => {
+    expect(spelledAsPath("/Paid/*", { caseSensitive: true })).toBe("/Paid/*");
+  });
+
+  it("is on the edge entry too", () => {
+    expect(edge.spelledAsPath("/Paid/*")).toBe("/paid/*");
+    expect(edge.inspectPath("/PAID").path).toBe("/paid");
+  });
+});
+
+describe("an encoded spelling", () => {
+  it("a pattern registered with an escape still prices its page", async () => {
+    const { gate } = await gateWith({ registry: registry([resource("/my%20report", "premium")]) });
+    const answer = await gate(req("/my%20report", GPTBOT));
+    expect(!answer.ok && answer.body).toMatchObject({ resource: "/my%20report", unit_weight: 10 });
+  });
+
+  for (const [path, bought] of [
+    ["/data/my%20report", "/data/my%20report"],
+    ["/%64ata/two", "/%64ata/two"],
+    ["/data/a;b=1", "/data/a;b=1"],
+    ["/data/two", "/%64ata/two"],
+  ] as const) {
+    it(`a receipt for ${bought} opens ${path}`, async () => {
+      const { gate, iss } = await gateWith({ registry: registry([resource("/data/*")]) });
+      const token = await iss.sign({ resource: bought, unit_quota: 2 });
+      expect((await gate(req(path, { "AIFP-Receipt": token }))).status).toBe(200);
+    });
+  }
+});
+
+describe("what the 402 names", () => {
+  it("an unregistered path is quoted as the agent asked for it, so its payer finds its own URL", async () => {
+    const { gate } = await gateWith({ registry: undefined });
+    const answer = await gate(req("/Articles/My%20Report?x=1", GPTBOT));
+    expect(!answer.ok && answer.body.resource).toBe("/Articles/My%20Report");
+  });
+
+  it("a receipt bought for that quote opens it", async () => {
+    const { gate, iss } = await gateWith({ registry: undefined });
+    const token = await iss.sign({ resource: "/Articles/My%20Report", unit_quota: 2 });
+    expect((await gate(req("/Articles/My%20Report", { "AIFP-Receipt": token }))).status).toBe(200);
+  });
+});
+
+describe("a prefix receipt for a section as discovery lists it", () => {
+  for (const [path, covers] of [
+    ["/x", true],
+    ["/x/a", true],
+    ["/xy", false],
+  ] as const) {
+    it(`/x/* with scope prefix ${covers ? "opens" : "does not open"} ${path}`, () => {
+      expect(scopeCovers("prefix", "/x/*", path)).toBe(covers);
+    });
+  }
+});
+
 describe("the real registry", () => {
   const merchant = (view: Record<string, unknown>) =>
     ({ listResources: async () => SECTIONS, merchant: async () => ({ merchant_id: MERCHANT, ...view }) }) as never;
@@ -229,6 +444,17 @@ describe("the real registry", () => {
     const odd = new ResourceRegistry({ merchant: merchant({ network_mode: "mainnet" }) });
     await odd.refresh();
     expect(odd.networkMode()).toBeNull();
+    // The control plane stores the field only for a test site.
+    const unsaid = new ResourceRegistry({ merchant: merchant({}) });
+    await unsaid.refresh();
+    expect(unsaid.networkMode()).toBe("live");
+  });
+
+  it("hands the case option to the matcher", async () => {
+    const live = new ResourceRegistry({ merchant: merchant({}) });
+    await live.refresh();
+    expect(live.match("/PAID/x")?.route_pattern).toBe("/paid/*");
+    expect(live.match("/PAID/x", { caseSensitive: true })).toBeNull();
   });
 
   it("refuses a test receipt on a live site end to end, and matches a spelling", async () => {
@@ -306,6 +532,12 @@ describe("shadow spends nothing", () => {
     expect(store.incrBy).not.toHaveBeenCalled();
     expect(store.decrBy).not.toHaveBeenCalled();
     expect(events.map((e) => [e.kind, e.verified, e.ua_class])).toEqual(Array(3).fill(["serve", true, "aifp_agent"]));
+  });
+
+  it("still reads a single-use receipt with no nonce as a would-be refusal", async () => {
+    const { gate, iss } = await gateWith({ mode: "shadow" });
+    const token = await iss.sign({ resource: "/paid/*", unit_quota: 1, nonce: null });
+    expect((await gate(req("/paid/a", { "AIFP-Receipt": token }))).headers["AIFP-Shadow-Status"]).toBe("403");
   });
 
   it("still reads a bad receipt as a would-be refusal", async () => {

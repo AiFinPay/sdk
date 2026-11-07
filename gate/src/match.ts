@@ -1,11 +1,14 @@
 import type { AifpResource } from "./types.js";
+import { beforeMark, inspectPath, spelledAsPath } from "./path.js";
+import { TIER_WEIGHTS } from "./pricing.js";
 
 /**
  * Path → registry record. Port of the matcher in backend/routes/gateway.js.
  *
  * `/api/lookup/*` matches `/api/lookup` and everything under it; anything else
- * is an exact compare. Longest route_pattern wins, so a specific `/api/search`
- * beats a catch-all `/api/*` regardless of registration order.
+ * is an exact compare. An exact pattern wins, then the longest wildcard, so a
+ * specific `/api/search` beats a catch-all `/api/*` regardless of registration
+ * order. On a tie the paid one wins.
  *
  * No match returns null, and NULL MEANS PAYWALLED, never free. An unregistered
  * path is an unpriced path, and the safe reading of "the merchant never said
@@ -17,16 +20,34 @@ export function matchResource(
   path: string,
   { caseSensitive = false }: { caseSensitive?: boolean } = {}
 ): AifpResource | null {
-  const asked = caseSensitive ? path : path.toLowerCase();
+  const { path: asked } = inspectPath(path, { caseSensitive });
+  const own = bestFor(resources, asked, caseSensitive);
+  const before = beforeMark(asked, { caseSensitive });
+  if (before === null) return own;
+  // Either page may be what the origin serves, so the dearer one sets the price.
+  const other = bestFor(resources, before, caseSensitive);
+  return priceOf(other) > priceOf(own) ? other : own;
+}
+
+function priceOf(r: AifpResource | null): number {
+  if (!r || r.paywall_enabled === false) return 0;
+  return r.unit_weight ?? TIER_WEIGHTS[r.tier as keyof typeof TIER_WEIGHTS] ?? 1;
+}
+
+function bestFor(resources: AifpResource[], asked: string, caseSensitive: boolean): AifpResource | null {
   let best: AifpResource | null = null;
+  let bestRank = -1;
   for (const r of resources) {
     if (!r.route_pattern) continue;
-    const pat = caseSensitive ? r.route_pattern : r.route_pattern.toLowerCase();
-    const hit = pat.endsWith("/*")
-      ? asked === pat.slice(0, -2) || asked.startsWith(pat.slice(0, -1))
-      : asked === pat || asked === pat.replace(/\/+$/, "");
+    const pat = spelledAsPath(r.route_pattern, { caseSensitive });
+    const wild = pat.endsWith("/*");
+    const hit = wild ? asked === pat.slice(0, -2) || asked.startsWith(pat.slice(0, -1)) : asked === pat;
     if (!hit) continue;
-    if (!best || pat.length > best.route_pattern.length) best = r;
+    const rank = wild ? pat.length : Number.MAX_SAFE_INTEGER;
+    if (rank > bestRank || (rank === bestRank && best?.paywall_enabled === false && r.paywall_enabled !== false)) {
+      best = r;
+      bestRank = rank;
+    }
   }
   return best;
 }

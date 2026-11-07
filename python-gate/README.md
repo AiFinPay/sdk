@@ -113,7 +113,7 @@ and expires with the receipt.
 | `on_store_error` | `"closed"` | `"open"` serves un-metered calls when the store is down (`AIFP-Meter: degraded`). |
 | `require_agent_match` | `True` | Refuse a caller whose `AIFP-Agent-Id` names someone other than the receipt's payer; a caller naming nobody is served (anti-accident, not anti-theft). |
 | `case_sensitive` | `False` | Paths and patterns are compared in lower case, as most origins serve them. `True` for an origin where `/A` and `/a` are two pages. |
-| `network_mode` | not checked | `"live"` or `"test"`, or a callable returning it: a testnet receipt does not open a live site or the reverse. Pass `network_mode` from `GET /v1/merchants/:id`. |
+| `network_mode` | not checked | `"live"` or `"test"`, or a callable returning it: a testnet receipt does not open a live site or the reverse. From `GET /v1/merchants/:id`: `record.get("network_mode", "live")`, since the field is stored only for a test site. |
 | `replay` | `"auto"` | Single-use receipts get a one-shot nonce check. |
 | `jwks` | fetched | Pin the key set and skip network I/O (redeploy on key rotation). |
 | `on_event(e)` | — | `402` / `serve` / `403` / `meter_error` events for your metrics. |

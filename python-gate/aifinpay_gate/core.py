@@ -12,6 +12,7 @@ of truth for a rule the merchant edits in the dashboard.
 
 import math
 import re
+import sys
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -20,7 +21,7 @@ from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Pro
 from .agents import classify_agent
 from .challenge import build_challenge
 from .operator_policy import decide_operator, normalize_operator_policy
-from .path import inspect_path
+from .path import before_mark, inspect_path, spelled_as_path
 from .pricing import weight_for_tier
 from .reporter import GateReporter, GateReporterV2, _context, _utc_now
 from .scope import pattern_covers, scope_covers
@@ -39,6 +40,12 @@ HEADER_SHADOW_STATUS = "AIFP-Shadow-Status"
 # On an answer that depends on who asked: a shared cache keyed by URL must not
 # hand it to the next caller.
 NO_STORE = "private, no-store, max-age=0"
+# These outrank Cache-Control at the CDN they address, so a paid answer must not carry them.
+CDN_CACHE_HEADERS = frozenset({
+    "cdn-cache-control", "surrogate-control", "cloudflare-cdn-cache-control",
+    "vercel-cdn-cache-control", "netlify-cdn-cache-control",
+    "edge-control", "akamai-cache-control", "x-accel-expires",
+})
 MODES = ("shadow", "enforce")
 NETWORK_MODES = ("live", "test")
 TIERS = ("standard", "complex", "premium")
@@ -63,6 +70,12 @@ class SimpleRequest:
 
     def header(self, name: str) -> Optional[str]:
         return self._lower.get(name.lower())
+
+
+def _route_price(route: "Optional[Route]") -> int:
+    if route is None or not route.paywall:
+        return 0
+    return route.weight or weight_for_tier(route.tier)
 
 
 @dataclass(frozen=True)
@@ -108,12 +121,6 @@ class GateResult:
         if self.aifp is not None:
             out["aifp"] = self.aifp
         return out
-
-
-def _spelled_as_path(resource: str, case_sensitive: bool) -> str:
-    """A receipt or a mount names the resource as the merchant spelled it; a path is canonical."""
-    spelled = resource if case_sensitive else resource.lower()
-    return spelled if spelled.endswith("/*") else spelled.rstrip("/") or "/"
 
 
 def _payer_key(address: str, chain: Optional[str]) -> str:
@@ -240,16 +247,28 @@ class Gate:
     # ── routing ─────────────────────────────────────────────────────────────
 
     def route_for(self, path: str, method: Optional[str] = None) -> Optional[Route]:
-        asked = path if self.case_sensitive else path.lower()
+        asked = inspect_path(path, case_sensitive=self.case_sensitive).path
+        own = self._best_route(asked, method)
+        before = before_mark(asked, case_sensitive=self.case_sensitive)
+        if before is None:
+            return own
+        # Either page may be what the origin serves, so the dearer one sets the price.
+        other = self._best_route(before, method)
+        return other if _route_price(other) > _route_price(own) else own
+
+    def _best_route(self, asked: str, method: Optional[str]) -> Optional[Route]:
         best: Optional[Route] = None
+        best_rank = -1
         for r in self.routes or ():
             if r.methods is not None and method is not None and method.upper() not in r.methods:
                 continue
-            pattern = r.pattern if self.case_sensitive else r.pattern.lower()
-            if not pattern_covers(pattern, asked) and (pattern.endswith("/*") or asked != pattern.rstrip("/")):
+            pattern = spelled_as_path(r.pattern, case_sensitive=self.case_sensitive)
+            if not pattern_covers(pattern, asked):
                 continue
-            if best is None or len(r.pattern) > len(best.pattern):
-                best = r
+            # An exact pattern wins, then the longest wildcard. On a tie the paid one wins.
+            rank = len(pattern) if pattern.endswith("/*") else sys.maxsize
+            if rank > best_rank or (rank == best_rank and best is not None and not best.paywall and r.paywall):
+                best, best_rank = r, rank
         return best
 
     def discovery_resources(self) -> List[Dict[str, Any]]:
@@ -267,6 +286,9 @@ class Gate:
         are supplied by the integrator, never derived from agent/wallet/UA/IP.
         """
         if self.reporting is None or result is None:
+            return None
+        # A mount with no resource names the raw path, which is private.
+        if self.routes is None and not self.resource:
             return None
         if result.ok and (not result.aifp or result.aifp.get("mode") != "paid"):
             return None
@@ -427,10 +449,15 @@ class Gate:
             resource, tier = route.pattern, route.tier
             weight = route.weight or weight_for_tier(tier)
             scope_path = path  # a receipt names a real path; "/api/*" is not one
+            # A page priced as the one before an escaped mark is bought as that page.
+            if not pattern_covers(spelled_as_path(route.pattern, case_sensitive=self.case_sensitive), path):
+                scope_path = before_mark(path, case_sensitive=self.case_sensitive) or path
         else:
             route = None
-            resource, tier, weight = (self.resource or path), self.tier, self.mount_weight
-            scope_path = _spelled_as_path(self.resource or path, self.case_sensitive)
+            # An unregistered path is quoted as the agent asked for it: its payer compares the 402 with its own URL.
+            asked = re.split(r"[?#]", str(req.path), maxsplit=1)[0] or "/"
+            resource, tier, weight = (self.resource or asked), self.tier, self.mount_weight
+            scope_path = spelled_as_path(self.resource or path, case_sensitive=self.case_sensitive)
         agent_header = req.header("AIFP-Agent-Id")
 
         # Explicitly free route: no metering, no batch spend.
@@ -521,7 +548,7 @@ class Gate:
 
         bought = payload.get("resource")
         if isinstance(bought, str):
-            bought = _spelled_as_path(bought, self.case_sensitive)
+            bought = spelled_as_path(bought, case_sensitive=self.case_sensitive)
         if not scope_covers(payload.get("scope"), bought, scope_path):
             return self._forbid(
                 resource, weight,

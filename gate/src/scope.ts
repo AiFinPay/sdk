@@ -30,12 +30,12 @@
 export function scopeCovers(scope: string | undefined, resource: string, path: string): boolean {
   if (scope === "merchant") return true;
   if (scope === "prefix") {
-    if (resource === "/") return true; // whole site, spelled as a prefix
-    if (path === resource) return true; // the prefix path itself
-    // The trailing slash is the entire point: without it, /articles covers
-    // /articles-internal, and a merchant's private routes get served on a
-    // receipt bought for their blog.
-    const boundary = resource.endsWith("/") ? resource : resource + "/";
+    // A discovery document lists a section as "/x/*" with scope prefix.
+    const base = resource.endsWith("/*") ? resource.slice(0, -1) : resource;
+    if (base === "/") return true; // whole site, spelled as a prefix
+    if (path === base) return true; // the prefix path itself
+    // The trailing slash is what stops /articles covering /articles-internal.
+    const boundary = base.endsWith("/") ? base : base + "/";
     // The SDKs buy "/paid/" for a "/paid/*" 402, and that wildcard covers "/paid" itself.
     return path === boundary.slice(0, -1) || path.startsWith(boundary);
   }

@@ -11,7 +11,7 @@ import json
 import threading
 from typing import Any, Dict, Optional
 
-from .core import Gate
+from .core import CDN_CACHE_HEADERS, Gate
 from .discovery import DISCOVERY_PATH, build_discovery_document, discovery_link_header, is_html_content_type
 
 _STATUS = {200: "200 OK", 400: "400 Bad Request", 402: "402 Payment Required", 403: "403 Forbidden", 503: "503 Service Unavailable"}
@@ -19,7 +19,12 @@ _STATUS = {200: "200 OK", 400: "400 Bad Request", 402: "402 Payment Required", 4
 
 class _WsgiRequest:
     def __init__(self, environ: Dict[str, Any]):
-        self.path = environ.get("PATH_INFO") or "/"
+        # The server decoded this, so a "?" or "#" in it is part of the path, not its end.
+        # PEP 3333: PATH_INFO holds the URL's bytes as latin-1 characters.
+        path = environ.get("PATH_INFO") or "/"
+        if not path.isascii() and all(ord(c) <= 0xFF for c in path):
+            path = "".join(c if ord(c) < 0x80 else f"%{ord(c):02x}" for c in path)
+        self.path = path.replace("?", "%3F").replace("#", "%23")
         self.method = environ.get("REQUEST_METHOD", "GET")
         self._environ = environ
 
@@ -42,7 +47,7 @@ def _json(start_response, status: int, headers: Dict[str, str], body: Any, metho
 def _with_gate_headers(headers, extra, paid):
     """A handler's own Cache-Control must not make a paid response storable; anywhere else it wins."""
     if paid:
-        headers = [(k, v) for k, v in headers if k.lower() != "cache-control"]
+        headers = [(k, v) for k, v in headers if k.lower() != "cache-control" and k.lower() not in CDN_CACHE_HEADERS]
     elif any(k.lower() == "cache-control" for k, _ in headers):
         extra = [(k, v) for k, v in extra if k.lower() != "cache-control"]
     return list(headers) + extra
