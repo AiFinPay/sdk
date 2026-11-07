@@ -108,11 +108,17 @@ describe("inspectPath", () => {
     expect(inspectPath("/\u00d7\u00a9/x").path).toBe("/%d7%a9/x");
   });
 
+  for (const [raw, path] of [
+    ["/docs/what%3F", "/docs/what%3f"],
+    ["/docs/what%253F", "/docs/what%3f"],
+    ["/wiki/C%23", "/wiki/c%23"],
+  ] as const) {
+    it(`${raw} keeps its mark`, () => {
+      expect(inspectPath(raw)).toEqual({ path, ambiguous: false });
+    });
+  }
+
   for (const raw of [
-    "/docs/what%3F",
-    "/docs/what%253F",
-    "/wiki/C%23",
-    "/report%3Fx",
     "/paid/%2525252e%2525252e/x",
     "/paid/%252525252e%252525252e/x",
     "/%25252570aid/a",
@@ -164,7 +170,11 @@ describe("which pattern a path falls under", () => {
     const page = paywalled("/wiki/C%23", "premium");
     expect(matchResource([page], "/wiki/C%23")).toBe(page);
     expect(matchResource([page], "/wiki/C")).toBeNull();
-    expect(matchResource([paywalled("/paid")], "/paid%3Fx")).toBeNull();
+    const paid = paywalled("/paid");
+    expect(matchResource([paid], "/paid%3Fx")).toBe(paid);
+    const open = paywalled("/open", "standard", false);
+    expect(matchResource([open], "/open%3Fx")).toBeNull();
+    expect(matchResource([paid], "/free%3F/paid")).toBeNull();
     const cafe = paywalled("/caf\u00e9/*", "premium");
     expect(matchResource([cafe], "/caf%C3%A9/x")).toBe(cafe);
   });
@@ -177,12 +187,41 @@ describe("the same read at every step", () => {
     expect(answer.status).toBe(400);
   });
 
-  for (const spelled of ["/report%3Fx", "/paid%3Fx", "/report%23x", "/docs/what%3F"]) {
-    it(`${spelled} is refused: a proxy that decodes hands it on as the page before the mark`, async () => {
-      const { gate } = await gateWith();
-      expect((await gate(req(spelled, GPTBOT))).status).toBe(400);
-    });
-  }
+  it("an escaped mark costs the dearer of the two pages, and a receipt for that page opens it", async () => {
+    const { gate, iss } = await gateWith();
+    for (const spelled of ["/report%3Fx", "/report%23x", "/REPORT%3Fx"]) {
+      const asked = (await gate(req(spelled, GPTBOT))) as { status: number; body: { resource: string; unit_weight: number } };
+      expect([asked.status, asked.body.resource, asked.body.unit_weight]).toEqual([402, "/report", 4]);
+    }
+    const page = await iss.sign({ sub: "0xabc", resource: "/report", scope: "exact", unit_quota: 5, receipt_id: "r1" });
+    expect((await gate(req("/report%3Fx", { ...GPTBOT, "AIFP-Receipt": page }))).status).toBe(200);
+    expect(((await gate(req("/paid%3Fx", GPTBOT))) as { body: { resource: string } }).body.resource).toBe("/paid/*");
+  });
+
+  it("a page with its own price keeps it, and its own receipt opens it", async () => {
+    const list = [resource("/wiki/C%23", "premium"), resource("/wiki/C"), resource("/x%3Fy"), resource("/x", "premium")];
+    const { gate, iss } = await gateWith({ registry: registry(list) });
+    const own = (await gate(req("/wiki/C%23", GPTBOT))) as { body: { resource: string; unit_weight: number } };
+    expect([own.body.resource, own.body.unit_weight]).toEqual(["/wiki/C%23", 10]);
+    const claims = { sub: "0xabc", scope: "exact" as const, unit_quota: 50 };
+    const bought = await iss.sign({ ...claims, resource: "/wiki/C%23", receipt_id: "r1" });
+    expect((await gate(req("/wiki/C%23", { ...GPTBOT, "AIFP-Receipt": bought }))).status).toBe(200);
+    const cheaper = await iss.sign({ ...claims, resource: "/wiki/C", receipt_id: "r2" });
+    expect((await gate(req("/wiki/C%23", { ...GPTBOT, "AIFP-Receipt": cheaper }))).status).toBe(403);
+    const dearer = (await gate(req("/x%3Fy", GPTBOT))) as { body: { resource: string; unit_weight: number } };
+    expect([dearer.body.resource, dearer.body.unit_weight]).toEqual(["/x", 10]);
+  });
+
+  it("on a mount with no patterns a page with a mark is its own page", async () => {
+    const { gate, iss } = await gateWith({ registry: undefined, resource: undefined });
+    const asked = (await gate(req("/docs/what%3F", GPTBOT))) as { status: number; body: { resource: string } };
+    expect([asked.status, asked.body.resource]).toEqual([402, "/docs/what%3F"]);
+    const claims = { sub: "0xabc", scope: "exact" as const, unit_quota: 5 };
+    const named = await iss.sign({ ...claims, resource: "/docs/what%3F", receipt_id: "r1" });
+    expect((await gate(req("/docs/what%3F", { ...GPTBOT, "AIFP-Receipt": named }))).status).toBe(200);
+    const other = await iss.sign({ ...claims, resource: "/docs/what", receipt_id: "r2" });
+    expect((await gate(req("/docs/what%3F", { ...GPTBOT, "AIFP-Receipt": other }))).status).toBe(403);
+  });
 });
 
 describe("a spelling does not buy another price", () => {

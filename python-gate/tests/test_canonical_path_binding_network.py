@@ -251,8 +251,7 @@ def test_asgi_drops_a_cdns_own_cache_header_on_a_paid_response():
     assert b"x-own" in names
 
 
-@pytest.mark.parametrize("raw", ["/paid/%2525252e%2525252e/x", "/paid/%252525252e%252525252e/x", "/z#/..;/paid/a",
-                                 "/report%3Fx", "/paid%3Fx", "/report%23x", "/docs/what%3F"])
+@pytest.mark.parametrize("raw", ["/paid/%2525252e%2525252e/x", "/paid/%252525252e%252525252e/x", "/z#/..;/paid/a"])
 def test_a_spelling_that_cannot_be_read_one_way_is_refused(raw):
     assert g.inspect_path(raw).ambiguous
     assert routed().decide(req(path=raw, **GPTBOT)).status == 400
@@ -287,7 +286,7 @@ def test_an_exact_route_beats_a_wildcard_and_a_tie_goes_to_the_paid_one():
 
 
 @pytest.mark.parametrize("pattern,path", [
-    ("/caf%C3%A9/*", "/caf\u00e9/x"), ("/caf\u00e9/*", "/caf\u00e9/x"), ("/caf\u00e9/*", "/caf%C3%A9/x"),
+    ("/caf%C3%A9/*", "/caf\u00e9/x"), ("/caf\u00e9/*", "/caf\u00e9/x"), ("/caf\u00e9/*", "/caf%C3%A9/x"), ("/wiki/C%23", "/wiki/C%23"),
 ])
 def test_a_route_with_an_escape_or_a_character_is_the_page_it_names(pattern, path):
     assert gate(routes=[g.Route(pattern, "premium")]).decide(req(path=path, **GPTBOT)).body["unit_weight"] == 10
@@ -296,7 +295,7 @@ def test_a_route_with_an_escape_or_a_character_is_the_page_it_names(pattern, pat
 def test_the_wsgi_adapter_reads_pep_3333_bytes():
     from aifinpay_gate.wsgi import _WsgiRequest
     assert _WsgiRequest({"PATH_INFO": "/caf\u00c3\u00a9/x"}).path == "/caf%c3%a9/x"
-    assert g.inspect_path(_WsgiRequest({"PATH_INFO": "/wiki/C#"}).path).ambiguous
+    assert g.inspect_path(_WsgiRequest({"PATH_INFO": "/wiki/C#"}).path).path == "/wiki/c%23"
 
 
 def test_the_asgi_adapter_reads_an_escape_that_is_not_utf8():
@@ -306,3 +305,32 @@ def test_the_asgi_adapter_reads_an_escape_that_is_not_utf8():
     assert answer.status == 402 and answer.body["unit_weight"] == 10
     assert _AsgiRequest({"path": "/caf\u00e9/x", "raw_path": b"/caf%C3%A9/x"}).path == "/caf%C3%A9/x"
     assert _AsgiRequest({"path": "/plain/x", "raw_path": b"/%70lain/x"}).path == "/plain/x"
+
+
+@pytest.mark.parametrize("spelled", ["/report%3Fx", "/report%23x", "/REPORT%3Fx"])
+def test_an_escaped_mark_costs_the_page_before_it_and_a_receipt_for_that_page_opens_it(spelled):
+    gt = routed()
+    asked = gt.decide(req(path=spelled, **GPTBOT))
+    assert (asked.status, asked.body["resource"], asked.body["unit_weight"]) == (402, "/report", 4)
+    opened = gt.decide(req(path=spelled, **{**GPTBOT, "AIFP-Receipt": token(resource="/report", scope="exact", sub=PAYER)}))
+    assert opened.status == 200
+
+
+def test_a_page_with_a_mark_keeps_its_own_price_and_receipt():
+    gt = gate(routes=[g.Route("/wiki/C%23", "premium"), g.Route("/wiki/C"), g.Route("/x%3Fy"), g.Route("/x", "premium")])
+    own = gt.decide(req(path="/wiki/C%23", **GPTBOT))
+    assert (own.body["resource"], own.body["unit_weight"]) == ("/wiki/C%23", 10)
+    assert gt.decide(req(path="/wiki/C%23", **{**GPTBOT, "AIFP-Receipt": token(resource="/wiki/C%23", unit_quota=50)})).status == 200
+    assert gt.decide(req(path="/wiki/C%23", **{**GPTBOT, "AIFP-Receipt": token(resource="/wiki/C", unit_quota=50, receipt_id="r2", nonce="n2")})).status == 403
+    dearer = gt.decide(req(path="/x%3Fy", **GPTBOT))
+    assert (dearer.body["resource"], dearer.body["unit_weight"]) == ("/x", 10)
+    assert gate(routes=[g.Route("/open", paywall=False)]).route_for("/open%3Fx") is None
+    assert gate(routes=[g.Route("/paid")]).route_for("/free%3F/paid") is None
+
+
+def test_on_a_mount_with_no_routes_a_page_with_a_mark_is_its_own_page():
+    gt = gate(routes=None)
+    asked = gt.decide(req(path="/docs/what%3F", **GPTBOT))
+    assert asked.status == 402 and asked.body["resource"] == "/docs/what%3F"
+    assert gt.decide(req(path="/docs/what%3F", **{**GPTBOT, "AIFP-Receipt": token(resource="/docs/what%3F")})).status == 200
+    assert gt.decide(req(path="/docs/what%3F", **{**GPTBOT, "AIFP-Receipt": token(resource="/docs/what", receipt_id="r2", nonce="n2")})).status == 403

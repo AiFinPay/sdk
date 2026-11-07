@@ -2205,6 +2205,108 @@
    }
   },
   {
+   "id": "scope.encoded_mark",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A batch bought for a page with an encoded mark opens that page",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/what%3Fx",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       200,
+       301,
+       302,
+       307,
+       308,
+       404
+      ]
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/paid/what%3Fx"
+     }
+    }
+   }
+  },
+  {
+   "id": "scope.before_the_mark",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A batch for a page does not open a page that only starts like it",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/what%3Fx",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/paid/what"
+     }
+    }
+   }
+  },
+  {
+   "id": "scope.mark_buys_the_page",
+   "group": "scope",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A path priced as the page before an escaped mark opens with a batch for that page",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/report%3Fx",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       200,
+       301,
+       302,
+       307,
+       308,
+       404
+      ]
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "resource": "/report"
+     }
+    }
+   }
+  },
+  {
    "id": "scope.encoded_resource",
    "group": "scope",
    "level": "must",

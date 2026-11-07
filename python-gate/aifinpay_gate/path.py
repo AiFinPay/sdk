@@ -30,10 +30,9 @@ def _escape_non_ascii(text: str) -> str:
 def inspect_path(raw_target: str, *, case_sensitive: bool = False) -> InspectedPath:
     """For an origin whose routing the gate cannot see. The origin still receives
     what the client sent. Origins disagree on dot segments: ``/paid/..;/../a`` is
-    ``/a`` to one and ``/paid/a`` to another, so ``ambiguous`` marks those, an
-    escaped ``?`` or ``#``, which a proxy that decodes hands on as the end of the
-    path, a raw ``#``, and a spelling still decoding after the last round.
-    Anything else reads the same when read again."""
+    ``/a`` to one and ``/paid/a`` to another, so ``ambiguous`` marks those, a raw
+    ``#``, and a spelling still decoding after the last round. Anything else reads
+    the same when read again."""
     target = ("/" if raw_target is None else str(raw_target)).split("?", 1)[0]
     path = target.split("#", 1)[0] or "/"
     for _ in range(3):
@@ -45,7 +44,6 @@ def inspect_path(raw_target: str, *, case_sensitive: bool = False) -> InspectedP
         "#" in target
         or _CONTROL.search(path) is not None
         or _decode_round(path) != path
-        or _MARK.search(path) is not None
     )
     out = []
     for raw in path.split("/"):
@@ -74,3 +72,10 @@ def spelled_as_path(resource: str, *, case_sensitive: bool = False) -> str:
     if not wild:
         return path
     return "/*" if path == "/" else f"{path}/*"
+
+
+def before_mark(path: str, *, case_sensitive: bool = False) -> "str | None":
+    """A proxy that decodes hands ``/report%3Fx`` on as ``/report``, so a canonical
+    path with an escaped mark may be either page. None without one."""
+    found = _MARK.search(path)
+    return None if found is None else inspect_path(path[: found.start()], case_sensitive=case_sensitive).path

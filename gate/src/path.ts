@@ -36,8 +36,7 @@ export interface InspectedPath {
 /**
  * The path a pattern is matched against, for an origin whose routing the gate cannot see. The origin still receives what the client sent.
  * Origins disagree on dot segments: `/paid/..;/../a` is `/a` to one and `/paid/a` to another, so no single answer is safe. `ambiguous` marks those,
- * an escaped `?` or `#`, which a proxy that decodes hands on as the end of the path, a raw `#`, and a spelling still decoding after the last round.
- * Anything else reads the same when read again.
+ * a raw `#`, and a spelling still decoding after the last round. Anything else reads the same when read again.
  */
 export function inspectPath(
   rawTarget: string,
@@ -54,7 +53,7 @@ function read(rawTarget: string, caseSensitive: boolean, maybeBytes: boolean): I
     if (next === path) break;
     path = next;
   }
-  let ambiguous = target.includes("#") || CONTROL.test(path) || decodeRound(path) !== path || /%(3f|23)/i.test(path);
+  let ambiguous = target.includes("#") || CONTROL.test(path) || decodeRound(path) !== path;
   const out: string[] = [];
   for (const raw of path.split("/")) {
     const segment = raw.split(";", 1)[0] as string;
@@ -77,4 +76,10 @@ export function spelledAsPath(resource: string, { caseSensitive = false }: { cas
   const { path } = read(wild ? resource.slice(0, -2) : resource, caseSensitive, false);
   if (!wild) return path;
   return path === "/" ? "/*" : `${path}/*`;
+}
+
+/** A proxy that decodes hands `/report%3Fx` on as `/report`, so a canonical path with an escaped mark may be either page. Null without one. */
+export function beforeMark(path: string, { caseSensitive = false }: { caseSensitive?: boolean } = {}): string | null {
+  const at = path.search(/%(3f|23)/i);
+  return at < 0 ? null : read(path.slice(0, at), caseSensitive, false).path;
 }

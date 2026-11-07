@@ -5,9 +5,9 @@
 0.10.0 was never published. Publish this one, after `@aifinpay/agent` 2.14.1.
 
 - A path reads the same however many times it is read. A spelling still decoding after
-  the last round is ambiguous, as are a raw `#` and an escaped `?` or `#`: a proxy that
-  decodes hands `/report%3Fx` on as `/report`. An agent gets a 400 on such a path in
-  enforce, a reader the page. Before,
+  the last round is ambiguous, as is a raw `#`. An escaped `?` or `#` stays part of the
+  name, and since a proxy that decodes hands `/report%3Fx` on as `/report`, such a path
+  costs the dearer of the two pages and a receipt for that one opens it. Before,
   `/paid/%2525252e%2525252e/x` was read a second time as `/x` and served free.
 - A character outside ASCII reads as its escape, in a path and in a pattern, so
   `/café/*` and `/caf%C3%A9/*` are one page. An escape is lower case even with `caseSensitive`.

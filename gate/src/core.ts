@@ -28,8 +28,8 @@ import { MemoryStore } from "./stores/memory.js";
 import type { GateStore } from "./stores/types.js";
 import { createVerifier } from "./verify.js";
 import { buildChallenge } from "./challenge.js";
-import { inspectPath, spelledAsPath } from "./path.js";
-import { scopeCovers } from "./scope.js";
+import { beforeMark, inspectPath, spelledAsPath } from "./path.js";
+import { patternCovers, scopeCovers } from "./scope.js";
 import { TIER_WEIGHTS, weightForTier } from "./pricing.js";
 import { classifyAgent, type AgentIdentity } from "./agents.js";
 import { decideOperator, type OperatorDecision } from "./operator-policy.js";
@@ -476,7 +476,12 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // In static-mount mode the declared resource is the path the merchant
     // published, which is what the receipt was quoted for, so it wins over
     // req.path (which a mounted router may have already stripped a prefix off).
-    const scopePath = options.registry ? path : spelledAsPath(options.resource ?? path, { caseSensitive });
+    // A page priced as the one before an escaped mark is bought as that page.
+    const pricedBefore =
+      matched?.route_pattern && !patternCovers(spelledAsPath(matched.route_pattern, { caseSensitive }), path)
+        ? beforeMark(path, { caseSensitive })
+        : null;
+    const scopePath = options.registry ? (pricedBefore ?? path) : spelledAsPath(options.resource ?? path, { caseSensitive });
 
     // ── 2. Explicitly free resources ──────────────────────────────────────
     // paywall_enabled:false is the merchant saying "serve this to anyone". No

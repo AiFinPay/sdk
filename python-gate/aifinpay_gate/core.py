@@ -21,7 +21,7 @@ from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Pro
 from .agents import classify_agent
 from .challenge import build_challenge
 from .operator_policy import decide_operator, normalize_operator_policy
-from .path import inspect_path, spelled_as_path
+from .path import before_mark, inspect_path, spelled_as_path
 from .pricing import weight_for_tier
 from .reporter import GateReporter, GateReporterV2, _context, _utc_now
 from .scope import pattern_covers, scope_covers
@@ -70,6 +70,12 @@ class SimpleRequest:
 
     def header(self, name: str) -> Optional[str]:
         return self._lower.get(name.lower())
+
+
+def _route_price(route: "Optional[Route]") -> int:
+    if route is None or not route.paywall:
+        return 0
+    return route.weight or weight_for_tier(route.tier)
 
 
 @dataclass(frozen=True)
@@ -242,6 +248,15 @@ class Gate:
 
     def route_for(self, path: str, method: Optional[str] = None) -> Optional[Route]:
         asked = inspect_path(path, case_sensitive=self.case_sensitive).path
+        own = self._best_route(asked, method)
+        before = before_mark(asked, case_sensitive=self.case_sensitive)
+        if before is None:
+            return own
+        # Either page may be what the origin serves, so the dearer one sets the price.
+        other = self._best_route(before, method)
+        return other if _route_price(other) > _route_price(own) else own
+
+    def _best_route(self, asked: str, method: Optional[str]) -> Optional[Route]:
         best: Optional[Route] = None
         best_rank = -1
         for r in self.routes or ():
@@ -434,6 +449,9 @@ class Gate:
             resource, tier = route.pattern, route.tier
             weight = route.weight or weight_for_tier(tier)
             scope_path = path  # a receipt names a real path; "/api/*" is not one
+            # A page priced as the one before an escaped mark is bought as that page.
+            if not pattern_covers(spelled_as_path(route.pattern, case_sensitive=self.case_sensitive), path):
+                scope_path = before_mark(path, case_sensitive=self.case_sensitive) or path
         else:
             route = None
             # An unregistered path is quoted as the agent asked for it: its payer compares the 402 with its own URL.

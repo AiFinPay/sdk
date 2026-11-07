@@ -1,5 +1,6 @@
 import type { AifpResource } from "./types.js";
-import { inspectPath, spelledAsPath } from "./path.js";
+import { beforeMark, inspectPath, spelledAsPath } from "./path.js";
+import { TIER_WEIGHTS } from "./pricing.js";
 
 /**
  * Path → registry record. Port of the matcher in backend/routes/gateway.js.
@@ -20,6 +21,20 @@ export function matchResource(
   { caseSensitive = false }: { caseSensitive?: boolean } = {}
 ): AifpResource | null {
   const { path: asked } = inspectPath(path, { caseSensitive });
+  const own = bestFor(resources, asked, caseSensitive);
+  const before = beforeMark(asked, { caseSensitive });
+  if (before === null) return own;
+  // Either page may be what the origin serves, so the dearer one sets the price.
+  const other = bestFor(resources, before, caseSensitive);
+  return priceOf(other) > priceOf(own) ? other : own;
+}
+
+function priceOf(r: AifpResource | null): number {
+  if (!r || r.paywall_enabled === false) return 0;
+  return r.unit_weight ?? TIER_WEIGHTS[r.tier as keyof typeof TIER_WEIGHTS] ?? 1;
+}
+
+function bestFor(resources: AifpResource[], asked: string, caseSensitive: boolean): AifpResource | null {
   let best: AifpResource | null = null;
   let bestRank = -1;
   for (const r of resources) {
