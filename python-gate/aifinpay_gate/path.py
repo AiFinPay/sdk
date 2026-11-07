@@ -48,6 +48,9 @@ def inspect_path(raw_target: str, *, case_sensitive: bool = False) -> InspectedP
     out = []
     for raw in path.split("/"):
         segment = raw.split(";", 1)[0]
+        # Dropped with the parameter, an escaped mark would hide where a proxy that decodes ends the path.
+        if _MARK.search(raw[len(segment):]):
+            ambiguous = True
         if segment == "":
             continue
         if segment in (".", ".."):

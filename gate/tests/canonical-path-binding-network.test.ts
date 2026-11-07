@@ -119,6 +119,10 @@ describe("inspectPath", () => {
   }
 
   for (const raw of [
+    "/report;a%3Fb/c",
+    "/report%3Ba%3Fb/c",
+    "/report;%3F/c",
+    "/paid/secret;a%23b/c",
     "/paid/%2525252e%2525252e/x",
     "/paid/%252525252e%252525252e/x",
     "/%25252570aid/a",

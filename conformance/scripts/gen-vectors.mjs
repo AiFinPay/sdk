@@ -285,6 +285,8 @@ alias("encoded_hash", "An encoded hash does not end the path", "/x%23/../paid/a"
 alias("mark_ends_exact", "An escaped mark does not walk around an exact pattern behind a proxy that decodes", "/report%3Fx");
 alias("mark_ends_section", "An escaped mark does not walk around a section behind a proxy that decodes", "/paid%3Fx");
 alias("hash_ends_exact", "An escaped hash does not walk around an exact pattern behind a proxy that decodes", "/report%23x");
+alias("mark_in_param", "An escaped mark in a parameter does not walk around the gate", "/report;a%3Fb/c");
+alias("mark_in_encoded_param", "An escaped mark in an encoded parameter does not walk around the gate", "/report%3Ba%3Fb/c");
 alias("still_encoded", "A dot segment still encoded after the last round does not walk around the gate", "/paid/%2525252e%2525252e/x");
 alias("still_encoded_deeper", "One layer deeper, for a server that decodes before the gate", "/paid/%252525252e%252525252e/x");
 alias("dotdot_param_pop", "A dot-dot with a parameter does not move the price", "/paid/..;/x");

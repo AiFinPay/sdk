@@ -57,6 +57,8 @@ function read(rawTarget: string, caseSensitive: boolean, maybeBytes: boolean): I
   const out: string[] = [];
   for (const raw of path.split("/")) {
     const segment = raw.split(";", 1)[0] as string;
+    // Dropped with the parameter, an escaped mark would hide where a proxy that decodes ends the path.
+    if (/%(3f|23)/i.test(raw.slice(segment.length))) ambiguous = true;
     if (segment === "") continue;
     if (segment === "." || segment === "..") {
       ambiguous = true;

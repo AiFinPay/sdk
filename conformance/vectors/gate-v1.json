@@ -5759,6 +5759,64 @@
    ]
   },
   {
+   "id": "path.mark_in_param",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An escaped mark in a parameter does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/report;a%3Fb/c",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "path.mark_in_encoded_param",
+   "group": "path",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An escaped mark in an encoded parameter does not walk around the gate",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/report%3Ba%3Fb/c",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": [
+       301,
+       302,
+       307,
+       308,
+       400,
+       402,
+       403,
+       404
+      ],
+      "origin": false
+     }
+    }
+   ]
+  },
+  {
    "id": "path.still_encoded",
    "group": "path",
    "level": "must",

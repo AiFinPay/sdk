@@ -251,7 +251,8 @@ def test_asgi_drops_a_cdns_own_cache_header_on_a_paid_response():
     assert b"x-own" in names
 
 
-@pytest.mark.parametrize("raw", ["/paid/%2525252e%2525252e/x", "/paid/%252525252e%252525252e/x", "/z#/..;/paid/a"])
+@pytest.mark.parametrize("raw", ["/paid/%2525252e%2525252e/x", "/paid/%252525252e%252525252e/x", "/z#/..;/paid/a",
+                                 "/report;a%3Fb/c", "/report%3Ba%3Fb/c", "/report;%3F/c"])
 def test_a_spelling_that_cannot_be_read_one_way_is_refused(raw):
     assert g.inspect_path(raw).ambiguous
     assert routed().decide(req(path=raw, **GPTBOT)).status == 400

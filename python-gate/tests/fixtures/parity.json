@@ -2027,6 +2027,39 @@
     "path": "/%zz",
     "ambiguous": false
    }
+  ],
+  [
+   "/report;a%3Fb/c",
+   {
+    "path": "/report/c",
+    "ambiguous": true
+   },
+   {
+    "path": "/report/c",
+    "ambiguous": true
+   }
+  ],
+  [
+   "/report%3Ba%23b/c",
+   {
+    "path": "/report/c",
+    "ambiguous": true
+   },
+   {
+    "path": "/report/c",
+    "ambiguous": true
+   }
+  ],
+  [
+   "/report%3Fx/c;y",
+   {
+    "path": "/report%3fx/c",
+    "ambiguous": false
+   },
+   {
+    "path": "/report%3fx/c",
+    "ambiguous": false
+   }
   ]
  ],
  "spelled_cases": [
