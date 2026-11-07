@@ -1,3 +1,8 @@
+## 2.11.2 — a batch for a section opens its page
+
+- A batch for `/paid/` opens `/paid`, and one for `/paid/*` opens the section, as a gate
+  reads them. A read of the section page settled again.
+
 ## 2.11.1 — `aifp1_fetch` names the account that paid
 
 - `aifp1_fetch` without `agent_id` sends `AIFP-Agent-Id` with the account's address,

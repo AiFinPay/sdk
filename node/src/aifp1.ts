@@ -645,11 +645,14 @@ export interface Aifp1PayResult {
 export function scopeCovers(scope: string | undefined, resource: string, path: string): boolean {
   if (scope === "merchant") return true;
   if (scope === "prefix") {
-    if (resource === "/") return true; // whole site, spelled as a prefix
-    if (path === resource) return true; // the prefix path itself
+    // A discovery document lists a section as "/x/*" with scope prefix.
+    const base = resource.endsWith("/*") ? resource.slice(0, -1) : resource;
+    if (base === "/") return true; // whole site, spelled as a prefix
+    if (path === base) return true; // the prefix path itself
     // The trailing slash is what stops /articles covering /articles-internal.
-    const boundary = resource.endsWith("/") ? resource : resource + "/";
-    return path.startsWith(boundary);
+    const boundary = base.endsWith("/") ? base : base + "/";
+    // "/paid/" is bought for a "/paid/*" 402, and that wildcard covers "/paid" itself.
+    return path === boundary.slice(0, -1) || path.startsWith(boundary);
   }
   return patternCovers(resource, path); // 'exact', and anything unrecognised
 }
@@ -668,6 +671,56 @@ export function patternCovers(pattern: string, path: string): boolean {
   const pat = String(pattern || "");
   if (!pat.endsWith("/*")) return path === pat;
   return path === pat.slice(0, -2) || path.startsWith(pat.slice(0, -1));
+}
+
+function decodeAscii(text: string): string {
+  return text.replace(/%([0-9a-f]{2})/gi, (match, hex: string) => {
+    const code = parseInt(hex, 16);
+    return code < 0x80 && code !== 0x3f && code !== 0x23 ? String.fromCharCode(code) : match;
+  });
+}
+
+/** Mirror of inspectPath in @aifinpay/gate: the page a gate reads a spelling as. */
+export function readPath(raw: string, { literalCase = false }: { literalCase?: boolean } = {}): string {
+  let path = String(raw ?? "/").split(/[?#]/, 1)[0] || "/";
+  for (let round = 0; round < 3; round++) {
+    const next = decodeAscii(path).replace(/\\/g, "/");
+    if (next === path) break;
+    path = next;
+  }
+  const out: string[] = [];
+  for (const piece of path.split("/")) {
+    const segment = piece.split(";", 1)[0] as string;
+    if (segment === "" || segment === ".") continue;
+    if (segment === "..") out.pop();
+    else out.push(segment);
+  }
+  const read = ("/" + out.join("/")).replace(/[^\x00-\x7f]+/g, (run) =>
+    Array.from(new TextEncoder().encode(run), (b) => `%${b.toString(16).padStart(2, "0")}`).join("")
+  );
+  return literalCase ? read.replace(/%[0-9a-f]{2}/gi, (hex) => hex.toLowerCase()) : read.toLowerCase();
+}
+
+/** A gate prices a page with an escaped mark as the page before it, so its 402 may name that page. */
+export function challengeCovers(resource: string, restPath: string): boolean {
+  const asked = readPath(restPath);
+  const at = asked.search(/%(3f|23)/);
+  return patternCovers(readResource(resource), asked) || (at >= 0 && patternCovers(readResource(resource), readPath(asked.slice(0, at))));
+}
+
+/** Mirror of spelledAsPath in @aifinpay/gate: a pattern or a receipt's resource, read the way a path is. */
+export function readResource(resource: string, options: { literalCase?: boolean } = {}): string {
+  const text = String(resource ?? "");
+  if (!text.startsWith("/")) return text;
+  if (!text.endsWith("/*")) return readPath(text, options);
+  const base = readPath(text.slice(0, -2), options);
+  return base === "/" ? "/*" : `${base}/*`;
+}
+
+/** One account in the spelling each chain allows: an EVM address has no case. */
+function sameAccount(a: string, b: string): boolean {
+  const evm = /^0x[0-9a-fA-F]{40}$/;
+  return evm.test(a) && evm.test(b) ? a.toLowerCase() === b.toLowerCase() : a === b;
 }
 
 /**
@@ -794,6 +847,8 @@ export function idempotencyKeyFor(p: { quoteId: string; chain: string; asset: st
 // ── Receipt cache ─────────────────────────────────────────────────────────
 
 export interface Aifp1CachedReceipt {
+  /** The gate refused another case of this spelling, so it reads case literally. */
+  literalCase?: boolean;
   /** origin + slug, as parseGatewayUrl() computes it. */
   site: string;
   merchantId: string;
@@ -808,6 +863,8 @@ export interface Aifp1CachedReceipt {
   /** JWT expiry, ms epoch. */
   expiresAt: number;
   amountUsd: number;
+  /** The account that paid: a gate refuses this batch from any other. */
+  payer?: string;
 }
 
 // ── Merchant pins ─────────────────────────────────────────────────────────
@@ -976,15 +1033,20 @@ export class Aifp1ReceiptCache {
    * at which point we re-quote. Guessing a weight would only add a way to be
    * wrong in the direction of not spending a batch we own.
    */
-  find(site: string, restPath: string, merchantId?: string): Aifp1CachedReceipt | undefined {
+  find(site: string, restPath: string, merchantId?: string, payer?: string): Aifp1CachedReceipt | undefined {
     const now = Date.now();
+    const asked = readPath(restPath);
+    const literal = readPath(restPath, { literalCase: true });
     return this.entries.find(
       (e) =>
         e.site === site &&
         (merchantId === undefined || e.merchantId === merchantId) &&
+        (payer === undefined || e.payer === undefined || sameAccount(e.payer, payer)) &&
         e.remaining > 0 &&
         e.expiresAt - EXPIRY_MARGIN_MS > now &&
-        scopeCovers(e.scope, e.resource, restPath)
+        (e.literalCase
+          ? scopeCovers(e.scope, readResource(e.resource, { literalCase: true }), literal)
+          : scopeCovers(e.scope, readResource(e.resource), asked))
     );
   }
 
@@ -1454,6 +1516,7 @@ async function settleSolanaBatch(
       remaining: paid.unit_quota,
       expiresAt: Date.parse(paid.expires_at),
       amountUsd,
+      payer: deps.payerAddress,
     });
     const response = await send(paid.receipt);
     if (response.status === 402)
@@ -1547,7 +1610,11 @@ export async function aifp1Fetch(
     headers.set("AIFP-Agent-Id", deps.agentId);
     if (deps.framework) headers.set("AIFP-Agent-Framework", deps.framework);
     if (direct) headers.delete("AIFP-Receipt");
-    if (receiptJwt) headers.set("AIFP-Receipt", receiptJwt);
+    if (receiptJwt) {
+      headers.set("AIFP-Receipt", receiptJwt);
+      // A receipt is bound to the account that paid, whatever this agent calls itself.
+      headers.set("AIFP-Agent-Id", deps.payerAddress);
+    }
     return deps.fetchImpl(url, {
       ...init,
       headers,
@@ -1561,7 +1628,7 @@ export async function aifp1Fetch(
   };
 
   // 1. Spend a batch we already own, if one covers this path.
-  let held = direct ? undefined : deps.cache.find(site, restPath);
+  let held = direct ? undefined : deps.cache.find(site, restPath, undefined, deps.payerAddress);
   let resp = await send(held?.jwt);
   if (direct && resp.status === 402) {
     // A direct origin can serve several merchants. Learn this resource's
@@ -1574,12 +1641,12 @@ export async function aifp1Fetch(
       // The resource may be the merchant's pattern ("/movies/*") rather than
       // the URL, but it must cover the URL: never buy a batch for a path other
       // than the one that refused us.
-      if (!patternCovers(probe.resource, restPath)) {
+      if (!challengeCovers(probe.resource, restPath)) {
         throw new Aifp1QuoteError("direct AIFP-1 challenge resource must cover the full URL pathname");
       }
       directMerchant = probe.merchant_id;
       site = `direct:${JSON.stringify([site, directMerchant])}`;
-      held = deps.cache.find(site, restPath);
+      held = deps.cache.find(site, restPath, undefined, deps.payerAddress);
       if (held) resp = await send(held.jwt);
     }
   }
@@ -1589,6 +1656,25 @@ export async function aifp1Fetch(
     // unguarded would retire a full batch the first time a route was free.
     const remaining = quotaRemaining(resp);
     if (remaining !== null) deps.cache.noteQuotaRemaining(held, remaining);
+  }
+
+  // find() folds case, as a gate does by default. One set to read case literally
+  // refuses another spelling, and the batch is still good for its own.
+  if (
+    held &&
+    resp.status === 403 &&
+    !scopeCovers(held.scope, readResource(held.resource, { literalCase: true }), readPath(restPath, { literalCase: true }))
+  ) {
+    const refusal = await resp
+      .clone()
+      .json()
+      .catch(() => null);
+    // Only a refusal about the scope: a policy block or a bad token is not cured by buying.
+    if (refusal?.error === "AIFP-403" && String(refusal.detail ?? "").includes("scoped to")) {
+      held.literalCase = true;
+      held = undefined;
+      resp = await send(undefined);
+    }
   }
 
   if (resp.status !== 402) {
@@ -1643,7 +1729,11 @@ export async function aifp1Fetch(
     .json()
     .catch(() => null);
   if (!isAifp1Challenge(challenge)) return resp;
-  if (direct && (challenge.merchant_id !== directMerchant || !patternCovers(challenge.resource, restPath))) {
+  if (
+    direct &&
+    (challenge.merchant_id !== directMerchant ||
+      !challengeCovers(challenge.resource, restPath))
+  ) {
     throw new Aifp1QuoteError("direct AIFP-1 resource or merchant changed during receipt verification");
   }
 
@@ -2275,6 +2365,7 @@ export async function aifp1Fetch(
         remaining: paid.unit_quota,
         expiresAt: Date.parse(paid.expires_at),
         amountUsd,
+        payer: deps.payerAddress,
       };
       // Cache unconditionally. This used to be guarded on a finite expiresAt,
       // which meant an unparseable expires_at silently binned a batch that had
@@ -2332,7 +2423,7 @@ export async function aifp1Fetch(
   const outcome = await deps.cache.coalesce(site, buyBatch);
   if (outcome !== "retry") return outcome;
 
-  const fresh = deps.cache.find(site, restPath);
+  const fresh = deps.cache.find(site, restPath, undefined, deps.payerAddress);
   if (fresh) return send(fresh.jwt);
   return buyBatch();
 }

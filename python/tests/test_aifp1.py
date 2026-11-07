@@ -530,6 +530,10 @@ def test_scope_helpers_match_the_server():
     assert a.prefix_hint("/articles/2026/x") == "/articles/" and a.prefix_hint("/data") == "/"
     assert a.scope_covers("prefix", "/articles/", "/articles/9")
     assert not a.scope_covers("prefix", "/articles", "/articles-internal")
+    assert a.scope_covers("prefix", "/paid/", "/paid")
+    assert a.scope_covers("prefix", "/paid/*", "/paid")
+    assert a.scope_covers("prefix", "/paid/*", "/paid/a")
+    assert not a.scope_covers("prefix", "/paid/*", "/paid-internal")
     assert a.scope_covers("exact", "/movies/*", "/movies/11/x") and not a.scope_covers("exact", "/a", "/b")
     assert a.scope_covers("merchant", "*", "/anything")
 
