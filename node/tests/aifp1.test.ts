@@ -32,6 +32,7 @@ import {
   recoverAifp1Payment,
   idempotencyKeyFor,
   scopeCovers,
+  challengeCovers,
   patternCovers,
   prefixHint,
   parseGatewayUrl,
@@ -2138,6 +2139,17 @@ describe("reading a gate's answers as the gate does", () => {
     ["*", "*"],
   ])("reads the resource %s as %s", (raw, read) => {
     expect(readResource(raw)).toBe(read);
+  });
+
+  it("a direct 402 may name the page itself, or the one before an escaped mark, and nothing else", () => {
+    expect(challengeCovers("/report", "/report")).toBe(true);
+    expect(challengeCovers("/report", "/report%3Fx")).toBe(true);
+    expect(challengeCovers("/report", "/REPORT%23x")).toBe(true);
+    expect(challengeCovers("/paid/*", "/paid/a%3Fx")).toBe(true);
+    expect(challengeCovers("/wiki/C%23", "/wiki/C%23")).toBe(true);
+    expect(challengeCovers("/other", "/report%3Fx")).toBe(false);
+    expect(challengeCovers("/report", "/report/x")).toBe(false);
+    expect(challengeCovers("/x%3Fy", "/report%3Fx")).toBe(false);
   });
 
   it("a prefix batch opens the section page, and a section as discovery lists it", () => {

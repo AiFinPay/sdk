@@ -701,6 +701,13 @@ export function readPath(raw: string, { literalCase = false }: { literalCase?: b
   return literalCase ? read.replace(/%[0-9a-f]{2}/gi, (hex) => hex.toLowerCase()) : read.toLowerCase();
 }
 
+/** A gate prices a page with an escaped mark as the page before it, so its 402 may name that page. */
+export function challengeCovers(resource: string, restPath: string): boolean {
+  const asked = readPath(restPath);
+  const at = asked.search(/%(3f|23)/);
+  return patternCovers(readResource(resource), asked) || (at >= 0 && patternCovers(readResource(resource), readPath(asked.slice(0, at))));
+}
+
 /** Mirror of spelledAsPath in @aifinpay/gate: a pattern or a receipt's resource, read the way a path is. */
 export function readResource(resource: string, options: { literalCase?: boolean } = {}): string {
   const text = String(resource ?? "");
@@ -1634,7 +1641,7 @@ export async function aifp1Fetch(
       // The resource may be the merchant's pattern ("/movies/*") rather than
       // the URL, but it must cover the URL: never buy a batch for a path other
       // than the one that refused us.
-      if (!patternCovers(readResource(probe.resource), readPath(restPath))) {
+      if (!challengeCovers(probe.resource, restPath)) {
         throw new Aifp1QuoteError("direct AIFP-1 challenge resource must cover the full URL pathname");
       }
       directMerchant = probe.merchant_id;
@@ -1725,7 +1732,7 @@ export async function aifp1Fetch(
   if (
     direct &&
     (challenge.merchant_id !== directMerchant ||
-      !patternCovers(readResource(challenge.resource), readPath(restPath)))
+      !challengeCovers(challenge.resource, restPath))
   ) {
     throw new Aifp1QuoteError("direct AIFP-1 resource or merchant changed during receipt verification");
   }

@@ -5,7 +5,8 @@
 - A gate set to read case literally refusing another spelling no longer costs the
   batch: it stays good for its own spelling, and the other page is bought once.
 - `%3F` and `%23` stay escaped when a page is compared and a character outside ASCII
-  reads as its escape, as in `@aifinpay/gate` 0.10.1.
+  reads as its escape, as in `@aifinpay/gate` 0.10.1. A direct 402 for the page before
+  an escaped mark can be paid.
 - A batch for `/paid/` opens `/paid`, as a gate from `@aifinpay/gate` 0.9.1 reads it.
   It settled again on every read of the section page.
 - A URL in another case or spelling matches its pattern the way a gate from 0.10
