@@ -912,6 +912,27 @@ describe("execution", () => {
     near.outcome = nearOutcome();
     expect(await readAccountV14Revert(nearRpc(near), preparedNear(), nearSigner.address, 100n)).toBe(20n);
   });
+  it("a transaction the node has not seen, or not finalized, is not a revert", async () => {
+    const aptos = aptosState();
+    aptos.outcomeError = new AccountV14HttpStatusError(404, "missing");
+    expect(await readAccountV14Revert(aptosRpc(aptos), preparedAptos(), aptosSigner.address, 1n)).toBeNull();
+    const near = nearState();
+    near.outcome = nearOutcome({ final_execution_status: "INCLUDED" });
+    expect(await readAccountV14Revert(nearRpc(near), preparedNear(), nearSigner.address, 100n)).toBeNull();
+  });
+  it("near polls without blocking on FINAL", async () => {
+    const near = nearState();
+    near.outcome = nearOutcome();
+    const rpc = nearRpc(near);
+    const seen: any[] = [];
+    await readAccountV14Revert(
+      { ...rpc, call: async (method, params) => (seen.push(params), rpc.call(method, params)) },
+      preparedNear(),
+      nearSigner.address,
+      100n
+    );
+    expect(seen[0].wait_until).toBe("NONE");
+  });
   it("a success or a pending transaction is not a revert", async () => {
     const hash = `0x${"ab".repeat(32)}`;
     const aptos = aptosState();
@@ -1230,6 +1251,8 @@ describe("selection and helpers", () => {
       if (String(url).endsWith("/missing")) return answer({}, 404);
       if (init?.body && String(init.body).includes("handler"))
         return answer({ jsonrpc: "2.0", error: { name: "HANDLER_ERROR" }, id: 1 });
+      if (init?.body && String(init.body).includes("both"))
+        return answer({ jsonrpc: "2.0", error: { name: "X" }, result: {}, id: 1 });
       if (init?.body && String(init.body).includes("legacy"))
         return answer({ jsonrpc: "2.0", result: { error: "does not exist", logs: [] }, id: 1 });
       if (init?.body && String(init.body).includes("noresult")) return answer({ jsonrpc: "2.0", id: 1 });
@@ -1237,6 +1260,7 @@ describe("selection and helpers", () => {
     }) as typeof fetch);
     await expect(rpc.get("missing")).rejects.toMatchObject({ status: 404 });
     await expect(rpc.call("handler", {})).rejects.toMatchObject({ code: "ACCOUNT_V14_UNAVAILABLE" });
+    await expect(rpc.call("both", {})).rejects.toMatchObject({ code: "ACCOUNT_V14_UNAVAILABLE" });
     await expect(rpc.call("legacy", {})).rejects.toMatchObject({ code: "ACCOUNT_V14_UNAVAILABLE" });
     await expect(rpc.call("noresult", {})).rejects.toMatchObject({ code: "ACCOUNT_V14_UNAVAILABLE" });
     expect(await rpc.call("ok", {})).toEqual({ ok: true });

@@ -154,6 +154,8 @@ function harness(family: AccountV14Family, over: { quote?: (q: any) => void; led
   let txRef = "";
   let jwtOverrides: Record<string, unknown> = {};
   let payStatus = 200;
+  let paidOverrides: Record<string, unknown> = {};
+  let gatewayAfterPay = 200;
   const fetchImpl = vi.fn(async (input: any, init?: RequestInit) => {
     const target = String(input);
     if (target.endsWith("/v1/quote")) {
@@ -181,6 +183,7 @@ function harness(family: AccountV14Family, over: { quote?: (q: any) => void; led
           amount: quote.amount,
           network: "testnet",
           expires_at: new Date((claims.exp as number) * 1000).toISOString(),
+          ...paidOverrides,
         }),
         { status: 200 }
       );
@@ -188,7 +191,7 @@ function harness(family: AccountV14Family, over: { quote?: (q: any) => void; led
     if (target.endsWith("/.well-known/jwks.json"))
       return new Response(JSON.stringify({ keys: [jwk] }), { status: 200 });
     if (new Headers(init?.headers).get("AIFP-Receipt")) {
-      return new Response("paid content", { status: 200 });
+      return new Response("paid content", { status: gatewayAfterPay });
     }
     return new Response(
       JSON.stringify({
@@ -271,6 +274,8 @@ function harness(family: AccountV14Family, over: { quote?: (q: any) => void; led
     setSettleOutcome: (fn: (tx: AccountV14Prepared) => void) => (settleOutcome = fn),
     setJwt: (overrides: Record<string, unknown>) => (jwtOverrides = overrides),
     setPayStatus: (status: number) => (payStatus = status),
+    setPaid: (overrides: Record<string, unknown>) => (paidOverrides = overrides),
+    setGateway: (status: number) => (gatewayAfterPay = status),
   };
 }
 
@@ -433,6 +438,35 @@ describe("aifp1Fetch with accountV14", () => {
     const ok = harness("aptos");
     expect((await aifp1Fetch(ok.deps, URL_PAID, {}, { ...ok.options, maxAmountUsd: 0.2 }))!.status).toBe(200);
   });
+  it("budgets the higher independent rate within tolerance", async () => {
+    const reserved: number[] = [];
+    const h = harness("aptos");
+    h.deps.reserveDaily = async (usd) => {
+      reserved.push(usd);
+      return null;
+    };
+    await aifp1Fetch(h.deps, URL_PAID, {}, { ...h.options, nativeUsdPrice: { usd: 5.05, observedAtMs: fixture.now } });
+    expect(reserved[0]).toBeCloseTo(0.101 + 0.022725, 6);
+  });
+  it("a capped success journals, commits once and clears the purchase", async () => {
+    const ledger = new MemorySpendLedger();
+    const h = harness("aptos", { ledger });
+    expect((await aifp1Fetch(h.deps, URL_PAID, {}, h.options))!.status).toBe(200);
+    expect(await ledger.total(86_400_000)).toBeCloseTo(0.1225, 6);
+    const binding = paymentBudgetBinding(
+      { apiBaseUrl: API, quote: h.quote, chain: "aptos", asset: "APT", admissionUsdPrice: "5", maxFeeUnits: "1000000" },
+      signers.aptos.address,
+      "0xwallet"
+    );
+    await expect(ledger.reserve(0.1, 100, 86_400_000, binding)).resolves.toBeTruthy();
+  });
+  it("a gateway that refuses the paid receipt raises recovery, not a 402", async () => {
+    const h = harness("aptos");
+    h.setGateway(402);
+    const error = (await aifp1Fetch(h.deps, URL_PAID, {}, h.options).catch((e) => e)) as Aifp1PayError;
+    expect(error).toBeInstanceOf(Aifp1PayError);
+    expect(error.message).toMatch(/Gateway rejected paid receipt/);
+  });
   it("reserves gross plus fee", async () => {
     const reserved: number[] = [];
     const h = harness("aptos");
@@ -501,6 +535,12 @@ describe("aifp1Fetch with accountV14", () => {
     expect(error).not.toBeInstanceOf(Aifp1AccountRevertedError);
     expect(error.recovery && isAifp1AccountRecovery(error.recovery)).toBe(true);
     expect(await ledger.total(86_400_000)).toBeGreaterThan(0);
+    const recovery = error.recovery as Aifp1AccountPaymentRecovery;
+    await ledger.assertRecovery!(
+      recovery.budgetReservationId!,
+      recovery.txRef,
+      paymentBudgetBinding({ ...recovery, maxFeeUnits: "100000000000000000000000" }, signers.near.address, "0xwallet")
+    );
     const again = harness("near", { ledger });
     await expect(aifp1Fetch(again.deps, URL_PAID, {}, again.options)).rejects.toThrow(/Unresolved purchase/);
     expect(again.settleAccount).not.toHaveBeenCalled();
@@ -524,6 +564,15 @@ describe("aifp1Fetch with accountV14", () => {
       expect(await ledger.total(86_400_000)).toBe(expected);
     });
   }
+  it("a revert naming another transaction is not proof", async () => {
+    const h = harness("aptos");
+    h.setSettleOutcome((tx) => {
+      throw new AccountV14Error("ACCOUNT_V14_TRANSACTION_REVERTED", "reverted", { ...tx, hash: "other" }, 300000n);
+    });
+    const error = await aifp1Fetch(h.deps, URL_PAID, {}, h.options).catch((e) => e);
+    expect(error).toBeInstanceOf(Aifp1PayError);
+    expect(error).not.toBeInstanceOf(Aifp1AccountRevertedError);
+  });
   it("a revert with no cap still raises the typed error", async () => {
     const h = harness("aptos");
     h.setSettleOutcome((tx) => {
@@ -558,6 +607,19 @@ describe("aifp1Fetch with accountV14", () => {
       const error = (await aifp1Fetch(h.deps, URL_PAID, {}, h.options).catch((e) => e)) as Aifp1PayError;
       expect(error.message).toMatch(/could not be verified/);
     }
+  });
+  it("checks the receipt's network against the call and the response against the receipt", async () => {
+    const both = harness("aptos");
+    both.setJwt({ network: "mainnet" });
+    both.setPaid({ network: "mainnet" });
+    expect(((await aifp1Fetch(both.deps, URL_PAID, {}, both.options).catch((e) => e)) as Error).message).toMatch(
+      /could not be verified/
+    );
+    const paid = harness("aptos");
+    paid.setPaid({ network: "mainnet" });
+    expect(((await aifp1Fetch(paid.deps, URL_PAID, {}, paid.options).catch((e) => e)) as Error).message).toMatch(
+      /could not be verified/
+    );
   });
   it("receipts require the public key", async () => {
     const h = harness("aptos");
@@ -642,6 +704,25 @@ describe("recovery after a crash", () => {
       expect(bodies[0].payment_authorization.public_key).toBeTruthy();
     });
   }
+  it("a capped recovery asserts the reservation first and completes it after the receipt", async () => {
+    const recovery = await saved("near", "reservation");
+    const calls: string[] = [];
+    const fetchImpl = paidFetch("near", recovery, () => void calls.push("pay"));
+    const signer = signerFor("near", fetchImpl, {
+      assertReservation: async () => void calls.push("assert"),
+      completeReservation: async () => void calls.push("complete"),
+    });
+    await recoverAifp1Payment(recovery, signer, options);
+    expect(calls).toEqual(["assert", "pay", "complete"]);
+    const refused = signerFor("near", fetchImpl, {
+      assertReservation: async () => {
+        throw new Error("Recovery disagrees");
+      },
+      completeReservation: async () => undefined,
+    });
+    await expect(recoverAifp1Payment(recovery, refused, options)).rejects.toThrow("Recovery disagrees");
+    expect(calls).toEqual(["assert", "pay", "complete"]);
+  });
   it("requires independent owner selection and rejects every mismatch", async () => {
     const recovery = await saved("aptos");
     const fetchImpl = vi.fn() as unknown as typeof fetch;
@@ -776,6 +857,7 @@ describe("spend ledger binding", () => {
     );
     for (const edit of [
       { accountAdmissionRateUsd: "x" },
+      { accountAdmissionRateUsd: "1e2" },
       { accountAdmissionRateUsd: "0" },
       { accountAdmissionRateUsd: "100000" },
       { accountAdmissionRateUsd: 5 as never },
@@ -808,7 +890,7 @@ describe("spend ledger binding", () => {
 
 describe("AiFinPayAgent", () => {
   const seedHex = SEED.toString("hex");
-  it("pays end to end through the real executor against a mock node and API", async () => {
+  async function agentFlow(outcome: Record<string, unknown> = { success: true }) {
     const ledger = new MemorySpendLedger();
     const agent = await AiFinPayAgent.fromSeed(seedHex, {
       telemetry: false,
@@ -853,7 +935,14 @@ describe("AiFinPayAgent", () => {
           return json({ hash }, 202);
         }
         if (path.startsWith("/transactions/by_hash/"))
-          return json({ type: "user_transaction", hash, sender: payer, success: true });
+          return json({
+            type: "user_transaction",
+            hash,
+            sender: payer,
+            gas_used: "3000",
+            gas_unit_price: "100",
+            ...outcome,
+          });
         if (path === "/view") {
           const name = JSON.parse(String(init!.body)).function.split("::")[2];
           const views: Record<string, unknown[]> = {
@@ -901,28 +990,33 @@ describe("AiFinPayAgent", () => {
     const registry = await import("../src/generated/aptosV14Deployments.generated.js");
     const record = registry.APTOS_V14_DEPLOYMENTS.testnet as any;
     const saved = record.modules;
-    record.modules = [{ name: "splitter", bytecodeHash: moduleHash }];
     call.runtime_code_hash = moduleHash;
-    try {
-      const response = await agent.fetchPaid(
-        URL_PAID,
-        {},
-        {
-          accountV14: {
-            family: "aptos",
-            environment: "dev",
-            network: "testnet",
-            rpcUrl: "https://node.example/v1",
-            maxFeeUnits: 1_000_000n,
-            onPrepared: async (payment) => void journal.push(payment),
-          },
-          nativeUsdPrice: { usd: 5, observedAtMs: fixture.now },
-        }
-      );
-      expect(await response!.text()).toBe("paid content");
-    } finally {
-      record.modules = saved;
-    }
+    const authorization = (maxFeeUnits = 1_000_000n) => ({
+      accountV14: {
+        family: "aptos" as const,
+        environment: "dev" as const,
+        network: "testnet" as const,
+        rpcUrl: "https://node.example/v1",
+        maxFeeUnits,
+        onPrepared: async (payment: Aifp1AccountPaymentRecovery) => void journal.push(payment),
+      },
+      nativeUsdPrice: { usd: 5, observedAtMs: fixture.now },
+    });
+    const withPin = async <T>(run: () => Promise<T>): Promise<T> => {
+      record.modules = [{ name: "splitter", bytecodeHash: moduleHash }];
+      try {
+        return await run();
+      } finally {
+        record.modules = saved;
+      }
+    };
+    return { agent, ledger, quote, payer, seen, journal, authorization, withPin, hash: () => hash };
+  }
+  it("pays end to end through the real executor against a mock node and API", async () => {
+    const { agent, ledger, quote, payer, seen, journal, authorization, withPin, hash: currentHash } = await agentFlow();
+    const response = await withPin(() => agent.fetchPaid(URL_PAID, {}, authorization()));
+    expect(await response!.text()).toBe("paid content");
+    const hash = currentHash();
     expect(seen.sent).toBe(1);
     expect(seen.sim).toBe(2);
     expect(journal).toHaveLength(1);
@@ -951,6 +1045,59 @@ describe("AiFinPayAgent", () => {
     ).toBe(true);
     // Gross plus the fee bound, committed once.
     expect(await ledger.total(86_400_000)).toBeCloseTo(0.1 + 0.0225, 6);
+  });
+  it("passes the owner's fee budget to the executor", async () => {
+    const { agent, authorization, withPin } = await agentFlow();
+    await expect(withPin(() => agent.fetchPaid(URL_PAID, {}, authorization(100_000n)))).rejects.toThrow(/minimum gas/);
+  });
+  it("recovery reads the revert through the owner's RPC and sends nothing", async () => {
+    const { agent, ledger, seen, authorization, withPin } = await agentFlow({ success: false, vm_status: "abort" });
+    const error = (await withPin(() =>
+      agent.fetchPaid(URL_PAID, {}, authorization()).catch((e) => e)
+    )) as Aifp1AccountRevertedError;
+    expect(error).toBeInstanceOf(Aifp1AccountRevertedError);
+    expect(await ledger.total(86_400_000)).toBe(0.015);
+    await expect(
+      withPin(() =>
+        agent.recoverPaidPayment(error.recovery as Aifp1AccountPaymentRecovery, {
+          accountEnvironment: "dev",
+          accountNetwork: "testnet",
+          accountRpcUrl: "https://node.example/v1",
+        })
+      )
+    ).rejects.toBeInstanceOf(Aifp1AccountRevertedError);
+    expect(seen.sent).toBe(1);
+    expect(seen.pay).toBeUndefined();
+  });
+  it("a custom capped ledger without the journal hooks refuses before quoting", async () => {
+    const memory = new MemorySpendLedger();
+    const custom = {
+      reserve: memory.reserve.bind(memory),
+      commit: memory.commit.bind(memory),
+      release: memory.release.bind(memory),
+      total: memory.total.bind(memory),
+    };
+    const agent = await AiFinPayAgent.fromSeed(seedHex, {
+      telemetry: false,
+      spendLedger: custom,
+      budgetCaps: { daily_usd: 10 },
+    });
+    await expect(
+      agent.fetchPaid(
+        URL_PAID,
+        {},
+        {
+          accountV14: {
+            family: "aptos",
+            environment: "dev",
+            network: "testnet",
+            rpcUrl: "https://node.example",
+            maxFeeUnits: 1n,
+            onPrepared: async () => undefined,
+          },
+        }
+      )
+    ).rejects.toThrow(/Custom capped v1.4 ledger/);
   });
   it("derives the same accounts as @aifinpay/wallet, with and without an index", async () => {
     for (const derivationIndex of [undefined, 3]) {
