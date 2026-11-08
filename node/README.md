@@ -57,18 +57,22 @@ an EVM `v14.chain`.
 authorization. It excludes `v14` and `solanaV14`, and nothing in it has a default:
 
 ```ts
-await agent.fetchPaid(url, {}, {
-  accountV14: {
-    family: "aptos", // or "near"
-    environment: "dev",
-    network: "testnet",
-    rpcUrl: ownNodeUrl,
-    maxFeeUnits: 1_000_000n, // octas, or yoctoNEAR on NEAR
-    onPrepared: (payment) => saveDurably(payment),
-  },
-  nativeUsdPrice: () => independentUsdPrice(), // gross and fee are budgeted at this rate
-  maxAmountUsd: 0.5,
-});
+await agent.fetchPaid(
+  url,
+  {},
+  {
+    accountV14: {
+      family: "aptos", // or "near"
+      environment: "dev",
+      network: "testnet",
+      rpcUrl: ownNodeUrl,
+      maxFeeUnits: 1_000_000n, // octas, or yoctoNEAR on NEAR
+      onPrepared: (payment) => saveDurably(payment),
+    },
+    nativeUsdPrice: () => independentUsdPrice(), // gross and fee are budgeted at this rate
+    maxAmountUsd: 0.5,
+  }
+);
 ```
 
 The payer is the agent's `aptosAddress` or `nearAddress`, derived as in

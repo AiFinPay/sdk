@@ -451,7 +451,10 @@ describe("aifp1Fetch with accountV14", () => {
   it("a capped success journals, commits once and clears the purchase", async () => {
     const ledger = new MemorySpendLedger();
     const h = harness("aptos", { ledger });
+    const commit = vi.spyOn(h.deps, "commit");
     expect((await aifp1Fetch(h.deps, URL_PAID, {}, h.options))!.status).toBe(200);
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(commit.mock.calls[0]![1]).toBeCloseTo(0.1225, 6);
     expect(await ledger.total(86_400_000)).toBeCloseTo(0.1225, 6);
     const binding = paymentBudgetBinding(
       { apiBaseUrl: API, quote: h.quote, chain: "aptos", asset: "APT", admissionUsdPrice: "5", maxFeeUnits: "1000000" },
