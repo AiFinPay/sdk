@@ -48,12 +48,49 @@ account and WASM hash; council membership is not treated as governance authority
 See the [Aptos](../deployments/registry/splitter/aptos/README.md) and
 [NEAR](../deployments/registry/splitter/near/README.md) registry guides.
 
-**Payment execution is not implemented for Aptos or NEAR.** These resolvers read
-packaged metadata, not current chain state. Neither family is an EVM `v14.chain`,
-and `fetchPaid` cannot sign or settle their payments. Executable support requires
-backend quote/receipt contracts, independently verified runtime/profile checks,
-chain-specific signing, fee caps, and durable recovery; a registry flag or payout
-address does not supply these.
+These resolvers read packaged metadata, not current chain state. Neither family is
+an EVM `v14.chain`.
+
+### Paying on Aptos and NEAR
+
+`fetchPaid` settles native APT and NEAR only through an explicit `accountV14`
+authorization. It excludes `v14` and `solanaV14`, and nothing in it has a default:
+
+```ts
+await agent.fetchPaid(url, {}, {
+  accountV14: {
+    family: "aptos", // or "near"
+    environment: "dev",
+    network: "testnet",
+    rpcUrl: ownNodeUrl,
+    maxFeeUnits: 1_000_000n, // octas, or yoctoNEAR on NEAR
+    onPrepared: (payment) => saveDurably(payment),
+  },
+  nativeUsdPrice: () => independentUsdPrice(), // gross and fee are budgeted at this rate
+  maxAmountUsd: 0.5,
+});
+```
+
+The payer is the agent's `aptosAddress` or `nearAddress`, derived as in
+`@aifinpay/wallet`, and the account must be funded there. A selected deployment
+must be enabled in the installed registry, so a disabled record refuses.
+
+Before signing, the SDK treats the quote server as untrusted: the call must match
+the pinned contract, network and code hash, this wallet, the quoted payout
+destination and native total, the 1% gross-inclusive split, the route, the expiry
+and the quote id. It then reads through `rpcUrl`: network, live code hash, pause
+state, quote signer, route economics, treasury and payer nonce. Aptos simulates the
+exact transaction; `maxFeeUnits` caps `max_gas_amount * gas_unit_price`. NEAR has no
+simulation, so `maxFeeUnits` caps the attached gas at the current gas price, a
+pre-flight bound rather than a consensus cap; unused gas is refunded.
+
+`onPrepared` receives the signed transaction and its hash before the only broadcast;
+if it throws, nothing is sent. Pass a saved payment to `recoverPaidPayment` with
+`{ accountEnvironment, accountNetwork, accountRpcUrl }` to retry `/v1/pay` with the
+same transaction. Recovery never sends a transaction. A transaction that reverted
+raises `Aifp1AccountRevertedError`, debits only its fee and must not be retried with
+the same quote. On NEAR a failed payout after the call succeeded stays an
+`Aifp1PayError`, because funds may be partly paid; recover it, do not buy again.
 
 ### Stablecoin-only chains
 

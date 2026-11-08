@@ -61,12 +61,23 @@ import {
   solanaStableMint,
   SOLANA_GENESIS,
 } from "./settlementSolanaV14.js";
+import {
+  accountV14PublicKeyString,
+  accountV14Rpc,
+  accountV14SignerFromSeed,
+  encodeAccountV14AuthSignature,
+  executeAccountV14Settlement,
+  prepareAccountV14Settlement,
+  type AccountV14Family,
+  type AccountV14Signer,
+} from "./settlementAccountV14.js";
 import { getAgentHistory, getQuota, type AgentHistoryOptions, type QuotaSummary } from "./agentHistory.js";
 import { type SpendLedger, type SpendLedgerBinding, MemorySpendLedger, FileSpendLedger } from "./spendLedger.js";
 import {
   aifp1Fetch,
   recoverAifp1Payment,
   type Aifp1PaymentRecovery,
+  isAifp1AccountRecovery,
   type Aifp1RecoveryOptions,
   type Aifp1PayResult,
   Aifp1ReceiptCache,
@@ -988,6 +999,17 @@ export class AiFinPayAgent {
   get evmAddress(): string {
     return this.evmAccount.address;
   }
+  /** Aptos account for this agent's seed; same derivation as @aifinpay/wallet. */
+  get aptosAddress(): string {
+    return this.accountSigner("aptos").address;
+  }
+  /** NEAR implicit account for this agent's seed; same derivation as @aifinpay/wallet. */
+  get nearAddress(): string {
+    return this.accountSigner("near").address;
+  }
+  private accountSigner(family: AccountV14Family): AccountV14Signer {
+    return accountV14SignerFromSeed(family, domainSeed(`aifinpay:${family}:v1\0`, this.rootSeed, this.derivationIndex));
+  }
 
   /**
    * Casper identity, derived from the same seed as the other two.
@@ -1820,7 +1842,7 @@ export class AiFinPayAgent {
     if (opts.solanaV14 && (!ledger.beginQuoteAdmission || !ledger.adoptQuoteAdmission || !ledger.closeQuoteAdmission))
       throw new Aifp1QuoteError("Solana custom ledger requires durable quote-admission hooks before POST");
     if (
-      (opts.v14 || opts.solanaV14) &&
+      (opts.v14 || opts.solanaV14 || opts.accountV14) &&
       this.budgetCaps.daily_usd !== undefined &&
       (!this.ledger.prepare || !this.ledger.assertRecovery || !this.ledger.complete)
     ) {
@@ -1828,6 +1850,8 @@ export class AiFinPayAgent {
         "Custom capped v1.4 ledger requires prepare/assertRecovery/complete hooks before payment"
       );
     }
+    const acct = opts.accountV14;
+    const acctSigner = acct ? this.accountSigner(acct.family) : undefined;
     const deps: Aifp1Deps = {
       walletIdentity: this.evmAddress.toLowerCase(),
       quoteOwnerContext: JSON.stringify([
@@ -1853,13 +1877,31 @@ export class AiFinPayAgent {
       // A 0x address, because AIFP agent policies are address-keyed
       // (backend/aifp/agent-policy.js normalizeAddress) — a Solana pubkey here
       // would silently opt the agent out of its owner's own limits.
-      agentId: opts.agentId ?? (opts.solanaV14 ? this.solanaAddress : this.evmAddress),
+      agentId: opts.agentId ?? (opts.solanaV14 ? this.solanaAddress : (acctSigner?.address ?? this.evmAddress)),
       framework: agentFramework(opts.framework) ?? this.inner.framework,
-      payerAddress: opts.solanaV14 ? this.solanaAddress : this.evmAddress,
-      signPaymentAuthorization: (message) =>
-        opts.solanaV14
-          ? Promise.resolve(bs58.encode(nacl.sign.detached(Buffer.from(message), this.inner.secretKey)))
-          : this.evmAccount.signMessage({ message }),
+      payerAddress: opts.solanaV14 ? this.solanaAddress : (acctSigner?.address ?? this.evmAddress),
+      ...(acctSigner ? { paymentPublicKey: accountV14PublicKeyString(acctSigner.family, acctSigner.publicKey) } : {}),
+      signPaymentAuthorization: async (message) =>
+        acctSigner
+          ? encodeAccountV14AuthSignature(acctSigner.family, await acctSigner.sign(Buffer.from(message)))
+          : opts.solanaV14
+            ? bs58.encode(nacl.sign.detached(Buffer.from(message), this.inner.secretKey))
+            : this.evmAccount.signMessage({ message }),
+      prepareAccount: (quote, auth, pin) =>
+        prepareAccountV14Settlement(quote, {
+          rpc: accountV14Rpc(auth.rpcUrl, this.inner.fetchImpl),
+          pin,
+          payer: acctSigner!.address,
+          publicKey: acctSigner!.publicKey,
+          maxFeeUnits: auth.maxFeeUnits,
+        }),
+      settleAccount: (plan, onPrepared) =>
+        executeAccountV14Settlement(plan, {
+          rpc: accountV14Rpc(acct!.rpcUrl, this.inner.fetchImpl),
+          signer: acctSigner!,
+          onPrepared,
+          confirmMs: opts.settlementConfirmMs,
+        }),
       prepareSolana: (call, auth, orderId) =>
         prepareSolanaV14Settlement(call, {
           rpc: solanaV14Rpc(this.solanaRpc, this.inner.fetchImpl),
@@ -1912,7 +1954,7 @@ export class AiFinPayAgent {
           this.reportTelemetry({
             kind: "aifp1",
             merchant: merchantId,
-            chain: opts.solanaV14 ? "solana" : (opts.v14?.chain ?? "polygon"),
+            chain: opts.solanaV14 ? "solana" : (acct?.family ?? opts.v14?.chain ?? "polygon"),
             cost: amountUsd,
             tx: txRef,
           });
@@ -1926,7 +1968,12 @@ export class AiFinPayAgent {
   async recoverPaidPayment(recovery: Aifp1PaymentRecovery, opts: Aifp1RecoveryOptions = {}): Promise<Aifp1PayResult> {
     // The purchase was reserved in the durable ledger fetchPaid opens for Solana; a new process must read that one.
     if (recovery.family === "solana" && !this.ledgerOverride) this._ledger = FileSpendLedger.forAgent(this.evmAddress);
-    if (recovery.family !== "solana" && recovery.budgetReservationId !== undefined) {
+    const acctSigner = isAifp1AccountRecovery(recovery) ? this.accountSigner(recovery.family) : undefined;
+    if (
+      recovery.family !== "solana" &&
+      !isAifp1AccountRecovery(recovery) &&
+      recovery.budgetReservationId !== undefined
+    ) {
       const chain = recovery.chain ?? "polygon";
       await assertPreparedV14Recovery(
         recovery.quote.settlement_call as V14SettlementCall,
@@ -1940,7 +1987,25 @@ export class AiFinPayAgent {
       recovery,
       {
         walletIdentity: this.evmAddress.toLowerCase(),
-        payerAddress: recovery.family === "solana" ? this.solanaAddress : this.evmAddress,
+        payerAddress: recovery.family === "solana" ? this.solanaAddress : (acctSigner?.address ?? this.evmAddress),
+        ...(acctSigner ? { paymentPublicKey: accountV14PublicKeyString(acctSigner.family, acctSigner.publicKey) } : {}),
+        ...(acctSigner && opts.accountRpcUrl
+          ? { accountRpc: accountV14Rpc(opts.accountRpcUrl, this.inner.fetchImpl) }
+          : {}),
+        ...(acctSigner
+          ? {
+              finalizeFailedReservation: async (
+                id: string,
+                tx: string,
+                binding: SpendLedgerBinding,
+                feeUsd: number
+              ) => {
+                if (!this.ledger.finalizeFailure)
+                  throw new Aifp1QuoteError("Custom ledger cannot reconcile a proven revert; retain reservation");
+                await this.ledger.finalizeFailure(id, tx, binding, feeUsd);
+              },
+            }
+          : {}),
         framework: agentFramework(opts.framework) ?? this.inner.framework,
         ...(recovery.family === "solana"
           ? {
@@ -1957,10 +2022,12 @@ export class AiFinPayAgent {
               },
             }
           : {}),
-        signPaymentAuthorization: (message) =>
-          recovery.family === "solana"
-            ? Promise.resolve(bs58.encode(nacl.sign.detached(Buffer.from(message), this.inner.secretKey)))
-            : this.evmAccount.signMessage({ message }),
+        signPaymentAuthorization: async (message) =>
+          acctSigner
+            ? encodeAccountV14AuthSignature(acctSigner.family, await acctSigner.sign(Buffer.from(message)))
+            : recovery.family === "solana"
+              ? bs58.encode(nacl.sign.detached(Buffer.from(message), this.inner.secretKey))
+              : this.evmAccount.signMessage({ message }),
         fetchImpl: this.inner.fetchImpl,
         assertReservation: async (id, tx, binding) => {
           if (!this.ledger.assertRecovery)

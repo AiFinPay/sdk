@@ -120,7 +120,7 @@ export {
 } from "./generated/solanaV14Deployments.generated.js";
 export type { SolanaV14Deployment, SolanaNetwork } from "./generated/solanaV14Deployments.generated.js";
 
-// Aptos/NEAR registry integration is read-only; fetchPaid has no executor for these families.
+// Aptos/NEAR: fetchPaid pays natively through opts.accountV14; Node only.
 export {
   getAptosDeployment,
   getNearDeployment,
@@ -133,6 +133,29 @@ export type {
   AccountRequestedVersion,
   ResolveAccountDeploymentOptions,
 } from "./accountDeploymentResolver.js";
+export {
+  AccountV14Error,
+  accountV14Rpc,
+  accountV14SignerFromSeed,
+  authorizedAccountV14Pin,
+  validateAccountV14Quote,
+  prepareAccountV14Settlement,
+  executeAccountV14Settlement,
+  assertPreparedAccountV14Recovery,
+  readAccountV14Revert,
+} from "./settlementAccountV14.js";
+export type {
+  AccountV14Family,
+  AccountV14Network,
+  AccountV14Pin,
+  AccountV14Plan,
+  AccountV14Prepared,
+  AccountV14Rpc,
+  AccountV14Signer,
+  AccountV14SettlementCall,
+  AptosV14SettlementCall,
+  NearV14SettlementCall,
+} from "./settlementAccountV14.js";
 export { APTOS_V14_DEPLOYMENTS, APTOS_V14_DEPLOYMENTS_SOURCE } from "./generated/aptosV14Deployments.generated.js";
 export type { AptosV14Deployment, AptosNetwork } from "./generated/aptosV14Deployments.generated.js";
 export { NEAR_V14_DEPLOYMENTS, NEAR_V14_DEPLOYMENTS_SOURCE } from "./generated/nearV14Deployments.generated.js";
@@ -273,6 +296,7 @@ export * from "./settlementSolanaV14.js";
 export type {
   Aifp1EvmPaymentRecovery,
   Aifp1SolanaPaymentRecovery,
+  Aifp1AccountPaymentRecovery,
   Aifp1SettlementChain,
   Aifp1RecoveryOptions,
 } from "./aifp1.js";

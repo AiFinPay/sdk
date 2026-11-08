@@ -16,7 +16,7 @@ Agent Passport identity + route-verified AIFP-1/AIFP-2 settlement for autonomous
 ## Rules
 
 - Never edit `generated/*.ts` by hand — change the `@aifinpay/deployments` registry inputs or `scripts/generate-*.mjs`, then run the matching `registry:sync`.
-- `accountDeploymentResolver.ts` selects Aptos/NEAR metadata from generated package pins. It is not a payment executor; keep these families out of EVM `PaymentChain` and `fetchPaid` until verified quote/receipt, signing and recovery support exists.
+- `accountDeploymentResolver.ts` selects Aptos/NEAR metadata from generated package pins. `settlementAccountV14.ts` is their executor, reached only through `opts.accountV14`; keep these families out of EVM `PaymentChain`. Its encoders are proven against the official libraries in `tests/settlementAccountV14-encoding.test.ts`.
 - Keep both exports working (`.`, `./wallet`); `PAYMENT_RECEIPTS.md` ships in `files` — update it if receipt shape changes.
 - Settlement changes need tests in `tests/`; no live RPC, mock at `settlementHttp.ts` / facilitator boundaries.
 - Do not weaken route verification or log secret keys.

@@ -60,6 +60,25 @@ import {
   type SolanaV14Plan,
 } from "./settlementSolanaV14.js";
 import type { SolanaNetwork } from "./generated/solanaV14Deployments.generated.js";
+import {
+  AccountV14Error,
+  accountV14CostUsd,
+  accountV14Family,
+  accountV14InventoryPin,
+  assertPreparedAccountV14Recovery,
+  authorizedAccountV14Pin,
+  readAccountV14Revert,
+  validAccountV14Payer,
+  validateAccountV14Quote,
+  type AccountV14Family,
+  type AccountV14NativeSettlement,
+  type AccountV14Network,
+  type AccountV14Pin,
+  type AccountV14Plan,
+  type AccountV14Prepared,
+  type AccountV14Rpc,
+  type AccountV14SettlementCall,
+} from "./settlementAccountV14.js";
 import type { SdkEnvironment } from "./deploymentResolver.js";
 import { reportingHeaders, type AgentFramework } from "./agent.js";
 import type { SolanaV14Deployment } from "./generated/solanaV14Deployments.generated.js";
@@ -115,6 +134,23 @@ export class Aifp1FinalizedFailureError extends Aifp1PayError {
   }
 }
 
+/** The original Aptos or NEAR transaction reverted; only its fee was spent. Never resent. */
+export class Aifp1AccountRevertedError extends Aifp1PayError {
+  readonly code = "AIFP1_ACCOUNT_REVERTED";
+  constructor(
+    recovery: Aifp1AccountPaymentRecovery,
+    public readonly feeAmountUsd: number,
+    public readonly actualFeeUnits: bigint
+  ) {
+    super(
+      "Original transaction reverted; fee-only debit recorded, no payment was made",
+      recovery.txRef,
+      recovery.quote.quote_id,
+      recovery
+    );
+  }
+}
+
 /** Public settlement context; contains no private key or authorization signature. */
 export interface Aifp1EvmPaymentRecovery {
   family?: "evm";
@@ -146,8 +182,23 @@ export interface Aifp1SolanaPaymentRecovery extends Omit<
   maxFeeLamports: string;
   transactionFeeLamports: string;
 }
-export type Aifp1PaymentRecovery = Aifp1EvmPaymentRecovery | Aifp1SolanaPaymentRecovery;
-export type Aifp1SettlementChain = Aifp1V14Chain | "solana";
+export interface Aifp1AccountPaymentRecovery extends Omit<
+  Aifp1EvmPaymentRecovery,
+  "family" | "chain" | "txRef" | "serializedTransaction"
+> {
+  family: AccountV14Family;
+  chain: AccountV14Family;
+  txRef: string;
+  account: AccountV14Prepared;
+  /** Locally validated gross plus the fee bound; never recovery authority. */
+  reservedAmountUsd: number;
+  admissionUsdPrice: string;
+}
+export type Aifp1PaymentRecovery = Aifp1EvmPaymentRecovery | Aifp1SolanaPaymentRecovery | Aifp1AccountPaymentRecovery;
+export function isAifp1AccountRecovery(recovery: Aifp1PaymentRecovery): recovery is Aifp1AccountPaymentRecovery {
+  return accountV14Family(recovery.family) !== undefined;
+}
+export type Aifp1SettlementChain = Aifp1V14Chain | "solana" | AccountV14Family;
 export interface Aifp1PaymentSigner {
   /** Independent local identity shared by all rails; never copied from a journal. */
   walletIdentity?: string;
@@ -160,6 +211,9 @@ export interface Aifp1PaymentSigner {
   completeReservation?(id: string, txRef: string, binding: SpendLedgerBinding): Promise<void>;
   finalizeFailedReservation?(id: string, txRef: string, binding: SpendLedgerBinding, feeUsd: number): Promise<void>;
   solanaRpc?: SolanaV14Rpc;
+  accountRpc?: AccountV14Rpc;
+  /** Current key of an Aptos or NEAR payer, as /v1/pay expects it. */
+  paymentPublicKey?: string;
 }
 export type Aifp1RecoveryOptions = Pick<
   Aifp1FetchOptions,
@@ -167,6 +221,10 @@ export type Aifp1RecoveryOptions = Pick<
 > & {
   solanaNetwork?: SolanaNetwork;
   solanaEnvironment?: SdkEnvironment;
+  accountNetwork?: AccountV14Network;
+  accountEnvironment?: SdkEnvironment;
+  /** Reads the saved transaction's outcome; never sends one. */
+  accountRpcUrl?: string;
 };
 
 /** Exact owner/quote binding for a locally selected capped v1.4 payment. */
@@ -175,10 +233,36 @@ export function paymentBudgetBinding(
     admissionSolUsdPrice?: string;
     maxFeeLamports?: string;
     transactionFeeLamports?: string;
+    admissionUsdPrice?: string;
+    maxFeeUnits?: string;
   },
   payer: string,
   walletIdentity?: string
 ): SpendLedgerBinding {
+  const family = accountV14Family(payment.chain);
+  if (family) {
+    const account = payment.quote.settlement_call as AccountV14SettlementCall;
+    if (account?.splitter_version !== "1.4" || account.chain !== family)
+      throw new Aifp1QuoteError("Bound budgets require the original v1.4 call");
+    return {
+      apiBaseUrl: payment.apiBaseUrl.replace(/\/+$/, ""),
+      paymentIssuer: payment.paymentIssuer ?? "https://api.aifinpay.io",
+      payer,
+      ...(walletIdentity ? { walletIdentity } : {}),
+      ...(payment.admissionUsdPrice !== undefined
+        ? { accountAdmissionRateUsd: payment.admissionUsdPrice, accountMaxFeeUnits: payment.maxFeeUnits }
+        : {}),
+      merchantId: payment.quote.merchant_id,
+      scope: payment.quote.scope,
+      resource: payment.quote.resource,
+      networkMode: payment.quote.network_mode ?? "live",
+      chain: `${family}:${account.network}:${account.contract}:${account.runtime_code_hash}`,
+      asset: payment.asset,
+      token: account.args.quote.token,
+      grossAmount: account.args.quote.gross_amount,
+      quoteId: payment.quote.quote_id,
+    };
+  }
   const call = payment.quote.settlement_call as V14SettlementCall | SolanaV14SettlementCall;
   if (call?.splitter_version !== "1.4") throw new Aifp1QuoteError("Bound budgets require the original v1.4 call");
   return {
@@ -200,7 +284,7 @@ export function paymentBudgetBinding(
     chain:
       payment.chain === "solana"
         ? `solana:${(call as SolanaV14SettlementCall).network}:${call.contract}:${(call as SolanaV14SettlementCall).idl_sha256}`
-        : authorizedV14Chain(payment.chain),
+        : authorizedV14Chain(payment.chain as Aifp1V14Chain | undefined),
     asset: payment.asset,
     token: payment.chain === "solana" ? call.args.quote.token : call.args.quote.token.toLowerCase(),
     grossAmount: call.args.quote.grossAmount,
@@ -214,6 +298,7 @@ export function recoverAifp1Payment(
   signer: Aifp1PaymentSigner,
   options: Aifp1RecoveryOptions = {}
 ): Promise<Aifp1PayResult> {
+  if (isAifp1AccountRecovery(recovery)) return recoverAccountPayment(recovery, signer, options);
   if (recovery.family === "solana") {
     const call = recovery.quote.settlement_call as SolanaV14SettlementCall;
     if (!options.solanaNetwork || !options.solanaEnvironment)
@@ -351,6 +436,75 @@ export function recoverAifp1Payment(
   );
 }
 
+async function recoverAccountPayment(
+  recovery: Aifp1AccountPaymentRecovery,
+  signer: Aifp1PaymentSigner,
+  options: Aifp1RecoveryOptions
+): Promise<Aifp1PayResult> {
+  if (!options.accountNetwork || !options.accountEnvironment)
+    throw new Aifp1QuoteError("Account chain recovery requires independent owner environment/network");
+  const pin = accountV14InventoryPin(recovery.family, options.accountEnvironment, options.accountNetwork);
+  assertPreparedAccountV14Recovery(recovery.quote, recovery.account, pin, signer.payerAddress);
+  if (recovery.chain !== recovery.family || recovery.txRef !== recovery.account.hash || recovery.asset !== pin.asset)
+    throw new Aifp1QuoteError("Account chain recovery purchase mismatch");
+  if (signer.paymentPublicKey !== recovery.account.publicKey)
+    throw new Aifp1QuoteError("Account chain recovery key is not this wallet's");
+  const binding = paymentBudgetBinding(
+    { ...recovery, admissionUsdPrice: recovery.admissionUsdPrice, maxFeeUnits: recovery.account.maxFeeUnits },
+    signer.payerAddress,
+    recovery.budgetBindingVersion === 2 ? signer.walletIdentity : undefined
+  );
+  if (recovery.budgetReservationId !== undefined) {
+    if (!signer.assertReservation || !signer.completeReservation)
+      throw new Aifp1QuoteError("Original bound ledger hooks required");
+    await signer.assertReservation(recovery.budgetReservationId, recovery.txRef, binding);
+  }
+  if (signer.accountRpc) {
+    let fee: bigint | null;
+    try {
+      fee = await readAccountV14Revert(
+        signer.accountRpc,
+        recovery.account,
+        signer.payerAddress,
+        BigInt(recovery.account.maxFeeUnits)
+      );
+    } catch (error) {
+      throw new Aifp1PayError(
+        error instanceof Error ? error.message : "Revert proof is incomplete; retain original reservation",
+        recovery.txRef,
+        recovery.quote.quote_id,
+        recovery
+      );
+    }
+    if (fee !== null) {
+      const feeUsd = accountV14CostUsd(fee, pin.decimals, recovery.admissionUsdPrice);
+      if (recovery.budgetReservationId !== undefined) {
+        if (!signer.finalizeFailedReservation)
+          throw new Aifp1PayError(
+            "Proven revert requires ledger reconciliation",
+            recovery.txRef,
+            recovery.quote.quote_id,
+            recovery
+          );
+        await signer.finalizeFailedReservation(recovery.budgetReservationId, recovery.txRef, binding, feeUsd);
+      }
+      throw new Aifp1AccountRevertedError(recovery, feeUsd, fee);
+    }
+  }
+  const paid = await submitPayment(
+    { ...signer, agentId: signer.payerAddress, fetchImpl: signer.fetchImpl ?? fetch },
+    recovery.apiBaseUrl,
+    recovery.quote,
+    recovery.txRef,
+    recovery.asset,
+    recovery.family,
+    { paymentIssuer: recovery.paymentIssuer, ...options }
+  );
+  if (recovery.budgetReservationId !== undefined)
+    await signer.completeReservation!(recovery.budgetReservationId, recovery.txRef, binding);
+  return paid;
+}
+
 /** The gateway rejected a receipt we believed covered the request. */
 export class Aifp1ReceiptRejectedError extends Aifp1Error {}
 
@@ -437,6 +591,8 @@ export interface Aifp1Quote {
     scheme: "wallet-signature-v1";
     domain: string;
     max_age_seconds: number;
+    signature_encoding?: string;
+    public_key_required?: boolean;
   };
   merchant_id: string;
   resource: string;
@@ -455,6 +611,7 @@ export interface Aifp1Quote {
   settlement_call?:
     | V14SettlementCall
     | SolanaV14SettlementCall
+    | AccountV14SettlementCall
     | {
         chain: string;
         contract: string;
@@ -484,7 +641,7 @@ export interface Aifp1Quote {
     settlement_semantics: "gross-inclusive";
   };
   /** Native gross settlement in the selected chain currency, when backend readiness permits. */
-  native_settlement?: Aifp1EvmNativeSettlement | Aifp1SolanaNativeSettlement;
+  native_settlement?: Aifp1EvmNativeSettlement | Aifp1SolanaNativeSettlement | AccountV14NativeSettlement;
   settlement: {
     batch_units: string;
     total_units: string;
@@ -560,7 +717,13 @@ export interface QuoteSummary {
 export function describeQuote(q: Aifp1Quote): QuoteSummary {
   const ns = q.native_settlement;
   const pay = ns
-    ? { amount: formatUnits("total_lamports" in ns ? ns.total_lamports : ns.total_wei, ns.decimals), asset: ns.asset }
+    ? {
+        amount: formatUnits(
+          "total_lamports" in ns ? ns.total_lamports : "total_units" in ns ? ns.total_units : ns.total_wei,
+          ns.decimals
+        ),
+        asset: ns.asset,
+      }
     : null;
 
   // Fee as basis points, from the split the quote already carries. Stated so the
@@ -612,7 +775,7 @@ function formatUnits(raw: string, decimals: number): string {
 
 /** POST /v1/pay 200 body — routes/aifp.js. */
 export interface Aifp1PayResult {
-  network?: SolanaNetwork;
+  network?: string;
   program?: string;
   receipt_id: string;
   receipt: string; // the bearer JWT
@@ -1100,6 +1263,16 @@ export interface Aifp1FetchOptions {
     maxFeeLamports: bigint;
     onPrepared: (payment: Aifp1SolanaPaymentRecovery) => Promise<void>;
   };
+  /** Aptos or NEAR native v1.4, explicitly owner-authorized; excludes the other families.
+   * maxFeeUnits is in octas or yoctoNEAR. rpcUrl is the owner's node, and no value has a default. */
+  accountV14?: {
+    family: AccountV14Family;
+    environment: SdkEnvironment;
+    network: AccountV14Network;
+    rpcUrl: string;
+    maxFeeUnits: bigint;
+    onPrepared: (payment: Aifp1AccountPaymentRecovery) => Promise<void>;
+  };
   /** Explicit native v1.4 authorization. Deployment/signer pins come from the
    * SDK registry, never from a merchant response. The journal must be durable
    * before broadcast; a prepared transaction must be recovered, never replaced. */
@@ -1275,6 +1448,17 @@ export interface Aifp1Deps {
     orderId: string
   ): Promise<SolanaV14Plan>;
   settleSolana?(plan: SolanaV14Plan, onPrepared: (tx: SolanaV14Prepared) => Promise<void>): Promise<SolanaV14Prepared>;
+  prepareAccount?(
+    quote: Aifp1Quote,
+    authorization: NonNullable<Aifp1FetchOptions["accountV14"]>,
+    pin: AccountV14Pin
+  ): Promise<AccountV14Plan>;
+  settleAccount?(
+    plan: AccountV14Plan,
+    onPrepared: (tx: AccountV14Prepared) => Promise<void>
+  ): Promise<AccountV14Prepared>;
+  /** Current key of an Aptos or NEAR payer, as /v1/pay expects it. */
+  paymentPublicKey?: string;
   fetchImpl: typeof fetch;
   cache: Aifp1ReceiptCache;
   /** AIFP-Agent-Id / agent_id — a 0x address, or agent policies cannot key on it. */
@@ -1533,6 +1717,114 @@ async function settleSolanaBatch(
   }
 }
 
+async function settleAccountBatch(
+  deps: Aifp1Deps,
+  opts: Aifp1FetchOptions,
+  quote: Aifp1Quote,
+  plan: AccountV14Plan,
+  amountUsd: number,
+  usdRate: string,
+  binding: SpendLedgerBinding,
+  reservation: string | null,
+  site: string,
+  send: (receipt?: string) => Promise<Response>,
+  markSettled: () => void
+): Promise<Response> {
+  const auth = opts.accountV14!;
+  if (
+    typeof reservation === "string" &&
+    (!deps.prepareReservation || !deps.assertReservation || !deps.completeReservation)
+  )
+    throw new Aifp1QuoteError("Capped account chain payments require durable bound-journal hooks");
+  let prepared: AccountV14Prepared | undefined;
+  const recoveryFor = (tx: AccountV14Prepared): Aifp1AccountPaymentRecovery => ({
+    family: auth.family,
+    chain: auth.family,
+    apiBaseUrl: opts.apiBaseUrl ?? DEFAULT_API_BASE,
+    paymentIssuer: opts.paymentIssuer,
+    ...(deps.walletIdentity ? { budgetBindingVersion: 2 as const } : {}),
+    quote,
+    asset: plan.pin.asset,
+    txRef: tx.hash,
+    account: tx,
+    reservedAmountUsd: amountUsd,
+    admissionUsdPrice: usdRate,
+    ...(typeof reservation === "string" ? { budgetReservationId: reservation } : {}),
+  });
+  let result: AccountV14Prepared;
+  try {
+    result = await deps.settleAccount!(plan, async (tx) => {
+      assertPreparedAccountV14Recovery(quote, tx, plan.pin, deps.payerAddress);
+      if (typeof reservation === "string") await deps.prepareReservation!(reservation, tx.hash, binding);
+      await auth.onPrepared(recoveryFor(tx));
+      prepared = tx;
+    });
+  } catch (error) {
+    if (!prepared) throw error;
+    markSettled();
+    if (
+      error instanceof AccountV14Error &&
+      error.code === "ACCOUNT_V14_TRANSACTION_REVERTED" &&
+      error.prepared?.hash === prepared.hash &&
+      error.actualFeeUnits !== undefined
+    ) {
+      const feeUsd = accountV14CostUsd(error.actualFeeUnits, plan.pin.decimals, usdRate);
+      if (typeof reservation === "string") {
+        try {
+          if (!deps.finalizeFailedReservation) throw new Error("Ledger cannot reconcile a proven revert");
+          await deps.finalizeFailedReservation(reservation, prepared.hash, binding, feeUsd);
+        } catch (journal) {
+          throw new Aifp1PayError(
+            journal instanceof Error ? journal.message : "Revert journal requires reconciliation",
+            prepared.hash,
+            quote.quote_id,
+            recoveryFor(prepared)
+          );
+        }
+      }
+      throw new Aifp1AccountRevertedError(recoveryFor(prepared), feeUsd, error.actualFeeUnits);
+    }
+    throw new Aifp1PayError(
+      "Account chain transaction prepared; recover its original hash without resending",
+      prepared.hash,
+      quote.quote_id,
+      recoveryFor(prepared)
+    );
+  }
+  markSettled();
+  const recovery = recoveryFor(result);
+  try {
+    if (typeof reservation === "string") await deps.commit(reservation, amountUsd);
+    const paid = await submitPayment(deps, recovery.apiBaseUrl, quote, result.hash, recovery.asset, auth.family, opts);
+    if (typeof reservation === "string") await deps.completeReservation!(reservation, result.hash, binding);
+    deps.cache.put({
+      site,
+      merchantId: paid.merchant_id,
+      receiptId: paid.receipt_id,
+      jwt: paid.receipt,
+      scope: paid.scope,
+      resource: paid.resource,
+      unitQuota: paid.unit_quota,
+      remaining: paid.unit_quota,
+      expiresAt: Date.parse(paid.expires_at),
+      amountUsd,
+      payer: deps.payerAddress,
+    });
+    const response = await send(paid.receipt);
+    if (response.status === 402)
+      throw new Aifp1ReceiptRejectedError("Gateway rejected paid receipt; recover existing purchase");
+    deps.onPaid?.({ merchantId: paid.merchant_id, amountUsd, txRef: result.hash, receiptId: paid.receipt_id });
+    return response;
+  } catch (error) {
+    throw new Aifp1PayError(
+      error instanceof Error ? error.message : "Receipt recovery required",
+      result.hash,
+      quote.quote_id,
+      recovery
+    );
+  }
+}
+
 /** Is this response the AIFP-1 paywall asking for money? */
 function isAifp1Challenge(body: unknown): body is Aifp1Challenge {
   const b = body as Partial<Aifp1Challenge> | null;
@@ -1565,7 +1857,8 @@ export async function aifp1Fetch(
   if (opts.maxAmountUsd !== undefined && (!Number.isFinite(opts.maxAmountUsd) || opts.maxAmountUsd < 0)) {
     throw new Aifp1QuoteError("maxAmountUsd must be nonnegative and finite");
   }
-  if (opts.v14 && opts.solanaV14) throw new Aifp1QuoteError("Only one payment family may be authorized");
+  if ([opts.v14, opts.solanaV14, opts.accountV14].filter(Boolean).length > 1)
+    throw new Aifp1QuoteError("Only one payment family may be authorized");
   if (
     opts.expectedMerchantId !== undefined &&
     (typeof opts.expectedMerchantId !== "string" || !opts.expectedMerchantId)
@@ -1573,11 +1866,17 @@ export async function aifp1Fetch(
     throw new Aifp1QuoteError("expectedMerchantId must be a non-empty merchant id");
   const sol = opts.solanaV14;
   const evmChain = authorizedV14Chain(opts.v14?.chain);
-  const chain: Aifp1SettlementChain = sol ? "solana" : evmChain;
+  const acct = opts.accountV14;
+  const chain: Aifp1SettlementChain = sol ? "solana" : acct ? acct.family : evmChain;
   const solDeployment = sol ? authorizedSolanaV14Inventory(sol.environment, sol.network) : undefined;
   if (sol && (typeof sol.maxFeeLamports !== "bigint" || sol.maxFeeLamports <= 0n))
     throw new Aifp1QuoteError("Explicit positive Solana fee plus rent budget required");
-  const nativeAsset = sol ? "SOL" : paymentChain(evmChain)!.native;
+  const acctPin = acct ? authorizedAccountV14Pin(acct.family, acct.environment, acct.network) : undefined;
+  if (acct && (typeof acct.maxFeeUnits !== "bigint" || acct.maxFeeUnits <= 0n))
+    throw new Aifp1QuoteError("Explicit positive account chain fee budget required");
+  if (acct && typeof acct.onPrepared !== "function")
+    throw new Aifp1QuoteError("Account chain payments require a durable onPrepared journal");
+  const nativeAsset = sol ? "SOL" : acctPin ? acctPin.asset : paymentChain(evmChain)!.native;
   const direct = opts.resourcePathMode === "direct";
   const parsed = parseGatewayUrl(url, opts.gatewayOrigins ?? DEFAULT_GATEWAY_ORIGINS, opts.resourcePathMode);
   let site = parsed.site;
@@ -1764,6 +2063,7 @@ export async function aifp1Fetch(
     if (opts.maxAmountUsd === 0)
       throw new Aifp1QuoteError("No payment budget remains; cached access can still be used");
     let validPayer = /^0x[0-9a-fA-F]{40}$/.test(deps.payerAddress || "");
+    if (acct) validPayer = validAccountV14Payer(acct.family, deps.payerAddress);
     if (sol) {
       try {
         validPayer =
@@ -1777,11 +2077,13 @@ export async function aifp1Fetch(
       throw new Aifp1QuoteError("a settlement wallet signer is required to receive a payment receipt");
     }
     // 2. Quote.
-    const stableAsset = sol
-      ? sol.asset && sol.asset !== "SOL"
-        ? (solanaStableMint(sol.network, sol.asset), sol.asset)
-        : null
-      : pinnedStableAsset(opts.v14?.asset, evmChain);
+    const stableAsset = acct
+      ? null
+      : sol
+        ? sol.asset && sol.asset !== "SOL"
+          ? (solanaStableMint(sol.network, sol.asset), sol.asset)
+          : null
+        : pinnedStableAsset(opts.v14?.asset, evmChain);
     const apiBase = (opts.apiBaseUrl ?? DEFAULT_API_BASE).replace(/\/$/, "");
     const { scope, resource } = resolveScope(opts, challenge);
     const quoteBody: Record<string, unknown> = {
@@ -1791,8 +2093,8 @@ export async function aifp1Fetch(
       scope,
       units: opts.units ?? defaultUnitsFor(challenge),
       agent_id: deps.agentId,
-      ...(opts.v14 || sol ? { asset: stableAsset ?? nativeAsset } : {}),
-      ...(sol || opts.v14?.chain !== undefined ? { settlement_chain: chain } : {}),
+      ...(opts.v14 || sol || acct ? { asset: stableAsset ?? nativeAsset } : {}),
+      ...(sol || acct || opts.v14?.chain !== undefined ? { settlement_chain: chain } : {}),
     };
     let admission: QuoteAdmission | undefined;
     let admissionBinding: SpendLedgerBinding | undefined;
@@ -1923,7 +2225,7 @@ export async function aifp1Fetch(
     }
     if (
       quote.payer &&
-      (sol ? quote.payer !== deps.payerAddress : quote.payer.toLowerCase() !== deps.payerAddress.toLowerCase())
+      (sol || acct ? quote.payer !== deps.payerAddress : quote.payer.toLowerCase() !== deps.payerAddress.toLowerCase())
     ) {
       throw new Aifp1QuoteError("quote names a different paying wallet");
     }
@@ -1931,14 +2233,19 @@ export async function aifp1Fetch(
       throw new Aifp1QuoteError("unsupported receipt authorization scheme");
     }
     trustedPaymentIssuer(quote, opts.paymentIssuer);
-    const merchantWallet = sol ? quote.pay_to.solana : (quote.pay_to[chain] ?? quote.pay_to.evm);
+    const merchantWallet = sol
+      ? quote.pay_to.solana
+      : acct
+        ? quote.pay_to[acct.family]
+        : (quote.pay_to[chain] ?? quote.pay_to.evm);
     if (
-      (opts.v14 || sol) &&
+      (opts.v14 || sol || acct) &&
       (quote.accepted_chains.length !== 1 ||
         quote.accepted_chains[0] !== chain ||
         quote.settlement_call?.chain !== chain ||
         !merchantWallet ||
         (!sol &&
+          !acct &&
           quote.pay_to[chain] !== undefined &&
           quote.pay_to.evm !== undefined &&
           quote.pay_to[chain].toLowerCase() !== quote.pay_to.evm.toLowerCase()))
@@ -1955,12 +2262,14 @@ export async function aifp1Fetch(
     }
 
     if (
-      (opts.v14 || sol) &&
+      (opts.v14 || sol || acct) &&
       (quote.scope !== scope ||
         quote.resource !== (resource ?? "*") ||
         quote.currency !== "USD" ||
         (quote.network_mode ?? "live") !==
-          ((sol ? sol.network === "devnet" : paymentChain(evmChain)!.testnet) ? "test" : "live") ||
+          ((sol ? sol.network === "devnet" : acct ? acct.network === "testnet" : paymentChain(evmChain)!.testnet)
+            ? "test"
+            : "live") ||
         !Number.isSafeInteger(quote.unit_quota) ||
         quote.unit_quota <= 0)
     ) {
@@ -1999,6 +2308,8 @@ export async function aifp1Fetch(
     }
     let solPlan: SolanaV14Plan | undefined;
     let solRate: string | undefined;
+    let acctPlan: AccountV14Plan | undefined;
+    let acctRate: string | undefined;
     if (sol) {
       validateSolanaQuote(quote, sol, deps.payerAddress, quoteExpiryMs, solDeployment!);
       const price = typeof opts.nativeUsdPrice === "function" ? await opts.nativeUsdPrice() : opts.nativeUsdPrice;
@@ -2035,6 +2346,39 @@ export async function aifp1Fetch(
       if (solPlan.feeRentLamports < 0n || solPlan.feeRentLamports > sol.maxFeeLamports)
         throw new Aifp1QuoteError("Solana fee/rent cap exceeded");
       amountUsd += solanaLamportCostUsd(solPlan.feeRentLamports, solRate);
+    } else if (acct) {
+      const signedCall = validateAccountV14Quote(quote, acctPin!, deps.payerAddress);
+      if (quote.settlement.total_units !== parseUnits(quote.amount, 6).toString())
+        throw new Aifp1QuoteError("Account chain quote amount differs from its stable total");
+      const price = typeof opts.nativeUsdPrice === "function" ? await opts.nativeUsdPrice() : opts.nativeUsdPrice;
+      const age = price ? Date.now() - price.observedAtMs : NaN;
+      if (
+        !price ||
+        !Number.isFinite(price.usd) ||
+        price.usd <= 0 ||
+        !Number.isFinite(age) ||
+        age < -5000 ||
+        age > 60000
+      )
+        throw new Aifp1QuoteError("Fresh independent native USD price required for gross and fee budgeting");
+      acctRate = String(price.usd);
+      const gross = BigInt(signedCall.args.quote.gross_amount);
+      const debitUsd = accountV14CostUsd(gross, acctPin!.decimals, acctRate);
+      const quotedRate = quote.native_settlement?.rate_usd;
+      if (
+        debitUsd <= 0 ||
+        typeof quotedRate !== "string" ||
+        Math.abs(debitUsd - amountUsd) > Math.max(amountUsd * 0.02, 1e-6) ||
+        Math.abs(accountV14CostUsd(gross, acctPin!.decimals, quotedRate) - amountUsd) > Math.max(amountUsd * 0.02, 1e-6)
+      )
+        throw new Aifp1QuoteError("Native gross disagrees with the independent or quoted USD rate");
+      amountUsd = Math.max(amountUsd, debitUsd);
+      if (!deps.prepareAccount || !deps.settleAccount)
+        throw new Aifp1SettlementUnsupportedError("Account chain executor unavailable");
+      acctPlan = await deps.prepareAccount(quote, acct, acctPin!);
+      if (acctPlan.feeUnits <= 0n || acctPlan.feeUnits > acct.maxFeeUnits)
+        throw new Aifp1QuoteError("Account chain fee cap exceeded");
+      amountUsd += accountV14CostUsd(acctPlan.feeUnits, acctPin!.decimals, acctRate);
     } else if (stableAsset) {
       validateStableV14Quote(quote, stableAsset, deps.payerAddress as `0x${string}`, quoteExpiryMs, evmChain);
     } else if (opts.settlementPin || opts.v14) {
@@ -2069,7 +2413,10 @@ export async function aifp1Fetch(
       amountUsd = Math.max(amountUsd, debitUsd);
       const call = quote.settlement_call;
       const args = call?.args as
-        | Exclude<Aifp1Quote["settlement_call"], V14SettlementCall | SolanaV14SettlementCall | undefined>["args"]
+        | Exclude<
+            Aifp1Quote["settlement_call"],
+            V14SettlementCall | SolanaV14SettlementCall | AccountV14SettlementCall | undefined
+          >["args"]
         | undefined;
       if (
         quote.token_settlement !== undefined ||
@@ -2138,9 +2485,10 @@ export async function aifp1Fetch(
             transactionFeeLamports: solPlan!.transactionFeeLamports.toString(),
           }
         : {}),
+      ...(acct ? { admissionUsdPrice: acctRate!, maxFeeUnits: acct.maxFeeUnits.toString() } : {}),
     };
     const binding =
-      opts.v14 || sol ? paymentBudgetBinding(budgetContext, deps.payerAddress, deps.walletIdentity) : undefined;
+      opts.v14 || sol || acct ? paymentBudgetBinding(budgetContext, deps.payerAddress, deps.walletIdentity) : undefined;
     const reservation = await deps.reserveDaily(amountUsd, binding, admission?.id);
     if (reservation === "skip") return null;
 
@@ -2164,6 +2512,23 @@ export async function aifp1Fetch(
           quote,
           solPlan!,
           amountUsd,
+          binding!,
+          reservation,
+          site,
+          send,
+          () => {
+            settled = true;
+          }
+        );
+      }
+      if (acct) {
+        return await settleAccountBatch(
+          deps,
+          opts,
+          quote,
+          acctPlan!,
+          amountUsd,
+          acctRate!,
           binding!,
           reservation,
           site,
@@ -2653,7 +3018,10 @@ export function solanaQuoteAuthorizationMessage(
  * minting a second receipt.
  */
 async function submitPayment(
-  deps: Pick<Aifp1Deps, "fetchImpl" | "agentId" | "framework" | "payerAddress" | "signPaymentAuthorization">,
+  deps: Pick<
+    Aifp1Deps,
+    "fetchImpl" | "agentId" | "framework" | "payerAddress" | "signPaymentAuthorization" | "paymentPublicKey"
+  >,
   apiBase: string,
   quote: Aifp1Quote,
   txRef: string,
@@ -2661,6 +3029,9 @@ async function submitPayment(
   chain: Aifp1SettlementChain,
   opts: Aifp1FetchOptions
 ): Promise<Aifp1PayResult> {
+  const accountChain = accountV14Family(chain);
+  if (accountChain && !deps.paymentPublicKey)
+    throw new Aifp1PayError("Account chain receipts require the wallet's current public key", txRef, quote.quote_id);
   const idempotencyKey = idempotencyKeyFor({ quoteId: quote.quote_id, chain, asset, txRef });
   const deadline = Date.now() + (opts.settlementConfirmMs ?? DEFAULT_SETTLEMENT_CONFIRM_MS);
 
@@ -2718,7 +3089,12 @@ async function submitPayment(
             asset,
             tx_ref: txRef,
             agent_id: deps.agentId,
-            payment_authorization: { payer, expires_at: expiresAt, signature },
+            payment_authorization: {
+              payer,
+              expires_at: expiresAt,
+              signature,
+              ...(accountChain ? { public_key: deps.paymentPublicKey } : {}),
+            },
           }),
         },
         Math.max(1, Math.min(opts.apiTimeoutMs ?? 15_000, deadline - Date.now()))
@@ -2844,6 +3220,10 @@ async function verifyPaidReceipt(
         claims.program !== quote.settlement_call!.contract ||
         paid.network !== claims.network ||
         paid.program !== claims.program)) ||
+    (accountV14Family(chain) &&
+      (claims.network !== (quote.settlement_call as AccountV14SettlementCall).network ||
+        claims.contract !== quote.settlement_call!.contract ||
+        paid.network !== claims.network)) ||
     typeof claims.asset !== "string" ||
     claims.asset.toUpperCase() !== asset.toUpperCase() ||
     claims.currency !== "USD" ||
