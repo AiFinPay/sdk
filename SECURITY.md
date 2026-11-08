@@ -40,3 +40,7 @@ version, reproducible synthetic steps and expected/actual behavior. Do not inclu
 credentials, keys or live bearer tokens. Pause affected owner payment automation
 while the maintainers assess it. Dependency runtime audits and independent review
 are release gates; production activation and funded acceptance are separate gates.
+
+## Security maintainers
+
+- Pavlo Svizinskyy (@enot3615): security review and vulnerability triage
