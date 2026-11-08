@@ -1301,6 +1301,32 @@ describe("the durable purchase guard and identity", () => {
     expect((restart as Error).message).toMatch(/Unresolved purchase/);
     expect(flow.sends).toHaveLength(1);
   });
+  it("no daily cap: a new agent recovers the purchase from the durable journal without paying", async () => {
+    let address = "";
+    const flow = setup(() => address);
+    const agent = await agentOn(flow.fetchImpl);
+    address = agent.aptosAddress;
+    const first = (await withModule(flow.moduleHash, () =>
+      agent.fetchPaid(URL_PAID, {}, flow.paidOptions()).catch((e) => e)
+    )) as Aifp1PayError;
+    expect(first).toBeInstanceOf(Aifp1PayError);
+    let pays = 0;
+    const counted = (async (input: any, init?: RequestInit) => {
+      if (String(input).endsWith("/v1/pay")) pays++;
+      return (flow.fetchImpl as any)(input, init);
+    }) as typeof fetch;
+    const fresh = await agentOn(counted);
+    await withModule(flow.moduleHash, () =>
+      fresh
+        .recoverPaidPayment(first.recovery as Aifp1AccountPaymentRecovery, {
+          accountEnvironment: "dev",
+          accountNetwork: "testnet",
+        })
+        .catch((e) => e)
+    );
+    expect(pays).toBeGreaterThan(0);
+    expect(flow.sends).toHaveLength(1);
+  });
   it("a process-memory ledger cannot guard an account payment", async () => {
     const flow = setup(() => "");
     const agent = await agentOn(flow.fetchImpl, { spendLedger: new MemorySpendLedger() });

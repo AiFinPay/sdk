@@ -1452,6 +1452,25 @@ describe("outcome readers against real node behaviour", () => {
     consumed.views.is_consumed = [true];
     expect(await read(consumed)).toBeNull();
   });
+  it("near: an outcome missing its root id, receipts or logs is not a proven revert", async () => {
+    const read = (outcome: unknown) => {
+      const state = nearState();
+      state.outcome = outcome;
+      return readAccountV14Revert(nearRpc(state), nearPrepared(), nearSigner.address, 100n);
+    };
+    const [pay] = nearRevert().receipts_outcome as any[];
+    expect(await read(nearRevert({ receipts_outcome: undefined }))).toBeNull();
+    expect(
+      await read(
+        nearRevert({
+          transaction_outcome: { outcome: { tokens_burnt: "5", status: {} } },
+          receipts_outcome: [{ ...pay, id: undefined }],
+        })
+      )
+    ).toBeNull();
+    const { logs: _logs, ...withoutLogs } = pay.outcome;
+    expect(await read(nearRevert({ receipts_outcome: [{ ...pay, outcome: withoutLogs }] }))).toBeNull();
+  });
   it("near: only a failed root pay with nothing transferred and no live status is a revert", async () => {
     const read = (outcome: unknown, edit: (s: ReturnType<typeof nearState>) => void = () => undefined) => {
       const state = nearState();
