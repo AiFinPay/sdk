@@ -235,6 +235,14 @@ describe("validateAccountV14Quote refuses", () => {
     rejects(far, "near", /maximum lifetime/);
     expect(validateAccountV14Quote(stale, pinOf("aptos"), aptosSigner.address, true).chain).toBe("aptos");
   });
+  it("an empty quote id", async () => {
+    const quote = await tampered("aptos", (q) => {
+      q.quote_id = "";
+      q.settlement_call.order_id = "";
+      q.settlement_call.args.quote.order_id_hash = `0x${createHash("sha256").update("").digest("hex")}`;
+    });
+    rejects(quote, "aptos", /quote id missing/);
+  });
   it("a noncanonical or foreign signature", async () => {
     const unknown = baseQuote("aptos");
     const other = privateKeyToAccount(`0x${"43".repeat(32)}`);
@@ -246,7 +254,7 @@ describe("validateAccountV14Quote refuses", () => {
 
     const recovery = baseQuote("near");
     recovery.settlement_call.args.signature[64] = 29;
-    rejects(recovery, "near", /recovery id/);
+    rejects(recovery, "near", /invalid quote signature recovery id/);
 
     const highS = baseQuote("near");
     highS.settlement_call.args.signature.splice(32, 32, ...Buffer.alloc(32, 0xff));
@@ -595,8 +603,8 @@ describe("NEAR pre-flight refuses", () => {
     ["route disabled", (s) => (s.views.get_route.enabled = false), /route is disabled/],
     ["50 bps route", (s) => (s.views.get_route.treasury_bps = 50), /not 100 bps/],
     ["creator fee", (s) => (s.views.get_route.ip_creator_bps = 10), /creator fee is not zero/],
-    ["other treasury", (s) => (s.views.get_treasury = "evil.testnet"), /live treasury/],
-    ["route treasury", (s) => (s.views.get_route.route_treasury = "evil.testnet"), /live treasury/],
+    ["other treasury", (s) => (s.views.get_treasury = "evil.testnet"), /call treasury differs/],
+    ["route treasury", (s) => (s.views.get_route.route_treasury = "evil.testnet"), /call treasury differs/],
     ["nonce moved", (s) => (s.views.get_payer_nonce = 8), /live payer nonce/],
     ["payment consumed", (s) => (s.views.get_payment_status = "SETTLED"), /already consumed/],
     ["function-call key", (s) => (s.access.permission = { FunctionCall: {} }), /full access key/],
@@ -620,6 +628,22 @@ describe("NEAR pre-flight refuses", () => {
       await expect(prepareNear(state)).rejects.toThrow(pattern);
       expect(state.sent).toHaveLength(0);
     });
+  it("a view with an unexpected shape", async () => {
+    const state = nearState();
+    const rpc = nearRpc(state);
+    const call = rpc.call;
+    rpc.call = async (method, params: any) =>
+      params?.method_name === "is_paused" ? { logs: [] } : call(method, params);
+    await expect(
+      prepareAccountV14Settlement(baseQuote("near"), {
+        rpc,
+        pin: pinOf("near"),
+        payer: nearSigner.address,
+        publicKey: nearSigner.publicKey,
+        maxFeeUnits: 10n ** 23n,
+      })
+    ).rejects.toThrow(/NEAR view is_paused returned an unexpected shape/);
+  });
   it("the fee cap", async () => {
     await expect(prepareNear(nearState(), baseQuote("near"), 1n)).rejects.toThrow(/fee cap exceeded/);
   });
@@ -804,6 +828,26 @@ describe("execution", () => {
     expect(error.code).toBe("ACCOUNT_V14_PENDING");
     expect(error.prepared?.hash).toBe(prepared[0]!.hash);
     expect(state.submitted).toHaveLength(1);
+  });
+  it("aptos: another hash stays unknown even if the original then reads as settled", async () => {
+    const state = aptosState();
+    state.submitHash = `0x${"ee".repeat(32)}`;
+    const rpc = aptosRpc(state);
+    const plan = await prepareAptos(state);
+    let hash = "";
+    const error = (await executeAccountV14Settlement(plan, {
+      rpc: {
+        ...rpc,
+        get: async (path) =>
+          path.startsWith("transactions/by_hash/")
+            ? { type: "user_transaction", hash, sender: aptosSigner.address, success: true }
+            : rpc.get(path),
+      },
+      signer: aptosSigner,
+      confirmMs: 0,
+      onPrepared: async (p) => void (hash = p.hash),
+    }).catch((e) => e)) as AccountV14Error;
+    expect(error.code).toBe("ACCOUNT_V14_PENDING");
   });
   it("aptos: still pending at the deadline", async () => {
     const pendingTx = await run("aptos", (s) => (s.outcome = { type: "pending_transaction" }));
@@ -1069,6 +1113,7 @@ describe("recovery proof", () => {
     };
     const cases: [Partial<AccountV14Prepared>, RegExp][] = [
       [{ publicKey: "bad" }, /invalid NEAR recovery key/],
+      [{ publicKey: `secp256k:${bs58.encode(nearSigner.publicKey)}` }, /invalid NEAR recovery key/],
       [{ publicKey: `ed25519:${bs58.encode(Buffer.alloc(8))}` }, /invalid NEAR recovery key/],
       [{ publicKey: nearPublicKeyString(Buffer.alloc(32, 1)) }, /differs from this payment/],
       [{ hash: "wrong" }, /saved hash differs/],

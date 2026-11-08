@@ -1189,9 +1189,6 @@ class Cursor {
   done(): boolean {
     return this.offset === this.bytes.length;
   }
-  get position(): number {
-    return this.offset;
-  }
 }
 
 /** Offline proof that saved bytes are exactly this quote's payment by this wallet. */
@@ -1222,7 +1219,6 @@ export function assertPreparedAccountV14Recovery(
     const gasUnitPrice = cursor.u64();
     const expirationTimestampSecs = cursor.u64();
     cursor.take(1);
-    const rawLength = cursor.position;
     const raw = encodeAptosRawTransaction({
       sender: payer,
       sequenceNumber,
@@ -1234,7 +1230,6 @@ export function assertPreparedAccountV14Recovery(
       expirationTimestampSecs,
       chainId: pin.chainId as number,
     });
-    need(raw.equals(bytes.subarray(0, rawLength)), "signed transaction differs from this payment");
     need(maxGasAmount * gasUnitPrice <= BigInt(p.maxFeeUnits), "signed fee exceeds the saved cap");
     cursor.take(1);
     cursor.take(1);

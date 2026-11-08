@@ -187,11 +187,7 @@ function harness(family: AccountV14Family, over: { quote?: (q: any) => void; led
     }
     if (target.endsWith("/.well-known/jwks.json"))
       return new Response(JSON.stringify({ keys: [jwk] }), { status: 200 });
-    if (
-      (init?.headers as Headers | undefined)?.has?.("Authorization") ||
-      new Headers(init?.headers).get("AIFP-Receipt") ||
-      String(new Headers(init?.headers).get("authorization") ?? "")
-    ) {
+    if (new Headers(init?.headers).get("AIFP-Receipt")) {
       return new Response("paid content", { status: 200 });
     }
     return new Response(
@@ -390,6 +386,10 @@ describe("aifp1Fetch with accountV14", () => {
       await expect(aifp1Fetch(h.deps, URL_PAID, {}, h.options)).rejects.toThrow(pattern);
       expect(h.settleAccount).not.toHaveBeenCalled();
     }
+  });
+  it("a merchant's EVM address does not conflict with its account chain destination", async () => {
+    const h = harness("aptos", { quote: (q) => (q.pay_to = { ...q.pay_to, evm: `0x${"ab".repeat(20)}` }) });
+    expect((await aifp1Fetch(h.deps, URL_PAID, {}, h.options))!.status).toBe(200);
   });
   it("refuses an amount that disagrees with its stable total", async () => {
     const h = harness("aptos", { quote: (q) => (q.amount = "0.2") });
@@ -808,6 +808,150 @@ describe("spend ledger binding", () => {
 
 describe("AiFinPayAgent", () => {
   const seedHex = SEED.toString("hex");
+  it("pays end to end through the real executor against a mock node and API", async () => {
+    const ledger = new MemorySpendLedger();
+    const agent = await AiFinPayAgent.fromSeed(seedHex, {
+      telemetry: false,
+      spendLedger: ledger,
+      budgetCaps: { daily_usd: 10 },
+    });
+    const payer = agent.aptosAddress;
+    const quoteKey = privateKeyToAccount(`0x${"42".repeat(32)}`);
+    const quote = structuredClone(fixture.aptos) as any;
+    const call = quote.settlement_call;
+    const bytecode = Buffer.from("splitter-bytecode");
+    quote.payer = payer;
+    call.args.quote.payer = payer;
+    call.args.signature = await quoteKey.sign({
+      hash: `0x${aptosV14Digest(call.contract, call.args.quote).toString("hex")}`,
+    });
+    call.payload.arguments[7] = call.args.signature;
+    let hash = "";
+    const journal: Aifp1AccountPaymentRecovery[] = [];
+    const seen: { pay?: any; sim: number; sent: number; rpcHosts: Set<string> } = {
+      sim: 0,
+      sent: 0,
+      rpcHosts: new Set(),
+    };
+    const fetchImpl = (async (input: any, init?: RequestInit) => {
+      const target = String(input);
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+      if (target.startsWith("https://node.example/v1")) {
+        seen.rpcHosts.add(target);
+        const path = target.slice("https://node.example/v1".length);
+        if (path === "" || path === "/") return json({ chain_id: 2, ledger_timestamp: `${fixture.now}000` });
+        if (path.endsWith("/module/splitter")) return json({ bytecode: `0x${bytecode.toString("hex")}` });
+        if (path === "/accounts/" + payer) return json({ sequence_number: "5", authentication_key: payer });
+        if (path === "/estimate_gas_price") return json({ gas_estimate: 100 });
+        if (path === "/transactions/simulate") {
+          seen.sim++;
+          return json([{ success: true, gas_used: "3000", vm_status: "Executed successfully" }]);
+        }
+        if (path === "/transactions") {
+          seen.sent++;
+          hash = aptosTransactionHash(init!.body as Uint8Array);
+          return json({ hash }, 202);
+        }
+        if (path.startsWith("/transactions/by_hash/"))
+          return json({ type: "user_transaction", hash, sender: payer, success: true });
+        if (path === "/view") {
+          const name = JSON.parse(String(init!.body)).function.split("::")[2];
+          const views: Record<string, unknown[]> = {
+            is_paused: [false],
+            get_signer: [`0x${quoteKey.publicKey.slice(4)}`],
+            get_route_profile: [100, 0, true, "1", "0x0"],
+            get_treasury: [call.treasury_owner],
+            get_payer_nonce: ["7"],
+            is_consumed: [false],
+            quote_digest: [`0x${aptosV14Digest(call.contract, call.args.quote).toString("hex")}`],
+          };
+          return json(views[name]);
+        }
+      }
+      if (target.endsWith("/v1/quote")) return json(quote);
+      if (target.endsWith("/.well-known/jwks.json")) return json({ keys: [jwk] });
+      if (target.endsWith("/v1/pay")) {
+        seen.pay = JSON.parse(String(init!.body));
+        const { jwt, claims } = jwtFor("aptos", quote, hash, { sub: payer });
+        return json({
+          receipt: jwt,
+          receipt_id: claims.receipt_id,
+          merchant_id: quote.merchant_id,
+          tx_ref: hash,
+          scope: quote.scope,
+          resource: quote.resource,
+          unit_quota: quote.unit_quota,
+          chain: "aptos",
+          asset: "APT",
+          currency: "USD",
+          amount: quote.amount,
+          network: "testnet",
+          expires_at: new Date((claims.exp as number) * 1000).toISOString(),
+        });
+      }
+      if (new Headers(init?.headers).get("AIFP-Receipt")) return new Response("paid content");
+      return json(
+        { protocol: "AIFP-1", merchant_id: quote.merchant_id, resource: "/articles/x", unit_weight: 1, min_units: 200 },
+        402
+      );
+    }) as typeof fetch;
+    (agent.inner as unknown as { fetchImpl: typeof fetch }).fetchImpl = fetchImpl;
+    // The real bytecode is not in the repo: pin the test's module for the duration of the call.
+    const moduleHash = `0x${createHash("sha256").update(bytecode).digest("hex")}`;
+    const registry = await import("../src/generated/aptosV14Deployments.generated.js");
+    const record = registry.APTOS_V14_DEPLOYMENTS.testnet as any;
+    const saved = record.modules;
+    record.modules = [{ name: "splitter", bytecodeHash: moduleHash }];
+    call.runtime_code_hash = moduleHash;
+    try {
+      const response = await agent.fetchPaid(
+        URL_PAID,
+        {},
+        {
+          accountV14: {
+            family: "aptos",
+            environment: "dev",
+            network: "testnet",
+            rpcUrl: "https://node.example/v1",
+            maxFeeUnits: 1_000_000n,
+            onPrepared: async (payment) => void journal.push(payment),
+          },
+          nativeUsdPrice: { usd: 5, observedAtMs: fixture.now },
+        }
+      );
+      expect(await response!.text()).toBe("paid content");
+    } finally {
+      record.modules = saved;
+    }
+    expect(seen.sent).toBe(1);
+    expect(seen.sim).toBe(2);
+    expect(journal).toHaveLength(1);
+    expect(journal[0]!.txRef).toBe(hash);
+    expect(seen.pay.payment_authorization.payer).toBe(payer);
+    expect(seen.pay.agent_id).toBe(payer);
+    const publicKey = Buffer.from(seen.pay.payment_authorization.public_key.slice(2), "hex");
+    expect(aptosAddressFromPublicKey(publicKey)).toBe(payer);
+    const { paymentAuthorizationMessage, idempotencyKeyFor } = await import("../src/aifp1.js");
+    const message = paymentAuthorizationMessage({
+      quote,
+      apiBase: API,
+      chain: "aptos",
+      txRef: hash,
+      asset: "APT",
+      idempotencyKey: idempotencyKeyFor({ quoteId: quote.quote_id, chain: "aptos", asset: "APT", txRef: hash }),
+      payer,
+      expiresAt: seen.pay.payment_authorization.expires_at,
+    });
+    expect(
+      nacl.sign.detached.verify(
+        Buffer.from(message),
+        Buffer.from(seen.pay.payment_authorization.signature.slice(2), "hex"),
+        publicKey
+      )
+    ).toBe(true);
+    // Gross plus the fee bound, committed once.
+    expect(await ledger.total(86_400_000)).toBeCloseTo(0.1 + 0.0225, 6);
+  });
   it("derives the same accounts as @aifinpay/wallet, with and without an index", async () => {
     for (const derivationIndex of [undefined, 3]) {
       const agent = await AiFinPayAgent.fromSeed(seedHex, {
