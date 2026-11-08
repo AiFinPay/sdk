@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — native APT and NEAR payments
+## 2.15.0 — native APT and NEAR payments
 
 - `fetchPaid` pays native APT and NEAR through an explicit `accountV14`
   authorization: family, environment, network, RPC URL, fee budget and a durable
@@ -9,7 +9,7 @@
   and live chain state before signing. A mismatch refuses.
 - The signed transaction is journaled before the only broadcast.
   `recoverPaidPayment` retries `/v1/pay` with the same transaction and sends nothing.
-  A revert raises `Aifp1AccountRevertedError` and debits only the fee.
+  A revert proven on chain raises `Aifp1AccountRevertedError` and debits only the fee. Payments need a durable spend ledger.
 - New `aptosAddress` and `nearAddress` on `AiFinPayAgent`. Python and MCP do not
   have this yet.
 
