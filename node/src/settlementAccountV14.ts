@@ -155,6 +155,11 @@ export interface AccountV14Prepared {
   /** Aptos 0x hex; NEAR ed25519:base58. */
   publicKey: string;
   maxFeeUnits: string;
+  orderId: string;
+  /** The contract's payer nonce the quote signs. */
+  settlementNonce: string;
+  /** Aptos sequence number or NEAR access key nonce of the signed transaction. */
+  transactionNonce: string;
 }
 
 export class AccountV14Error extends Error {
@@ -728,7 +733,12 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function aptosView(rpc: AccountV14Rpc, pin: AccountV14Pin, name: string, args: unknown[]): Promise<unknown[]> {
+async function aptosView(
+  rpc: AccountV14Rpc,
+  pin: Pick<AccountV14Pin, "contract">,
+  name: string,
+  args: unknown[]
+): Promise<unknown[]> {
   const result = await rpc.post("view", {
     function: `${pin.contract}::splitter::${name}`,
     type_arguments: [],
@@ -737,7 +747,12 @@ async function aptosView(rpc: AccountV14Rpc, pin: AccountV14Pin, name: string, a
   need(Array.isArray(result), `Aptos view ${name} returned an unexpected shape`);
   return result;
 }
-async function nearView(rpc: AccountV14Rpc, pin: AccountV14Pin, name: string, args: unknown): Promise<unknown> {
+async function nearView(
+  rpc: AccountV14Rpc,
+  pin: Pick<AccountV14Pin, "contract">,
+  name: string,
+  args: unknown
+): Promise<unknown> {
   const result = (await rpc.call("query", {
     request_type: "call_function",
     finality: "final",
@@ -760,6 +775,8 @@ export interface AptosV14Plan {
   payer: string;
   publicKey: Uint8Array;
   raw: Buffer;
+  settlementNonce: string;
+  transactionNonce: string;
   /** Consensus cap: max_gas_amount * gas_unit_price. */
   feeUnits: bigint;
   maxFeeUnits: bigint;
@@ -772,6 +789,8 @@ export interface NearV14Plan {
   payer: string;
   publicKey: Uint8Array;
   transaction: Buffer;
+  settlementNonce: string;
+  transactionNonce: string;
   /** Pre-flight bound at the current gas price; unused gas is refunded. */
   feeUnits: bigint;
   maxFeeUnits: bigint;
@@ -894,6 +913,8 @@ async function prepareAptos(
     payer,
     publicKey,
     raw,
+    settlementNonce: q.nonce,
+    transactionNonce: sequenceNumber.toString(),
     feeUnits,
     maxFeeUnits,
     createdAtMs: Date.now(),
@@ -982,6 +1003,8 @@ async function prepareNear(
     quoteId: quote.quote_id,
     payer,
     publicKey,
+    settlementNonce: String(q.nonce),
+    transactionNonce: txNonce.toString(),
     transaction: encodeNearTransaction({
       signerId: payer,
       publicKey,
@@ -1024,16 +1047,17 @@ function feeFromNear(result: {
   return total;
 }
 
-async function readAptosOutcome(
-  rpc: AccountV14Rpc,
-  p: AccountV14Prepared,
-  payer: string
-): Promise<{ state: "pending" } | { state: "success" } | { state: "reverted"; fee: bigint }> {
+/** `held`: failed on chain, but a fee-only debit is not proven. */
+type AccountOutcome = { state: "pending" | "success" | "held" } | { state: "reverted"; fee: bigint };
+
+async function readAptosOutcome(rpc: AccountV14Rpc, p: AccountV14Prepared, payer: string): Promise<AccountOutcome> {
   let tx: {
     type?: unknown;
     hash?: unknown;
     success?: unknown;
     sender?: unknown;
+    sequence_number?: unknown;
+    payload?: { function?: unknown };
     gas_used?: unknown;
     gas_unit_price?: unknown;
   };
@@ -1046,23 +1070,56 @@ async function readAptosOutcome(
   if (tx?.type === "pending_transaction") return { state: "pending" };
   need(tx?.type === "user_transaction", "Aptos hash resolves to an unexpected transaction type");
   need(tx.hash === p.hash, "Aptos RPC returned a different transaction");
-  need(tx.sender === payer, "Aptos transaction has a different sender");
+  // The REST API trims leading zero nibbles from addresses; hashes and vector<u8> stay full length.
+  need(
+    typeof tx.sender === "string" &&
+      /^0x[0-9a-f]{1,64}$/.test(tx.sender) &&
+      normalizedMerchant("aptos", tx.sender) === payer,
+    "Aptos transaction has a different sender"
+  );
   if (tx.success === true) return { state: "success" };
   need(tx.success === false, "Aptos transaction has no outcome");
+  // Same node, so this catches inconsistency, not a node that lies coherently.
+  if (tx.sequence_number !== p.transactionNonce) return { state: "held" };
+  if (tx.payload?.function !== `${p.contract}::splitter::settle_native`) return { state: "held" };
+  const account = (await rpc.get(`accounts/${payer}`)) as { sequence_number?: unknown };
+  if (liveUint(account?.sequence_number) <= BigInt(p.transactionNonce)) return { state: "held" };
+  const [consumed] = await aptosView(rpc, p, "is_consumed", [payer, p.settlementNonce]);
+  if (consumed !== false) return { state: "held" };
   return { state: "reverted", fee: feeFromAptos(tx) };
 }
 
-async function readNearOutcome(
+interface NearReceiptOutcome {
+  id?: unknown;
+  outcome?: { tokens_burnt?: unknown; executor_id?: unknown; logs?: unknown; status?: { Failure?: unknown } };
+}
+
+/** pay is not atomic: only a failed root call, with nothing else run, leaves the funds with the payer. */
+async function nearRevertIsFeeOnly(
   rpc: AccountV14Rpc,
   p: AccountV14Prepared,
-  payer: string
-): Promise<{ state: "pending" } | { state: "success" } | { state: "reverted"; fee: bigint }> {
+  payer: string,
+  rootId: unknown,
+  receipts: NearReceiptOutcome[] | undefined
+): Promise<boolean> {
+  if (typeof rootId !== "string" || !Array.isArray(receipts)) return false;
+  const root = receipts.find((r) => r?.id === rootId);
+  if (root?.outcome?.status?.Failure === undefined || root.outcome.executor_id !== p.contract) return false;
+  if (!Array.isArray(root.outcome.logs) || root.outcome.logs.some((log) => String(log).startsWith("AIFP_PAYMENT_")))
+    return false;
+  // Whatever else ran must be the protocol's refund to the payer.
+  if (receipts.some((r) => r !== root && r?.outcome?.executor_id !== payer)) return false;
+  if ((await nearView(rpc, p, "get_payment_status", { payment_id: p.orderId })) !== null) return false;
+  return String(await nearView(rpc, p, "get_payer_nonce", { payer })) === p.settlementNonce;
+}
+
+async function readNearOutcome(rpc: AccountV14Rpc, p: AccountV14Prepared, payer: string): Promise<AccountOutcome> {
   let result: {
     final_execution_status?: unknown;
     status?: { Failure?: unknown };
     transaction?: { hash?: unknown; signer_id?: unknown; receiver_id?: unknown };
-    transaction_outcome?: { outcome?: { tokens_burnt?: unknown } };
-    receipts_outcome?: { outcome?: { tokens_burnt?: unknown } }[];
+    transaction_outcome?: { outcome?: { tokens_burnt?: unknown; status?: { SuccessReceiptId?: unknown } } };
+    receipts_outcome?: NearReceiptOutcome[];
   };
   try {
     result = (await rpc.call("EXPERIMENTAL_tx_status", {
@@ -1079,8 +1136,11 @@ async function readNearOutcome(
   need(result.transaction?.hash === p.hash, "NEAR RPC returned a different transaction");
   need(result.transaction?.signer_id === payer, "NEAR transaction has a different signer");
   need(result.transaction?.receiver_id === p.contract, "NEAR transaction has a different receiver");
-  if (result.status?.Failure !== undefined) return { state: "reverted", fee: feeFromNear(result) };
-  return { state: "success" };
+  if (result.status?.Failure === undefined) return { state: "success" };
+  const rootId = result.transaction_outcome?.outcome?.status?.SuccessReceiptId;
+  return (await nearRevertIsFeeOnly(rpc, p, payer, rootId, result.receipts_outcome))
+    ? { state: "reverted", fee: feeFromNear(result) }
+    : { state: "held" };
 }
 
 function readOutcome(rpc: AccountV14Rpc, p: AccountV14Prepared, payer: string) {
@@ -1121,6 +1181,9 @@ export async function executeAccountV14Settlement(
         ? `0x${Buffer.from(plan.publicKey).toString("hex")}`
         : nearPublicKeyString(plan.publicKey),
     maxFeeUnits: plan.maxFeeUnits.toString(),
+    orderId: plan.quoteId,
+    settlementNonce: plan.settlementNonce,
+    transactionNonce: plan.transactionNonce,
   };
   await ctx.onPrepared(prepared);
   const pending = () =>
@@ -1136,13 +1199,14 @@ export async function executeAccountV14Settlement(
     }
     const deadline = Date.now() + (ctx.confirmMs ?? 60_000);
     for (;;) {
-      let outcome: Awaited<ReturnType<typeof readOutcome>> = { state: "pending" };
+      let outcome: AccountOutcome = { state: "pending" };
       try {
         outcome = await readOutcome(ctx.rpc, prepared, plan.payer);
       } catch (error) {
         if (error instanceof AccountV14Error) throw error;
       }
       if (outcome.state === "success") return prepared;
+      if (outcome.state === "held") throw pending();
       if (outcome.state === "reverted") {
         need(outcome.fee <= plan.maxFeeUnits, "reverted transaction burned more than the fee cap");
         throw new AccountV14Error(
@@ -1203,6 +1267,8 @@ export function assertPreparedAccountV14Recovery(
   need(p.network === pin.network, "recovery network mismatch");
   need(p.contract === pin.contract, "recovery contract mismatch");
   need(/^[1-9][0-9]*$/.test(p.maxFeeUnits), "recovery has no fee cap");
+  need(p.orderId === quote.quote_id, "recovery order differs from the quote");
+  need(p.settlementNonce === String(call.args.quote.nonce), "recovery nonce differs from the quote");
   need(typeof p.signedTransactionBase64 === "string", "recovery has no signed bytes");
   const bytes = Buffer.from(p.signedTransactionBase64, "base64");
   need(bytes.length > 0 && bytes.toString("base64") === p.signedTransactionBase64, "invalid signed bytes");
@@ -1213,6 +1279,7 @@ export function assertPreparedAccountV14Recovery(
     const cursor = new Cursor(bytes);
     cursor.take(32);
     const sequenceNumber = cursor.u64();
+    need(sequenceNumber.toString() === p.transactionNonce, "recovery sequence number differs from the signed bytes");
     const payload = aptosPayload(pin.contract, call.args.quote, call.args.signature);
     need(cursor.take(payload.length).equals(payload), "signed payload differs from the quote");
     const maxGasAmount = cursor.u64();
@@ -1253,6 +1320,7 @@ export function assertPreparedAccountV14Recovery(
   const receiverOffset = 4 + signerLength + 33 + 8;
   need(bytes.length > receiverOffset + 4, "truncated signed transaction");
   const nonce = bytes.readBigUInt64LE(4 + signerLength + 33);
+  need(nonce.toString() === p.transactionNonce, "recovery nonce differs from the signed bytes");
   const receiverLength = bytes.readUInt32LE(receiverOffset);
   const blockOffset = receiverOffset + 4 + receiverLength;
   need(bytes.length >= blockOffset + 32, "truncated signed transaction");

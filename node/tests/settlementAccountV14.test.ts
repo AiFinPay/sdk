@@ -834,6 +834,7 @@ describe("execution", () => {
     state.submitHash = `0x${"ee".repeat(32)}`;
     const rpc = aptosRpc(state);
     const plan = await prepareAptos(state);
+    state.account.sequence_number = "6";
     let hash = "";
     const error = (await executeAccountV14Settlement(plan, {
       rpc: {
@@ -872,6 +873,8 @@ describe("execution", () => {
       type: "user_transaction",
       hash,
       sender: aptosSigner.address,
+      sequence_number: "5",
+      payload: { function: `${pinOf("aptos").contract}::splitter::settle_native` },
       success: false,
       vm_status: "Move abort",
       gas_used: "3000",
@@ -887,6 +890,9 @@ describe("execution", () => {
     signedTransactionBase64: "",
     publicKey: "",
     maxFeeUnits: "1000000",
+    orderId: "qt_fixture_aptos",
+    settlementNonce: "7",
+    transactionNonce: "5",
   });
   const preparedNear = (hash = "hash"): AccountV14Prepared => ({
     ...preparedAptos(hash),
@@ -898,8 +904,19 @@ describe("execution", () => {
       final_execution_status: "FINAL",
       status: { Failure: { ActionError: {} } },
       transaction: { hash: "hash", signer_id: nearSigner.address, receiver_id: pinOf("near").contract },
-      transaction_outcome: { outcome: { tokens_burnt: "5" } },
-      receipts_outcome: [{ outcome: { tokens_burnt: "7" } }, { outcome: { tokens_burnt: "8" } }],
+      transaction_outcome: { outcome: { tokens_burnt: "5", status: { SuccessReceiptId: "pay" } } },
+      receipts_outcome: [
+        {
+          id: "pay",
+          outcome: {
+            tokens_burnt: "7",
+            executor_id: pinOf("near").contract,
+            logs: [],
+            status: { Failure: {} },
+          },
+        },
+        { id: "refund", outcome: { tokens_burnt: "8", executor_id: nearSigner.address, logs: [], status: {} } },
+      ],
       ...fields,
     };
   }
@@ -907,6 +924,7 @@ describe("execution", () => {
     const hash = `0x${"ab".repeat(32)}`;
     const aptos = aptosState();
     aptos.outcome = aptosOutcome(hash);
+    aptos.account.sequence_number = "6";
     expect(await readAccountV14Revert(aptosRpc(aptos), preparedAptos(), aptosSigner.address, 1_000_000n)).toBe(300000n);
     const near = nearState();
     near.outcome = nearOutcome();
@@ -956,6 +974,7 @@ describe("execution", () => {
     for (const [fields, pattern] of cases) {
       const aptos = aptosState();
       aptos.outcome = aptosOutcome(hash, fields);
+      aptos.account.sequence_number = "6";
       await expect(
         readAccountV14Revert(aptosRpc(aptos), preparedAptos(), aptosSigner.address, 1_000_000n)
       ).rejects.toThrow(pattern);
@@ -967,7 +986,6 @@ describe("execution", () => {
       ],
       [{ transaction: { hash: "hash", signer_id: "x", receiver_id: pinOf("near").contract } }, /different signer/],
       [{ transaction: { hash: "hash", signer_id: nearSigner.address, receiver_id: "x" } }, /different receiver/],
-      [{ receipts_outcome: undefined }, /has no receipts/],
     ];
     for (const [fields, pattern] of nearCases) {
       const near = nearState();
@@ -986,6 +1004,7 @@ describe("execution", () => {
     const state = aptosState();
     const rpc = aptosRpc(state);
     const plan = await prepareAptos(state);
+    state.account.sequence_number = "6";
     let hash = "";
     const error = (await executeAccountV14Settlement(plan, {
       rpc: {
@@ -1005,6 +1024,7 @@ describe("execution", () => {
     const state = aptosState();
     const rpc = aptosRpc(state);
     const plan = await prepareAptos(state);
+    state.account.sequence_number = "6";
     let hash = "";
     const error = (await executeAccountV14Settlement(plan, {
       rpc: {
@@ -1061,6 +1081,9 @@ describe("recovery proof", () => {
         signedTransactionBase64: signed.toString("base64"),
         publicKey: `0x${Buffer.from(aptosSigner.publicKey).toString("hex")}`,
         maxFeeUnits: plan.maxFeeUnits.toString(),
+        orderId: plan.quoteId,
+        settlementNonce: plan.settlementNonce,
+        transactionNonce: plan.transactionNonce,
       } as AccountV14Prepared,
     };
   }
@@ -1080,6 +1103,9 @@ describe("recovery proof", () => {
         signedTransactionBase64: signed.toString("base64"),
         publicKey: nearPublicKeyString(nearSigner.publicKey),
         maxFeeUnits: plan.maxFeeUnits.toString(),
+        orderId: plan.quoteId,
+        settlementNonce: plan.settlementNonce,
+        transactionNonce: plan.transactionNonce,
       } as AccountV14Prepared,
     };
   }
@@ -1109,6 +1135,9 @@ describe("recovery proof", () => {
       [{ network: "mainnet" }, /network mismatch/],
       [{ contract: "0xother" }, /contract mismatch/],
       [{ maxFeeUnits: "0" }, /no fee cap/],
+      [{ orderId: "qt_other" }, /recovery order differs/],
+      [{ settlementNonce: "8" }, /recovery nonce differs from the quote/],
+      [{ transactionNonce: "6" }, /sequence number differs/],
       [{ maxFeeUnits: "1" }, /exceeds the saved cap/],
       [{ signedTransactionBase64: undefined as never }, /no signed bytes/],
       [{ signedTransactionBase64: "" }, /invalid signed bytes/],
@@ -1134,6 +1163,7 @@ describe("recovery proof", () => {
     };
     const cases: [Partial<AccountV14Prepared>, RegExp][] = [
       [{ publicKey: "bad" }, /invalid NEAR recovery key/],
+      [{ transactionNonce: "1" }, /nonce differs from the signed bytes/],
       [{ publicKey: `secp256k:${bs58.encode(nearSigner.publicKey)}` }, /invalid NEAR recovery key/],
       [{ publicKey: `ed25519:${bs58.encode(Buffer.alloc(8))}` }, /invalid NEAR recovery key/],
       [{ publicKey: nearPublicKeyString(Buffer.alloc(32, 1)) }, /differs from this payment/],
@@ -1279,4 +1309,295 @@ describe("selection and helpers", () => {
     expect(nearSigner.address).toBe(Buffer.from(nearSigner.publicKey).toString("hex"));
     expect(aptosSigner.address).toBe(aptosAddressFromPublicKey(aptosSigner.publicKey));
   });
+});
+
+describe("outcome readers against real node behaviour", () => {
+  const seedStartingWithZero = () => {
+    for (let i = 0; ; i++) {
+      const seed = createHash("sha256").update(String(i)).digest();
+      const signer = accountV14SignerFromSeed("aptos", seed);
+      if (signer.address.startsWith("0x0")) return signer;
+    }
+  };
+  const aptosRevertState = (overrides: Record<string, unknown> = {}, sender = aptosSigner.address) => {
+    const state = aptosState();
+    state.account.sequence_number = "6";
+    state.outcome = {
+      type: "user_transaction",
+      hash: `0x${"ab".repeat(32)}`,
+      sender,
+      sequence_number: "5",
+      payload: { function: `${pinOf("aptos").contract}::splitter::settle_native` },
+      success: false,
+      vm_status: "Move abort",
+      gas_used: "3000",
+      gas_unit_price: "100",
+      ...overrides,
+    };
+    return state;
+  };
+  const aptosPrepared = (): AccountV14Prepared => ({
+    family: "aptos",
+    network: "testnet",
+    contract: pinOf("aptos").contract,
+    hash: `0x${"ab".repeat(32)}`,
+    signedTransactionBase64: "",
+    publicKey: "",
+    maxFeeUnits: "1000000",
+    orderId: "qt_fixture_aptos",
+    settlementNonce: "7",
+    transactionNonce: "5",
+  });
+  const nearPrepared = (): AccountV14Prepared => ({
+    family: "near",
+    network: "testnet",
+    contract: pinOf("near").contract,
+    hash: "hash",
+    signedTransactionBase64: "",
+    publicKey: "",
+    maxFeeUnits: "1000000",
+    orderId: "qt_fixture_near",
+    settlementNonce: "7",
+    transactionNonce: "9",
+  });
+  const REFUND = (id: string) => ({
+    id,
+    outcome: {
+      executor_id: nearSigner.address,
+      tokens_burnt: "1",
+      logs: [],
+      receipt_ids: [],
+      status: { SuccessValue: "" },
+    },
+  });
+  const nearRevert = (fields: Record<string, unknown> = {}) => ({
+    final_execution_status: "FINAL",
+    status: { Failure: { ActionError: {} } },
+    transaction: { hash: "hash", signer_id: nearSigner.address, receiver_id: pinOf("near").contract },
+    transaction_outcome: { outcome: { tokens_burnt: "5", status: { SuccessReceiptId: "pay" } } },
+    receipts_outcome: [
+      {
+        id: "pay",
+        outcome: {
+          executor_id: pinOf("near").contract,
+          tokens_burnt: "7",
+          logs: [],
+          receipt_ids: ["refund"],
+          status: { Failure: { ActionError: {} } },
+        },
+      },
+      REFUND("refund"),
+    ],
+    ...fields,
+  });
+
+  it("aptos: a sender with trimmed leading zeros is this payer", async () => {
+    vi.useRealTimers();
+    const signer = seedStartingWithZero();
+    const trimmed = `0x${signer.address.slice(2).replace(/^0+/, "")}`;
+    expect(trimmed.length).toBeLessThan(66);
+    let hash = "";
+    const rpc: AccountV14Rpc = {
+      get: async (path) =>
+        path.startsWith("accounts/")
+          ? { sequence_number: "6", authentication_key: signer.address }
+          : { type: "user_transaction", hash, sender: trimmed, success: true, gas_used: "10", gas_unit_price: "100" },
+      post: async (path) => (path === "transactions" ? { hash } : [false]),
+      call: async () => {
+        throw new Error("not NEAR");
+      },
+    };
+    const plan = {
+      family: "aptos",
+      pin: pinOf("aptos"),
+      quoteId: "q",
+      payer: signer.address,
+      publicKey: signer.publicKey,
+      raw: Buffer.alloc(8),
+      feeUnits: 1n,
+      maxFeeUnits: 1n,
+      createdAtMs: Date.now(),
+      settlementNonce: "7",
+      transactionNonce: "5",
+    } as AccountV14Plan;
+    const prepared = await executeAccountV14Settlement(plan, {
+      rpc,
+      signer,
+      confirmMs: 0,
+      onPrepared: async (p) => void (hash = p.hash),
+    });
+    expect(prepared.hash).toBe(hash);
+    expect(await readAccountV14Revert(rpc, prepared, signer.address, 1n)).toBeNull();
+  });
+  it("aptos: a sender that is really another account stays refused", async () => {
+    const state = aptosRevertState({}, `0x${aptosSigner.address.slice(3)}`);
+    await expect(
+      readAccountV14Revert(aptosRpc(state), aptosPrepared(), aptosSigner.address, 1_000_000n)
+    ).rejects.toThrow(/different sender/);
+    const garbage = aptosRevertState({}, "not hex");
+    await expect(
+      readAccountV14Revert(aptosRpc(garbage), aptosPrepared(), aptosSigner.address, 1_000_000n)
+    ).rejects.toThrow(/different sender/);
+  });
+  it("aptos: a revert is believed only if the chain state agrees", async () => {
+    const read = (state: ReturnType<typeof aptosState>) =>
+      readAccountV14Revert(aptosRpc(state), aptosPrepared(), aptosSigner.address, 1_000_000n);
+    expect(await read(aptosRevertState())).toBe(300000n);
+    expect(await read(aptosRevertState({ sequence_number: "4" }))).toBeNull();
+    expect(await read(aptosRevertState({ payload: { function: "0x1::aptos_account::transfer" } }))).toBeNull();
+    const notAdvanced = aptosRevertState();
+    notAdvanced.account.sequence_number = "5";
+    expect(await read(notAdvanced)).toBeNull();
+    const consumed = aptosRevertState();
+    consumed.views.is_consumed = [true];
+    expect(await read(consumed)).toBeNull();
+  });
+  it("near: only a failed root pay with nothing transferred and no live status is a revert", async () => {
+    const read = (outcome: unknown, edit: (s: ReturnType<typeof nearState>) => void = () => undefined) => {
+      const state = nearState();
+      state.outcome = outcome;
+      edit(state);
+      return readAccountV14Revert(nearRpc(state), nearPrepared(), nearSigner.address, 100n);
+    };
+    expect(await read(nearRevert())).toBe(13n);
+    const base = nearRevert();
+    const [pay, refund] = base.receipts_outcome as any[];
+    // Transfers ran; the callback failed afterwards.
+    expect(
+      await read(
+        nearRevert({
+          receipts_outcome: [
+            {
+              ...pay,
+              outcome: { ...pay.outcome, status: { SuccessReceiptId: "cb" }, receipt_ids: ["t1", "t2", "cb"] },
+            },
+            {
+              id: "t1",
+              outcome: {
+                executor_id: "merchant.testnet",
+                tokens_burnt: "1",
+                logs: [],
+                receipt_ids: [],
+                status: { SuccessValue: "" },
+              },
+            },
+            {
+              id: "t2",
+              outcome: {
+                executor_id: "treasury.testnet",
+                tokens_burnt: "1",
+                logs: [],
+                receipt_ids: [],
+                status: { SuccessValue: "" },
+              },
+            },
+            {
+              id: "cb",
+              outcome: {
+                executor_id: pinOf("near").contract,
+                tokens_burnt: "1",
+                logs: [],
+                receipt_ids: [],
+                status: { Failure: {} },
+              },
+            },
+          ],
+        })
+      )
+    ).toBeNull();
+    // A transfer receipt beside a failed root is still movement.
+    expect(
+      await read(
+        nearRevert({
+          receipts_outcome: [
+            pay,
+            {
+              id: "t1",
+              outcome: {
+                executor_id: "merchant.testnet",
+                tokens_burnt: "1",
+                logs: [],
+                receipt_ids: [],
+                status: { SuccessValue: "" },
+              },
+            },
+          ],
+        })
+      )
+    ).toBeNull();
+    // A second contract receipt means the contract went past the root.
+    expect(
+      await read(
+        nearRevert({
+          receipts_outcome: [
+            pay,
+            {
+              id: "cb",
+              outcome: {
+                executor_id: pinOf("near").contract,
+                tokens_burnt: "1",
+                logs: [],
+                receipt_ids: [],
+                status: { Failure: {} },
+              },
+            },
+          ],
+        })
+      )
+    ).toBeNull();
+    expect(
+      await read(
+        nearRevert({
+          receipts_outcome: [
+            { ...pay, outcome: { ...pay.outcome, logs: ["AIFP_PAYMENT_PENDING payment_id=x"] } },
+            refund,
+          ],
+        })
+      )
+    ).toBeNull();
+    expect(
+      await read(
+        nearRevert({
+          receipts_outcome: [{ ...pay, outcome: { ...pay.outcome, executor_id: "other.testnet" } }, refund],
+        })
+      )
+    ).toBeNull();
+    expect(await read(nearRevert({ receipts_outcome: [{ ...pay, id: "elsewhere" }, refund] }))).toBeNull();
+    expect(
+      await read(
+        nearRevert({
+          receipts_outcome: [{ ...pay, outcome: { ...pay.outcome, status: { SuccessValue: "" } } }, refund],
+        })
+      )
+    ).toBeNull();
+    expect(
+      await read(nearRevert({ transaction_outcome: { outcome: { tokens_burnt: "5", status: { SuccessValue: "" } } } }))
+    ).toBeNull();
+    expect(await read(nearRevert(), (s) => (s.views.get_payment_status = "FAILED"))).toBeNull();
+    expect(await read(nearRevert(), (s) => (s.views.get_payer_nonce = 8))).toBeNull();
+  });
+  it("near: a held failure surfaces as unknown at once, not as a revert", async () => {
+    const state = nearState();
+    const rpc = nearRpc(state);
+    const plan = await prepareNear(state);
+    vi.useRealTimers();
+    plan.createdAtMs = Date.now();
+    let hash = "";
+    const error = (await executeAccountV14Settlement(plan, {
+      rpc: {
+        ...rpc,
+        call: async (method, params) =>
+          method === "EXPERIMENTAL_tx_status"
+            ? nearRevert({
+                transaction: { hash, signer_id: nearSigner.address, receiver_id: pinOf("near").contract },
+                receipts_outcome: [],
+              })
+            : rpc.call(method, params),
+      },
+      signer: nearSigner,
+      confirmMs: 5_000,
+      onPrepared: async (p) => void (hash = p.hash),
+    }).catch((e) => e)) as AccountV14Error;
+    expect(error.code).toBe("ACCOUNT_V14_PENDING");
+  }, 2_000);
 });

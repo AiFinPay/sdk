@@ -720,6 +720,7 @@ export class AiFinPayAgent {
   private _polygonWallet?: WalletClient;
   private readonly injectedEvmWalletClient?: WalletClient;
   private readonly derivationIndex?: number;
+  private readonly rootSeed: Uint8Array;
   // Multi-chain client cache for cross-chain orchestration (bridge flows).
   // Keyed by EVM chain name (see crossChain.ts EVM_CHAINS).
   private _evmClients: Map<AnyEvmChainName, { publicClient: PublicClient; walletClient: WalletClient }> = new Map();
@@ -729,8 +730,9 @@ export class AiFinPayAgent {
     inner: Agent,
     evmAccount: AgentWallet,
     opts: AiFinPayAgentOptions = {},
-    private readonly rootSeed: Uint8Array = inner.secretKey.subarray(0, 32)
+    private readonly recoverySeed?: Uint8Array
   ) {
+    this.rootSeed = recoverySeed ?? inner.secretKey.subarray(0, 32);
     this.inner = inner;
     this.evmAccount = evmAccount;
     this.injectedEvmWalletClient = opts.evmWalletClient;
@@ -999,16 +1001,23 @@ export class AiFinPayAgent {
   get evmAddress(): string {
     return this.evmAccount.address;
   }
-  /** Aptos account for this agent's seed; same derivation as @aifinpay/wallet. */
+  /** Aptos account for this agent's recovery seed, as in @aifinpay/wallet; refuses without one. */
   get aptosAddress(): string {
     return this.accountSigner("aptos").address;
   }
-  /** NEAR implicit account for this agent's seed; same derivation as @aifinpay/wallet. */
+  /** NEAR implicit account for this agent's recovery seed, as in @aifinpay/wallet; refuses without one. */
   get nearAddress(): string {
     return this.accountSigner("near").address;
   }
   private accountSigner(family: AccountV14Family): AccountV14Signer {
-    return accountV14SignerFromSeed(family, domainSeed(`aifinpay:${family}:v1\0`, this.rootSeed, this.derivationIndex));
+    if (!this.recoverySeed)
+      throw new AiFinPayError(
+        `${family} needs the agent's recovery seed: a Solana secret alone derives a different account than @aifinpay/wallet. Use fromSeed.`
+      );
+    return accountV14SignerFromSeed(
+      family,
+      domainSeed(`aifinpay:${family}:v1\0`, this.recoverySeed, this.derivationIndex)
+    );
   }
 
   /**
@@ -1836,13 +1845,19 @@ export class AiFinPayAgent {
       typeof opts.reportingToken === "string" && /^[A-Za-z0-9_-]{43}$/.test(opts.reportingToken)
         ? opts.reportingToken
         : undefined;
-    // Quote admission is durable even when the owner did not configure a daily cap.
+    const acct = opts.accountV14;
+    const acctSigner = acct ? this.accountSigner(acct.family) : undefined;
+    // Quote admission and the account chain guard are durable even when the owner did not configure a daily cap.
     const ledger =
-      opts.solanaV14 && !this.ledgerOverride ? (this._ledger = FileSpendLedger.forAgent(this.evmAddress)) : this.ledger;
+      (opts.solanaV14 || acct) && !this.ledgerOverride
+        ? (this._ledger = FileSpendLedger.forAgent(this.evmAddress))
+        : this.ledger;
+    if (acct && (ledger instanceof MemorySpendLedger || !ledger.prepare || !ledger.assertRecovery || !ledger.complete))
+      throw new Aifp1QuoteError("Account chain payments require a durable spend ledger with journal hooks");
     if (opts.solanaV14 && (!ledger.beginQuoteAdmission || !ledger.adoptQuoteAdmission || !ledger.closeQuoteAdmission))
       throw new Aifp1QuoteError("Solana custom ledger requires durable quote-admission hooks before POST");
     if (
-      (opts.v14 || opts.solanaV14 || opts.accountV14) &&
+      (opts.v14 || opts.solanaV14) &&
       this.budgetCaps.daily_usd !== undefined &&
       (!this.ledger.prepare || !this.ledger.assertRecovery || !this.ledger.complete)
     ) {
@@ -1850,8 +1865,6 @@ export class AiFinPayAgent {
         "Custom capped v1.4 ledger requires prepare/assertRecovery/complete hooks before payment"
       );
     }
-    const acct = opts.accountV14;
-    const acctSigner = acct ? this.accountSigner(acct.family) : undefined;
     const deps: Aifp1Deps = {
       walletIdentity: this.evmAddress.toLowerCase(),
       quoteOwnerContext: JSON.stringify([
@@ -1919,7 +1932,7 @@ export class AiFinPayAgent {
       settle: (p) => this.settleAifp1NativeV13(p, opts),
       checkPerCall: (usd) => this.checkPerCall(usd),
       reserveDaily: async (usd, binding, admissionId) => {
-        if (!admissionId) return this.reserveDaily(usd, binding);
+        if (!admissionId && !acct) return this.reserveDaily(usd, binding);
         const cap = this.budgetCaps.daily_usd ?? Number.MAX_VALUE;
         const id = await ledger.reserve(usd, cap, 24 * 3600 * 1000, binding, admissionId);
         if (id) return id;
@@ -1967,7 +1980,8 @@ export class AiFinPayAgent {
   /** Recover receipt issuance for an existing payment; never sends a transaction. */
   async recoverPaidPayment(recovery: Aifp1PaymentRecovery, opts: Aifp1RecoveryOptions = {}): Promise<Aifp1PayResult> {
     // The purchase was reserved in the durable ledger fetchPaid opens for Solana; a new process must read that one.
-    if (recovery.family === "solana" && !this.ledgerOverride) this._ledger = FileSpendLedger.forAgent(this.evmAddress);
+    if ((recovery.family === "solana" || isAifp1AccountRecovery(recovery)) && !this.ledgerOverride)
+      this._ledger = FileSpendLedger.forAgent(this.evmAddress);
     const acctSigner = isAifp1AccountRecovery(recovery) ? this.accountSigner(recovery.family) : undefined;
     if (
       recovery.family !== "solana" &&

@@ -454,11 +454,9 @@ async function recoverAccountPayment(
     signer.payerAddress,
     recovery.budgetBindingVersion === 2 ? signer.walletIdentity : undefined
   );
-  if (recovery.budgetReservationId !== undefined) {
-    if (!signer.assertReservation || !signer.completeReservation)
-      throw new Aifp1QuoteError("Original bound ledger hooks required");
-    await signer.assertReservation(recovery.budgetReservationId, recovery.txRef, binding);
-  }
+  if (recovery.budgetReservationId === undefined || !signer.assertReservation || !signer.completeReservation)
+    throw new Aifp1QuoteError("Original bound ledger hooks required");
+  await signer.assertReservation(recovery.budgetReservationId, recovery.txRef, binding);
   if (signer.accountRpc) {
     let fee: bigint | null;
     try {
@@ -478,30 +476,27 @@ async function recoverAccountPayment(
     }
     if (fee !== null) {
       const feeUsd = accountV14CostUsd(fee, pin.decimals, recovery.admissionUsdPrice);
-      if (recovery.budgetReservationId !== undefined) {
-        if (!signer.finalizeFailedReservation)
-          throw new Aifp1PayError(
-            "Proven revert requires ledger reconciliation",
-            recovery.txRef,
-            recovery.quote.quote_id,
-            recovery
-          );
-        await signer.finalizeFailedReservation(recovery.budgetReservationId, recovery.txRef, binding, feeUsd);
-      }
+      if (!signer.finalizeFailedReservation)
+        throw new Aifp1PayError(
+          "Proven revert requires ledger reconciliation",
+          recovery.txRef,
+          recovery.quote.quote_id,
+          recovery
+        );
+      await signer.finalizeFailedReservation(recovery.budgetReservationId, recovery.txRef, binding, feeUsd);
       throw new Aifp1AccountRevertedError(recovery, feeUsd, fee);
     }
   }
   const paid = await submitPayment(
     { ...signer, agentId: signer.payerAddress, fetchImpl: signer.fetchImpl ?? fetch },
-    recovery.apiBaseUrl,
+    recovery.apiBaseUrl.replace(/\/+$/, ""),
     recovery.quote,
     recovery.txRef,
     recovery.asset,
     recovery.family,
     { paymentIssuer: recovery.paymentIssuer, ...options }
   );
-  if (recovery.budgetReservationId !== undefined)
-    await signer.completeReservation!(recovery.budgetReservationId, recovery.txRef, binding);
+  await signer.completeReservation(recovery.budgetReservationId, recovery.txRef, binding);
   return paid;
 }
 
@@ -1725,22 +1720,20 @@ async function settleAccountBatch(
   amountUsd: number,
   usdRate: string,
   binding: SpendLedgerBinding,
-  reservation: string | null,
+  reservation: string,
   site: string,
   send: (receipt?: string) => Promise<Response>,
   markSettled: () => void
 ): Promise<Response> {
   const auth = opts.accountV14!;
-  if (
-    typeof reservation === "string" &&
-    (!deps.prepareReservation || !deps.assertReservation || !deps.completeReservation)
-  )
-    throw new Aifp1QuoteError("Capped account chain payments require durable bound-journal hooks");
+  if (!deps.prepareReservation || !deps.assertReservation || !deps.completeReservation)
+    throw new Aifp1QuoteError("Account chain payments require durable bound-journal hooks");
+  const apiBaseUrl = (opts.apiBaseUrl ?? DEFAULT_API_BASE).replace(/\/+$/, "");
   let prepared: AccountV14Prepared | undefined;
   const recoveryFor = (tx: AccountV14Prepared): Aifp1AccountPaymentRecovery => ({
     family: auth.family,
     chain: auth.family,
-    apiBaseUrl: opts.apiBaseUrl ?? DEFAULT_API_BASE,
+    apiBaseUrl,
     paymentIssuer: opts.paymentIssuer,
     ...(deps.walletIdentity ? { budgetBindingVersion: 2 as const } : {}),
     quote,
@@ -1749,13 +1742,13 @@ async function settleAccountBatch(
     account: tx,
     reservedAmountUsd: amountUsd,
     admissionUsdPrice: usdRate,
-    ...(typeof reservation === "string" ? { budgetReservationId: reservation } : {}),
+    budgetReservationId: reservation,
   });
   let result: AccountV14Prepared;
   try {
     result = await deps.settleAccount!(plan, async (tx) => {
       assertPreparedAccountV14Recovery(quote, tx, plan.pin, deps.payerAddress);
-      if (typeof reservation === "string") await deps.prepareReservation!(reservation, tx.hash, binding);
+      await deps.prepareReservation!(reservation, tx.hash, binding);
       await auth.onPrepared(recoveryFor(tx));
       prepared = tx;
     });
@@ -1769,18 +1762,16 @@ async function settleAccountBatch(
       error.actualFeeUnits !== undefined
     ) {
       const feeUsd = accountV14CostUsd(error.actualFeeUnits, plan.pin.decimals, usdRate);
-      if (typeof reservation === "string") {
-        try {
-          if (!deps.finalizeFailedReservation) throw new Error("Ledger cannot reconcile a proven revert");
-          await deps.finalizeFailedReservation(reservation, prepared.hash, binding, feeUsd);
-        } catch (journal) {
-          throw new Aifp1PayError(
-            journal instanceof Error ? journal.message : "Revert journal requires reconciliation",
-            prepared.hash,
-            quote.quote_id,
-            recoveryFor(prepared)
-          );
-        }
+      try {
+        if (!deps.finalizeFailedReservation) throw new Error("Ledger cannot reconcile a proven revert");
+        await deps.finalizeFailedReservation(reservation, prepared.hash, binding, feeUsd);
+      } catch (journal) {
+        throw new Aifp1PayError(
+          journal instanceof Error ? journal.message : "Revert journal requires reconciliation",
+          prepared.hash,
+          quote.quote_id,
+          recoveryFor(prepared)
+        );
       }
       throw new Aifp1AccountRevertedError(recoveryFor(prepared), feeUsd, error.actualFeeUnits);
     }
@@ -1794,9 +1785,9 @@ async function settleAccountBatch(
   markSettled();
   const recovery = recoveryFor(result);
   try {
-    if (typeof reservation === "string") await deps.commit(reservation, amountUsd);
-    const paid = await submitPayment(deps, recovery.apiBaseUrl, quote, result.hash, recovery.asset, auth.family, opts);
-    if (typeof reservation === "string") await deps.completeReservation!(reservation, result.hash, binding);
+    await deps.commit(reservation, amountUsd);
+    const paid = await submitPayment(deps, apiBaseUrl, quote, result.hash, recovery.asset, auth.family, opts);
+    await deps.completeReservation!(reservation, result.hash, binding);
     deps.cache.put({
       site,
       merchantId: paid.merchant_id,
@@ -2491,6 +2482,8 @@ export async function aifp1Fetch(
       opts.v14 || sol || acct ? paymentBudgetBinding(budgetContext, deps.payerAddress, deps.walletIdentity) : undefined;
     const reservation = await deps.reserveDaily(amountUsd, binding, admission?.id);
     if (reservation === "skip") return null;
+    if (acct && reservation === null)
+      throw new Aifp1QuoteError("Account chain payments require a durable journal; refusing to pay unguarded");
 
     let settled = false;
     let preparedTx: { hash: `0x${string}`; serializedTransaction: `0x${string}` } | undefined;
@@ -2530,7 +2523,7 @@ export async function aifp1Fetch(
           amountUsd,
           acctRate!,
           binding!,
-          reservation,
+          reservation!,
           site,
           send,
           () => {

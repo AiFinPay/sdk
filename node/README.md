@@ -76,7 +76,8 @@ await agent.fetchPaid(
 ```
 
 The payer is the agent's `aptosAddress` or `nearAddress`, derived as in
-`@aifinpay/wallet`, and the account must be funded there. A selected deployment
+`@aifinpay/wallet`, and the account must be funded there. Both need the recovery
+seed: an agent built with `fromSolanaSecret` refuses them. A selected deployment
 must be enabled in the installed registry, so a disabled record refuses.
 
 Before signing, the SDK treats the quote server as untrusted: the call must match
@@ -95,6 +96,18 @@ same transaction. Recovery never sends a transaction. A transaction that reverte
 raises `Aifp1AccountRevertedError`, debits only its fee and must not be retried with
 the same quote. On NEAR a failed payout after the call succeeded stays an
 `Aifp1PayError`, because funds may be partly paid; recover it, do not buy again.
+A failure that the SDK cannot prove left the funds with the payer is held the same
+way, so its reservation stays.
+
+Every account payment holds a reservation in a durable spend ledger, with or
+without `daily_usd`. While a purchase of the same merchant, scope and resource by
+this wallet is unresolved, a new one refuses with "Unresolved purchase", in this
+process and after a restart. An agent's own file ledger is used unless you pass a
+`spendLedger`; `MemorySpendLedger` refuses, and a custom ledger must be durable.
+
+A transaction that never lands keeps its reservation: the SDK has no resolver yet,
+so the purchase stays blocked until the owner reconciles the journal. The same holds
+for a crash after the reservation and before signing, where no transaction exists.
 
 ### Stablecoin-only chains
 
