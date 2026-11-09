@@ -28,6 +28,7 @@ import { MemoryStore } from "./stores/memory.js";
 import type { GateStore } from "./stores/types.js";
 import { createVerifier } from "./verify.js";
 import { buildChallenge } from "./challenge.js";
+import { licenseHeaders, receiptLicense } from "./license.js";
 import { beforeMark, inspectPath, spelledAsPath } from "./path.js";
 import { patternCovers, scopeCovers } from "./scope.js";
 import { TIER_WEIGHTS, weightForTier } from "./pricing.js";
@@ -183,6 +184,7 @@ export interface GateOptions {
 }
 
 const DEFAULT_ISSUER = "https://api.aifinpay.io";
+const DEFAULT_API_BASE = "https://api.aifinpay.io";
 const DEFAULT_JWKS = "https://api.aifinpay.io/.well-known/jwks.json";
 
 /** Shared receipt failure details and response headers. The hosted gate uses
@@ -481,7 +483,9 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       matched?.route_pattern && !patternCovers(spelledAsPath(matched.route_pattern, { caseSensitive }), path)
         ? beforeMark(path, { caseSensitive })
         : null;
-    const scopePath = options.registry ? (pricedBefore ?? path) : spelledAsPath(options.resource ?? path, { caseSensitive });
+    const scopePath = options.registry
+      ? (pricedBefore ?? path)
+      : spelledAsPath(options.resource ?? path, { caseSensitive });
 
     // ── 2. Explicitly free resources ──────────────────────────────────────
     // paywall_enabled:false is the merchant saying "serve this to anyone". No
@@ -702,13 +706,17 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       return forbid(resource, weight, "single-use receipt carries no nonce");
     }
 
+    // The licence the receipt was bought under goes out with what it unlocked.
+    const license = receiptLicense(payload.lic);
+    const licensed = licenseHeaders(options.apiBase ?? DEFAULT_API_BASE, merchantId, license);
+
     // A shadow site promises not to touch money: the receipt is verified and reported, and nothing is spent.
     if (mode === "shadow") {
       note({ kind: "serve", resource, weight, agent: payload.sub, receipt_id: payload.receipt_id });
       return {
         ok: true,
         status: 200,
-        headers: { "Cache-Control": NO_STORE },
+        headers: { "Cache-Control": NO_STORE, ...licensed },
         aifp: {
           agent: payload.sub ?? null,
           receipt_id: payload.receipt_id,
@@ -718,6 +726,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
           used: 0,
           remaining: limit,
           mode: "shadow",
+          ...(license ? { license } : {}),
         },
       };
     }
@@ -768,11 +777,12 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       used,
       remaining: limit - used,
       mode: "paid",
+      ...(license ? { license } : {}),
     };
     return {
       ok: true,
       status: 200,
-      headers: { [HEADER_QUOTA_REMAINING]: String(limit - used), "Cache-Control": NO_STORE },
+      headers: { [HEADER_QUOTA_REMAINING]: String(limit - used), "Cache-Control": NO_STORE, ...licensed },
       aifp,
     };
 
@@ -785,7 +795,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
         return {
           ok: true,
           status: 200,
-          headers: { "AIFP-Meter": "degraded", "Cache-Control": NO_STORE },
+          headers: { "AIFP-Meter": "degraded", "Cache-Control": NO_STORE, ...licensed },
           aifp: {
             agent: payload.sub ?? null,
             receipt_id: payload.receipt_id,
@@ -795,6 +805,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
             used: 0,
             remaining: limit,
             mode: "paid",
+            ...(license ? { license } : {}),
           },
         };
       }

@@ -333,6 +333,21 @@ add("fail.origin_keeps_units", "should", "content-enforce", "An origin that cann
 add("fail.decision_down_shadow", "must", "content-shadow", "A decision service outage does not touch a shadow site", step(get("gptbot"), served()), { fault: { decision: true }, needs: ["fault:decision"] });
 add("fail.decision_down_enforce", "must", "content-enforce", "A decision service outage fails closed for an agent", step(get("gptbot"), noOrigin([500, 502, 503, 504])), { fault: { decision: true }, needs: ["fault:decision"] });
 
+// ── content licence (AIFINP-262) ──────────────────────────────────────────
+const LIC = { id: "clic_" + "ab".repeat(12), rev: 2, v: "2.0", sha256: "3".repeat(64), confirmed: false };
+const LIC_URL = `${API}/v1/merchants/${MERCHANT}/license/2`;
+const licensed = {
+  "aifp-license": `id=${LIC.id}; rev=2; sha256=${LIC.sha256}; url="${LIC_URL}"`,
+  link: { contains: `<${LIC_URL}/text>; rel="license"` },
+};
+add("license.delivered", "must", "content-enforce", "Content a receipt unlocked carries the licence that receipt bound", step(pay("l"), served({ "aifp-license": { contains: `sha256=${LIC.sha256}` }, link: { contains: 'rel="license"' } })), { receipts: { l: R({ lic: LIC }) } });
+add("license.exact", "parity", "content-enforce", "The licence headers equal the reference", step(pay("l"), served(licensed)), { receipts: { l: R({ lic: LIC }) } });
+add("license.absent", "must", "content-enforce", "A receipt without a licence adds no licence header", step(pay(), served({ "aifp-license": null })), { receipts: { r: R() } });
+add("license.not_on_challenge", "must", "content-enforce", "A 402 carries no licence header", step(get("gptbot"), { ...noOrigin(402), headers: { "aifp-license": null } }));
+add("license.not_on_forged", "must", "content-enforce", "A forged receipt with a licence is refused without it", step(pay("x"), { ...refused403(), headers: { "aifp-license": null } }), { receipts: { x: R({ lic: LIC }, { mutate: "tamper_payload" }) } });
+add("license.not_on_exhausted", "must", "content-enforce", "A drained receipt is refused without its licence", [step(pay("one"), served({ "aifp-license": { contains: LIC.id } })), step(pay("one"), { status: [402, 403], origin: false, headers: { "aifp-license": null } })], { receipts: { one: R({ unit_quota: 1, lic: LIC }) } });
+add("license.malformed_ignored", "must", "content-enforce", "A malformed licence claim is ignored, not echoed", step(pay("m"), served({ "aifp-license": null })), { receipts: { m: R({ lic: { ...LIC, id: "evil", url: "https://evil.example" } }) } });
+
 // ── verbs ─────────────────────────────────────────────────────────────────
 add("method.post", "must", "content-enforce", "A POST is charged like a GET", step({ method: "POST", path: PAID, ua: "gptbot" }, noOrigin(402)));
 add("method.head", "must", "content-enforce", "A HEAD is charged like a GET", step({ method: "HEAD", path: PAID, ua: "gptbot" }, noOrigin(402)));

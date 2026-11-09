@@ -60,6 +60,8 @@ export { matchResource } from "./match.js";
 export { inspectPath, spelledAsPath } from "./path.js";
 export type { InspectedPath } from "./path.js";
 export { buildChallenge } from "./challenge.js";
+export { HEADER_LICENSE, licenseHeaders, receiptLicense } from "./license.js";
+export type { ReceiptLicense } from "./license.js";
 export { createVerifier } from "./verify.js";
 export type { VerifyResult, VerifierOptions } from "./verify.js";
 

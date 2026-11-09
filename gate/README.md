@@ -337,6 +337,10 @@ skeletons for DynamoDB and Postgres are in the source of
 | 7   | `used + weight > unit_quota`                                                                                                                                     | `402` — `quota exhausted — prepay the next batch`                 |
 | 8   | Otherwise                                                                                                                                                        | `200`, header `AIFP-Quota-Remaining`, `req.aifp` populated        |
 
+A receipt bought under a content licence carries a `lic` claim. The `200` it opens
+then also has `AIFP-License: id=…; rev=…; sha256=…; url="…"` and
+`Link: <…/text>; rel="license"`, and `req.aifp.license`. A refusal never has them.
+
 Verification is local and stateless: an Ed25519 signature checked against our
 published JWKS, in your process, pinned to `EdDSA`. Your latency never depends
 on ours. Pass `jwks: { keys: [...] }` to remove even the JWKS fetch (at the cost
