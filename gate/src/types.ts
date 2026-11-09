@@ -9,6 +9,7 @@
 // once and costs a support round-trip on every incident after that.
 // ──────────────────────────────────────────────────────────────────────────
 import type { GateOperator, UaClass } from "./agents.js";
+import type { ReceiptLicense } from "./license.js";
 
 /** The three merchant-selectable price settings. There are no custom prices. */
 export type Tier = "standard" | "complex" | "premium";
@@ -56,6 +57,8 @@ export interface AifpReceiptClaims {
   payer?: string;
   /** "test" on a receipt paid on a testnet; absent means live. */
   network_mode?: string;
+  /** The content licence the quote bound; read through receiptLicense(). */
+  lic?: unknown;
   /** Absent on a quota receipt. The issuer signs other token kinds with the same
    *  key and the same audience — `"action"` is a per-call billing receipt, proof
    *  that a call was ALREADY served and charged. The gate refuses to spend
@@ -114,6 +117,8 @@ export interface AifpContext {
    *  runs in shadow mode and spent nothing: `shadow` says what the answer
    *  would have been, and is absent for a good receipt, which enforce serves. */
   mode: "paid" | "open" | "exempt" | "shadow";
+  /** The content licence this receipt was bought under, from its `lic` claim. */
+  license?: ReceiptLicense;
   /** Only with mode "shadow": the refusal the gate decided on and did not
    *  send. `weight` is what the call would have been metered at. */
   shadow?: ShadowOutcome;

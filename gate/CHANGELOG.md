@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — the content licence travels with the content
+
+- A receipt with a `lic` claim (AIFINP-262) unlocks content that carries
+  `AIFP-License: id=…; rev=…; sha256=…; url="…"` and `Link: <…/text>; rel="license"`,
+  and `req.aifp.license`. The URL is built from `apiBase` and the merchant id, never
+  copied from the token; a malformed claim adds nothing. A 402, 403 or 503 never
+  carries it. Express appends the `Link`, so a page's other `Link` values stay.
+
 ## @aifinpay/gate 0.10.1 — what an independent review of 0.10.0 found
 
 0.10.0 was never published. Publish this one, after `@aifinpay/agent` 2.14.1.

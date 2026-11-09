@@ -150,7 +150,10 @@ export function aifpGate(options: GateOptions): RequestHandler {
           if (res.destroyed) close();
         }
 
-        res.set(result.headers);
+        // Link is appended: a page may carry other Link values, the discovery one among them.
+        const { Link: licenseLink, ...headers } = result.headers;
+        res.set(headers);
+        if (licenseLink) res.append("Link", licenseLink);
         if (!result.ok) {
           res.status(result.status).json(result.body);
           return;

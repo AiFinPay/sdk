@@ -43,6 +43,8 @@ export interface SignArgs {
   payer?: string;
   chain?: string;
   network_mode?: string;
+  /** The content licence claim, as backend receipts.js writes it. */
+  lic?: unknown;
   /** Seconds from now; negative for an already-expired receipt. */
   expiresInSec?: number;
 }
@@ -74,6 +76,7 @@ export async function signReceipt(privateKey: CryptoKey, a: SignArgs = {}): Prom
   if (a.payer !== undefined) body.payer = a.payer;
   if (a.chain !== undefined) body.chain = a.chain;
   if (a.network_mode !== undefined) body.network_mode = a.network_mode;
+  if (a.lic !== undefined) body.lic = a.lic;
 
   return new jose.SignJWT(body)
     .setProtectedHeader({ alg: "EdDSA", typ: "JWT", kid: "test-key" })

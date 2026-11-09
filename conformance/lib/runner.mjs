@@ -32,8 +32,8 @@ function send(base, hostHeader, { method, path, headers, body }) {
 const substitute = (value, api) => JSON.parse(JSON.stringify(value).replaceAll("{{api}}", api));
 const originReached = (res, marker) => res.headers["x-origin-hit"] === "1" || res.body.includes(marker) || res.body.includes("ORIGIN-503");
 
-function compareHeaders(expected, res, errors) {
-  for (const [name, rule] of Object.entries(expected ?? {})) {
+function compareHeaders(expected, res, errors, api) {
+  for (const [name, rule] of Object.entries(api ? substitute(expected ?? {}, api) : (expected ?? {}))) {
     const actual = res.headers[name];
     if (rule === null) {
       if (actual !== undefined) errors.push(`header ${name}: expected absent, got ${JSON.stringify(actual)}`);
@@ -100,7 +100,7 @@ function compareResponse(expect, res, ctx, errors) {
   const reached = originReached(res, ctx.vectors.fixtures.marker);
   if (expect.origin === true && !reached) errors.push("origin: expected the content, it did not arrive");
   if (expect.origin === false && reached) errors.push("origin: the content was served");
-  compareHeaders(expect.headers, res, errors);
+  compareHeaders(expect.headers, res, errors, ctx.api);
   compareBody(expect.body, res, ctx, errors);
   if (expect.weight_at_least !== undefined && res.status === 402) {
     try {

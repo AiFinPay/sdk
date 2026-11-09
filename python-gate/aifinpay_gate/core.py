@@ -19,7 +19,8 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Protocol, Sequence
 
 from .agents import classify_agent
-from .challenge import build_challenge
+from .challenge import DEFAULT_API_BASE, build_challenge
+from .license import license_headers, receipt_license
 from .operator_policy import decide_operator, normalize_operator_policy
 from .path import before_mark, inspect_path, spelled_as_path
 from .pricing import weight_for_tier
@@ -589,13 +590,19 @@ class Gate:
         if wants_replay_check and (not isinstance(nonce, str) or nonce == ""):
             return self._forbid(resource, weight, "single-use receipt carries no nonce", who=who, agent=agent_header)
 
+        # The licence the receipt was bought under goes out with what it unlocked.
+        lic = receipt_license(payload.get("lic"))
+        licensed = license_headers(self.api_base or DEFAULT_API_BASE, self.merchant_id, lic)
+        with_lic = {"license": lic} if lic else {}
+
         # A shadow site promises not to touch money: the receipt is verified and
         # reported, and nothing is spent.
         if self.mode == "shadow":
             self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": sub, "receipt_id": receipt_id}, who)
-            return GateResult(True, 200, {"Cache-Control": NO_STORE}, aifp={
+            return GateResult(True, 200, {"Cache-Control": NO_STORE, **licensed}, aifp={
                 "agent": sub, "receipt_id": receipt_id, "resource": resource, "weight": 0,
                 "unit_quota": _int_if_whole(limit), "used": 0, "remaining": _int_if_whole(limit), "mode": "shadow",
+                **with_lic,
             })
 
         nonce_key: Optional[str] = None
@@ -631,9 +638,10 @@ class Gate:
 
         self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": sub, "receipt_id": receipt_id}, who)
         remaining = _int_if_whole(limit - used)
-        return GateResult(True, 200, {HEADER_QUOTA_REMAINING: str(remaining), "Cache-Control": NO_STORE}, aifp={
+        return GateResult(True, 200, {HEADER_QUOTA_REMAINING: str(remaining), "Cache-Control": NO_STORE, **licensed}, aifp={
             "agent": sub, "receipt_id": receipt_id, "resource": resource, "weight": weight,
             "unit_quota": _int_if_whole(limit), "used": used, "remaining": remaining, "mode": "paid",
+            **with_lic,
         })
 
     def _store_failure(self, e: Exception, resource: str, weight: int, payload: Dict[str, Any],
@@ -641,10 +649,13 @@ class Gate:
         self._emit({"kind": "meter_error", "resource": resource, "weight": weight, "detail": str(e)}, who)
         if self.on_store_error == "open":
             # Availability chosen over metering: served and NOT counted.
-            return GateResult(True, 200, {"AIFP-Meter": "degraded", "Cache-Control": NO_STORE}, aifp={
+            lic = receipt_license(payload.get("lic"))
+            headers = {"AIFP-Meter": "degraded", "Cache-Control": NO_STORE,
+                       **license_headers(self.api_base or DEFAULT_API_BASE, self.merchant_id, lic)}
+            return GateResult(True, 200, headers, aifp={
                 "agent": payload.get("sub"), "receipt_id": payload["receipt_id"], "resource": resource,
                 "weight": weight, "unit_quota": _int_if_whole(limit), "used": 0,
-                "remaining": _int_if_whole(limit), "mode": "paid",
+                "remaining": _int_if_whole(limit), "mode": "paid", **({"license": lic} if lic else {}),
             })
         return self._refuse(resource, weight, GateResult(False, 503, _json_headers(**{"Retry-After": "5"}), body={
             "error": "AIFP-503-METER", "detail": "quota store unavailable — retry shortly",

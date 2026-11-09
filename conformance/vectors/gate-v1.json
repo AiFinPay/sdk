@@ -6887,6 +6887,283 @@
    ]
   },
   {
+   "id": "license.delivered",
+   "group": "license",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "Content a receipt unlocked carries the licence that receipt bound",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "l",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-license": {
+        "contains": "sha256=3333333333333333333333333333333333333333333333333333333333333333"
+       },
+       "link": {
+        "contains": "rel=\"license\""
+       }
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "l": {
+     "claims": {
+      "lic": {
+       "id": "clic_abababababababababababab",
+       "rev": 2,
+       "v": "2.0",
+       "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+       "confirmed": false
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "license.exact",
+   "group": "license",
+   "level": "parity",
+   "profile": "content-enforce",
+   "title": "The licence headers equal the reference",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "l",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-license": "id=clic_abababababababababababab; rev=2; sha256=3333333333333333333333333333333333333333333333333333333333333333; url=\"{{api}}/v1/merchants/mrch_0123456789abcdef/license/2\"",
+       "link": {
+        "contains": "<{{api}}/v1/merchants/mrch_0123456789abcdef/license/2/text>; rel=\"license\""
+       }
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "l": {
+     "claims": {
+      "lic": {
+       "id": "clic_abababababababababababab",
+       "rev": 2,
+       "v": "2.0",
+       "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+       "confirmed": false
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "license.absent",
+   "group": "license",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A receipt without a licence adds no licence header",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-license": null
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "license.not_on_challenge",
+   "group": "license",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A 402 carries no licence header",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "headers": {
+       "aifp-license": null
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "license.not_on_forged",
+   "group": "license",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A forged receipt with a licence is refused without it",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false,
+      "headers": {
+       "aifp-license": null
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "lic": {
+       "id": "clic_abababababababababababab",
+       "rev": 2,
+       "v": "2.0",
+       "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+       "confirmed": false
+      }
+     },
+     "sign": {
+      "mutate": "tamper_payload"
+     }
+    }
+   }
+  },
+  {
+   "id": "license.not_on_exhausted",
+   "group": "license",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A drained receipt is refused without its licence",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "one",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-license": {
+        "contains": "clic_abababababababababababab"
+       }
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "one",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": [
+       402,
+       403
+      ],
+      "origin": false,
+      "headers": {
+       "aifp-license": null
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "one": {
+     "claims": {
+      "unit_quota": 1,
+      "lic": {
+       "id": "clic_abababababababababababab",
+       "rev": 2,
+       "v": "2.0",
+       "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+       "confirmed": false
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "license.malformed_ignored",
+   "group": "license",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A malformed licence claim is ignored, not echoed",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "m",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-license": null
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "m": {
+     "claims": {
+      "lic": {
+       "id": "evil",
+       "rev": 2,
+       "v": "2.0",
+       "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+       "confirmed": false,
+       "url": "https://evil.example"
+      }
+     }
+    }
+   }
+  },
+  {
    "id": "method.post",
    "group": "method",
    "level": "must",
