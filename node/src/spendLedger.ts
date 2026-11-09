@@ -26,6 +26,9 @@ export interface SpendLedgerBinding {
   solanaAdmissionRateUsd?: string;
   solanaMaxFeeLamports?: string;
   solanaTransactionFeeLamports?: string;
+  /** Same role for Aptos and NEAR, in octas or yoctoNEAR. */
+  accountAdmissionRateUsd?: string;
+  accountMaxFeeUnits?: string;
   /** Makes older parsers refuse the durable pre-quote phase. */
   quoteAdmissionVersion?: "1";
 }
@@ -107,6 +110,8 @@ function validBinding(binding: unknown): binding is SpendLedgerBinding {
     "solanaAdmissionRateUsd",
     "solanaMaxFeeLamports",
     "solanaTransactionFeeLamports",
+    "accountAdmissionRateUsd",
+    "accountMaxFeeUnits",
     "quoteAdmissionVersion",
   ];
   return (
@@ -136,6 +141,14 @@ function validBinding(binding: unknown): binding is SpendLedgerBinding {
         typeof b.solanaTransactionFeeLamports === "string" &&
         /^(?:0|[1-9][0-9]*)$/.test(b.solanaTransactionFeeLamports) &&
         BigInt(b.solanaTransactionFeeLamports) <= BigInt(b.solanaMaxFeeLamports))) &&
+    ((b.accountAdmissionRateUsd === undefined && b.accountMaxFeeUnits === undefined) ||
+      ((b.chain?.startsWith("aptos:") || b.chain?.startsWith("near:")) &&
+        typeof b.accountAdmissionRateUsd === "string" &&
+        /^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,18})?$/.test(b.accountAdmissionRateUsd) &&
+        Number(b.accountAdmissionRateUsd) > 0 &&
+        Number(b.accountAdmissionRateUsd) < 100000 &&
+        typeof b.accountMaxFeeUnits === "string" &&
+        /^[1-9][0-9]*$/.test(b.accountMaxFeeUnits))) &&
     BINDING_FIELDS.every(
       (k) => typeof (binding as SpendLedgerBinding)[k] === "string" && !!(binding as SpendLedgerBinding)[k]
     )
@@ -149,6 +162,8 @@ function sameBinding(left: SpendLedgerBinding | undefined, right: SpendLedgerBin
     left.solanaAdmissionRateUsd === right.solanaAdmissionRateUsd &&
     left.solanaMaxFeeLamports === right.solanaMaxFeeLamports &&
     left.solanaTransactionFeeLamports === right.solanaTransactionFeeLamports &&
+    left.accountAdmissionRateUsd === right.accountAdmissionRateUsd &&
+    left.accountMaxFeeUnits === right.accountMaxFeeUnits &&
     BINDING_FIELDS.every((k) => left[k] === right[k])
   );
 }
@@ -292,8 +307,10 @@ function finalizeFailureEntry(
     !validBinding(binding) ||
     !sameBinding(entry.binding, binding) ||
     entry.txRef !== txRef ||
-    !binding.solanaAdmissionRateUsd ||
-    !binding.solanaMaxFeeLamports ||
+    !(
+      (binding.solanaAdmissionRateUsd && binding.solanaMaxFeeLamports) ||
+      (binding.accountAdmissionRateUsd && binding.accountMaxFeeUnits)
+    ) ||
     !finiteNonnegative(feeUsd) ||
     feeUsd > entry.usd
   )
@@ -312,6 +329,13 @@ function finalizeFailureEntry(
   delete entry.receiptPending;
 }
 function validTxRef(txRef: string, binding: SpendLedgerBinding): boolean {
+  if (binding.chain.startsWith("near:")) {
+    try {
+      return bs58.decode(txRef).length === 32 && bs58.encode(bs58.decode(txRef)) === txRef;
+    } catch {
+      return false;
+    }
+  }
   if (!binding.chain.startsWith("solana:")) return /^0x[0-9a-fA-F]{64}$/.test(txRef);
   try {
     return bs58.decode(txRef).length === 64 && bs58.encode(bs58.decode(txRef)) === txRef;
@@ -502,7 +526,7 @@ function validateEntries(data: unknown): Entry[] {
           (e.failure !== true ||
             e.expiresAt !== undefined ||
             e.receiptPending !== undefined ||
-            !e.binding?.solanaAdmissionRateUsd ||
+            !(e.binding?.solanaAdmissionRateUsd || e.binding?.accountAdmissionRateUsd) ||
             !e.txRef))
     )
   )

@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/agent",
-  "version": "2.14.1",
+  "version": "2.15.0",
   "description": "AiFinPay SDK for global Agent Passport identity and route-verified AIFP-1/AIFP-2 settlement for autonomous AI agents.",
   "type": "module",
   "main": "dist/index.js",
@@ -107,7 +107,10 @@
     }
   },
   "devDependencies": {
+    "@aptos-labs/ts-sdk": "7.5.0",
     "@eslint/js": "^10.0.1",
+    "@near-js/crypto": "2.5.1",
+    "@near-js/transactions": "2.5.1",
     "@types/node": "^22.20.5",
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
