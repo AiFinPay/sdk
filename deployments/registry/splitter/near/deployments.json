@@ -63,7 +63,7 @@
       "testnet": true,
       "version": "1.4.0",
       "contractAccountId": "aifp-splitter.testnet",
-      "settlementEnabled": false,
+      "settlementEnabled": true,
       "wasmCodeHash": "d18b181f17cd597e96c1703af3e1d6b38576492d19e035ee06bc3aab56531b46",
       "runtimeCodeHash": "d18b181f17cd597e96c1703af3e1d6b38576492d19e035ee06bc3aab56531b46",
       "treasuryAccountId": "aifp-treasury-e7abd866cd527146.testnet",
