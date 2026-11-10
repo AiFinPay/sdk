@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — the content licence travels with the content
+## @aifinpay/gate 0.11.0 — the content licence travels with the content
 
 - A receipt with a `lic` claim (AIFINP-262) unlocks content that carries
   `AIFP-License: id=…; rev=…; sha256=…; url="…"` and `Link: <…/text>; rel="license"`,

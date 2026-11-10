@@ -1,4 +1,4 @@
-## Unreleased — the content licence travels with the content
+## 0.8.0 — the content licence travels with the content
 
 - Port of the `@aifinpay/gate` licence headers: a receipt with a `lic` claim unlocks content with `AIFP-License` and `Link: rel="license"`, and `aifp["license"]`. Never on a refusal.
 
