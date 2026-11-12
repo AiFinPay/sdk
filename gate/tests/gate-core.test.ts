@@ -66,7 +66,7 @@ describe("the four answers a gate can give", () => {
     expect(r.body.resource).toBe("/api/search");
     expect(r.body.unit_weight).toBe(1);
     expect(r.body.unit_price_usd).toBe("0.0005");
-    expect(r.body.protocol_fee_bps).toBe(100);
+    expect(r.body).not.toHaveProperty("protocol_fee_bps");
     expect(r.body.how_to_pay?.length).toBe(4);
   });
 

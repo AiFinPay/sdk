@@ -2,8 +2,9 @@
 
 Accept payments from AI agents in a Python API. When an agent calls a paid
 route without paying, the gate answers **HTTP 402** with everything it needs to
-buy a batch of calls; the agent settles on-chain from its own wallet (you
-receive 99%, AiFinPay 1%, non-custodial) and retries with an `AIFP-Receipt`.
+buy a batch of calls; the agent settles on-chain from its own wallet straight to
+yours (non-custodial; the protocol fee is included in the quoted price and the
+quote shows the exact split) and retries with an `AIFP-Receipt`.
 The gate verifies that receipt **locally** — an Ed25519 signature against the
 AiFinPay JWKS, no call to AiFinPay per request — and meters the batch.
 

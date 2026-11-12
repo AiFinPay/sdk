@@ -182,6 +182,7 @@ async function fixture(network = "polygon", route = "merchant-aifp1") {
     orderId: "order-1",
     expectedMerchant: merchant,
     expectedGrossAmount: 1000000n,
+    expectedFeeBps: 100,
     ...(network !== "polygon" && network !== "amoy" ? { expectedChain: network as PaymentChain } : {}),
     maxGasWei: PAYMENT_CHAINS[network as PaymentChain]?.gasModel === "op" ? 2000000n : 1200000n,
     onPrepared,
@@ -685,5 +686,24 @@ describe("per-chain native fee safety", () => {
     f.ctx.maxGasWei = 1199999n;
     await expect(executeV14Settlement(f.call, f.ctx)).rejects.toMatchObject({ code: "V14_GAS_BUDGET_EXCEEDED" });
     expect(f.wallet.account.signTransaction).not.toHaveBeenCalled();
+  });
+});
+
+describe("merchant-aifp1 profile is checked against the quoted fee", () => {
+  it("accepts a live profile that matches the quoted fee", async () => {
+    const f = await fixture();
+    f.state.getProfile.treasuryBps = 250;
+    f.ctx.expectedFeeBps = 250;
+    await expect(executeV14Settlement(f.call, f.ctx)).resolves.toMatchObject({ route: "merchant-aifp1" });
+  });
+  it.each([
+    ["a profile at another fee", 100, 250],
+    ["no quoted fee", 100, undefined],
+    ["a fee above the contract cap", 600, 600],
+  ])("refuses %s", async (_name, live, quoted) => {
+    const f = await fixture();
+    f.state.getProfile.treasuryBps = live;
+    f.ctx.expectedFeeBps = quoted;
+    await expect(executeV14Settlement(f.call, f.ctx)).rejects.toMatchObject({ code: "V14_PROFILE_MISMATCH" });
   });
 });

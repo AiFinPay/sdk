@@ -43,7 +43,7 @@ AGENT_PRIVATE_KEY=0x...your_key... vhs demo.tape
 ```
 
 The agent EOA must be funded — ≥ 0.01 MATIC on Polygon mainnet covers
-`merchant amount + 1.01% fee + ~0.001 MATIC gas` per call.
+`merchant amount + the contract's fee + ~0.001 MATIC gas` per call.
 
 ## Path B — manual screen record (browser + terminal split-screen)
 

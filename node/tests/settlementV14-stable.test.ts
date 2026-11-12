@@ -198,6 +198,7 @@ async function fixture(network: PaymentChain = "polygon", asset = "USDC", micro 
     orderId: "order-1",
     expectedMerchant: merchant,
     expectedGrossAmount: gross,
+    expectedFeeBps: 100,
     expectedToken: USDC,
     expectedChain: network,
     maxGasWei: 10_000_000n,

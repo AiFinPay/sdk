@@ -229,7 +229,7 @@ async function challenge402(res, req) {
     // FEE-INCLUSIVE semantics — same as Polygon B2BSplitter v1.2: the amount
     //   sent IS the total, and merchant + treasury + creator sum back to it.
     //   PRICE_LAMPORTS = base merchant amount (what the bridge merchant earns)
-    //   contract adds: +1% treasury + 0.01% ip_creator on top
+    //   contract adds the treasury and ip_creator fees on top
     //   agent pays = merchant + treasury_fee + ip_creator_fee
     ...(BRIDGE_MERCHANT_SOLANA ? (() => {
       const baseMerchant = BigInt(PRICE_LAMPORTS);
@@ -365,7 +365,7 @@ async function verifySolanaTx(txHash, expectedOrderId) {
   // skipped. One implementation, one place to audit.
   //
   // The fee split quoted in the challenge above is what is enforced here: the
-  // merchant must receive the base amount and the treasury its 1%.
+  // merchant must receive the base amount and the treasury its fee.
   const base = BigInt(PRICE_LAMPORTS);
   const result = verifySolanaPayment({
     tx,
@@ -445,7 +445,7 @@ app.get("/", (_req, res) => res.json({
   service: SERVICE_NAME,
   description: "AiFinPay-gated proxy in front of io.net IO Intelligence (managed LLM inference)",
   upstream: IONET_API_URL,
-  pricing: { total_wei: PRICE_WEI, split: "98.99% merchant / 1.00% treasury / 0.01% creator" },
+  pricing: { total_wei: PRICE_WEI, split: "merchant / treasury / creator, fixed by the B2BSplitter contract" },
 }));
 
 app.get("/.well-known/x402.json", (_req, res) => res.json({

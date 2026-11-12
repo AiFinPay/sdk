@@ -136,10 +136,10 @@ See [python/README.md](./python/README.md).
 
 Current protocol economics documented in the v2 line:
 
-- **AIFP-1:** payer pays the quoted gross amount; merchant receives **99%**; AiFinPay receives **1%**; creator/referral receives **0%**.
+- **AIFP-1:** payer pays the quoted gross amount. A protocol fee is included in the quoted price. Each quote and the on-chain transaction show the exact split between the merchant and the protocol. The fee is set per merchant; creator/referral receives **0%**.
 - **AIFP-2 / x402:** provider receives **100%**; AiFinPay protocol fee is currently **0%**.
 
-Older 98.99% / 1% / 0.01% examples belong to a retired fee model and must not be used as current economics.
+Older examples with a fixed three-way split (merchant / treasury / creator) belong to a retired fee model and must not be used as current economics.
 
 ## Merchant monetization
 

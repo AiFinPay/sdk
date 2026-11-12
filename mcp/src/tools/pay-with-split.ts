@@ -3,7 +3,7 @@ import type { ToolContext } from "../server.js";
 const RETIRED_MESSAGE =
   "The legacy /api/b2b split-invoice tools are retired. " +
   "Use the canonical AIFP-1 settlement client: payer total equals the quoted gross amount, " +
-  "merchant receives 99%, AiFinPay receives 1%, creator/referral receives 0%. " +
+  "the protocol fee is included in it and the quote shows the exact split, creator/referral receives 0%. " +
   "AIFP-2/x402 currently charges 0% at the protocol layer. " +
   "Settlement remains fail-closed until the selected chain profile, runtime hash, " +
   "merchant target, asset and paid E2E evidence are verified.";

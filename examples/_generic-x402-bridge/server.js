@@ -384,7 +384,7 @@ app.get("/", (_req, res) => res.json({
   description: `AiFinPay-gated paid proxy in front of ${SERVICE_LABEL}`,
   upstream: UPSTREAM_URL,
   paid_endpoint: ROUTE_PATH,
-  pricing: { total_wei: PRICE_WEI, split: "98.99% merchant / 1.00% treasury / 0.01% creator" },
+  pricing: { total_wei: PRICE_WEI, split: "merchant / treasury / creator, fixed by the B2BSplitter contract" },
 }));
 
 app.get("/.well-known/x402.json", (_req, res) => res.json({

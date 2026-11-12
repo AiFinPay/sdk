@@ -11,9 +11,10 @@ revenue-share bookkeeping, no contracts to sign, no custodial arrangement.
 > **Status — read first.** This guide describes the reference **bridge**
 > examples in [`examples/`](./examples) (`exa-x402-bridge` and its
 > siblings). They settle on Polygon through the **legacy v1.2
-> `B2BSplitter`** with the older 98.99% / 1.00% / 0.01% split shown below.
-> Current AIFP-1 economics are gross-inclusive: merchant **99%**, AiFinPay
-> **1%**, creator **0%**, settled on v1.4. To monetize your own site or API
+> `B2BSplitter`**, whose split is fixed in that contract.
+> Current AIFP-1 economics are gross-inclusive and settle on v1.4: a protocol
+> fee is included in the quoted price, and each quote and the on-chain
+> transaction show the exact split. To monetize your own site or API
 > under those terms, use the merchant gate instead —
 > [`@aifinpay/gate`](./gate/README.md) (Node) or
 > [`aifinpay-gate`](./python-gate/README.md) (Python). Check network availability
@@ -160,9 +161,9 @@ from documentation.
 ```
 agent  ──msg.value──▶  B2BSplitter.payNative(paymentId, merchant, ipCreator, orderId)
                           │
-                          ├──── 98.99% ────▶  YOUR merchant wallet
-                          ├──── 1.00%  ────▶  AiFinPay treasury Safe
-                          └──── 0.01%  ────▶  ipCreator (or treasury if 0x0)
+                          ├──── merchantAmount ───▶  YOUR merchant wallet
+                          ├──── treasuryAmount ───▶  AiFinPay treasury Safe
+                          └──── ipCreatorAmount ──▶  ipCreator (or treasury if 0x0)
 
 emit Payment(payer, merchant, address(0), totalAmount,
              merchantAmount, treasuryAmount, ipCreatorAmount, orderId)
@@ -173,7 +174,7 @@ agreement on-chain. The protocol fee is structural — it exists because
 every `payNative` call goes through the splitter, whose fee BPS are set
 on-chain by the AiFinPay Safe.
 
-## What you get for the 1% protocol fee
+## What you get for the protocol fee
 
 - Pre-built x402 SDKs in Python (`aifinpay-agent`) and Node
   (`@aifinpay/agent`), and an MCP server (`@aifinpay/mcp`).

@@ -14,6 +14,7 @@ import {
 } from "./accountDeploymentResolver.js";
 import type { AptosV14Deployment } from "./generated/aptosV14Deployments.generated.js";
 import type { NearV14Deployment } from "./generated/nearV14Deployments.generated.js";
+import { protocolFeeUnits, quotedFeeBps } from "./feeBps.js";
 
 export type AccountV14Family = "aptos" | "near";
 export type AccountV14Network = "mainnet" | "testnet";
@@ -124,6 +125,8 @@ export interface AccountV14QuoteFields {
     signature_encoding?: string;
     public_key_required?: boolean;
   };
+  fee_bps?: number | null;
+  fee_policy?: { treasury_bps?: number } | null;
 }
 
 export interface AccountV14Pin {
@@ -582,11 +585,13 @@ export function validateAccountV14Quote(
   const q = call.args.quote;
   need(q && typeof q === "object", "call has no quote");
   const gross = canonicalUint(q.gross_amount, pin.family === "aptos" ? 8 : 16);
-  const treasury = gross / 100n;
+  const feeBps = quotedFeeBps(quote);
+  need(feeBps !== undefined, "quote states no usable protocol fee");
+  const treasury = protocolFeeUnits(gross, feeBps!);
   need(gross > 0n && treasury > 0n, "gross is too small for the protocol fee");
   need(q.gross_amount === n.total_units, "signed gross differs from the native total");
-  need(n.merchant_units === (gross - treasury).toString(), "merchant leg is not 99%");
-  need(n.treasury_units === treasury.toString(), "treasury leg is not 1%");
+  need(n.merchant_units === (gross - treasury).toString(), "merchant leg does not match the quoted fee");
+  need(n.treasury_units === treasury.toString(), "treasury leg does not match the quoted fee");
   need(n.creator_units === "0", "creator leg is not zero");
 
   need(q.payer === payer, "signed payer is not this wallet");
@@ -843,7 +848,7 @@ async function prepareAptos(
   const route = await aptosView(rpc, pin, "get_route_profile", [APTOS_ROUTE]);
   need(route.length === 5, "Aptos route profile has an unexpected shape");
   need(route[2] === true, "route is disabled");
-  need(Number(route[0]) === 100, "live route treasury fee is not 100 bps");
+  need(Number(route[0]) === quotedFeeBps(quote), "live route treasury fee differs from the quoted fee");
   need(Number(route[1]) === 0, "live route creator fee is not zero");
   const [treasury] = await aptosView(rpc, pin, "get_treasury", []);
   const override = String(route[4]);
@@ -952,7 +957,7 @@ async function prepareNear(
   } | null;
   need(isObject(route), "route is unknown");
   need(route.enabled === true, "route is disabled");
-  need(Number(route.treasury_bps) === 100, "live route treasury fee is not 100 bps");
+  need(Number(route.treasury_bps) === quotedFeeBps(quote), "live route treasury fee differs from the quoted fee");
   need(Number(route.ip_creator_bps) === 0, "live route creator fee is not zero");
   const treasury = route.route_treasury ?? (await nearView(rpc, pin, "get_treasury", {}));
   need(treasury === call.treasury_owner, "call treasury differs from the live treasury");

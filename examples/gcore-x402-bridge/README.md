@@ -122,7 +122,7 @@ console.log("Tx:", out._receipt?.txHash);
 Default `PRICE_WEI` is 0.25 POL (≈ $0.025) per call. Gcore Everywhere
 Inference per-token pricing on Llama-3-70B class models is
 ~$0.001-0.005 per typical agent request, leaving 5-20× margin to cover
-bridge ops and the 1 % protocol fee.
+bridge ops and the protocol fee.
 
 For dynamic per-request pricing, hit Gcore's
 `POST /v3/inference/deployment-price-preview` before each call and pass

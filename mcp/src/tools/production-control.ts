@@ -86,7 +86,7 @@ export function settlementRoutesTool() {
     description:
       "Where an agent can pay today. Lists the splitter v1.4 AIFP-1 routes payable_fetch uses first — one per chain the backend serves (read from the issuer's /api/health and /.well-known/x402.json, pinned against the SDK's deployment registry) with chain_id, assets, quote_endpoint and pay_endpoint — then the legacy splitter v1.3 routes from GET /v1/settlement/routes under legacy_v13. " +
       '"live": true means payable now through payable_fetch on that chain; a v1.3 entry being disabled says nothing about v1.4. ' +
-      "AIFP-1 is merchant monetisation (99% merchant / 1% AiFinPay / 0% creator). AIFP-2/x402 is 100% provider / 0% AiFinPay / 0% creator.",
+      "AIFP-1 is merchant monetisation: the protocol fee is included in the quoted price and each quote shows the exact split, creator 0%. AIFP-2/x402 is 100% provider / 0% AiFinPay / 0% creator.",
     inputSchema: {
       type: "object",
       properties: {

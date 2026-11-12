@@ -1,5 +1,8 @@
 ## 0.8.0 — the content licence travels with the content
 
+- The 402 no longer carries `protocol_fee_bps`, and `PROTOCOL_FEE_BPS` /
+  `MERCHANT_SHARE_BPS` are gone from `pricing`. The fee is set per merchant and
+  stated by the quote.
 - Port of the `@aifinpay/gate` licence headers: a receipt with a `lic` claim unlocks content with `AIFP-License` and `Link: rel="license"`, and `aifp["license"]`. Never on a refusal.
 
 ## 0.7.1 — what an independent review of 0.7.0 found

@@ -177,7 +177,7 @@ class Server:
         quote = {
             "quote_id": order, "nonce": "n-" + order, "payer": body["payer"], "merchant_id": body["merchant_id"],
             "resource": "*" if body["scope"] == "merchant" else body["resource"], "scope": body["scope"],
-            "unit_quota": 200, "amount": AMOUNT,
+            "unit_quota": 200, "amount": AMOUNT, "fee_bps": 100,
             "currency": "USD", "expires_at": iso(valid_until),
             "network_mode": "test" if PAYMENT_CHAINS[self.chain].get("testnet") else "live",
             "accepted_chains": [self.chain],

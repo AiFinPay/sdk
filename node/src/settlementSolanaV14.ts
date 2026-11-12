@@ -21,6 +21,7 @@ import {
 } from "./generated/solanaV14Deployments.generated.js";
 import { resolveSolanaDeployment } from "./solanaDeploymentResolver.js";
 import type { SdkEnvironment } from "./deploymentResolver.js";
+import { validFeeBps } from "./feeBps.js";
 
 const ZERO = "11111111111111111111111111111111";
 export const SOLANA_TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
@@ -456,10 +457,14 @@ export async function prepareSolanaV14Settlement(
     payer: string;
     orderId: string;
     maxFeeLamports: bigint;
+    /** AIFP-1 fee in bps the quote stated; the live route profile must match it. */
+    expectedFeeBps: number;
   }
 ): Promise<SolanaV14Plan> {
   const { rpc, deployment: d, payer, maxFeeLamports } = ctx;
   validateSolanaV14Call(call, d, payer, ctx.orderId);
+  const feeBps = validFeeBps(ctx.expectedFeeBps);
+  if (feeBps === undefined) fail("explicit quoted protocol fee required");
   if (typeof maxFeeLamports !== "bigint" || maxFeeLamports <= 0n) fail("explicit Solana fee plus rent budget required");
   if ((await rpc.request("getGenesisHash", [])) !== SOLANA_GENESIS[d.network]) fail("Solana RPC network mismatch");
   const q = call.args.quote,
@@ -511,7 +516,12 @@ export async function prepareSolanaV14Settlement(
   for (let i = 0; i < count; i++) {
     const o = 12 + i * 77;
     if (r.subarray(o, o + 32).equals(hex32(q.routeId))) {
-      if (treasury !== undefined || r.readUInt16LE(o + 32) !== 100 || r.readUInt16LE(o + 34) !== 0 || r[o + 36] !== 1)
+      if (
+        treasury !== undefined ||
+        r.readUInt16LE(o + 32) !== feeBps ||
+        r.readUInt16LE(o + 34) !== 0 ||
+        r[o + 36] !== 1
+      )
         fail("Solana merchant profile mismatch");
       const routeTreasury = pub(r, o + 45);
       treasury = routeTreasury === ZERO ? pub(c, 136) : routeTreasury;

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   BASE_UNIT_PRICE_USD,
   MIN_BATCH_UNITS,
-  PROTOCOL_FEE_BPS,
   TIER_WEIGHTS,
   UNIT_PRICE_USD,
   minRequestsForTier,
@@ -29,7 +28,6 @@ describe("the tier-weight invariant", () => {
 
   it("prices are the protocol's three fixed settings", () => {
     expect(UNIT_PRICE_USD).toEqual({ standard: "0.0005", complex: "0.002", premium: "0.005" });
-    expect(PROTOCOL_FEE_BPS).toBe(100);
   });
 
   it("an unknown or absent tier meters exactly 1 unit per call", () => {

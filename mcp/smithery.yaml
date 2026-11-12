@@ -147,7 +147,7 @@ tools:
   - name: agent_passport_resolve
     description: Resolve an AiFinPay Agent Passport by @username, permanent AIFP number, or immutable agent id. Returns verified public wallet bindings only.
   - name: settlement_routes
-    description: Read AiFinPay's runtime-verified settlement routes. AIFP-1 is merchant monetisation (99% merchant / 1% AiFinPay / 0% creator). AIFP-2/x402 is 100% provider.
+    description: Read AiFinPay's runtime-verified settlement routes. AIFP-1 is merchant monetisation; its protocol fee is included in the quoted price and the quote shows the exact split. AIFP-2/x402 is 100% provider.
   - name: settlement_invoice
     description: Build and validate a non-signing EVM settlement invoice. This tool never moves funds.
   - name: settlement_solana

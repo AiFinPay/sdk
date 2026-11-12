@@ -39,12 +39,8 @@ export const UNIT_PRICE_USD: { standard: "0.0005"; complex: "0.002"; premium: "0
 /** One billing unit is priced at the base tier. */
 export const BASE_UNIT_PRICE_USD = "0.0005" as const;
 
-/** AIFP-1 protocol fee: 1% of the gross price paid by the agent.
- *  It is deducted from gross settlement; it is NOT added on top.
- *  A merchant settlement is therefore 99% of the gross AIFP-1 price before
- *  external network/settlement costs. */
-export const PROTOCOL_FEE_BPS = 100 as const;
-export const MERCHANT_SHARE_BPS = 9_900 as const;
+/** The AIFP-1 protocol fee is set per merchant and stated in each quote; it is
+ *  included in the gross price, never added on top. */
 export const CREATOR_FEE_BPS = 0 as const;
 export const FEE_MODE = "gross-inclusive" as const;
 

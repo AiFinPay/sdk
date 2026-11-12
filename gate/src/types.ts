@@ -145,7 +145,6 @@ export interface GateErrorBody {
   unit_weight?: number;
   unit_price_usd?: string;
   min_requests?: number;
-  protocol_fee_bps?: 100;
   no_minimum_fee?: true;
   /** Where accepted_chains, accepted_assets, amount, order_id and expiry come
    *  from. They are deliberately not inlined: accepted_chains is per-merchant

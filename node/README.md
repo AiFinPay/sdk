@@ -82,7 +82,7 @@ must be enabled in the installed registry, so a disabled record refuses.
 
 Before signing, the SDK treats the quote server as untrusted: the call must match
 the pinned contract, network and code hash, this wallet, the quoted payout
-destination and native total, the 1% gross-inclusive split, the route, the expiry
+destination and native total, the gross-inclusive split at the quote's fee, the route, the expiry
 and the quote id. It then reads through `rpcUrl`: network, live code hash, pause
 state, quote signer, route economics, treasury and payer nonce. Aptos simulates the
 exact transaction; `maxFeeUnits` caps `max_gas_amount * gas_unit_price`. NEAR has no
@@ -153,8 +153,9 @@ See [receipt configuration and recovery](./PAYMENT_RECEIPTS.md).
 
 Non-custodial payment client for autonomous AI agents on
 [AiFinPay](https://aifinpay.io). AIFP-1 is gross-inclusive: payer total equals
-the quote, merchant receives 99%, AiFinPay receives 1%, creator/referral
-receives 0%. AIFP-2/x402 currently charges 0% at the protocol layer. Legacy
+the quote. A protocol fee is included in the quoted price; each quote and the
+on-chain transaction show the exact split between the merchant and the
+protocol, and creator/referral receives 0%. AIFP-2/x402 currently charges 0% at the protocol layer. Legacy
 `/api/b2b` split-invoice methods are retired. The v1.3 executor checks the
 independently supplied deployment/runtime pin, chain, fee profile, merchant
 target and asset. A matching runtime value alone is not production approval;

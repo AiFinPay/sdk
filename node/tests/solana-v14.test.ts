@@ -136,6 +136,7 @@ function fixture(asset = "SOL") {
     expires_at: new Date(expiry * 1000).toISOString(),
     network_mode: "live",
     payment_authorization: { scheme: "wallet-signature-v1", domain: api, max_age_seconds: 300 },
+    fee_bps: 100,
     settlement: {
       batch_units: "100000",
       total_units: "100000",
@@ -337,6 +338,7 @@ describe("Solana v1.4 exact source flow", () => {
         payer: payer.publicKey.toBase58(),
         orderId: f.quote.quote_id,
         maxFeeLamports: 1_000_000n,
+        expectedFeeBps: 100,
       })
     ).resolves.toBeTruthy();
   });
@@ -349,6 +351,7 @@ describe("Solana v1.4 exact source flow", () => {
       payer: payer.publicKey.toBase58(),
       orderId: f.quote.quote_id,
       maxFeeLamports: 1_000_000n,
+      expectedFeeBps: 100,
     });
     expect(plan.feeRentLamports).toBe(asset === "SOL" ? 104000n : 434000n);
     const p = await executeSolanaV14Settlement(plan, {
@@ -426,6 +429,7 @@ describe("Solana v1.4 exact source flow", () => {
         payer: payer.publicKey.toBase58(),
         orderId: f.quote.quote_id,
         maxFeeLamports: failure === "rent cap" ? 1n : 1_000_000n,
+        expectedFeeBps: 100,
       })
     ).rejects.toThrow();
     expect(f.sends).toBe(0);
@@ -440,6 +444,7 @@ describe("Solana v1.4 exact source flow", () => {
       payer: payer.publicKey.toBase58(),
       orderId: f.quote.quote_id,
       maxFeeLamports: 1_000_000n,
+      expectedFeeBps: 100,
     });
     await expect(
       executeSolanaV14Settlement(plan, {
@@ -506,6 +511,7 @@ describe("Solana v1.4 exact source flow", () => {
         payer: payer.publicKey.toBase58(),
         orderId: f.quote.quote_id,
         maxFeeLamports: 1_000_000n,
+        expectedFeeBps: 100,
       })
     ).rejects.toThrow();
     expect(f.sends).toBe(0);
@@ -534,6 +540,7 @@ describe("Solana v1.4 exact source flow", () => {
       payer: payer.publicKey.toBase58(),
       orderId: f.quote.quote_id,
       maxFeeLamports: 1_000_000n,
+      expectedFeeBps: 100,
     });
     f.setFailed(true);
     const original = f.rpc.request;
@@ -1411,4 +1418,31 @@ it("actual file fsync failure blocks quote POST, including retry after the direc
     guarded.mockRestore();
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+describe("Solana merchant profile is checked against the quoted fee", () => {
+  const ctx = (f: ReturnType<typeof fixture>, expectedFeeBps: unknown) => ({
+    rpc: f.rpc,
+    deployment: f.d,
+    payer: payer.publicKey.toBase58(),
+    orderId: f.quote.quote_id,
+    maxFeeLamports: 1_000_000n,
+    expectedFeeBps: expectedFeeBps as number,
+  });
+  it("accepts a live profile that matches the quoted fee", async () => {
+    const f = fixture("USDC");
+    const entry = f.map[f.call.accounts.profiles!] as { data: [string, string] };
+    const buf = Buffer.from(entry.data[0], "base64");
+    buf.writeUInt16LE(250, 44);
+    entry.data = [buf.toString("base64"), "base64"];
+    await expect(prepareSolanaV14Settlement(f.call, ctx(f, 250))).resolves.toBeTruthy();
+  });
+  it("refuses a profile at another fee", async () => {
+    const f = fixture("USDC");
+    await expect(prepareSolanaV14Settlement(f.call, ctx(f, 250))).rejects.toThrow(/merchant profile mismatch/);
+  });
+  it.each([undefined, 0, 501])("refuses quoted fee %s", async (bps) => {
+    const f = fixture("USDC");
+    await expect(prepareSolanaV14Settlement(f.call, ctx(f, bps))).rejects.toThrow(/quoted protocol fee required/);
+  });
 });

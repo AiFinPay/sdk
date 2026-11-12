@@ -4,8 +4,7 @@
 // Polygon-pilot pattern. Frontend = a real third-party API (here: Exa AI's
 // /search). Bridge gates calls behind a B2BSplitter on-chain payment in
 // MATIC: agent calls `payNative(paymentId, merchant, ipCreator, orderId)`; the contract
-// splits msg.value 98.99% / 1.00% / 0.01% (merchant / treasury / ipCreator)
-// fee-from-top. Bridge verifies the receipt via viem, then forwards to Exa
+// splits msg.value between merchant, treasury and ipCreator at its fixed rates. Bridge verifies the receipt via viem, then forwards to Exa
 // using the bridge operator's pooled API key.
 //
 // Wire flow:
@@ -330,7 +329,7 @@ async function challenge402(res, query, req) {
       ttl_seconds:           Math.floor(ORDER_TTL_MS / 1000),
     },
 
-    // Solana b2b_pay_with_split — fee-on-top, contract adds 1%+0.01% on top
+    // Solana b2b_pay_with_split — fee-on-top, the contract adds its fees on top
     ...(BRIDGE_MERCHANT_SOLANA ? (() => {
       const baseMerchant = BigInt(PRICE_LAMPORTS);
       const treasuryFee  = (baseMerchant * 100n) / 10000n;
@@ -410,7 +409,7 @@ async function verifySolanaTx(txHash, expectedOrderId) {
   // skipped. One implementation, one place to audit.
   //
   // The fee split quoted in the challenge above is what is enforced here: the
-  // merchant must receive the base amount and the treasury its 1%.
+  // merchant must receive the base amount and the treasury its fee.
   const base = BigInt(PRICE_LAMPORTS);
   const result = verifySolanaPayment({
     tx,
@@ -506,7 +505,7 @@ app.get("/", async (_req, res) => res.json({
     total_wei: (await quoteWei()).toString(),
     pol_usd: await polUsd(),
     note: "total_wei is derived from price_usd at the current POL rate and moves with it",
-    split: "98.99% merchant / 1.00% treasury / 0.01% creator",
+    split: "merchant / treasury / creator, fixed by the B2BSplitter contract",
   },
 }));
 
@@ -736,6 +735,6 @@ app.listen(PORT, () => {
   console.log(`  Upstream:    ${EXA_API_URL}`);
   console.log(`  Splitter:    ${SPLITTER_ADDRESS} (Polygon, B2BSplitter)`);
   console.log(`  Merchant:    ${BRIDGE_MERCHANT_WALLET}`);
-  console.log(`  Price:       $${PRICE_USD} per call, converted to POL at the live rate, split 98.99/1/0.01`);
+  console.log(`  Price:       $${PRICE_USD} per call, converted to POL at the live rate, split by the B2BSplitter contract`);
   console.log(`  Try:         curl -X POST http://localhost:${PORT}/search -H 'content-type: application/json' -d '{"query":"hello"}'`);
 });

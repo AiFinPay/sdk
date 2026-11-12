@@ -98,6 +98,7 @@ function fixture(chain: PaymentChain = "polygon") {
       valid_until: expiry,
       settlement_semantics: "gross-inclusive",
     },
+    fee_bps: 100,
     settlement: {
       batch_units: "100000",
       total_units: "100000",
@@ -775,4 +776,50 @@ it("refuses a native quote whose signed call names a token before reserving budg
   await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toThrow(/signed v1.4 call disagrees/);
   expect(f.deps.reserveDaily).not.toHaveBeenCalled();
   expect(f.deps.settle).not.toHaveBeenCalled();
+});
+
+describe("AIFP-1 fee comes from the quote", () => {
+  const atFee = (bps: number, legsBps = bps) => {
+    const f = fixture();
+    const q = f.quote as any;
+    const gross = BigInt(q.native_settlement.gross_wei);
+    q.fee_bps = bps;
+    q.native_settlement.treasury_wei = String((gross * BigInt(legsBps)) / 10_000n);
+    q.native_settlement.merchant_wei = String(gross - (gross * BigInt(legsBps)) / 10_000n);
+    const micro = BigInt(q.settlement.gross_units);
+    q.settlement.protocol_fee_units = String((micro * BigInt(legsBps)) / 10_000n);
+    q.settlement.merchant_units = String(micro - (micro * BigInt(legsBps)) / 10_000n);
+    return f;
+  };
+  it("pays a quote priced at a non-default fee and hands that fee to settlement", async () => {
+    const f = atFee(250);
+    expect((await aifp1Fetch(f.deps, url, {}, f.opts))?.status).toBe(200);
+    expect(f.deps.settle).toHaveBeenCalledWith(
+      expect.objectContaining({ feeBps: 250, treasuryWei: 25_000_000_000_000_000n })
+    );
+  });
+  it.each([
+    ["legs at another fee", () => atFee(250, 100)],
+    [
+      "no stated fee",
+      () => {
+        const f = fixture();
+        delete (f.quote as any).fee_bps;
+        return f;
+      },
+    ],
+    [
+      "fee_policy disagreeing with fee_bps",
+      () => {
+        const f = fixture();
+        (f.quote as any).fee_policy = { treasury_bps: 250 };
+        return f;
+      },
+    ],
+    ["a fee above the contract cap", () => atFee(501)],
+  ])("refuses %s before settlement", async (_name, make) => {
+    const f = make();
+    await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toThrow(/canonical AIFP-1 gross economics/);
+    expect(f.deps.settle).not.toHaveBeenCalled();
+  });
 });

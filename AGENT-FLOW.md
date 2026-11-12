@@ -193,7 +193,7 @@ It returns a summary object; its `headline` reads:
 
 ```
 Pay 0.2110751110782772 POL ($0.02) for 40 requests to /api/agent/genres
-(incl. 1.00% fee), valid until 2026-09-04T13:00:00Z.
+(incl. <fee>% fee), valid until 2026-09-04T13:00:00Z.
 ```
 
 It states the on-chain figure and the USD together, the fee as a rate, and the

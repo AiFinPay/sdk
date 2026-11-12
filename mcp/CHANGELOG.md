@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Tool descriptions (`settlement_routes`, the retired split tools) and the
+  bundled skill no longer state a fixed AIFP-1 split: the protocol fee is
+  included in the quoted price and each quote shows the exact split.
+
 ## 2.16.2 — bundles skill 2.12.2
 
 - `@aifinpay/skill` ^2.12.2, and `aifinpay://skill` serves it: the smallest

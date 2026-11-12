@@ -122,6 +122,7 @@ class Fixture:
         }
         self.quote = {
             "quote_id": "qt_solana",
+            "fee_bps": 100,
             "nonce": "n_sol",
             "merchant_id": "mrch_sol",
             "payer": payer,
@@ -432,6 +433,7 @@ def plan(f, **changes):
         payer=str(PAYER.pubkey()),
         order_id="qt_solana",
         max_fee_lamports=changes.get("max_fee_lamports", 1_000_000),
+        expected_fee_bps=changes.get("expected_fee_bps", 100),
     )
 
 
@@ -1151,3 +1153,30 @@ def test_exact_v2_migration_keeps_all_debits_and_reservation_identity(tmp_path):
         and after["reservations"][0]["id"] == reservation
     )
     assert after["spend"][:1200] == before["spend"]
+
+
+def _set_profile_fee(f, bps):
+    for key, value in f.data.items():
+        if isinstance(value, bytearray) and value[:8] == s.DISCS["profiles"]:
+            struct.pack_into("<H", value, 44, bps)
+            return
+    raise AssertionError("no profiles account in fixture")
+
+
+def test_a_profile_matching_the_quoted_fee_is_accepted():
+    f = Fixture("USDC")
+    _set_profile_fee(f, 250)
+    assert plan(f, expected_fee_bps=250)
+
+
+def test_a_profile_at_another_fee_is_refused():
+    f = Fixture("USDC")
+    with pytest.raises(s.SolanaV14Error, match="merchant profile mismatch"):
+        plan(f, expected_fee_bps=250)
+
+
+@pytest.mark.parametrize("bps", [None, 0, 501])
+def test_an_unusable_quoted_fee_is_refused(bps):
+    f = Fixture("USDC")
+    with pytest.raises(s.SolanaV14Error, match="quoted protocol fee required"):
+        plan(f, expected_fee_bps=bps)

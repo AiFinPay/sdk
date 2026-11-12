@@ -34,6 +34,7 @@ from eth_account.messages import encode_typed_data
 from eth_utils import is_address, keccak, to_checksum_address
 
 from ._v14_deployments import V14_DEPLOYMENTS
+from .fee_bps import valid_fee_bps
 from .payment_chains import PAYMENT_CHAINS, native_payable, pinned_token_decimals
 
 ZERO = "0x0000000000000000000000000000000000000000"
@@ -294,6 +295,7 @@ class V14ExecutionContext:
     expected_token: Optional[str] = None  # None / address(0) = the selected chain's native asset
     min_seconds_remaining: Optional[int] = None
     expected_chain: str | None = None  # Base requires explicit caller authorization
+    expected_fee_bps: Optional[int] = None  # AIFP-1 fee the quote stated; the live profile must match it
 
 
 def _quote_args(q: Dict[str, Any]) -> tuple:
@@ -590,7 +592,7 @@ def execute_v14_settlement(call: Dict[str, Any], ctx: V14ExecutionContext) -> Di
     effective_treasury = treasury if _lc(route_treasury) == ZERO else route_treasury
     if (
         not enabled
-        or treasury_bps != (100 if validated["route"] == "merchant-aifp1" else 0)
+        or treasury_bps != ((valid_fee_bps(ctx.expected_fee_bps) or -1) if validated["route"] == "merchant-aifp1" else 0)
         or creator_bps != 0
         or _lc(effective_treasury) != _lc(deployment["splitter"]["treasury"])
     ):

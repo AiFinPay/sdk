@@ -363,7 +363,6 @@ of a redeploy when we rotate keys).
   "unit_price_usd": "0.002",
   "min_requests": 10,
   "scope": "exact",
-  "protocol_fee_bps": 100,
   "no_minimum_fee": true,
   "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
   "how_to_pay": [
@@ -387,29 +386,30 @@ req.aifp;
 ### Pricing
 
 Three fixed settings, per call. The displayed/quoted AIFP-1 price is the
-**gross amount paid by the agent**. AiFinPay receives **1% of that gross amount**
-and the merchant receives **99% of gross** before external network or settlement
-costs. The 1% fee is **not added on top** of the displayed AIFP-1 price.
+**gross amount paid by the agent**. A protocol fee is included in that price,
+never added on top. The fee is set per merchant, so the 402 does not state it:
+each quote and the on-chain transaction show the exact split between the
+merchant and the protocol.
 
-| Tier       | Gross price paid by agent | Merchant 99% | AiFinPay 1% | Billing units per call |
-| ---------- | ------------------------: | -----------: | ----------: | ---------------------: |
-| `standard` |                   $0.0005 |    $0.000495 |   $0.000005 |                      1 |
-| `complex`  |                    $0.002 |     $0.00198 |    $0.00002 |                      4 |
-| `premium`  |                    $0.005 |     $0.00495 |    $0.00005 |                     10 |
+| Tier       | Gross price paid by agent | Billing units per call |
+| ---------- | ------------------------: | ---------------------: |
+| `standard` |                   $0.0005 |                      1 |
+| `complex`  |                    $0.002 |                      4 |
+| `premium`  |                    $0.005 |                     10 |
 
 AIFP-2/x402 is a separate route: the provider receives 100% of its
 provider-defined price, while any AiFinPay AIFP-2 fee is payer-side/on-top. The
 current AIFP-2 fee is 0%; a future non-zero fee requires a versioned AIFP-2
 settlement profile and must not reduce the provider amount.
 
-> **Which splitter a merchant settles on.** The table above is the canonical
-> model, and it is what a v1.4 quote settles: the backend publishes the gross,
-> checks the quote's fee bps against the live v1.4 profile, and the agent pays
-> exactly that gross. A new live merchant is registered on v1.4 unless it asks
+> **Which splitter a merchant settles on.** The gross-inclusive model above is
+> what a v1.4 quote settles: the backend publishes the gross and the fee bps,
+> checks them against the live v1.4 profile, and the agent pays exactly that
+> gross. A new live merchant is registered on v1.4 unless it asks
 > for something else. Merchants registered before `settlement_version` existed
-> still read as the legacy v1.2 splitter, whose immutable split is
-> 98.99/1.00/0.01 and whose quotes the backend grosses up so the merchant is
-> made whole. The MCP `payable_fetch`, Node `fetchPaid`,
+> still read as the legacy v1.2 splitter, whose split is immutable in that
+> contract and whose quotes the backend grosses up so the merchant is made
+> whole. The MCP `payable_fetch`, Node `fetchPaid`,
 > Python `fetch_paid`) refuse v1.2 quotes, so such a merchant needs to move to
 > v1.4 before those agents can pay it. v1.4 profile fees and treasury can be
 > changed by the contract administrators; clients verify the current values

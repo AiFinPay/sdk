@@ -8,8 +8,6 @@ from typing import Optional
 TIER_WEIGHTS = {"standard": 1, "complex": 4, "premium": 10}
 UNIT_PRICE_USD = {"standard": "0.0005", "complex": "0.002", "premium": "0.005"}
 BASE_UNIT_PRICE_USD = "0.0005"
-PROTOCOL_FEE_BPS = 100
-MERCHANT_SHARE_BPS = 9_900
 
 _UNIT_PRICE_UNITS = {"standard": 500, "complex": 2000, "premium": 5000}
 MIN_BATCH_UNITS = 20_000  # $0.02 in 6-dp minor units (server AIFP_MIN_BATCH_UNITS)

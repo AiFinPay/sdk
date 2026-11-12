@@ -2,6 +2,9 @@
 
 ## @aifinpay/gate 0.11.0 — the content licence travels with the content
 
+- The 402 no longer carries `protocol_fee_bps`, and `PROTOCOL_FEE_BPS` is no
+  longer exported. The fee is set per merchant and stated by the quote; a
+  self-hosted gate does not know it.
 - A receipt with a `lic` claim (AIFINP-262) unlocks content that carries
   `AIFP-License: id=…; rev=…; sha256=…; url="…"` and `Link: <…/text>; rel="license"`,
   and `req.aifp.license`. The URL is built from `apiBase` and the merchant id, never

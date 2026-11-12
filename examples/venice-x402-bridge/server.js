@@ -199,7 +199,7 @@ async function challenge402(res, req) {
       ttl_seconds:           Math.floor(ORDER_TTL_MS / 1000),
     },
 
-    // Solana b2b_pay_with_split — fee-on-top, contract adds 1%+0.01% on top
+    // Solana b2b_pay_with_split — fee-on-top, the contract adds its fees on top
     ...(BRIDGE_MERCHANT_SOLANA ? (() => {
       const baseMerchant = BigInt(PRICE_LAMPORTS);
       const treasuryFee  = (baseMerchant * 100n) / 10000n;
@@ -279,7 +279,7 @@ async function verifySolanaTx(txHash, expectedOrderId) {
   // skipped. One implementation, one place to audit.
   //
   // The fee split quoted in the challenge above is what is enforced here: the
-  // merchant must receive the base amount and the treasury its 1%.
+  // merchant must receive the base amount and the treasury its fee.
   const base = BigInt(PRICE_LAMPORTS);
   const result = verifySolanaPayment({
     tx,
@@ -371,7 +371,7 @@ app.get("/", (_req, res) => res.json({
   service: SERVICE_NAME,
   description: "AiFinPay-gated proxy in front of Venice AI chat-completions",
   upstream: VENICE_API_URL,
-  pricing: { total_wei: PRICE_WEI, split: "98.99% merchant / 1.00% treasury / 0.01% creator" },
+  pricing: { total_wei: PRICE_WEI, split: "merchant / treasury / creator, fixed by the B2BSplitter contract" },
 }));
 
 app.get("/.well-known/x402.json", (_req, res) => res.json({

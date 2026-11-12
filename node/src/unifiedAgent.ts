@@ -1775,6 +1775,7 @@ export class AiFinPayAgent {
       creatorWei: bigint;
       validUntil: bigint;
       orderId: string;
+      feeBps: number;
       settlementCall?: import("./aifp1.js").Aifp1Quote["settlement_call"];
       token?: `0x${string}`;
       onPrepared?: (tx: { hash: `0x${string}`; serializedTransaction: `0x${string}` }) => Promise<void>;
@@ -1792,6 +1793,7 @@ export class AiFinPayAgent {
         orderId: p.orderId,
         expectedMerchant: p.merchantWallet,
         expectedGrossAmount: p.grossWei,
+        expectedFeeBps: p.feeBps,
         expectedChain: chain,
         ...(p.token ? { expectedToken: p.token } : {}),
         maxGasWei: opts.v14.maxGasWei,
@@ -1915,12 +1917,13 @@ export class AiFinPayAgent {
           onPrepared,
           confirmMs: opts.settlementConfirmMs,
         }),
-      prepareSolana: (call, auth, orderId) =>
+      prepareSolana: (call, auth, orderId, feeBps) =>
         prepareSolanaV14Settlement(call, {
           rpc: solanaV14Rpc(this.solanaRpc, this.inner.fetchImpl),
           deployment: authorizedSolanaV14Inventory(auth.environment, auth.network),
           payer: this.solanaAddress,
           orderId,
+          expectedFeeBps: feeBps,
           maxFeeLamports: auth.maxFeeLamports,
         }),
       settleSolana: (plan, onPrepared) =>

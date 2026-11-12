@@ -4,7 +4,7 @@
 // Drives the full autonomous-commerce loop:
 //   1. POST /search without auth → expect 402 with pay_matic details
 //   2. Submit B2BSplitter.payNative(paymentId, merchant, address(0), orderId) on
-//      Polygon, msg.value = total_wei. Contract splits 98.99/1/0.01.
+//      Polygon, msg.value = total_wei. The contract splits it at its fixed rates.
 //   3. Wait for confirmation.
 //   4. Retry POST /search with x-tx-hash + x-order-id headers — bridge
 //      verifies the receipt + Payment event on-chain and forwards to
