@@ -106,6 +106,24 @@ afterEach(() => {
 });
 
 describe("backend quotes", () => {
+  it("refuses legs that do not match the quoted fee", async () => {
+    for (const family of ["aptos", "near"] as const) {
+      const quote = await tampered(family, (q) => {
+        q.fee_policy = { ...(q.fee_policy as object), treasury_bps: 250 };
+        if (q.fee_bps != null) q.fee_bps = 250;
+      });
+      rejects(quote, family, /does not match the quoted fee/);
+    }
+  });
+  it("refuses a quote that states no protocol fee", async () => {
+    for (const family of ["aptos", "near"] as const) {
+      const quote = await tampered(family, (q) => {
+        delete q.fee_policy;
+        delete q.fee_bps;
+      });
+      rejects(quote, family, /states no usable protocol fee/);
+    }
+  });
   it("accepts the quote the backend really builds", () => {
     for (const family of ["aptos", "near"] as const)
       expect(validateAccountV14Quote(baseQuote(family), pinOf(family), signerOf(family).address).chain).toBe(family);
@@ -473,7 +491,7 @@ describe("Aptos pre-flight refuses", () => {
     ["route shape", (s) => (s.views.get_route_profile = [100]), /unexpected shape/],
     ["view shape", (s) => (s.views.get_treasury = "x" as never), /unexpected shape/],
     ["route disabled", (s) => (s.views.get_route_profile![2] = false), /route is disabled/],
-    ["50 bps route", (s) => (s.views.get_route_profile![0] = 50), /not 100 bps/],
+    ["50 bps route", (s) => (s.views.get_route_profile![0] = 50), /differs from the quoted fee/],
     ["creator fee", (s) => (s.views.get_route_profile![1] = 10), /creator fee is not zero/],
     ["other treasury", (s) => (s.views.get_treasury = [`0x${"ab".repeat(32)}`]), /live treasury/],
     ["route treasury", (s) => (s.views.get_route_profile![4] = `0x${"cd".repeat(32)}`), /live treasury/],
@@ -601,7 +619,7 @@ describe("NEAR pre-flight refuses", () => {
     ["short signer", (s) => (s.views.get_signer = [1]), /invalid byte array/],
     ["unknown route", (s) => (s.views.get_route = null), /route is unknown/],
     ["route disabled", (s) => (s.views.get_route.enabled = false), /route is disabled/],
-    ["50 bps route", (s) => (s.views.get_route.treasury_bps = 50), /not 100 bps/],
+    ["50 bps route", (s) => (s.views.get_route.treasury_bps = 50), /differs from the quoted fee/],
     ["creator fee", (s) => (s.views.get_route.ip_creator_bps = 10), /creator fee is not zero/],
     ["other treasury", (s) => (s.views.get_treasury = "evil.testnet"), /call treasury differs/],
     ["route treasury", (s) => (s.views.get_route.route_treasury = "evil.testnet"), /call treasury differs/],

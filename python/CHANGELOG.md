@@ -1,3 +1,12 @@
+## 2.12.0 — the AIFP-1 fee comes from the quote
+
+- `fetch_paid` reads the AIFP-1 protocol fee from the quote (`fee_bps`,
+  `fee_policy.treasury_bps`) instead of fixing it at 100 bps. Both must agree, be
+  a whole number of bps within the contract cap, the legs must match it, and the
+  live v1.4 EVM and Solana route profiles must carry the same fee. A quote that
+  states no usable fee is refused. `V14ExecutionContext` has `expected_fee_bps`;
+  `settlement_solana_v14.prepare_settlement` requires `expected_fee_bps`.
+
 ## 2.11.2 — a batch for a section opens its page
 
 - A batch for `/paid/` opens `/paid`, and one for `/paid/*` opens the section, as a gate

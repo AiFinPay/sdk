@@ -180,6 +180,7 @@ def context(chain, call, journal, **over):
         client=chain, account=PAYER, order_id="order-1", expected_merchant=MERCHANT,
         expected_gross_amount=int(q["grossAmount"]), max_gas_wei=10_000_000, on_prepared=journal.append,
         expected_token=None if q["token"] == ZERO else q["token"],
+        expected_fee_bps=100,
     )
     kw.update(over)
     return s.V14ExecutionContext(**kw)
@@ -281,3 +282,21 @@ def test_a_reverted_settlement_is_reported_not_retried(pinned):
     with pytest.raises(s.V14SettlementError) as err:
         s.execute_v14_settlement(call, context(chain, call, journal))
     assert err.value.code == "V14_TRANSACTION_REVERTED"
+
+
+def test_the_live_profile_must_match_the_quoted_fee(pinned):
+    call = signed_call(pinned, token=USDC)
+    chain, journal = FakeChain(pinned, call), []
+    chain.state.update({"getProfile(bytes32)": (250, 0, True, 1, ZERO)})
+    s.execute_v14_settlement(call, context(chain, call, journal, expected_fee_bps=250))
+    assert len(chain.sent) >= 1
+
+
+@pytest.mark.parametrize("live,quoted", [(100, 250), (100, None), (600, 600)])
+def test_a_profile_that_differs_from_the_quoted_fee_is_refused(pinned, live, quoted):
+    call = signed_call(pinned, token=USDC)
+    chain, journal = FakeChain(pinned, call), []
+    chain.state.update({"getProfile(bytes32)": (live, 0, True, 1, ZERO)})
+    with pytest.raises(s.V14SettlementError) as err:
+        s.execute_v14_settlement(call, context(chain, call, journal, expected_fee_bps=quoted))
+    assert err.value.code == "V14_PROFILE_MISMATCH" and chain.sent == [] and journal == []

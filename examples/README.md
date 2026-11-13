@@ -37,9 +37,10 @@ run with `node --test` and no network.
 
 These bridges sell per-call access by having the agent pay the legacy
 Polygon B2BSplitter (`0xbD1fa545…`, or the older `0xE34Fc0E6…` in
-`_generic-x402-bridge`), which splits 98.99% / 1.00% / 0.01% (merchant /
-treasury / creator). That is not the AIFP-1 v1.4 model (merchant 99% /
-AiFinPay 1% of the gross), and the released agent clients do not pay it. To
+`_generic-x402-bridge`), which splits each payment between merchant, treasury
+and creator at rates fixed in that contract. That is not the AIFP-1 v1.4 model
+(a protocol fee included in the quoted gross, with the split shown in each
+quote), and the released agent clients do not pay it. To
 put a new API behind AIFP-1, use [`@aifinpay/gate`](../gate) (Node) or
 [`aifinpay-gate`](../python-gate) (Python) instead.
 

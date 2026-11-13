@@ -85,7 +85,7 @@ def test_exact_nonmultiple100_units_and_legacy_metadata_rule(chain, asset):
     decimals = pinned_token_decimals(chain, token)
     gross = 100001 * 10 ** (decimals - 6)
     call = signed_call(dep, token=token, gross=gross)
-    quote = {"quote_id": "order-1", "amount": "0.100001", "settlement_call": call,
+    quote = {"quote_id": "order-1", "amount": "0.100001", "fee_bps": 100, "settlement_call": call,
              "accepted_assets": [asset], "accepted_chains": [chain], "pay_to": {"evm": call["args"]["quote"]["merchant"]},
              "settlement": {"total_units": "100001"},
              "token_settlement": {"asset": asset, "token": token, "decimals": decimals, "total_units": str(gross),
@@ -166,3 +166,34 @@ def test_arc_testnet_reads_receipts_from_drpc_by_default():
     # rpc.blockdaemon.testnet.arc.io keeps answering a receipt query with the
     # first null it served, so a payment there outlived the receipt wait.
     assert PAYMENT_CHAINS["arctestnet"]["defaultRpc"] == "https://rpc.drpc.testnet.arc.io"
+
+
+def _stable_quote_at(bps, legs_bps):
+    chain, asset = "bnb", "USDC"
+    dep = V14_DEPLOYMENTS[chain]
+    token = next(t["address"] for t in dep["splitter"]["assets"] if t["symbol"] == asset)
+    decimals = pinned_token_decimals(chain, token)
+    gross = 100001 * 10 ** (decimals - 6)
+    call = signed_call(dep, token=token, gross=gross)
+    fee = gross * legs_bps // 10_000
+    quote = {"quote_id": "order-1", "amount": "0.100001", "fee_bps": bps, "settlement_call": call,
+             "accepted_assets": [asset], "accepted_chains": [chain], "pay_to": {"evm": call["args"]["quote"]["merchant"]},
+             "settlement": {"total_units": "100001"},
+             "token_settlement": {"asset": asset, "token": token, "decimals": decimals, "total_units": str(gross),
+                                  "merchant_units": str(gross - fee), "protocol_fee_units": str(fee),
+                                  "creator_units": "0", "settlement_semantics": "gross-inclusive"}}
+    return quote, asset, int(call["args"]["quote"]["validUntil"]), chain
+
+
+def test_stable_legs_follow_the_quoted_fee():
+    quote, asset, expiry, chain = _stable_quote_at(250, 250)
+    assert a.validate_stable_quote(quote, asset, PAYER.address, expiry, chain) == 100001
+
+
+@pytest.mark.parametrize("bps,legs_bps", [(250, 100), (None, 100), (501, 501)])
+def test_stable_legs_at_another_fee_or_no_fee_are_refused(bps, legs_bps):
+    quote, asset, expiry, chain = _stable_quote_at(bps, legs_bps)
+    if bps is None:
+        quote.pop("fee_bps")
+    with pytest.raises(a.Aifp1QuoteError):
+        a.validate_stable_quote(quote, asset, PAYER.address, expiry, chain)

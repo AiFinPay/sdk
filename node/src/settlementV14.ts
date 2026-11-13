@@ -40,6 +40,7 @@ import {
 
 import { V14_DEPLOYMENTS } from "./generated/v14Deployments.generated.js";
 import { SettlementConfirmationPendingError } from "./settlement.js";
+import { validFeeBps } from "./feeBps.js";
 
 /** The Quote struct, exactly as B2BSplitterV14 declares it. Field ORDER is part
  *  of the EIP-712 hash — this mirrors _QUOTE_TYPEHASH and must not be reordered. */
@@ -433,6 +434,8 @@ export interface V14ExecutionContext {
   /** Independently authorized purchase, not defaults copied from settlement_call. */
   expectedMerchant?: Address;
   expectedGrossAmount?: bigint;
+  /** AIFP-1 fee in bps the quote stated; the live merchant-aifp1 profile must match it. */
+  expectedFeeBps?: number;
   /** Trusted chain selected by the caller. Every non-Polygon mainnet must be explicit; legacy Polygon/Amoy callers remain valid. */
   expectedChain?: PaymentChain | "amoy";
   /** The token the purchase was authorized in; address(0) or omitted = selected native currency. */
@@ -646,7 +649,7 @@ export async function executeV14Settlement(
   const effectiveTreasury = lc(profile.routeTreasury) === ZERO ? treasury : profile.routeTreasury;
   if (
     !profile.enabled ||
-    profile.treasuryBps !== (validated.route === "merchant-aifp1" ? 100 : 0) ||
+    profile.treasuryBps !== (validated.route === "merchant-aifp1" ? (validFeeBps(ctx.expectedFeeBps) ?? -1) : 0) ||
     profile.ipCreatorBps !== 0 ||
     lc(effectiveTreasury) !== lc(deployment.splitter.treasury)
   ) {

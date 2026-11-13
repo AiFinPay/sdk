@@ -6,7 +6,7 @@ Node package's output, byte for byte."""
 
 from typing import Any, Dict, Optional
 
-from .pricing import PROTOCOL_FEE_BPS, min_requests_for_tier, unit_price_usd
+from .pricing import min_requests_for_tier, unit_price_usd
 
 DEFAULT_API_BASE = "https://api.aifinpay.io"
 DEFAULT_DETAIL = "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header"
@@ -49,7 +49,6 @@ def build_challenge(
         "unit_price_usd": unit_price or unit_price_usd(tier),
         "min_requests": requests_,
         "scope": scope,
-        "protocol_fee_bps": PROTOCOL_FEE_BPS,
         "no_minimum_fee": True,
         "settlement_terms_from":
             f"POST {api}/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",

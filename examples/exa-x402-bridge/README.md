@@ -4,9 +4,9 @@ Reference paid-proxy bridge in front of [Exa AI](https://exa.ai/) `/search` —
 the canonical example of how to plug a pay-per-call API into AiFinPay.
 
 The bridge gates upstream calls behind an on-chain settlement to the
-`B2BSplitter` contract selected in [server.js](server.js): the agent's payment is split atomically — 98.99% to the
-bridge's merchant wallet, 1.00% to the AiFinPay treasury, 0.01% to a
-creator/referral slot — in a single transaction. The bridge then
+`B2BSplitter` contract selected in [server.js](server.js): the agent's payment is split atomically between the
+bridge's merchant wallet, the AiFinPay treasury and a creator/referral slot, at
+rates fixed in that contract, in a single transaction. The bridge then
 forwards the request to Exa using its own pooled API key and returns
 the result.
 
@@ -31,7 +31,7 @@ agent                               bridge                       exa.ai
   │                                   │                              │
   │  AiFinPaySplitter.b2bPayWithSplit │                              │
   │  (Polygon mainnet)                │                              │
-  │  merchantAmount + 1.01% fee       │                              │
+  │  merchantAmount + fee on top      │                              │
   ├──── tx ──────────────────────────►│ B2BPaymentWithSplit event    │
   │   tx hash                         │                              │
   │◄──── confirmation                 │                              │
@@ -62,9 +62,8 @@ export POLYGON_RPC="https://polygon.drpc.org"
 export PORT="3001"
 ```
 
-The agent EOA needs ≥ ~0.01 MATIC: `merchantAmount + 1.01% + gas`.
-At 0.005 MATIC merchant + 1.01% on top + ~0.001 MATIC gas, ≈ 0.006-0.007
-MATIC per search call.
+The agent EOA needs ≥ ~0.01 MATIC: `merchantAmount + the contract's fee + gas`,
+≈ 0.006-0.007 MATIC per search call at the default 0.005 MATIC merchant amount.
 
 ## Run the bridge
 
@@ -74,7 +73,7 @@ node server.js
 #   Upstream:    https://api.exa.ai/search
 #   Splitter:    <address from the running bridge configuration>
 #   Merchant:    0x...
-#   Price:       5000000000000000 wei (~0.005000 MATIC) merchant amount, +1.01% fee on top
+#   Price:       5000000000000000 wei (~0.005000 MATIC) merchant amount, + the contract's fee on top
 ```
 
 ## Run the demo client

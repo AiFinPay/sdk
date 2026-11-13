@@ -1,5 +1,5 @@
 import type { GateErrorBody, Tier } from "./types.js";
-import { PROTOCOL_FEE_BPS, minRequestsForTier, unitPriceUsd } from "./pricing.js";
+import { minRequestsForTier, unitPriceUsd } from "./pricing.js";
 
 /**
  * The 402 body, byte-for-byte what the hosted gateway emits.
@@ -61,7 +61,6 @@ export function buildChallenge(args: {
     // and being refused. Fixing the scope COMPARISON (0.2.3) does not help
     // while the challenge never says which scope was sold.
     scope: args.scope ?? "exact",
-    protocol_fee_bps: PROTOCOL_FEE_BPS,
     // Unlike cards, there is no fixed floor per transaction, which is the only
     // reason a $0.0005 call is a viable product at all.
     no_minimum_fee: true,

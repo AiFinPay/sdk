@@ -20,6 +20,7 @@ from solders.pubkey import Pubkey
 from solders.transaction import Transaction
 
 from ._solana_v14_deployments import SOLANA_V14_DEPLOYMENTS
+from .fee_bps import valid_fee_bps
 
 ZERO = "11111111111111111111111111111111"
 TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
@@ -399,9 +400,12 @@ def verify_historical_quote(call, *, rpc, deployment, payer, order_id):
     _assert_config_signer(call, c)
 
 
-def prepare_settlement(call, *, rpc, deployment, payer, order_id, max_fee_lamports):
+def prepare_settlement(call, *, rpc, deployment, payer, order_id, max_fee_lamports, expected_fee_bps):
     d, q = deployment, call["args"]["quote"]
     validate_call(call, d, payer, order_id)
+    fee_bps = valid_fee_bps(expected_fee_bps)
+    if fee_bps is None:
+        raise SolanaV14Error("explicit quoted protocol fee required")
     if type(max_fee_lamports) is not int or max_fee_lamports <= 0:
         raise SolanaV14Error("explicit Solana fee plus rent budget required")
     if rpc.request("getGenesisHash", []) != GENESIS[d["network"]]:
@@ -456,7 +460,7 @@ def prepare_settlement(call, *, rpc, deployment, payer, order_id, max_fee_lampor
     routes = [
         r[12 + i * 77 : 12 + (i + 1) * 77] for i in range(n) if r[12 + i * 77 : 44 + i * 77] == _hex32(q["routeId"])
     ]
-    if len(routes) != 1 or struct.unpack_from("<HH", routes[0], 32) != (100, 0) or routes[0][36] != 1:
+    if len(routes) != 1 or struct.unpack_from("<HH", routes[0], 32) != (fee_bps, 0) or routes[0][36] != 1:
         raise SolanaV14Error("Solana merchant profile mismatch")
     treasury = _pub(routes[0], 45)
     treasury = _pub(c, 136) if treasury == ZERO else treasury

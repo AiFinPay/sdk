@@ -78,7 +78,7 @@ Monorepo of independent packages. Each package owns its own `AGENTS.md`; respect
   and `mcp/src/config.ts`; package version text is not authorization to sign.
 - `npm audit --omit=dev --audit-level=high` must pass for `node/` and `mcp/`; keep `mcp-http` `private: true` with its `ws`/`fast-uri`/`ip-address` overrides and rate limiting.
 - Tests must not use live network/RPC; mock at `settlementHttp.ts`, `safe-fetch.ts`, `client.py`, or facilitator boundaries. SSRF coverage in `mcp/tests/` must keep passing.
-- Economics are consensus-critical: AIFP-1 = 1% inside gross (merchant 99%, AiFinPay 1%, creator/referral 0%). Do not touch fee splits, payout addresses, or settlement flags without a pinned deployment and paid end-to-end evidence.
+- Economics are consensus-critical: the AIFP-1 protocol fee sits inside the gross, is set per merchant and is stated by each quote (`fee_bps` / `fee_policy.treasury_bps`); clients check it against the live route profile and the contract cap, creator/referral 0%. Do not touch fee splits, payout addresses, or settlement flags without a pinned deployment and paid end-to-end evidence.
 
 ## Linked surfaces
 

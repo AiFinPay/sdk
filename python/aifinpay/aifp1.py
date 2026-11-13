@@ -46,6 +46,7 @@ from eth_utils import keccak
 
 from ._v14_deployments import V14_DEPLOYMENTS
 from .client import _reporting_headers, _user_agent
+from .fee_bps import protocol_fee_units, quoted_fee_bps
 from .payment_chains import PAYMENT_CHAINS, native_payable, pinned_token_decimals
 from .settlement_v14 import (
     SettlementConfirmationPending,
@@ -281,6 +282,13 @@ def prefix_hint(path: str) -> str:
     return f"/{segs[0]}/" if len(segs) > 1 else "/"
 
 
+def _require_fee_bps(quote: Dict[str, Any]) -> int:
+    bps = quoted_fee_bps(quote)
+    if bps is None:
+        raise Aifp1QuoteError(f"quote {quote.get('quote_id')} states no usable protocol fee")
+    return bps
+
+
 def _micro_usd(amount: Any) -> int:
     try:
         value = Decimal(str(amount))
@@ -415,7 +423,7 @@ def validate_stable_quote(
     decimals = pinned_token_decimals(chain, token)
     gross = micro * 10 ** (decimals - 6)
     metadata = quote.get("token_settlement")
-    treasury = gross // 100
+    treasury = protocol_fee_units(gross, _require_fee_bps(quote))
     if (decimals == 18 and metadata is None) or (
         "token_settlement" in quote
         and (
@@ -494,7 +502,7 @@ def validate_native_quote(
         or "token_settlement" in quote
         or native.get("settlement_semantics") != "gross-inclusive"
         or int(native.get("creator_wei", -1)) != 0
-        or treasury != gross // 100
+        or treasury != protocol_fee_units(gross, _require_fee_bps(quote))
         or int(native.get("merchant_wei", -1)) != gross - treasury
     ):
         raise Aifp1QuoteError("signed v1.4 call disagrees with the requested merchant, debit or expiry")
@@ -516,7 +524,9 @@ def validate_solana_quote(quote, asset, payer, expiry_s, native_usd, deployment,
     validate_call(call, deployment, payer, quote["quote_id"], historical=historical)
     q = call["args"]["quote"]
     gross, micro = int(q["grossAmount"]), _micro_usd(quote.get("amount"))
-    fee = gross // 100
+    bps = _require_fee_bps(quote)
+    fee = protocol_fee_units(gross, bps)
+    micro_fee = protocol_fee_units(micro, bps)
     s = quote.get("settlement") or {}
     if (
         quote.get("accepted_chains") != ["solana"]
@@ -528,14 +538,14 @@ def validate_solana_quote(quote, asset, payer, expiry_s, native_usd, deployment,
         or s.get("gross_units") != str(micro)
         or s.get("total_units") != str(micro)
         or s.get("payer_total_units") != str(micro)
-        or s.get("protocol_fee_units") != str(micro // 100)
+        or s.get("protocol_fee_units") != str(micro_fee)
         or s.get("creator_units") != "0"
-        or s.get("merchant_units") != str(micro - micro // 100)
+        or s.get("merchant_units") != str(micro - micro_fee)
         or s.get("settlement_semantics") != "gross-inclusive"
         or not (
             s.get("fee_on_top") is False
             or s.get("fee_on_top")
-            == {"provider": str(micro - micro // 100), "treasury": str(micro // 100), "creator": "0"}
+            == {"provider": str(micro - micro_fee), "treasury": str(micro_fee), "creator": "0"}
         )
         or not _sane(native_usd, "SOL")
     ):
@@ -1782,6 +1792,7 @@ def aifp1_fetch(
             payer=account.address,
             order_id=quote["quote_id"],
             max_fee_lamports=max_fee_lamports,
+            expected_fee_bps=_require_fee_bps(quote),
         )
         amount_usd += lamport_cost_usd(sol_plan.fee_rent_lamports, str(native_usd))
         paid_asset = asset
@@ -1863,6 +1874,7 @@ def aifp1_fetch(
                 on_prepared=journal,
                 expected_token=q["token"] if stable else None,
                 expected_chain=chain,
+                expected_fee_bps=_require_fee_bps(quote),
             )
             result = execute_v14_settlement(call, ctx)
     except SettlementConfirmationPending as e:

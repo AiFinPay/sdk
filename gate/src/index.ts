@@ -69,7 +69,6 @@ export {
   TIER_WEIGHTS,
   UNIT_PRICE_USD,
   BASE_UNIT_PRICE_USD,
-  PROTOCOL_FEE_BPS,
   MIN_BATCH_UNITS,
   weightForTier,
   minRequestsForTier,

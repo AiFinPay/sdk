@@ -42,6 +42,7 @@ import { keccak256, parseUnits, stringToHex } from "viem";
 import { paymentChain, paymentStableAsset, type PaymentChain } from "./paymentChains.js";
 import { AiFinPayError } from "./errors.js";
 import { validateV14SettlementCall, V14SettlementError, type V14SettlementCall } from "./settlementV14.js";
+import { protocolFeeUnits, quotedFeeBps } from "./feeBps.js";
 import { SettlementConfirmationPendingError } from "./settlement.js";
 import { settlementHttp, SettlementHttpError } from "./settlementHttp.js";
 import type { SpendLedgerBinding, QuoteAdmission } from "./spendLedger.js";
@@ -581,6 +582,9 @@ export interface Aifp1Challenge {
 export interface Aifp1Quote {
   quote_id: string;
   payer?: string;
+  /** Protocol fee in bps the quote was priced under; must agree with fee_policy.treasury_bps. */
+  fee_bps?: number | null;
+  fee_policy?: { id?: string; route?: string | null; treasury_bps?: number; creator_bps?: number } | null;
   network_mode?: "live" | "test";
   payment_authorization?: {
     scheme: "wallet-signature-v1";
@@ -1440,7 +1444,8 @@ export interface Aifp1Deps {
   prepareSolana?(
     call: SolanaV14SettlementCall,
     authorization: NonNullable<Aifp1FetchOptions["solanaV14"]>,
-    orderId: string
+    orderId: string,
+    feeBps: number
   ): Promise<SolanaV14Plan>;
   settleSolana?(plan: SolanaV14Plan, onPrepared: (tx: SolanaV14Prepared) => Promise<void>): Promise<SolanaV14Prepared>;
   prepareAccount?(
@@ -1476,6 +1481,8 @@ export interface Aifp1Deps {
     creatorWei: bigint;
     validUntil: bigint;
     orderId: string;
+    /** AIFP-1 fee the quote stated; the live route profile must match it. */
+    feeBps: number;
     settlementCall?: Aifp1Quote["settlement_call"];
     /** The token a stablecoin purchase was authorized in; omitted = native. */
     token?: `0x${string}`;
@@ -1494,6 +1501,12 @@ export interface Aifp1Deps {
   onPaid?(info: { merchantId: string; amountUsd: number; txRef: string; receiptId: string }): void;
 }
 
+function requireFeeBps(quote: Aifp1Quote): number {
+  const bps = quotedFeeBps(quote);
+  if (bps === undefined) throw new Aifp1QuoteError(`quote ${quote.quote_id} states no usable protocol fee`);
+  return bps;
+}
+
 function validateCanonicalQuoteEconomics(quote: Aifp1Quote): void {
   try {
     const s = quote.settlement;
@@ -1503,7 +1516,9 @@ function validateCanonicalQuoteEconomics(quote: Aifp1Quote): void {
     const merchant = BigInt(s.merchant_units);
     const protocol = BigInt(s.protocol_fee_units);
     const creator = BigInt(s.creator_units);
-    const expectedProtocol = gross / 100n;
+    const bps = quotedFeeBps(quote);
+    if (bps === undefined) throw new Error("no usable fee");
+    const expectedProtocol = protocolFeeUnits(gross, bps);
     // Older backend clients consume this unfortunately named breakdown. It
     // cannot be dropped during a rolling upgrade. Only accept it as inclusive
     // when the explicit semantics and every leg agree with the canonical data.
@@ -1531,7 +1546,7 @@ function validateCanonicalQuoteEconomics(quote: Aifp1Quote): void {
     }
   } catch {
     throw new Aifp1QuoteError(
-      `quote ${quote.quote_id} does not implement canonical AIFP-1 gross economics (payer 100%, merchant 99%, protocol 1%, creator 0%)`
+      `quote ${quote.quote_id} does not implement canonical AIFP-1 gross economics (legs must add up to the gross at the quoted fee, creator 0)`
     );
   }
 }
@@ -1549,7 +1564,7 @@ function validateSolanaQuote(
   const asset = auth.asset ?? "SOL",
     q = call.args.quote,
     gross = BigInt(q.grossAmount),
-    treasury = gross / 100n;
+    treasury = protocolFeeUnits(gross, requireFeeBps(quote));
   if (
     !/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,6})?$/.test(quote.amount) ||
     quote.accepted_chains.join() !== "solana" ||
@@ -2333,7 +2348,12 @@ export async function aifp1Fetch(
       }
       if (!deps.prepareSolana || !deps.settleSolana)
         throw new Aifp1SettlementUnsupportedError("Solana executor unavailable");
-      solPlan = await deps.prepareSolana(quote.settlement_call as SolanaV14SettlementCall, sol, quote.quote_id);
+      solPlan = await deps.prepareSolana(
+        quote.settlement_call as SolanaV14SettlementCall,
+        sol,
+        quote.quote_id,
+        requireFeeBps(quote)
+      );
       if (solPlan.feeRentLamports < 0n || solPlan.feeRentLamports > sol.maxFeeLamports)
         throw new Aifp1QuoteError("Solana fee/rent cap exceeded");
       amountUsd += solanaLamportCostUsd(solPlan.feeRentLamports, solRate);
@@ -2554,7 +2574,7 @@ export async function aifp1Fetch(
         // token and the USD amount in validateStableV14Quote before budgeting.
         const signed = (quote.settlement_call as V14SettlementCall).args.quote;
         const gross = BigInt(signed.grossAmount);
-        const treasury = gross / 100n;
+        const treasury = protocolFeeUnits(gross, requireFeeBps(quote));
         settleParams = {
           merchantWallet: merchantWallet as `0x${string}`,
           grossWei: gross,
@@ -2614,7 +2634,7 @@ export async function aifp1Fetch(
           BigInt(native.payer_total_wei ?? native.total_wei) !== nativeGross ||
           BigInt(native.total_wei) !== nativeGross ||
           nativeCreator !== 0n ||
-          nativeTreasury !== nativeGross / 100n ||
+          nativeTreasury !== protocolFeeUnits(nativeGross, requireFeeBps(quote)) ||
           nativeMerchant !== nativeGross - nativeTreasury
         ) {
           throw new Aifp1QuoteError(
@@ -2640,6 +2660,7 @@ export async function aifp1Fetch(
       try {
         txRef = await deps.settle({
           ...settleParams,
+          feeBps: requireFeeBps(quote),
           // The binding the server verifies on-chain: the Payment event's orderId
           // must equal the quote id, or /v1/pay answers order_id_mismatch.
           orderId: quote.quote_id,
@@ -2853,7 +2874,7 @@ function validateStableV14Quote(
   const gross = pin ? micro * 10n ** BigInt(pin.decimals - 6) : 0n;
   const metadata = quote.token_settlement;
   // Split the actual token gross, not the rounded legacy micro-dollar legs.
-  const treasury = gross / 100n;
+  const treasury = protocolFeeUnits(gross, requireFeeBps(quote));
   if (
     (pin?.decimals === 18 && metadata === undefined) ||
     (metadata !== undefined &&

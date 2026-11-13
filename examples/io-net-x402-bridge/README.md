@@ -72,7 +72,7 @@ console.log("Tx:", out._receipt?.txHash);
 Default `PRICE_WEI` is 0.25 POL (≈ $0.025) per call. IO Intelligence
 per-token pricing on Llama-3-70B class models is ~$0.001-0.005 per
 typical agent request, leaving 5-20× margin to cover bridge ops and
-the 1% protocol fee.
+the protocol fee.
 
 Adjust `PRICE_WEI` for heavier models (Llama-3.1-405B, Mixtral-8x22B)
 or higher-token contexts.

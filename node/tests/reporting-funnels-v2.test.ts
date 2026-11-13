@@ -91,6 +91,7 @@ function fixture() {
       valid_until: expiry,
       settlement_semantics: "gross-inclusive",
     },
+    fee_bps: 100,
     settlement: {
       batch_units: "100000",
       total_units: "100000",

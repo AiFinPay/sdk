@@ -230,8 +230,7 @@ NATIVE_ASSETS: dict[str, str] = {
     "xrplevm": "XRP",
 }
 
-# AIFP-1 = 1% inside gross (merchant 99%, AiFinPay 1%, creator 0%).
-# AIFP-2 = 0% fee (x402/provider).
+# v1.3 splitter profiles, fixed in each deployed contract.
 EXPECTED_BPS: dict[str, dict[str, int]] = {
     "AIFP-1": {"treasury": 100, "creator": 0},
     "AIFP-2": {"treasury": 0, "creator": 0},

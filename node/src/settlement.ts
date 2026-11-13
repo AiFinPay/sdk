@@ -350,7 +350,7 @@ function expectedBreakdown(route: SettlementRouteClass, gross: bigint) {
   const treasury = (gross * BigInt(bps.treasury)) / 10_000n;
   const creator = (gross * BigInt(bps.creator)) / 10_000n;
   if (bps.treasury > 0 && treasury === 0n) {
-    throw new SettlementProtocolError("AIFP-1 gross amount is too small for the 1% protocol fee", "amount_too_small");
+    throw new SettlementProtocolError("AIFP-1 gross amount is too small for the protocol fee", "amount_too_small");
   }
   const merchant = gross - treasury - creator;
   if (merchant <= 0n) {

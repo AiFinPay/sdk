@@ -409,8 +409,8 @@ app.get("/", (_req, res) => res.json({
     : null,
   upstream: GCORE_API_URL || undefined,
   pricing: GCORE_DEPLOYMENTS.length === 0
-    ? { total_wei: PRICE_WEI, split: "98.99% merchant / 1.00% treasury / 0.01% creator" }
-    : { split: "98.99% merchant / 1.00% treasury / 0.01% creator" },
+    ? { total_wei: PRICE_WEI, split: "merchant / treasury / creator, fixed by the B2BSplitter contract" }
+    : { split: "merchant / treasury / creator, fixed by the B2BSplitter contract" },
 }));
 
 // GET /models — OpenAI-compatible catalog list. Lets agents discover what

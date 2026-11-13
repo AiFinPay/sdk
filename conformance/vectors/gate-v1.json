@@ -285,7 +285,6 @@
    "unit_price_usd": "0.0005",
    "min_requests": 40,
    "scope": "exact",
-   "protocol_fee_bps": 100,
    "no_minimum_fee": true,
    "settlement_terms_from": "POST {{api}}/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
    "how_to_pay": [
@@ -310,7 +309,6 @@
    "unit_price_usd": "0.002",
    "min_requests": 10,
    "scope": "exact",
-   "protocol_fee_bps": 100,
    "no_minimum_fee": true,
    "settlement_terms_from": "POST {{api}}/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
    "how_to_pay": [
@@ -335,7 +333,6 @@
    "unit_price_usd": "0.005",
    "min_requests": 4,
    "scope": "exact",
-   "protocol_fee_bps": 100,
    "no_minimum_fee": true,
    "settlement_terms_from": "POST {{api}}/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
    "how_to_pay": [
@@ -360,7 +357,6 @@
    "unit_price_usd": "0.0005",
    "min_requests": 40,
    "scope": "exact",
-   "protocol_fee_bps": 100,
    "no_minimum_fee": true,
    "settlement_terms_from": "POST {{api}}/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
    "how_to_pay": [
@@ -385,7 +381,6 @@
    "unit_price_usd": "0.0005",
    "min_requests": 40,
    "scope": "exact",
-   "protocol_fee_bps": 100,
    "no_minimum_fee": true,
    "settlement_terms_from": "POST {{api}}/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
    "how_to_pay": [
