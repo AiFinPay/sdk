@@ -516,9 +516,8 @@ Use agent_history. Do not guess /v1/history, /v1/payments or /v1/wallet/tx.
 ```
 
 Canonical AIFP-1 economics are gross-inclusive: the agent pays the quoted
-price. A protocol fee is included in that price, and each quote
-(`fee_policy`) and the on-chain transaction show the exact split between the
-merchant and the protocol. Production served Polygon and Base
+price, AiFinPay takes **1 %** (100 bps) from it, and the merchant receives
+**99 %**. No fixed fee is implied. Production served Polygon and Base
 (splitter v1.4) at the 2026-10-29 baseline check. Additional client descriptors
 do not prove production activation; check issuer capabilities and merchant
 authorization. This source cohort adds a Solana v1.4 adapter with explicit
@@ -526,7 +525,7 @@ network, asset and fee/rent limits; its published deployment records are
 enabled, but the backend did not serve Solana at that check. The smallest paid batch is $0.02, plus network fees and any
 required account rent.
 
-(The legacy v1.2 bridge added its fee on top of the price.)
+(The older "98.99 / 1 / 0.01" figure was the v1.2 fee-on-top model.)
 
 Routes:
 
@@ -646,7 +645,7 @@ number:
 
 ```
 Pay 0.211075111078277 POL ($0.02) for 40 requests to /api/agent/genres
-(incl. <fee>% fee), valid until 2026-09-04T13:00:00Z.
+(incl. 1.00% fee), valid until 2026-09-04T13:00:00Z.
 ```
 
 It states the on-chain figure and the USD, the fee as a rate, and the scope in

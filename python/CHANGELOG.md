@@ -1,4 +1,4 @@
-## Unreleased — the AIFP-1 fee comes from the quote
+## 2.12.0 — the AIFP-1 fee comes from the quote
 
 - `fetch_paid` reads the AIFP-1 protocol fee from the quote (`fee_bps`,
   `fee_policy.treasury_bps`) instead of fixing it at 100 bps. Both must agree, be

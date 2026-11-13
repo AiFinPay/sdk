@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.15.0 — native APT and NEAR payments
+## 2.16.0 — the AIFP-1 fee comes from the quote
 
 - The AIFP-1 protocol fee is read from the quote (`fee_bps`, `fee_policy.treasury_bps`)
   instead of being fixed at 100 bps. Both must agree, be a whole number of bps
@@ -9,6 +9,9 @@
   carry the same fee. A quote that states no usable fee is refused.
   `executeV14Settlement` takes `expectedFeeBps`, `prepareSolanaV14Settlement`
   takes `expectedFeeBps`; the v1.3 executor is unchanged.
+
+## 2.15.0 — native APT and NEAR payments
+
 - `fetchPaid` pays native APT and NEAR through an explicit `accountV14`
   authorization: family, environment, network, RPC URL, fee budget and a durable
   `onPrepared`. A wallet without it behaves as before.
