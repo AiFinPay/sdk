@@ -6,7 +6,7 @@ description: Pay for x402-gated APIs and sites as an agent (AIFP-1 on an owner-s
   wallet, payment history, prepaid quotas and Agent Passport records through
   the AiFinPay MCP server or SDK.
 license: MIT
-version: 2.12.2
+version: 2.12.5
 author: AiFinPay Support
 metadata:
   hermes:
@@ -49,8 +49,9 @@ Node `fetchPaid` (2.1.0+) and Python `fetch_paid` (2.2.0+) execute payments.
 This skill is instructions only. To act on it, one of these must be
 installed — always use the `latest` release:
 
-- **MCP client (Claude Desktop / Cursor / Windsurf):**
-  `npx @aifinpay/mcp`. The server depends on `@aifinpay/agent`
+- **MCP client (Claude Code / Claude Desktop / Cursor / Windsurf):**
+  `npx @aifinpay/mcp`; in Claude Code,
+  `claude mcp add aifinpay -- npx -y @aifinpay/mcp`. The server depends on `@aifinpay/agent`
   and pulls it in automatically — do not install the agent package yourself.
 - **Agent code in Node/TS:**
   `npm install @aifinpay/agent`. Do NOT install the MCP server.
@@ -192,8 +193,8 @@ checklist as `payment_setup_status` and signs nothing. With AIFINPAY_MODE=dev
 it also exposes dev_payment_quote. Never tell a user a payment was sent
 because a quote or invoice was created.
 
-`settlement_routes` lists the AIFP-1 v1.4 routes first (Polygon and Base,
-`live: true` when served) and the older splitter v1.3 routes under
+`settlement_routes` lists the AIFP-1 v1.4 routes first (`live: true` when
+served) and the older splitter v1.3 routes under
 `legacy_v13`. Only the v1.4 section says whether `payable_fetch` can pay; a
 v1.3 route marked not live does not mean the network is disabled.
 
@@ -436,13 +437,21 @@ agent's balance, payments and receipts, and can set a daily-spend email alert,
 at https://dash.aifinpay.io → My Agents:
 
 - **MCP:** the owner clicks **Claim via MCP**, gets a one-time URL and gives it
-  to you; call `agent_claim_self({"magic_link_url": "…"})`. The owner-selected
+  to you; call `agent_claim_self({"magic_link_url": "…"})`. The URL reads
+  `https://dash.aifinpay.io/api/auth/verify?token=…`: it links this agent and
+  signs nobody in. Without `agent_claim_self` in this session, do not open it.
+  An assistant in an MCP client tells the owner to connect `@aifinpay/mcp`
+  (Prerequisites) and generate a new URL; code on the SDK uses the address
+  path below. The owner-selected
   payment family must be bound successfully; the other wallet is best-effort.
   Binding a wallet does not activate a disabled payment network. Use the
   selected wallet's **Fund** panel for available networks and assets.
-- **Node / Python:** the owner uses **Add agent by address** and gives you the
-  challenge; return `agent.signDashboardClaim(challenge)` (Node) or
-  `agent.sign_dashboard_claim(challenge)` (Python). These sign only
+- **Node / Python:** the owner opens **Link an agent**, then the signed-message
+  option under the one-time URL, enters your public wallet address, presses
+  **Get ownership message** and gives you the message;
+  return `agent.signDashboardClaim(challenge)` (Node) or
+  `agent.sign_dashboard_claim(challenge)` (Python) for the owner to paste into
+  **Wallet signature** and press **Link wallet**. These sign only
   `AiFinPay-claim:polygon:<own address>:<nonce>`.
 
 Once the agent is claimed, the dashboard is where the owner manages its
@@ -516,16 +525,17 @@ Use agent_history. Do not guess /v1/history, /v1/payments or /v1/wallet/tx.
 ```
 
 Canonical AIFP-1 economics are gross-inclusive: the agent pays the quoted
-price, AiFinPay takes **1 %** (100 bps) from it, and the merchant receives
-**99 %**. No fixed fee is implied. Production served Polygon and Base
-(splitter v1.4) at the 2026-10-29 baseline check. Additional client descriptors
+price. A protocol fee is included in that price, and each quote
+(`fee_policy`) and the on-chain transaction show the exact split between the
+merchant and the protocol. The networks production serves are the rows
+of the issuer's `/api/payment-capabilities`. Client descriptors
 do not prove production activation; check issuer capabilities and merchant
 authorization. This source cohort adds a Solana v1.4 adapter with explicit
 network, asset and fee/rent limits; its published deployment records are
-enabled, but the backend did not serve Solana at that check. The smallest paid batch is $0.02, plus network fees and any
+enabled; whether the backend serves Solana is in the same capabilities read. The smallest paid batch is $0.02, plus network fees and any
 required account rent.
 
-(The older "98.99 / 1 / 0.01" figure was the v1.2 fee-on-top model.)
+(The legacy v1.2 bridge added its fee on top of the price.)
 
 Routes:
 
@@ -645,7 +655,7 @@ number:
 
 ```
 Pay 0.211075111078277 POL ($0.02) for 40 requests to /api/agent/genres
-(incl. 1.00% fee), valid until 2026-09-04T13:00:00Z.
+(incl. <fee>% fee), valid until 2026-09-04T13:00:00Z.
 ```
 
 It states the on-chain figure and the USD, the fee as a rate, and the scope in

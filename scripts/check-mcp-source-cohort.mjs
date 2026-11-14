@@ -26,24 +26,24 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // Keep the bootstrap immutable between such refreshes.
 export const BASE = "baff2043ca0170bc35e1603f3fa75f81ab54c2ea";
 export const COHORT = {
-  mcp: "2.16.3",
+  mcp: "2.16.4",
   agent: "2.16.0",
   python: "2.12.0",
-  skill: "2.12.2",
+  skill: "2.12.5",
 };
 // Real CLI subprocess tests retain their default five-second limit. Serialize
 // the complete suite to avoid competing compiler/import workers starving them.
 export const MCP_TEST_ARGS = ["test", "--", "--maxWorkers=1"];
 // Parent-reviewed canonical reporting producer; no moving branch or registry
 // artifact stands in for its committed tree and actual source pack.
-export const SKILL_COMMIT = "aad2c27c28e36ff42f2ecf628bf2fbb40e9da24a";
-export const SKILL_TREE = "e2f4b44139585fcd1b788ff585c9d242507e5075";
+export const SKILL_COMMIT = "bb5b06fa785a684bebbb1313deef2506bf6c006b";
+export const SKILL_TREE = "104bf7d5f4db7823ea74dd1834d70757b6bf9f0a";
 export const SKILL_SHA =
-  "9993db931300c1f8a16714d9bbeff52a8874cdeae23652d1c9a182eb2d97972b";
+  "d4315f93fd05657e8d022a934764af8c36da27c68c04c5cc41cc5f9de260cbe8";
 export const SKILL_PACK = {
-  sha256: "0535889e9f5727d2d8cf9288ff6bd8eac586b3a56ff03c8784a85c4ae4ce7653",
+  sha256: "31ef8fd98e2e358cd3cd9be2b4d3ffd6a8c0bca07b75e421245b044871077fc5",
   integrity:
-    "sha512-xexfTt4BWuZoD3JWGX8A9XMpVubyCT05NqWmKHWQjQS7QoN5BqGFW2Eq2DIKC4DVYXJutTAymAk7vG2V5io3Pg==",
+    "sha512-PIfbvXTnHfnjA3Ioq1MOnieuhoiuiBIvFhAKS6bG4IGN79pPAd1Hn0R4PWvJ199Q8T/4oKEJryIeizcSFxhtuw==",
 };
 export const BASE_HASHES = {
   "package.json":

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.16.4 — installs agent 2.16.0, bundles skill 2.12.5
+
+- `@aifinpay/agent` ^2.16.0 (lock resolved from the registry): the AIFP-1
+  protocol fee is taken from the quote and checked against the live route
+  profile, not assumed to be a fixed rate.
+- `@aifinpay/skill` ^2.12.5, and `aifinpay://skill` serves it: no fixed fee
+  rate, served networks read from `/api/payment-capabilities`, Claude Code as
+  an MCP client and the current dashboard steps for linking an agent. 2.16.3
+  still bundled 2.12.2.
+- The README no longer names a prepared version; dependency versions are read
+  from the manifest and lock.
+
 ## 2.16.3 — no fixed fee rate in tool descriptions
 
 - `settlement_routes` and the retired split tools no longer state a fixed
