@@ -152,7 +152,13 @@ describe("local settings report", () => {
     const m = await fresh();
     const f = backend(stored);
     await m.reportLocalSettings(
-      ctx(f, { paymentsEnabled: undefined, gatewayOrigins: undefined, payAsset: undefined, payChain: "base" })
+      ctx(f, {
+        paymentsEnabled: undefined,
+        gatewayOrigins: undefined,
+        payAsset: undefined,
+        payChain: "base",
+        maxGas: "0.001",
+      })
     );
     expect(Object.keys(sentBody(f))).toEqual(KEYS);
     expect(sentBody(f)).toEqual({
@@ -262,6 +268,8 @@ describe("local settings report", () => {
   it("signs and sends nothing when the pay chain or a USD cap cannot be reported", async () => {
     for (const overrides of [
       { payChain: "no-such-chain" },
+      { gatewayOrigins: ["https://news.example/"] },
+      { payAsset: "NOT-PINNED" },
       { maxAmountUsd: undefined },
       { maxAmountUsd: Number.NaN },
       { maxAmountUsd: 0 },

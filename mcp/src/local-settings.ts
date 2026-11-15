@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import type { McpConfig } from "./config.js";
+import { validatePaymentConfig, type McpConfig } from "./config.js";
 import { policyIssuer, STATEMENT_LIFETIME_S } from "./dashboard-policy.js";
 import { payChain, type PayChain } from "./pay-chains.js";
 import type { ToolContext } from "./server.js";
@@ -31,11 +31,12 @@ export function localSettingsStatement(
   return JSON.stringify(["AiFinPay agent local settings v1", issuer, address, expiresAt, settings]);
 }
 
-/** Undefined when the pay chain or a USD cap cannot be reported. */
+/** Undefined when the settings would be refused for payments anyway, so a report would mislead. */
 export function localSettings(config: McpConfig): LocalSettings | undefined {
   let chain: PayChain;
   try {
     chain = payChain(config.payChain);
+    validatePaymentConfig({ ...config, paymentsEnabled: true });
   } catch {
     return undefined;
   }
