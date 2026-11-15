@@ -12,10 +12,12 @@
   when unset), `max_usd`, `daily_usd`, `pay_chain` and `pay_asset`. Keys, the
   passphrase, the seed, file paths, the agents file and agent id, the RPC URL,
   trusted hosts, claim origins and the base URL are never sent.
-- At most once per process per wallet and settings after a 200 or a 409; any
-  other answer is retried on the next call. The report waits at most 5 s, never
-  throws and never changes a tool's answer; a backend without the route
-  answers 404 and nothing is stored.
+- At most once per process per wallet and settings after a 200, and again
+  after every successful claim (a new link starts with no report); any other
+  answer, a 409 too, is retried on the next call. Only settings the payment
+  check accepts are reported. The report waits at most 5 s, never throws and
+  never changes a tool's answer; a backend without the route answers 404 and
+  nothing is stored.
 
 ## 2.16.3 — no fixed fee rate in tool descriptions
 

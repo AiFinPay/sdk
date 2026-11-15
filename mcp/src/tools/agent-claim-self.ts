@@ -310,7 +310,7 @@ export async function runAgentClaimSelf(ctx: ToolContext, args: Record<string, u
     };
   }
   // The owner's dashboard shows the linked EVM wallet's local settings.
-  if (!primarySolana) await reportLocalSettings(ctx);
+  if (!primarySolana) await reportLocalSettings(ctx, { afterClaim: true });
   const secondary = await claimFamily(!primarySolana);
   const evmResult = primarySolana ? secondary : primary;
   const solanaResult = primarySolana ? primary : secondary;

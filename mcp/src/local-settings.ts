@@ -57,14 +57,15 @@ function positiveUsd(value: number | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
-/** Best effort, signed by the agent's own EVM key: never throws, and no tool answer depends on it. */
-export async function reportLocalSettings(ctx: ToolContext): Promise<void> {
+/** Best effort, signed by the agent's own EVM key: never throws, and no tool answer depends on it.
+ *  `afterClaim` sends even settings already reported: a new link starts with no report. */
+export async function reportLocalSettings(ctx: ToolContext, { afterClaim = false } = {}): Promise<void> {
   try {
     const settings = localSettings(ctx.config);
     if (!settings) return;
     const address = ctx.agent.evmAddress.toLowerCase();
     const key = JSON.stringify([address, settings]);
-    if (reported.has(key)) return;
+    if (!afterClaim && reported.has(key)) return;
     const issuer = policyIssuer(ctx.config.baseUrl);
     const expiresAt = Math.floor(Date.now() / 1000) + STATEMENT_LIFETIME_S;
     const signature = await ctx.agent.evmAccount.signMessage({
@@ -81,8 +82,8 @@ export async function reportLocalSettings(ctx: ToolContext): Promise<void> {
       redirect: "manual",
       signal: AbortSignal.timeout(REPORT_TIMEOUT_MS),
     });
-    // 409: a report signed later is already stored.
-    if (response.status === 200 || response.status === 409) reported.add(key);
+    // A 409 means a report signed later is stored (another process, or a clock ahead): try again later.
+    if (response.status === 200) reported.add(key);
   } catch {
     // Not reported; the next call tries again.
   }

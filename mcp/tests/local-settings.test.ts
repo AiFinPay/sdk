@@ -223,9 +223,10 @@ describe("local settings report", () => {
     expect(reports(f)).toHaveLength(4);
   });
 
-  it("a 409 counts as reported; any other answer is retried on the next call, one request per call", async () => {
+  it("only a 200 counts as reported; any other answer, a 409 too, is retried on the next call, one request per call", async () => {
     const answers: [string, Report, boolean][] = [
-      ["409", OUTCOMES["409"], false],
+      ["200", stored, false],
+      ["409", OUTCOMES["409"], true],
       ["503", () => Response.json({ error: "db_not_ready" }, { status: 503 }), true],
       ["404", OUTCOMES["404"], true],
       ["500", OUTCOMES["500"], true],
@@ -402,6 +403,17 @@ describe("agent_claim_self reports after an EVM claim", () => {
     expect(reports(f)[0][0]).toBe(`https://api.aifinpay.io/v1/agents/${lower}/local-settings`);
     expect(Object.keys(sentBody(f))).toEqual(KEYS);
     expect(exchange.mock.calls.some(([url]) => String(url).includes("local-settings"))).toBe(false);
+  });
+
+  it("reports again after a new link, even when this process already reported the same settings", async () => {
+    const m = await fresh();
+    vi.stubGlobal("fetch", claimExchange());
+    const f = backend(stored);
+    await m.reportLocalSettings(ctx(f));
+    await m.reportLocalSettings(ctx(f));
+    expect(reports(f)).toHaveLength(1);
+    await m.runAgentClaimSelf(claimCtx(f), { magic_link_url: link });
+    expect(reports(f)).toHaveLength(2);
   });
 
   it("does not report after a Solana claim, even when the EVM wallet is linked too", async () => {
