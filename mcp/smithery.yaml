@@ -137,7 +137,7 @@ tools:
   - name: agent_reload
     description: Reload the configured local wallet files after init or a file update, without starting a new conversation. Returns public addresses only.
   - name: agent_claim_self
-    description: Link the agent to its owner's AiFinPay dashboard with a one-time URL from dash.aifinpay.io. Signs only an AiFinPay claim challenge for the agent's own address; moves no funds.
+    description: Link the agent to its owner's AiFinPay dashboard with a one-time URL from dash.aifinpay.io. Signs only an AiFinPay claim challenge for the agent's own address and, after an EVM claim, a summary of its payment settings for the owner's dashboard (never keys or file paths); moves no funds.
   - name: payable_fetch
     description: Registered only when the owner enables payments. Fetches a GET resource from an owner-approved AIFP-1 merchant, buys a prepaid batch through verified Polygon v1.4 within the owner's limits, and reuses its receipt. scope "merchant" buys one batch for the whole site.
   - name: agent_quota

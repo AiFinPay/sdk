@@ -160,8 +160,8 @@ export async function createServer(config: McpConfig = {}) {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       agentAddressTool(),
-      // Links the agent to its owner's dashboard. Signs only an AiFinPay claim
-      // challenge for this agent's own address, on allowed origins; no funds.
+      // Links the agent to its owner's dashboard. Signs only an AiFinPay claim challenge for this
+      // agent's own address, on allowed origins, and after an EVM claim the settings summary; no funds.
       agentClaimSelfTool(),
       {
         name: "agent_reload",
