@@ -202,6 +202,36 @@ def payment_authorization_message(
     )
 
 
+def _or(value, default):
+    return default if value is None else value
+
+
+def evm_quote_authorization_message(body, auth, issuer):
+    """The statement an EVM payer signs for /v1/quote, byte for byte as the backend rebuilds it."""
+    return json.dumps(
+        [
+            "AiFinPay EVM quote authorization v1",
+            issuer,
+            body.get("merchant_id"),
+            body.get("resource"),
+            _or(body.get("tier"), "standard"),
+            body.get("requests"),
+            body.get("units"),
+            _or(body.get("currency"), "USD"),
+            _or(body.get("scope"), "exact"),
+            body.get("settlement_chain"),
+            body.get("settlement_version"),
+            body.get("asset"),
+            _or(body.get("force"), False),
+            auth["payer"],
+            auth["nonce"],
+            auth["expires_at"],
+        ],
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+
+
 def solana_quote_authorization_message(body, auth, issuer):
     return json.dumps(
         [
@@ -1451,6 +1481,54 @@ class MerchantPins:
         _write_private_json(self._path(site), {"site": site, "merchant_id": merchant_id})
 
 
+def _request_evm_quote(session, quote_url, body, account, issuer, headers):
+    """A signed nonce reserves budget: resend the same body when uncertain; re-sign only an expired one, once."""
+
+    def signed():
+        auth = {"payer": account.address.lower(), "nonce": os.urandom(32).hex(), "expires_at": int(time.time()) + 240}
+        signature = account.sign_message(encode_defunct(text=evm_quote_authorization_message(body, auth, issuer)))
+        signature = signature.signature.hex()
+        auth["signature"] = signature if signature.startswith("0x") else "0x" + signature
+        return {**body, "quote_authorization": auth}
+
+    request = signed()
+    resigned = False
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            r = session.post(
+                quote_url,
+                json=request,
+                **({"headers": headers} if headers else {}),
+                timeout=15,
+                allow_redirects=False,
+            )
+        except requests.RequestException as e:
+            if attempt >= 3:
+                raise Aifp1QuoteError(f"POST {quote_url} failed: {e}") from None
+            time.sleep(0.25 * attempt)
+            continue
+        if r.status_code == 410 and not resigned:
+            try:
+                expired = r.json().get("reason") == "evm_quote_authorization_expired"
+            except Exception:
+                expired = False
+            if expired:
+                resigned = True
+                request = signed()
+                continue
+        uncertain = r.status_code >= 500
+        if r.ok:
+            try:
+                r.json()
+            except ValueError:
+                uncertain = True
+        if not uncertain or attempt >= 3:
+            return r
+        time.sleep(0.25 * attempt)
+
+
 def aifp1_fetch(
     url: str,
     *,
@@ -1684,17 +1762,16 @@ def aifp1_fetch(
         quote_headers = {**({"content-type": "application/json"} if admission else {}),
                          **({"AIFP-Agent-Framework": framework} if framework else {}),
                          **_reporting_headers(reporting_token, quote_url, api_base.rstrip('/'))}
-        r = session.post(
-            quote_url,
-            **(
-                {"data": admission["request_body"]}
-                if admission
-                else {"json": quote_body}
-            ),
-            **({"headers": quote_headers} if quote_headers else {}),
-            timeout=15,
-            allow_redirects=False,
-        )
+        if admission:
+            r = session.post(
+                quote_url,
+                data=admission["request_body"],
+                **({"headers": quote_headers} if quote_headers else {}),
+                timeout=15,
+                allow_redirects=False,
+            )
+        else:
+            r = _request_evm_quote(session, quote_url, quote_body, account, issuer, quote_headers)
         if not r.ok:
             if sol and r.status_code == 410:
                 try:

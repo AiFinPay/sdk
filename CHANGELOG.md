@@ -6,6 +6,13 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## Signed EVM quotes — agent 2.17.0, Python 2.13.0
+
+- Both agent SDKs sign every EVM `/v1/quote` with the paying wallet
+  (`quote_authorization`) and retry an uncertain answer with the same signed
+  request; only an expired authorization is signed again, once. MCP is not
+  part of this change.
+
 ## Minimum batch $0.02 — agent 2.14.0, Python 2.11.0, gate 0.9.0, aifinpay-gate 0.6.0, MCP 2.16.0
 
 - The agent SDKs buy the minimum batch the 402 advertises, falling back to

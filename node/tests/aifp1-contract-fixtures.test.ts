@@ -3,7 +3,13 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { aifp1Fetch, Aifp1ReceiptCache, type Aifp1Deps, type Aifp1FetchOptions } from "../src/aifp1.js";
+import {
+  aifp1Fetch,
+  evmQuoteAuthorizationMessage,
+  Aifp1ReceiptCache,
+  type Aifp1Deps,
+  type Aifp1FetchOptions,
+} from "../src/aifp1.js";
 import { PAYMENT_CHAINS, type PaymentChain } from "../src/paymentChains.js";
 
 const DIR = new URL("../../contract-fixtures/aifp1/", import.meta.url);
@@ -30,7 +36,7 @@ describe.each(Object.keys(manifest.files))("%s", (name) => {
     const stable = asset !== PAYMENT_CHAINS[chain].native;
     const url = f.merchant_origin + f.challenge_402.resource;
     const txRef = f.pay_response.tx_ref as string;
-    const quoteBodies: unknown[] = [];
+    const quoteBodies: Record<string, unknown>[] = [];
     const payBodies: Record<string, unknown>[] = [];
     const fetchImpl = vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
       const target = String(input);
@@ -81,7 +87,18 @@ describe.each(Object.keys(manifest.files))("%s", (name) => {
     };
 
     expect((await aifp1Fetch(deps, url, {}, opts))?.status).toBe(200);
-    expect(quoteBodies).toEqual([f.quote_request]);
+    expect(quoteBodies).toHaveLength(1);
+    const { quote_authorization: auth, ...quoteBody } = quoteBodies[0] as Record<string, any>;
+    expect(quoteBody).toEqual(f.quote_request);
+    expect(auth).toEqual({
+      payer: f.payer.toLowerCase(),
+      nonce: expect.stringMatching(/^[0-9a-f]{64}$/),
+      expires_at: Math.floor(Date.now() / 1000) + 240,
+      signature: "0xsignature",
+    });
+    expect(deps.signPaymentAuthorization).toHaveBeenCalledWith(
+      evmQuoteAuthorizationMessage(f.quote_request, auth, f.api_base)
+    );
     expect(deps.settle).toHaveBeenCalledWith(expect.objectContaining({ settlementCall: f.quote.settlement_call }));
     expect(payBodies).toHaveLength(1);
     expect(payBodies[0]).toMatchObject({ quote_id: f.quote.quote_id, chain, tx_ref: txRef });
