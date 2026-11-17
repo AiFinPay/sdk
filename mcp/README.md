@@ -4,12 +4,10 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Version **2.13.0** is prepared in this checkout, on the published agent 2.9.0
-and canonical skill 2.11.0 (AiFinPay/skill 0490615, published 2026-10-22). The separate canonical producer's final immutable
-source pin is a required handoff, not a moving-branch substitution.
-The published baseline checked2026-10-04 was MCP2.5.0. Package publication and
-real registry dependency/lock refresh remain release gates; a source-cohort
-build does not prove those steps. Owner-enabled v1.4 purchases with `payable_fetch` are
+The `@aifinpay/agent` and `@aifinpay/skill` releases this package installs
+are named in `package.json` and resolved in `package-lock.json`;
+`aifinpay://skill` serves the guide bundled from that skill release.
+Owner-enabled v1.4 purchases with `payable_fetch` are
 released: on Polygon since 2.2.0, on Base (ETH or USDC) since 2.5.0; site-wide
 batches with `scope: "merchant"` since 2.4.1. Since 2.12.1 payments are on by
 default: a persistent wallet created with `init` can pay with no payment env at
