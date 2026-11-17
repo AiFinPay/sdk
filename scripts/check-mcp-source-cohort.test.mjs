@@ -59,10 +59,10 @@ test("canonical mirror and both CI refs bind the reviewed reporting producer; wr
 });
 test("reporting source target refuses every stale package version without claiming registry availability", () => {
   verifyCohortVersions({
-    mcp: "2.16.3",
+    mcp: "2.16.4",
     agent: "2.16.0",
     python: "2.12.0",
-    skill: "2.12.2",
+    skill: "2.12.5",
   });
   for (const [name, oldVersion] of Object.entries({
     mcp: "2.15.2",
@@ -91,7 +91,7 @@ test("MCP candidate metadata preserves the real registry lock of the published c
   assert.deepEqual(lock.packages[""].dependencies, manifest.dependencies);
   // The published skill tarball is byte-identical to the pinned source pack;
   // as with the agent, the registry identity is the only change.
-  const registrySkill = "2.12.2";
+  const registrySkill = "2.12.5";
   assert.equal(manifest.dependencies["@aifinpay/skill"], `^${registrySkill}`);
   {
     const { version, resolved, integrity, ...skillEdges } =
@@ -112,9 +112,9 @@ test("MCP candidate metadata preserves the real registry lock of the published c
     );
     assert.deepEqual(skillEdges, baselineSkillEdges);
   }
-  // The lock follows the published agent 2.14.0. Besides its registry identity,
+  // The lock follows the published agent 2.16.0. Besides its registry identity,
   // its one dependency change from the baseline is deployments 1.1.4 -> 2.1.4.
-  const registryAgent = "2.14.0";
+  const registryAgent = "2.16.0";
   assert.equal(manifest.dependencies["@aifinpay/agent"], `^${registryAgent}`);
   const { version, resolved, integrity, ...agentEdges } =
     lock.packages["node_modules/@aifinpay/agent"];
@@ -130,7 +130,7 @@ test("MCP candidate metadata preserves the real registry lock of the published c
       version: registryAgent,
       resolved: `https://registry.npmjs.org/@aifinpay/agent/-/agent-${registryAgent}.tgz`,
       integrity:
-        "sha512-fyuyrAxL3+4Irqp47ZmwqHAJYoHT0AqD51BAvAWVVm6j04aPmDTvQRs/eprT9N3cJUFgoWW7qJIIq2ZVY4u6kg==",
+        "sha512-Z7sUBS1Np6Lkl/x7JMhidrIQAMXPXXcjmR0WG9vhrqGDa/j8/KTRBZwjKOx3O5xLeZebToKWAAYu+2jvMag1SQ==",
     },
   );
   assert.deepEqual(agentEdges, {
@@ -147,7 +147,7 @@ test("MCP candidate metadata preserves the real registry lock of the published c
       "sha512-V8OSFKS/TBdKxnpQGqrkNQKYrGRWIxm/93Lju5UU5ah6OYpySto6dYF82I+IFHEXbp49uSH4JtBRAfhO240Vpg==",
     license: "MIT",
   });
-  // With agent 2.14.0 and skill 2.12.2 published and locked, the release
+  // With agent 2.16.0 and skill 2.12.5 published and locked, the release
   // metadata check must accept the lock. It also verifies the installed
   // package, so it needs `npm ci` in mcp/; CI runs this file before any mcp
   // install (it then installs the cohort in a disposable directory and runs
