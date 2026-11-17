@@ -1,3 +1,11 @@
+## 0.9.0 — unproven pays
+
+- Port of `@aifinpay/gate` 0.12.0: `unproven_pays(reader_proof, verify_search_bot=None, free_bots=...)`,
+  `ReaderProof(key, ttl_seconds)` and `verify_search_bot(user_agent, ip, resolver=None, now=None, timeout=1.0)`
+  with `SEARCH_BOT_TABLE` and `SystemResolver`. The ASGI and WSGI adapters set `req.ip`
+  from `scope["client"]` / `REMOTE_ADDR`; `SimpleRequest` takes `ip=`. Nothing else
+  reads it. Reader-proof vectors shared with Node in `conformance/vectors/reader-proof-v1.json`.
+
 ## 0.8.1 — a gate that does not know its network refuses a testnet receipt
 
 - Port of `@aifinpay/gate` 0.11.1, on ASGI and WSGI alike: with no `network_mode` (or a callable returning `None`) a receipt paid on a test network is refused with 403 instead of opening the site; a live or unmarked receipt is served as before. A test site says so with `network_mode="test"`. Parity fixture regenerated.

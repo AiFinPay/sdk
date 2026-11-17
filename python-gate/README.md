@@ -73,6 +73,40 @@ else:                     # paid: add result.headers to your response; result.ai
     ...
 ```
 
+## Unproven pays
+
+`known_ai_agent` charges whoever names itself an agent. `unproven_pays` charges
+whoever has not proven it may read free: a reader with a signed cookie, or a
+search crawler confirmed by DNS. Everyone else gets the 402 with the price.
+
+```python
+from aifinpay_gate import Gate, ReaderProof, unproven_pays
+
+reader_proof = ReaderProof(os.environ["AIFP_READER_KEY"])  # 32+ bytes
+gate = Gate(merchant_id, resource="/articles", should_charge=unproven_pays(reader_proof))
+
+# After your own browser check passes:
+response.headers["Set-Cookie"] = reader_proof.set_cookie(reader_proof.issue(request.headers.get("user-agent")))
+```
+
+- **Reader cookie** `__aifp_human` = `<exp>.<sig>`: HMAC-SHA-256 of
+  `<exp>\n<user-agent>`, base64url without padding, valid 30 days for the
+  User-Agent it was issued to; the same bytes as `@aifinpay/gate`
+  ([`conformance/vectors/reader-proof-v1.json`](../conformance/vectors/reader-proof-v1.json)).
+  This package does not run the browser check.
+- **Verified search crawler** (`verify_search_bot`): forward-confirmed reverse
+  DNS against `SEARCH_BOT_TABLE`, cached per operator and address 24 h verified
+  and 1 h refused, at most `SEARCH_BOT_CACHE_MAX` entries, 1 s timeout. A DNS
+  error or timeout is not verified: the crawler pays. The lookup blocks; the
+  ASGI middleware already runs the gate in a thread.
+- **The client address** is `req.ip`: `REMOTE_ADDR` under WSGI, `scope["client"]`
+  under ASGI. Behind a proxy that is the proxy's address unless the server
+  rewrites it: `uvicorn --proxy-headers --forwarded-allow-ips=<proxy>`,
+  werkzeug's `ProxyFix`, or your own middleware for Django. A `SimpleRequest`
+  takes `ip=`. Without an address no crawler is verified and all of them pay.
+- `AIFP-Receipt` or `AIFP-Agent-Id` on the request is charged whatever else it
+  carries, so a receipt is always metered.
+
 ## Routes
 
 `Route(pattern, tier="standard", weight=None, methods=None, paywall=True)`

@@ -26,6 +26,7 @@ class _WsgiRequest:
             path = "".join(c if ord(c) < 0x80 else f"%{ord(c):02x}" for c in path)
         self.path = path.replace("?", "%3F").replace("#", "%23")
         self.method = environ.get("REQUEST_METHOD", "GET")
+        self.ip = environ.get("REMOTE_ADDR")
         self._environ = environ
 
     def header(self, name: str) -> Optional[str]:

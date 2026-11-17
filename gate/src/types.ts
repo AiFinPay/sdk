@@ -170,12 +170,14 @@ export type GateResult =
       reportingResource?: string;
     };
 
-/** What the core needs from a request. Deliberately two fields: it is the whole
+/** What the core needs from a request. Deliberately small: it is the whole
  *  reason the decision logic can be unit-tested without a server, and the whole
  *  reason a Fastify/Hono/Workers adapter is ~15 lines. */
 export interface GateRequest {
   path: string;
   header(name: string): string | undefined;
+  /** The client's address; only `unprovenPays` reads it. Behind a proxy, pass the real client's, not the proxy's. */
+  ip?: string;
 }
 
 export type GateEventKind = "402" | "serve" | "403" | "meter_error" | "pricing_unavailable";

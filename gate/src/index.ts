@@ -53,6 +53,24 @@ export {
   UA_CLASSES,
 } from "./agents.js";
 export type { AgentIdentity, AiAgentUaEntry, GateOperator, UaClass } from "./agents.js";
+export {
+  createReaderProof,
+  verifySearchBot,
+  unprovenPays,
+  READER_COOKIE,
+  READER_TTL_SECONDS,
+  SEARCH_BOT_TABLE,
+  SEARCH_BOT_CACHE_MAX,
+} from "./unproven.js";
+export type {
+  DnsResolver,
+  FreeBotCategory,
+  ReaderProof,
+  ReaderProofOptions,
+  SearchBotEntry,
+  UnprovenPaysOptions,
+  VerifySearchBotInput,
+} from "./unproven.js";
 export { decideOperator, normalizeOperatorPolicy, OPERATOR_ACTIONS, OPERATOR_DEFAULT } from "./operator-policy.js";
 export type { OperatorDecision } from "./operator-policy.js";
 export { scopeCovers } from "./scope.js";

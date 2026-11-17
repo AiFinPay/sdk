@@ -76,6 +76,7 @@ export function aifpGate(options: GateOptions): RequestHandler {
         const result = await gate({
           path: fullPath,
           header: (name: string) => req.header(name) ?? undefined,
+          ip: req.ip,
         });
 
         if (options.reporting && result.reportingResource && !reportingResponses.has(res)) {

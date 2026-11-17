@@ -28,6 +28,8 @@ class _AsgiRequest:
             path = raw.decode("latin-1").split("?", 1)[0]
         self.path = path.replace("?", "%3F").replace("#", "%23")
         self.method = scope.get("method", "GET")
+        client = scope.get("client")
+        self.ip = client[0] if client else None
         self._headers: Dict[str, str] = {}
         for k, v in scope.get("headers") or []:
             name = k.decode("latin-1").lower()

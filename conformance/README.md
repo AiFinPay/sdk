@@ -41,4 +41,4 @@ A subject is a module exporting `{ id, label, capabilities, supports(profile), s
 
 ## Change the vectors
 
-Edit `scripts/gen-vectors.mjs` and regenerate. Golden bodies come from the built `../gate`, so a change to the 402 shows up as a stale file in CI. A body change is a contract change: it needs its own proposal, and every port follows.
+Edit `scripts/gen-vectors.mjs` and regenerate. It also writes `vectors/reader-proof-v1.json`, the reader cookie computed with plain HMAC; the Node and Python gate unit tests read it directly. Golden bodies come from the built `../gate`, so a change to the 402 shows up as a stale file in CI. A body change is a contract change: it needs its own proposal, and every port follows.
