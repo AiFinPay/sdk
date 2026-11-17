@@ -162,9 +162,12 @@ and Googlebot. On an API that is usually right — agents are the only callers.
 On a **page** it is almost never right: you have put a 402 in front of your own
 readers and your search ranking.
 
-`knownAiAgent` returns true for the self-identifying AI crawlers — GPTBot,
-ClaudeBot, PerplexityBot, CCBot, Bytespider, Google-Extended and the rest — plus
-anything already speaking AIFP. A browser passes through free.
+`knownAiAgent` returns true for the self-identifying AI crawlers and assistants —
+GPTBot, ClaudeBot, PerplexityBot, CCBot, Bytespider and the rest — plus anything
+already speaking AIFP. A browser passes through free, and so do search indexers
+and link previews (Googlebot, bingbot, facebookexternalhit): charging them costs
+the site its listing. The list is `data/agents-v1.json`, exported as
+`@aifinpay/gate/agents.json`, with the operator page that names each token.
 
 That is a decision about **who is asked** to pay, not enforcement. The
 User-Agent is whatever the client says it is: a scraper that sends a browser's
@@ -464,12 +467,13 @@ Every decision is in the event `detail` — `operator policy: block
 (operator=openai)` — in shadow as in enforce, which is how the dashboard says
 what a shadow gate would have done.
 
-Every event also says **who asked**, normalised: `operator` (`openai`,
-`anthropic`, `perplexity`, `google`, `microsoft`, `meta`, `bytedance`, `apple`,
-`amazon`, `commoncrawl`, `aifinpay`, `unknown`), `ua_class` (`ai_crawler`,
-`ai_agent_browser`, `aifp_agent`, `human`, `unknown`) and `verified`. The
-mapping is `AI_AGENT_UA_TABLE` in `agents.ts` — the same table `knownAiAgent`
-charges from, exported with `classifyAgent(req)`. `verified` is **true only
+Every event also says **who asked**, normalised: `operator` (one of
+`GATE_OPERATORS`, from `data/agents-v1.json`; anything else is `unknown`),
+`ua_class` (`ai_crawler`, `ai_agent_browser`, `aifp_agent`, `human`, `unknown`)
+and `verified`. The mapping is `AI_AGENT_UA_TABLE`, generated from that file by
+`npm run agents` — the same table `knownAiAgent` charges from, exported with
+`classifyAgent(req)`. `ROBOTS_TOKENS` lists the robots.txt tokens the operators
+publish. `verified` is **true only
 when the request's AIFP receipt verified**; a User-Agent is a claim, and
 vulnerability scanners send `ChatGPT-User` and `Claude-SearchBot` to look
 trusted. The raw User-Agent, IP and headers never appear in an event.

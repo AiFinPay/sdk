@@ -163,6 +163,7 @@ const fixture = {
     AI_AGENT_UA_MARKERS: G.AI_AGENT_UA_MARKERS,
     AI_AGENT_UA_TABLE: G.AI_AGENT_UA_TABLE.map((row) => [row.marker, row.operator, row.ua_class]),
     GATE_OPERATORS: G.GATE_OPERATORS, UA_CLASSES: G.UA_CLASSES,
+    ROBOTS_TOKENS: G.ROBOTS_TOKENS.map((row) => [row.token, row.operator, row.ua_class]),
     TIER_WEIGHTS: G.TIER_WEIGHTS, UNIT_PRICE_USD: G.UNIT_PRICE_USD,
     min_requests: Object.fromEntries(tiers.map((t) => [t, G.minRequestsForTier(t)])),
     REDIS_INCRBY_SCRIPT: G.REDIS_INCRBY_SCRIPT,

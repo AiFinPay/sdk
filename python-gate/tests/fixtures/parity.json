@@ -1,11 +1,11 @@
 {
- "generated_from": "@aifinpay/gate 0.11.0",
+ "generated_from": "@aifinpay/gate 0.12.0",
  "jwks": {
   "keys": [
    {
+    "kty": "OKP",
     "crv": "Ed25519",
     "x": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw",
-    "kty": "OKP",
     "kid": "fixture-1",
     "alg": "EdDSA",
     "use": "sig"
@@ -27,24 +27,45 @@
    "claudebot",
    "claude-searchbot",
    "claude-user",
+   "claude-agent",
    "claude-web",
    "anthropic-ai",
    "perplexitybot",
    "perplexity-user",
+   "google-cloudvertexbot",
+   "google-gemininotebook",
+   "google-notebooklm",
+   "google-agent",
+   "meta-externalagent",
+   "meta-webindexer",
+   "meta-externalfetcher",
+   "amazonbot",
+   "amzn-searchbot",
+   "amzn-user",
+   "bedrockbot",
+   "mistralai-training",
+   "mistralai-index",
+   "mistralai-user",
+   "duckassistbot",
    "ccbot",
    "bytespider",
-   "google-extended",
-   "applebot-extended",
-   "meta-externalagent",
-   "facebookbot",
-   "amazonbot",
    "youbot",
+   "diffbot-user",
    "diffbot",
    "timpibot",
    "omgilibot",
    "cohere-ai",
    "ai2bot",
-   "mistralai",
+   "kimibot",
+   "kimi-searchbot",
+   "kimi-user",
+   "linerbot",
+   "liner-user",
+   "exasearchbot",
+   "exauser",
+   "elevenlabsbot",
+   "sbintuitionsbot",
+   "velenpublicwebcrawler",
    "aifinpay-agent",
    "headlesschrome",
    "phantomjs"
@@ -81,6 +102,11 @@
     "ai_agent_browser"
    ],
    [
+    "claude-agent",
+    "anthropic",
+    "ai_agent_browser"
+   ],
+   [
     "claude-web",
     "anthropic",
     "ai_agent_browser"
@@ -101,6 +127,81 @@
     "ai_agent_browser"
    ],
    [
+    "google-cloudvertexbot",
+    "google",
+    "ai_crawler"
+   ],
+   [
+    "google-gemininotebook",
+    "google",
+    "ai_agent_browser"
+   ],
+   [
+    "google-notebooklm",
+    "google",
+    "ai_agent_browser"
+   ],
+   [
+    "google-agent",
+    "google",
+    "ai_agent_browser"
+   ],
+   [
+    "meta-externalagent",
+    "meta",
+    "ai_crawler"
+   ],
+   [
+    "meta-webindexer",
+    "meta",
+    "ai_crawler"
+   ],
+   [
+    "meta-externalfetcher",
+    "meta",
+    "ai_agent_browser"
+   ],
+   [
+    "amazonbot",
+    "amazon",
+    "ai_crawler"
+   ],
+   [
+    "amzn-searchbot",
+    "amazon",
+    "ai_crawler"
+   ],
+   [
+    "amzn-user",
+    "amazon",
+    "ai_agent_browser"
+   ],
+   [
+    "bedrockbot",
+    "amazon",
+    "ai_crawler"
+   ],
+   [
+    "mistralai-training",
+    "mistral",
+    "ai_crawler"
+   ],
+   [
+    "mistralai-index",
+    "mistral",
+    "ai_crawler"
+   ],
+   [
+    "mistralai-user",
+    "mistral",
+    "ai_agent_browser"
+   ],
+   [
+    "duckassistbot",
+    "duckduckgo",
+    "ai_agent_browser"
+   ],
+   [
     "ccbot",
     "commoncrawl",
     "ai_crawler"
@@ -111,38 +212,18 @@
     "ai_crawler"
    ],
    [
-    "google-extended",
-    "google",
-    "ai_crawler"
-   ],
-   [
-    "applebot-extended",
-    "apple",
-    "ai_crawler"
-   ],
-   [
-    "meta-externalagent",
-    "meta",
-    "ai_crawler"
-   ],
-   [
-    "facebookbot",
-    "meta",
-    "ai_crawler"
-   ],
-   [
-    "amazonbot",
-    "amazon",
-    "ai_crawler"
-   ],
-   [
     "youbot",
-    "unknown",
+    "you",
     "ai_crawler"
+   ],
+   [
+    "diffbot-user",
+    "diffbot",
+    "ai_agent_browser"
    ],
    [
     "diffbot",
-    "unknown",
+    "diffbot",
     "ai_crawler"
    ],
    [
@@ -157,18 +238,63 @@
    ],
    [
     "cohere-ai",
-    "unknown",
+    "cohere",
     "ai_agent_browser"
    ],
    [
     "ai2bot",
+    "ai2",
+    "ai_crawler"
+   ],
+   [
+    "kimibot",
+    "moonshot",
+    "ai_crawler"
+   ],
+   [
+    "kimi-searchbot",
+    "moonshot",
+    "ai_crawler"
+   ],
+   [
+    "kimi-user",
+    "moonshot",
+    "ai_agent_browser"
+   ],
+   [
+    "linerbot",
     "unknown",
     "ai_crawler"
    ],
    [
-    "mistralai",
+    "liner-user",
     "unknown",
     "ai_agent_browser"
+   ],
+   [
+    "exasearchbot",
+    "unknown",
+    "ai_crawler"
+   ],
+   [
+    "exauser",
+    "unknown",
+    "ai_agent_browser"
+   ],
+   [
+    "elevenlabsbot",
+    "unknown",
+    "ai_crawler"
+   ],
+   [
+    "sbintuitionsbot",
+    "unknown",
+    "ai_crawler"
+   ],
+   [
+    "velenpublicwebcrawler",
+    "unknown",
+    "ai_crawler"
    ],
    [
     "aifinpay-agent",
@@ -197,6 +323,13 @@
    "apple",
    "amazon",
    "commoncrawl",
+   "mistral",
+   "duckduckgo",
+   "cohere",
+   "moonshot",
+   "you",
+   "diffbot",
+   "ai2",
    "aifinpay",
    "unknown"
   ],
@@ -206,6 +339,203 @@
    "aifp_agent",
    "human",
    "unknown"
+  ],
+  "ROBOTS_TOKENS": [
+   [
+    "GPTBot",
+    "openai",
+    "ai_crawler"
+   ],
+   [
+    "OAI-SearchBot",
+    "openai",
+    "ai_crawler"
+   ],
+   [
+    "ChatGPT-User",
+    "openai",
+    "ai_agent_browser"
+   ],
+   [
+    "ClaudeBot",
+    "anthropic",
+    "ai_crawler"
+   ],
+   [
+    "Claude-SearchBot",
+    "anthropic",
+    "ai_crawler"
+   ],
+   [
+    "Claude-User",
+    "anthropic",
+    "ai_agent_browser"
+   ],
+   [
+    "anthropic-ai",
+    "anthropic",
+    "ai_crawler"
+   ],
+   [
+    "PerplexityBot",
+    "perplexity",
+    "ai_crawler"
+   ],
+   [
+    "Perplexity-User",
+    "perplexity",
+    "ai_agent_browser"
+   ],
+   [
+    "Google-CloudVertexBot",
+    "google",
+    "ai_crawler"
+   ],
+   [
+    "Google-Extended",
+    "google",
+    "ai_crawler"
+   ],
+   [
+    "meta-externalagent",
+    "meta",
+    "ai_crawler"
+   ],
+   [
+    "meta-webindexer",
+    "meta",
+    "ai_crawler"
+   ],
+   [
+    "meta-externalfetcher",
+    "meta",
+    "ai_agent_browser"
+   ],
+   [
+    "Amazonbot",
+    "amazon",
+    "ai_crawler"
+   ],
+   [
+    "Amzn-SearchBot",
+    "amazon",
+    "ai_crawler"
+   ],
+   [
+    "Amzn-User",
+    "amazon",
+    "ai_agent_browser"
+   ],
+   [
+    "bedrockbot",
+    "amazon",
+    "ai_crawler"
+   ],
+   [
+    "amazon-kendra",
+    "amazon",
+    "ai_crawler"
+   ],
+   [
+    "amazon-QBusiness",
+    "amazon",
+    "ai_crawler"
+   ],
+   [
+    "Applebot-Extended",
+    "apple",
+    "ai_crawler"
+   ],
+   [
+    "MistralAI-Training",
+    "mistral",
+    "ai_crawler"
+   ],
+   [
+    "MistralAI-Index",
+    "mistral",
+    "ai_crawler"
+   ],
+   [
+    "MistralAI-User",
+    "mistral",
+    "ai_agent_browser"
+   ],
+   [
+    "DuckAssistBot",
+    "duckduckgo",
+    "ai_agent_browser"
+   ],
+   [
+    "CCBot",
+    "commoncrawl",
+    "ai_crawler"
+   ],
+   [
+    "Bytespider",
+    "bytedance",
+    "ai_crawler"
+   ],
+   [
+    "Diffbot-User",
+    "diffbot",
+    "ai_agent_browser"
+   ],
+   [
+    "Diffbot",
+    "diffbot",
+    "ai_crawler"
+   ],
+   [
+    "webzio-extended",
+    "unknown",
+    "ai_crawler"
+   ],
+   [
+    "KimiBot",
+    "moonshot",
+    "ai_crawler"
+   ],
+   [
+    "Kimi-SearchBot",
+    "moonshot",
+    "ai_crawler"
+   ],
+   [
+    "Kimi-User",
+    "moonshot",
+    "ai_agent_browser"
+   ],
+   [
+    "LinerBot",
+    "unknown",
+    "ai_crawler"
+   ],
+   [
+    "Liner-User",
+    "unknown",
+    "ai_agent_browser"
+   ],
+   [
+    "ExaSearchBot",
+    "unknown",
+    "ai_crawler"
+   ],
+   [
+    "ElevenlabsBot",
+    "unknown",
+    "ai_crawler"
+   ],
+   [
+    "SBIntuitionsBot",
+    "unknown",
+    "ai_crawler"
+   ],
+   [
+    "VelenPublicWebCrawler",
+    "unknown",
+    "ai_crawler"
+   ]
   ],
   "TIER_WEIGHTS": {
    "standard": 1,

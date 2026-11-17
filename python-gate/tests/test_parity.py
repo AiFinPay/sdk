@@ -28,6 +28,7 @@ def test_constants_match_the_node_package():
     assert [list(row) for row in g.AI_AGENT_UA_TABLE] == C["AI_AGENT_UA_TABLE"]
     assert list(g.GATE_OPERATORS) == C["GATE_OPERATORS"]
     assert list(g.UA_CLASSES) == C["UA_CLASSES"]
+    assert [list(row) for row in g.ROBOTS_TOKENS] == C["ROBOTS_TOKENS"]
     assert g.TIER_WEIGHTS == C["TIER_WEIGHTS"]
     assert g.UNIT_PRICE_USD == C["UNIT_PRICE_USD"]
     assert {t: g.min_requests_for_tier(t) for t in C["min_requests"]} == C["min_requests"]

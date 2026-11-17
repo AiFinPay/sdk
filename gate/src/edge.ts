@@ -17,9 +17,10 @@ export {
   AI_AGENT_UA_MARKERS,
   AI_AGENT_UA_TABLE,
   GATE_OPERATORS,
+  ROBOTS_TOKENS,
   UA_CLASSES,
 } from "./agents.js";
-export type { AgentIdentity, AiAgentUaEntry, GateOperator, UaClass } from "./agents.js";
+export type { AgentIdentity, AiAgentUaEntry, GateOperator, RobotsTokenEntry, UaClass } from "./agents.js";
 export { matchResource } from "./match.js";
 export { discoveryLinkHeader, isHtmlContentType, LLMS_TXT_PATH, X402_DISCOVERY_PATH } from "./discovery-link.js";
 export type { DiscoveryLinkOptions, DiscoveryLinkSetting } from "./discovery-link.js";
