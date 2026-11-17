@@ -121,6 +121,15 @@ const scenarios = [
     reqs: [{ path: "/paid", headers: { "User-Agent": "Mozilla/5.0 (compatible; GPTBot/1.1)" } }, { path: "/paid", headers: { "User-Agent": "Mozilla/5.0 (Macintosh) Safari/605.1.15" } }] },
   { name: "shadow: operator block served, would-be 403, same event", opts: { resource: "/paid", mode: "shadow", shouldCharge: "known", operatorPolicy: OP_POLICY },
     reqs: [{ path: "/paid", headers: { "User-Agent": "Mozilla/5.0 (compatible; ClaudeBot/1.0)" } }, { path: "/paid", headers: { "User-Agent": "Mozilla/5.0 (compatible; GPTBot/1.1)" } }] },
+  ...["observe", "charge", "allow"].map((scriptClients) => ({
+    name: `script clients: ${scriptClients}`, opts: { resource: "/paid", shouldCharge: "known", scriptClients, scriptClientAllow: ["statuscake"] },
+    reqs: [{ path: "/paid", headers: { "User-Agent": "curl/8.5.0" } }, { path: "/paid", headers: { "User-Agent": "Python/3.12 aiohttp/3.9.5" } },
+           { path: "/paid", headers: { "User-Agent": "curl/8.5.0 StatusCake" } }, { path: "/paid", headers: { "User-Agent": "Mozilla/5.0 (Macintosh) Safari/605.1.15" } },
+           { path: "/paid", headers: { "User-Agent": "Mozilla/5.0 (compatible; GPTBot/1.1) python-requests/2.32.3" } },
+           { path: "/paid", headers: { "User-Agent": "curl/8.5.0", "AIFP-Agent-Id": "0xclaimed" } }] })),
+  { name: "script clients: no predicate charges everyone", opts: { resource: "/paid", scriptClients: "allow" }, reqs: [{ path: "/paid", headers: { "User-Agent": "curl/8.5.0" } }] },
+  { name: "script clients: shadow charge, would-be 402", opts: { resource: "/paid", mode: "shadow", shouldCharge: "known", scriptClients: "charge" },
+    reqs: [{ path: "/paid", headers: { "User-Agent": "Wget/1.21.4" } }] },
 ];
 
 const results = [];
@@ -133,6 +142,7 @@ for (const s of scenarios) {
   const gate = G.createGate({
     merchantId: MID, jwks: { keys: [pubJwk] }, resource: s.opts.resource, tier: s.opts.tier, weight: s.opts.weight,
     requireAgentMatch: s.opts.requireAgentMatch, networkMode: s.opts.networkMode, apiBase: s.opts.apiBase, mode: s.opts.mode, operatorPolicy: s.opts.operatorPolicy,
+    scriptClients: s.opts.scriptClients, scriptClientAllow: s.opts.scriptClientAllow,
     onEvent: (e) => events.push(e),
     ...(s.opts.shouldCharge === "known" ? { shouldCharge: G.knownAiAgent } : {}),
   });
@@ -164,6 +174,8 @@ const fixture = {
     HEADER_MODE: G.HEADER_MODE, HEADER_SHADOW_STATUS: G.HEADER_SHADOW_STATUS,
     AI_AGENT_UA_MARKERS: G.AI_AGENT_UA_MARKERS,
     AI_AGENT_UA_TABLE: G.AI_AGENT_UA_TABLE.map((row) => [row.marker, row.operator, row.ua_class]),
+    SCRIPT_CLIENT_MARKERS: G.SCRIPT_CLIENT_MARKERS.map((row) => [row.marker, row.match]),
+    DETAIL_SCRIPT_CLIENT_OBSERVED: G.DETAIL_SCRIPT_CLIENT_OBSERVED, SCRIPT_CLIENTS_MODES: G.SCRIPT_CLIENTS_MODES,
     GATE_OPERATORS: G.GATE_OPERATORS, UA_CLASSES: G.UA_CLASSES,
     TIER_WEIGHTS: G.TIER_WEIGHTS, UNIT_PRICE_USD: G.UNIT_PRICE_USD,
     min_requests: Object.fromEntries(tiers.map((t) => [t, G.minRequestsForTier(t)])),

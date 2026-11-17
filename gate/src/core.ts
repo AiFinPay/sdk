@@ -32,7 +32,7 @@ import { licenseHeaders, receiptLicense } from "./license.js";
 import { beforeMark, inspectPath, spelledAsPath } from "./path.js";
 import { patternCovers, scopeCovers } from "./scope.js";
 import { TIER_WEIGHTS, weightForTier } from "./pricing.js";
-import { classifyAgent, type AgentIdentity } from "./agents.js";
+import { identifyRequest, knownAiAgent, type AgentIdentity } from "./agents.js";
 import { decideOperator, type OperatorDecision } from "./operator-policy.js";
 import type { ResourceRegistry } from "./registry.js";
 import type { GateReporterV2, ReportingContext } from "./reporter.js";
@@ -172,6 +172,10 @@ export interface GateOptions {
    * question never arises.
    */
   shouldCharge?: (req: GateRequest) => boolean | Promise<boolean>;
+  /** Script clients under `shouldCharge: knownAiAgent`: "charge", "observe" (default, free with a detail) or "allow". */
+  scriptClients?: ScriptClientsMode;
+  /** Lowercase User-Agent substrings never treated as script clients (a monitor, a feed reader, a partner). */
+  scriptClientAllow?: readonly string[];
   /**
    * The framework adapter (`aifpGate`) adds a `Link` header to every HTML
    * response that passes through it, pointing at `/llms.txt` and
@@ -194,6 +198,10 @@ export const DETAIL_QUOTA_EXHAUSTED = "quota exhausted — prepay the next batch
 export const DETAIL_RECEIPT_EXPIRED = "receipt expired — prepay a new batch";
 export const DETAIL_VERIFY_FAILED = "receipt verification failed (signature/issuer/audience)";
 export const HEADER_QUOTA_REMAINING = "AIFP-Quota-Remaining";
+/** The `detail` of a serve event for a script client that `scriptClients: "charge"` would have refused. */
+export const DETAIL_SCRIPT_CLIENT_OBSERVED = "script client served free in observe; charge would answer 402";
+export const SCRIPT_CLIENTS_MODES = ["observe", "charge", "allow"] as const;
+export type ScriptClientsMode = (typeof SCRIPT_CLIENTS_MODES)[number];
 /** On every response from a gate in shadow mode: `AIFP-Mode: shadow`. Enforce
  *  sends no such header — its 402 says what it is. */
 export const HEADER_MODE = "AIFP-Mode";
@@ -230,6 +238,20 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
   if (mode !== "enforce" && mode !== "shadow") {
     throw new Error(`createGate: mode must be "shadow" or "enforce": ${JSON.stringify(options.mode)}`);
   }
+
+  const scriptClients: ScriptClientsMode = options.scriptClients ?? "observe";
+  if (!(SCRIPT_CLIENTS_MODES as readonly string[]).includes(scriptClients)) {
+    throw new Error(
+      `createGate: scriptClients must be "observe", "charge" or "allow": ${JSON.stringify(options.scriptClients)}`
+    );
+  }
+  const scriptClientAllow = options.scriptClientAllow ?? [];
+  if (!Array.isArray(scriptClientAllow) || !scriptClientAllow.every((s) => typeof s === "string" && s.length > 0)) {
+    throw new Error(
+      `createGate: scriptClientAllow must be an array of non-empty strings: ${JSON.stringify(options.scriptClientAllow)}`
+    );
+  }
+  const allowLower = scriptClientAllow.map((s) => s.toLowerCase());
 
   if (
     options.minBatchUnits !== undefined &&
@@ -302,7 +324,11 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // IP or headers. Stamped on every event this request emits, and upgraded
     // to verified only once the receipt checks out in step 4 — a User-Agent
     // or an AIFP-Agent-Id header is a claim, and scanners make that claim.
-    let who: AgentIdentity = classifyAgent(req);
+    const seen = identifyRequest(req, allowLower);
+    let who: AgentIdentity = seen.identity;
+    // Only the shipped predicate hands script clients to the scriptClients option.
+    const scriptRule = seen.script && options.shouldCharge === knownAiAgent ? scriptClients : null;
+    const exemptDetail = scriptRule === "observe" ? DETAIL_SCRIPT_CLIENT_OBSERVED : undefined;
     // Set when `resource` is the raw request path: the ingest refuses it, and it is not ours to send.
     let unregistered = false;
     const note = (e: GateEvent) => emit({ ...e, ...who, ...(unregistered ? { unregistered: true } : {}) });
@@ -416,7 +442,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
 
     // A predicate that throws charges: see GateOptions.shouldCharge.
     const exempted = async (): Promise<boolean> => {
-      if (!options.shouldCharge) return false;
+      if (!options.shouldCharge || scriptRule === "charge") return false;
       try {
         return !(await options.shouldCharge(req));
       } catch {
@@ -446,7 +472,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       if (options.registry.neverLoaded && options.registryUnavailable !== "mount-default") {
         unregistered = true;
         // A reader is free whatever the price is, so an unreachable control plane stays the agents' problem.
-        if (await exempted()) return serveExempt(path, 0);
+        if (await exempted()) return serveExempt(path, 0, exemptDetail);
         note({
           kind: "pricing_unavailable",
           resource: path,
@@ -558,7 +584,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       if (decided) return decided;
     }
 
-    if (await exempted()) return serveExempt(resource, weight);
+    if (await exempted()) return serveExempt(resource, weight, exemptDetail);
 
     // ── 3. No receipt → the 402 that teaches an agent how to pay ──────────
     const token = req.header("AIFP-Receipt");

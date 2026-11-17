@@ -185,6 +185,43 @@ A predicate that **throws** charges the request. Of the two wrong answers a
 broken detector can give, a 402 to one human is visible and recoverable; a
 crawler served free is silent and permanent.
 
+### Script clients: curl, HTTP libraries, default-configured automation
+
+A request whose User-Agent is an HTTP library or command-line client in its
+default configuration (`curl/8.5.0`, `python-requests/2.32.3`, `Go-http-client/1.1`,
+the full list is `SCRIPT_CLIENT_MARKERS` in `agents.ts`) is a **script client**:
+`operator: "unknown"`, `ua_class: "unknown"`. With `shouldCharge: knownAiAgent`,
+the `scriptClients` option decides what happens to it:
+
+| `scriptClients`       | A script client without a receipt                                                          |
+| --------------------- | ------------------------------------------------------------------------------------------ |
+| `"observe"` (default) | Served free, as before. The `serve` event carries `detail: DETAIL_SCRIPT_CLIENT_OBSERVED`. |
+| `"charge"`            | Charged like any other agent: a `402` without a receipt.                                   |
+| `"allow"`             | Served free, no detail.                                                                    |
+
+Count the observed ones in your `onEvent` before you switch to `"charge"`. The
+detail stays in your process: the reporter does not send exempt `unknown`
+serves, and the event ingest has no field for it.
+
+`scriptClientAllow` takes lowercase User-Agent substrings that are never script
+clients: your uptime monitor, a feed reader, a partner's integration. An
+unknown `scriptClients` value, or an allow list that is not an array of
+non-empty strings, throws at construction.
+
+Order, first match wins: a request carrying `AIFP-Receipt` or `AIFP-Agent-Id`
+is an AIFP agent and pays; no User-Agent, or a named AI crawler, is classified
+as before; then the allow list; then the script-client table; anything else is
+a reader. On that identity the gate applies a `paywall_enabled: false` route,
+then the operator rules (a rule on `ua_class: "unknown"` covers script
+clients), then `shouldCharge` with `scriptClients`. Only the exported
+`knownAiAgent` itself hands script clients to `scriptClients`: a predicate of
+your own, including one that wraps `knownAiAgent`, decides alone, and
+`knownAiAgent` returns false for a script client. Without `shouldCharge` every
+request pays, script clients included, whatever `scriptClients` says.
+
+A script that sends a browser's User-Agent is a reader here. Catching it needs
+edge signals, not a User-Agent table.
+
 ### robots.txt decides whether any of this runs at all
 
 ```
@@ -428,6 +465,8 @@ genuinely more expensive than its tier.
 | `mode`              | `"enforce"`   | `"shadow"` observes: same decisions and events, every request served, nothing refused or metered for a would-be refusal. See §1a.                                                                                |
 | `store`             | `MemoryStore` | Anything beyond one process. See §3.                                                                                                                                                                             |
 | `registry`          | —             | Path-matched pricing from your registered endpoints, and the operator rules saved on the dashboard (below).                                                                                                      |
+| `scriptClients`     | `"observe"`   | `"charge"` sends curl and HTTP libraries to pay on a content site, `"allow"` serves them free with no detail. See §1b.                                                                                           |
+| `scriptClientAllow` | `[]`          | Lowercase User-Agent substrings that are never script clients (a monitor, a feed reader).                                                                                                                        |
 | `operatorPolicy`    | from registry | The merchant's allow / charge / block per operator for a gate without a registry; an object, or a function returning the current one.                                                                            |
 | `onStoreError`      | `"closed"`    | `"open"` trades metering for availability, visibly.                                                                                                                                                              |
 | `onEvent`           | —             | `402` / `serve` / `403` / `meter_error` / `pricing_unavailable` for your own metrics; each carries who asked (below).                                                                                            |

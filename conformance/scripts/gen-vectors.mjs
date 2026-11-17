@@ -33,6 +33,11 @@ const fixtures = {
     perplexity: "Mozilla/5.0 (compatible; PerplexityBot/1.0)",
     chatgpt: "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0",
     sdk: "aifinpay-agent-node/2.14.0",
+    curl: "curl/8.5.0",
+    monitor: "curl/8.5.0 StatusCake",
+    // Browser-shaped, with a marker word that its rule does not match: "ruby" counts only as a prefix.
+    ruby_device: "Mozilla/5.0 (Linux; Android 14; Ruby Build/UP1A.231005.007) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+    firefox_android: "Mozilla/5.0 (Android 14; Mobile; rv:132.0) Gecko/132.0 Firefox/132.0",
     none: null,
   },
 };
@@ -60,6 +65,8 @@ const profiles = {
     ...base, mode: "shadow", charge: "agents", resources: STANDARD,
     operator_rules: [{ operator: "openai", action: "allow" }, { operator: "anthropic", action: "block" }], operator_default: "charge",
   },
+  "scripts-charge": { ...base, mode: "enforce", charge: "agents", script_clients: "charge", script_client_allow: ["statuscake"], resources: STANDARD },
+  "scripts-allow": { ...base, mode: "enforce", charge: "agents", script_clients: "allow", resources: STANDARD },
   "policy-block-all": { ...base, mode: "enforce", charge: "agents", resources: STANDARD, operator_rules: [], operator_default: "block" },
   "policy-verified": {
     ...base, mode: "enforce", charge: "agents", resources: STANDARD,
@@ -257,6 +264,21 @@ eventCase("mode.shadow_receipt_event", "parity", "content-shadow", "Shadow repor
 eventCase("events.open_route", "must", "mixed-enforce", "A free route is not a paid admission, and a reader is not reported on it", [step(get("chrome", "/open/x"), served()), step(get("gptbot", "/open/x"), served())], [{ kind: "serve", resource: "/open/*", operator: "openai", ua_class: "ai_crawler", verified: false, exempt: true }]);
 eventCase("events.table", "parity", "content-enforce", "Every marker reports its operator and class", G.AI_AGENT_UA_TABLE.map((row) => step(get(`Mozilla/5.0 (compatible; ${row.marker}/1.0)`), noOrigin(402))), G.AI_AGENT_UA_TABLE.map((row) => ev("402", row.operator, row.ua_class, false)));
 add("events.ingest_down", "must", "content-enforce", "An ingest outage changes no response", [step(get("gptbot"), noOrigin(402)), step(get("chrome"), served())], { fault: { ingest: 503 }, needs: ["events"] });
+
+// ── script clients ────────────────────────────────────────────────────────
+const scripts = { needs: ["script_clients"] };
+const scriptEvents = { needs: ["events", "script_clients"] };
+add("script.observed", "must", "content-enforce", "A script client is served free by default (observe)", step(get("curl"), served({ "aifp-paywall": "exempt" })));
+eventCase("script.observed_local", "must", "content-enforce", "An observed script client is not sent to the ingest", step(get("curl"), served()), []);
+add("script.charged", "must", "scripts-charge", "A script client is charged when the site says charge", step(get("curl"), noOrigin(402)), scripts);
+eventCase("script.charged_event", "must", "scripts-charge", "A charged script client reports as unknown automation", step(get("curl"), noOrigin(402)), [ev("402", "unknown", "unknown", false)], scriptEvents);
+add("script.allowed", "must", "scripts-allow", "A script client is served free when the site says allow", step(get("curl"), served({ "aifp-paywall": "exempt" })), scripts);
+add("script.allow_list", "must", "scripts-charge", "An allow-listed User-Agent is a reader, even under charge", step(get("monitor"), served({ "aifp-paywall": "exempt" })), scripts);
+add("script.browser", "must", "scripts-charge", "A browser is a reader under charge", [step(get("chrome"), served({ "aifp-paywall": "exempt" })), step(get("firefox_android"), served({ "aifp-paywall": "exempt" }))], scripts);
+add("script.marker_rule", "must", "scripts-charge", "A browser carrying a marker word its rule does not match is a reader", step(get("ruby_device"), served({ "aifp-paywall": "exempt" })), scripts);
+eventCase("script.crawler", "must", "scripts-allow", "A named crawler keeps its operator and is charged under allow", step(get("gptbot"), noOrigin(402)), [ev("402", "openai", "ai_crawler", false)], scriptEvents);
+add("script.aifp_header", "must", "scripts-allow", "A script client with an agent id pays under allow", step(get("curl", PAID, { agent: "payer" }), noOrigin(402)), scripts);
+add("script.receipt", "must", "scripts-charge", "A script client with a receipt is metered", step(pay("r", PAID, { ua: "curl" }), quota(2)), { receipts: { r: R() }, ...scripts });
 
 // ── operator rules ────────────────────────────────────────────────────────
 add("policy.allow", "must", "policy-enforce", "An allowed operator is served free", step(get("gptbot"), served({ "aifp-paywall": "exempt" })));

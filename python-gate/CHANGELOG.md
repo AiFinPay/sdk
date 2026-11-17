@@ -1,3 +1,7 @@
+## 0.9.0 — script clients can be sent to pay
+
+- Port of `@aifinpay/gate` 0.12.0. `SCRIPT_CLIENT_MARKERS` lists HTTP libraries and command-line clients in their default configuration, each with a `prefix` or `word` rule; such a request is classified `operator: "unknown"`, `ua_class: "unknown"`. With `should_charge=known_ai_agent`, `script_clients` decides: `"observe"` (default) serves it free with `DETAIL_SCRIPT_CLIENT_OBSERVED` in the event `detail`, `"charge"` answers 402, `"allow"` serves it free. `script_client_allow` exempts User-Agent substrings. `known_ai_agent` returns false for a script client; an operator rule on `ua_class: "unknown"` now covers it. Parity fixture regenerated.
+
 ## 0.8.1 — a gate that does not know its network refuses a testnet receipt
 
 - Port of `@aifinpay/gate` 0.11.1, on ASGI and WSGI alike: with no `network_mode` (or a callable returning `None`) a receipt paid on a test network is refused with 403 instead of opening the site; a live or unmarked receipt is served as before. A test site says so with `network_mode="test"`. Parity fixture regenerated.
