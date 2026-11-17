@@ -114,6 +114,13 @@ origin>, <lowercase address>, <expires_at>]`, valid 60 s); it signs no payment
 and changes nothing. It is not made on `payable_fetch`'s refusal path, for an
 ephemeral wallet or on Solana.
 
+For a linked agent, `payment_setup_status` and, after an EVM claim,
+`agent_claim_self` also share a summary of this server's settings with the
+owner's dashboard (`POST /v1/agents/<address>/local-settings`, signed by the
+wallet's own key): the MCP version, whether payments are on,
+`AIFINPAY_GATEWAY_ORIGINS`, the per-payment and daily USD limits, the pay chain
+and asset — never keys, the passphrase, file paths or the RPC URL.
+
 ## Indexed wallet derivation
 
 The wallet CLI and MCP can use deterministic child wallets from one recovery
@@ -232,7 +239,8 @@ chat that has no AiFinPay MCP, links nothing; such an agent is linked by signed
 message in My Agents instead. An account with 2FA on links the same way: the
 URL was made in a session that already passed the second factor. The tool contacts
 only AiFinPay origins, signs only the claim challenge for this agent's own
-address, and moves no funds. The owner-selected payment family must be confirmed successfully;
+address (and, after an EVM claim, the settings summary under "Owner limits"),
+and moves no funds. The owner-selected payment family must be confirmed successfully;
 the second wallet is best-effort. Use the selected wallet's Fund panel for
 available networks and assets; binding does not activate a disabled network.
 Offer this to the owner after `init` (step 4 above): from then on the owner

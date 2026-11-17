@@ -20,7 +20,7 @@ import type { ToolContext } from "./server.js";
 export const CONTROLS_URL = "https://dash.aifinpay.io";
 const DEFAULT_ISSUER = "https://api.aifinpay.io";
 /** How long the signed statement is valid; the backend accepts at most 300 s. */
-const STATEMENT_LIFETIME_S = 60;
+export const STATEMENT_LIFETIME_S = 60;
 
 export interface DashboardPolicy {
   per_tx_cap_usd: number | null;

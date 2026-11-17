@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.17.0 — a linked agent shares its local settings with the owner's dashboard
+
+- For a linked agent, `payment_setup_status` (persistent wallet, EVM pay chain,
+  right after the dashboard read says linked) and `agent_claim_self` (after an
+  EVM claim) send `POST /v1/agents/<address>/local-settings`, signed by the
+  wallet's own key, EIP-191 over
+  `["AiFinPay agent local settings v1", <backend origin>, <lowercase address>, <expires_at>, settings]`
+  (valid 60 s), so the dashboard can show what this computer enforces: `mcp_version`,
+  `payments_enabled`, `site_origins` (`AIFINPAY_GATEWAY_ORIGINS`, or `null`
+  when unset), `max_usd`, `daily_usd`, `pay_chain` and `pay_asset`. Keys, the
+  passphrase, the seed, file paths, the agents file and agent id, the RPC URL,
+  trusted hosts, claim origins and the base URL are never sent.
+- At most once per process per wallet and settings after a 200, and again
+  after every successful claim (a new link starts with no report); any other
+  answer, a 409 too, is retried on the next call. Only settings the payment
+  check accepts are reported. The report waits at most 5 s, never throws and
+  never changes a tool's answer; a backend without the route answers 404 and
+  nothing is stored.
+
 ## 2.16.4 — installs agent 2.16.0, bundles skill 2.12.5
 
 - `@aifinpay/agent` ^2.16.0 (lock resolved from the registry): the AIFP-1
