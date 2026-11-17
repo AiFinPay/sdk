@@ -556,7 +556,8 @@ describe("Base v1.4 chain authorization", () => {
     await expect(aifp1Fetch(f.deps, url, {}, f.opts)).rejects.toThrow();
     expect(f.deps.reserveDaily).not.toHaveBeenCalled();
     expect(f.deps.settle).not.toHaveBeenCalled();
-    expect(f.deps.signPaymentAuthorization).not.toHaveBeenCalled();
+    const signed = vi.mocked(f.deps.signPaymentAuthorization).mock.calls.map(([m]) => JSON.parse(m)[0]);
+    expect(signed.filter((m) => m !== "AiFinPay EVM quote authorization v1")).toEqual([]);
   });
 
   it("refuses a Polygon token in an explicitly authorized Base purchase before approval", async () => {

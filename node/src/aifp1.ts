@@ -2197,33 +2197,47 @@ export async function aifp1Fetch(
     }
     const quote = admission?.quoteJson
       ? (JSON.parse(admission.quoteJson) as Aifp1Quote)
-      : await requestQuote(
-          deps,
-          apiBase,
-          admission?.requestBody ?? quoteBody,
-          opts.apiTimeoutMs,
-          admission
-            ? async (status, detail) => {
-                const body = JSON.parse(admission!.requestBody),
-                  auth = body.quote_authorization;
-                if (
-                  status === 410 &&
-                  detail?.error === "AIFP-410-SOLANA" &&
-                  detail.reason === "solana_quote_authorization_expired" &&
-                  detail.admission_status === "not_admitted" &&
-                  auth.expires_at <= Math.floor(Date.now() / 1000) &&
-                  detail.authorization_nonce === auth.nonce &&
-                  detail.authorization_statement_hash ===
-                    createHash("sha256").update(admission!.statement).digest("hex") &&
-                  detail.network === auth.network &&
-                  detail.network_mode === auth.network_mode &&
-                  detail.payer === deps.payerAddress
-                )
-                  await deps.closeQuoteAdmission!(admission!.id, admissionBinding!, admissionContext!, "not-admitted");
-              }
-            : undefined,
-          opts.reportingToken
-        );
+      : !sol && !acct
+        ? await requestEvmQuote(
+            deps,
+            apiBase,
+            quoteBody,
+            opts.paymentIssuer ?? DEFAULT_API_BASE,
+            opts.apiTimeoutMs,
+            opts.reportingToken
+          )
+        : await requestQuote(
+            deps,
+            apiBase,
+            admission?.requestBody ?? quoteBody,
+            opts.apiTimeoutMs,
+            admission
+              ? async (status, detail) => {
+                  const body = JSON.parse(admission!.requestBody),
+                    auth = body.quote_authorization;
+                  if (
+                    status === 410 &&
+                    detail?.error === "AIFP-410-SOLANA" &&
+                    detail.reason === "solana_quote_authorization_expired" &&
+                    detail.admission_status === "not_admitted" &&
+                    auth.expires_at <= Math.floor(Date.now() / 1000) &&
+                    detail.authorization_nonce === auth.nonce &&
+                    detail.authorization_statement_hash ===
+                      createHash("sha256").update(admission!.statement).digest("hex") &&
+                    detail.network === auth.network &&
+                    detail.network_mode === auth.network_mode &&
+                    detail.payer === deps.payerAddress
+                  )
+                    await deps.closeQuoteAdmission!(
+                      admission!.id,
+                      admissionBinding!,
+                      admissionContext!,
+                      "not-admitted"
+                    );
+                }
+              : undefined,
+            opts.reportingToken
+          );
     if (admission && !admission.quoteJson) {
       const quoteJson = JSON.stringify(quote);
       await deps.adoptQuoteAdmission!(admission.id, admissionBinding!, admissionContext!, quoteJson);
@@ -2984,6 +2998,79 @@ async function requestQuote(
     throw new Aifp1QuoteError(`POST /v1/quote → 200 without a quote_id: ${text.slice(0, 200)}`);
   }
   return quote;
+}
+
+/** A signed nonce reserves budget: resend the same bytes when uncertain; re-sign only an expired one, once. */
+async function requestEvmQuote(
+  deps: Aifp1Deps,
+  apiBase: string,
+  body: Record<string, unknown>,
+  issuer: string,
+  timeoutMs?: number,
+  reportingToken?: string
+): Promise<Aifp1Quote> {
+  const signed = async () => {
+    const auth = {
+      payer: deps.payerAddress.toLowerCase(),
+      nonce: randomBytes(32).toString("hex"),
+      expires_at: Math.floor(Date.now() / 1000) + 240,
+    };
+    const signature = await deps.signPaymentAuthorization(evmQuoteAuthorizationMessage(body, auth, issuer));
+    return JSON.stringify({ ...body, quote_authorization: { ...auth, signature } });
+  };
+  let request = await signed();
+  let resigned = false;
+  for (let attempt = 1; ; attempt++) {
+    const refusal: { status?: number; detail?: Record<string, unknown> | null } = {};
+    try {
+      return await requestQuote(
+        deps,
+        apiBase,
+        request,
+        timeoutMs,
+        async (status, detail) => {
+          refusal.status = status;
+          refusal.detail = detail;
+        },
+        reportingToken
+      );
+    } catch (e) {
+      if (e instanceof Aifp1ActiveReceiptError) throw e;
+      if (refusal.status === 410 && refusal.detail?.reason === "evm_quote_authorization_expired" && !resigned) {
+        resigned = true;
+        request = await signed();
+        continue;
+      }
+      if ((refusal.status !== undefined && refusal.status < 500) || attempt >= 3) throw e;
+      await sleep(250 * attempt);
+    }
+  }
+}
+
+/** The statement an EVM payer signs for /v1/quote, byte for byte as the backend rebuilds it. */
+export function evmQuoteAuthorizationMessage(
+  body: Record<string, unknown>,
+  auth: { payer: string; nonce: string; expires_at: number },
+  issuer: string
+): string {
+  return JSON.stringify([
+    "AiFinPay EVM quote authorization v1",
+    issuer,
+    body.merchant_id,
+    body.resource ?? null,
+    body.tier ?? "standard",
+    body.requests ?? null,
+    body.units ?? null,
+    body.currency ?? "USD",
+    body.scope ?? "exact",
+    body.settlement_chain ?? null,
+    body.settlement_version ?? null,
+    body.asset ?? null,
+    body.force ?? false,
+    auth.payer,
+    auth.nonce,
+    auth.expires_at,
+  ]);
 }
 
 /** Sign only this locally constructed request; a server cannot choose the

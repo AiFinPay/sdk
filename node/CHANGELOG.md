@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.17.0 — the paying wallet signs every EVM quote
+
+- Every EVM `/v1/quote` carries a `quote_authorization` (`payer`, random `nonce`,
+  `expires_at`, EIP-191 `signature`) over the statement the backend rebuilds;
+  `evmQuoteAuthorizationMessage` builds it. `signPaymentAuthorization` signs it
+  before any payment authorization. Solana and account-chain quotes are unchanged.
+- Each signed nonce reserves budget, so a transport failure, a 5xx or an unreadable
+  200 resends the same signed request, at most three times in all. Only a 410
+  `evm_quote_authorization_expired` is signed again, once. A 409, 403 or any other
+  4xx refuses at once.
+
 ## 2.16.0 — the AIFP-1 fee comes from the quote
 
 - The AIFP-1 protocol fee is read from the quote (`fee_bps`, `fee_policy.treasury_bps`)

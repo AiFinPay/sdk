@@ -252,7 +252,9 @@ describe("S05 memory-only optional payer propagation", () => {
       expect(init?.redirect).not.toBe("follow");
     }
     expect(f.deps.settle).toHaveBeenCalledTimes(1);
-    expect(f.deps.signPaymentAuthorization).toHaveBeenCalledTimes(1);
+    const signed = f.deps.signPaymentAuthorization.mock.calls.map(([m]) => JSON.parse(m)[0]);
+    expect(signed.filter((m) => m !== "AiFinPay EVM quote authorization v1")).toHaveLength(1);
+    expect(signed).toHaveLength(2);
     expect(JSON.stringify(f.prepared.mock.calls)).not.toContain(token);
     expect(JSON.stringify(f.deps.reserveDaily.mock.calls)).not.toContain(token);
   });

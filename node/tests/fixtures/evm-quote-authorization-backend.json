@@ -1,0 +1,89 @@
+{
+  "generatedBy": "aifinpay-web backend/app/aifp/payment-auth.js evmQuoteMessageFor + viem signMessage, each verified by authenticateEvmQuote (git blob 64dc360cccde9df129c0995ca2a56e49f86caa36)",
+  "key": "0x0707070707070707070707070707070707070707070707070707070707070707",
+  "address": "0x4a62316623ad457F02cDC5D997deD67a383EC569",
+  "vectors": [
+    {
+      "name": "v1.4 polygon native, as the SDK sends it",
+      "issuer": "https://api.aifinpay.io",
+      "body": {
+        "merchant_id": "mrch_vector_polygon",
+        "payer": "0x4a62316623ad457F02cDC5D997deD67a383EC569",
+        "resource": "/api/genres",
+        "scope": "exact",
+        "units": 200,
+        "agent_id": "0x4a62316623ad457F02cDC5D997deD67a383EC569",
+        "asset": "POL",
+        "settlement_chain": "polygon"
+      },
+      "payer": "0x4a62316623ad457f02cdc5d997ded67a383ec569",
+      "nonce": "0101010101010101010101010101010101010101010101010101010101010101",
+      "expires_at": 1795000001,
+      "message": "[\"AiFinPay EVM quote authorization v1\",\"https://api.aifinpay.io\",\"mrch_vector_polygon\",\"/api/genres\",\"standard\",null,200,\"USD\",\"exact\",\"polygon\",null,\"POL\",false,\"0x4a62316623ad457f02cdc5d997ded67a383ec569\",\"0101010101010101010101010101010101010101010101010101010101010101\",1795000001]",
+      "signature": "0x555fd8b0a8f85608c4c7b92031bc0607b2013c68ecfdf0f1312d98a04a94afa23ffe4b8fc3304ef988ac02cf2ce9b0c93bd6057f3a9d09023821b138082809261c",
+      "statement_hash": "4790479ff2650b0f100bcf793029cc2fda61d2a22f26c1ed9fcc543d73212759"
+    },
+    {
+      "name": "v1.4 base USDC exact",
+      "issuer": "https://api.aifinpay.io",
+      "body": {
+        "merchant_id": "mrch_vector_base",
+        "payer": "0x4a62316623ad457F02cDC5D997deD67a383EC569",
+        "resource": "/v1/search?q=x",
+        "scope": "exact",
+        "units": 40,
+        "agent_id": "0x4a62316623ad457F02cDC5D997deD67a383EC569",
+        "asset": "USDC",
+        "settlement_chain": "base"
+      },
+      "payer": "0x4a62316623ad457f02cdc5d997ded67a383ec569",
+      "nonce": "0202020202020202020202020202020202020202020202020202020202020202",
+      "expires_at": 1795000002,
+      "message": "[\"AiFinPay EVM quote authorization v1\",\"https://api.aifinpay.io\",\"mrch_vector_base\",\"/v1/search?q=x\",\"standard\",null,40,\"USD\",\"exact\",\"base\",null,\"USDC\",false,\"0x4a62316623ad457f02cdc5d997ded67a383ec569\",\"0202020202020202020202020202020202020202020202020202020202020202\",1795000002]",
+      "signature": "0x3802dad080b3c3249ca6bc265c8658e896cbee8b3615c05cd59e65b87a20ec18084956064d6e4d7d7d492048af33ff42bc1a06cff0871a1d358115c537b5ccb81c",
+      "statement_hash": "5aa944533fdb9c037b0c472e3d8fb386f30e914b0ac733997959e17ba3a0d105"
+    },
+    {
+      "name": "legacy merchant scope: no resource, asset or settlement_chain",
+      "issuer": "https://api.aifinpay.io",
+      "body": {
+        "merchant_id": "mrch_vector_legacy",
+        "payer": "0x4a62316623ad457F02cDC5D997deD67a383EC569",
+        "scope": "merchant",
+        "units": 1000,
+        "agent_id": "0x4a62316623ad457F02cDC5D997deD67a383EC569"
+      },
+      "payer": "0x4a62316623ad457f02cdc5d997ded67a383ec569",
+      "nonce": "0303030303030303030303030303030303030303030303030303030303030303",
+      "expires_at": 1795000003,
+      "message": "[\"AiFinPay EVM quote authorization v1\",\"https://api.aifinpay.io\",\"mrch_vector_legacy\",null,\"standard\",null,1000,\"USD\",\"merchant\",null,null,null,false,\"0x4a62316623ad457f02cdc5d997ded67a383ec569\",\"0303030303030303030303030303030303030303030303030303030303030303\",1795000003]",
+      "signature": "0x32730dbfad2a708e5b8f2a622f03f0bd2d806cf3ebce6ff2cd226f86bb3de5c22e0ffe6f3a773198e062d89281517352535a3d9f3a1644a9313cb96251a06b1b1b",
+      "statement_hash": "55346421a57e83eb4ae07ad19ff0b386e621070a16779cb769d5d73c300467ef"
+    },
+    {
+      "name": "all fields, force true, non-ASCII resource",
+      "issuer": "https://api.aifinpay.io",
+      "body": {
+        "merchant_id": "mrch_vector_all",
+        "payer": "0x4a62316623ad457F02cDC5D997deD67a383EC569",
+        "resource": "/статті/café-☕/\"q\"",
+        "tier": "premium",
+        "requests": 25,
+        "units": 50,
+        "currency": "USD",
+        "scope": "prefix",
+        "settlement_chain": "arbitrum",
+        "settlement_version": "1.4",
+        "asset": "USDT",
+        "force": true,
+        "agent_id": "agent-ü"
+      },
+      "payer": "0x4a62316623ad457f02cdc5d997ded67a383ec569",
+      "nonce": "0404040404040404040404040404040404040404040404040404040404040404",
+      "expires_at": 1795000004,
+      "message": "[\"AiFinPay EVM quote authorization v1\",\"https://api.aifinpay.io\",\"mrch_vector_all\",\"/статті/café-☕/\\\"q\\\"\",\"premium\",25,50,\"USD\",\"prefix\",\"arbitrum\",\"1.4\",\"USDT\",true,\"0x4a62316623ad457f02cdc5d997ded67a383ec569\",\"0404040404040404040404040404040404040404040404040404040404040404\",1795000004]",
+      "signature": "0xaa9fbbadce11a950d21adcccf1678d5db7c1d298666e13bde331fb4399fdcabb1e6ca11e8970727f24e2cdb4619b692ee1e43faae7695f43c3d4b0d257c38b7d1b",
+      "statement_hash": "bc99bc2101f4a0f34a96bddf856709ba1c7be9d6c97cc4a8513139370c5d412b"
+    }
+  ]
+}
