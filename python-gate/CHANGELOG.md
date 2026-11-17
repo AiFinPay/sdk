@@ -1,3 +1,10 @@
+## 0.9.0 — one list of AI crawlers and agents
+
+- Port of `@aifinpay/gate` 0.12.0: the tables in `agents.py` are generated from
+  `gate/data/agents-v1.json`, shipped as `aifinpay_gate/data/agents-v1.json`, with
+  the new operator ids and rows. `ROBOTS_TOKENS` exported. Parity fixture regenerated.
+- Publish only after the AiFinPay gate-events ingest accepts the new operator ids.
+
 ## 0.8.0 — the content licence travels with the content
 
 - The 402 no longer carries `protocol_fee_bps`, and `PROTOCOL_FEE_BPS` /

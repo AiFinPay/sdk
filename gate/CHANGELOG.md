@@ -1,5 +1,28 @@
 # Changelog
 
+## @aifinpay/gate 0.12.0 — one list of AI crawlers and agents
+
+Publish only after the AiFinPay gate-events ingest accepts the new operator ids:
+the ingest refuses a whole batch that names an id it does not know.
+
+- The operator and User-Agent tables are generated from `data/agents-v1.json`
+  (`npm run agents`, `npm run agents:check`), which ships in the package as
+  `@aifinpay/gate/agents.json`. Each row names the operator page it comes from.
+- New operator ids: `mistral`, `duckduckgo`, `cohere`, `moonshot`, `you`,
+  `diffbot`, `ai2`. `cohere-ai`, `youbot`, `diffbot` and `ai2bot` move from
+  `unknown` to their operator.
+- New User-Agent rows: Claude-Agent, Google-CloudVertexBot, Google-GeminiNotebook,
+  Google-NotebookLM, Google-Agent, meta-webindexer, meta-externalfetcher,
+  Amzn-SearchBot, Amzn-User, bedrockbot, MistralAI-Training, MistralAI-Index,
+  MistralAI-User (replacing `mistralai`), DuckAssistBot, Diffbot-User, KimiBot,
+  Kimi-SearchBot, Kimi-User, LinerBot, Liner-User, ExaSearchBot, ExaUser,
+  ElevenlabsBot, SBIntuitionsBot, VelenPublicWebCrawler.
+- `google-extended` and `applebot-extended` are no longer User-Agent markers: they
+  are robots.txt tokens and no request carries them. `facebookbot` is gone: Meta
+  no longer documents it. All three now read as readers.
+- `ROBOTS_TOKENS` (and the `RobotsTokenEntry` type) lists the robots.txt tokens.
+- `classifyAgent`, `knownAiAgent` and `decideOperator` are unchanged.
+
 ## @aifinpay/gate 0.11.0 — the content licence travels with the content
 
 - The 402 no longer carries `protocol_fee_bps`, and `PROTOCOL_FEE_BPS` is no

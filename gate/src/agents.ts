@@ -28,13 +28,22 @@
  */
 import type { GateRequest } from "./types.js";
 
-/**
- * Who runs the client, as a closed set. Shared verbatim with the AiFinPay
- * gate-events ingest (which refuses any other value) and the site-check probe,
- * so adding an id is a contract change in all three — not a local edit.
- * Operators without an id here are "unknown", never a free-text name: the
- * value becomes a counter key, and a free-text field is an unbounded one.
- */
+/** Operators, classes and rows come from data/agents-v1.json; ids are a closed set the gate-events ingest validates. */
+export interface AiAgentUaEntry {
+  /** Lowercase User-Agent substring. */
+  marker: string;
+  operator: GateOperator;
+  ua_class: UaClass;
+}
+
+export interface RobotsTokenEntry {
+  /** robots.txt product token, as published. */
+  token: string;
+  operator: GateOperator;
+  ua_class: UaClass;
+}
+
+// <generated:agents-v1> by scripts/gen-agents.mjs from data/agents-v1.json; do not edit by hand.
 export const GATE_OPERATORS = [
   "openai",
   "anthropic",
@@ -46,22 +55,116 @@ export const GATE_OPERATORS = [
   "apple",
   "amazon",
   "commoncrawl",
+  "mistral",
+  "duckduckgo",
+  "cohere",
+  "moonshot",
+  "you",
+  "diffbot",
+  "ai2",
   "aifinpay",
   "unknown",
 ] as const;
 export type GateOperator = (typeof GATE_OPERATORS)[number];
 
-/**
- * What kind of client, by its own signals:
- * - `ai_crawler` — bulk fetcher for training or a search index (GPTBot, ClaudeBot).
- * - `ai_agent_browser` — fetches because a person asked an assistant (ChatGPT-User).
- * - `aifp_agent` — speaks AIFP: sent AIFP-Receipt / AIFP-Agent-Id, or is one of our clients.
- * - `human` — a User-Agent with no automation marker. A stealth bot lands here too;
- *   the name says what the request claims, not what was proven.
- * - `unknown` — automation of unknown purpose: no User-Agent at all, headless browsers.
- */
 export const UA_CLASSES = ["ai_crawler", "ai_agent_browser", "aifp_agent", "human", "unknown"] as const;
 export type UaClass = (typeof UA_CLASSES)[number];
+
+/** User-Agent rows, lowercase markers, in match order: first match wins. */
+export const AI_AGENT_UA_TABLE: readonly AiAgentUaEntry[] = [
+  { marker: "gptbot", operator: "openai", ua_class: "ai_crawler" },
+  { marker: "oai-searchbot", operator: "openai", ua_class: "ai_crawler" },
+  { marker: "chatgpt-user", operator: "openai", ua_class: "ai_agent_browser" },
+  { marker: "claudebot", operator: "anthropic", ua_class: "ai_crawler" },
+  { marker: "claude-searchbot", operator: "anthropic", ua_class: "ai_crawler" },
+  { marker: "claude-user", operator: "anthropic", ua_class: "ai_agent_browser" },
+  { marker: "claude-agent", operator: "anthropic", ua_class: "ai_agent_browser" },
+  { marker: "claude-web", operator: "anthropic", ua_class: "ai_agent_browser" },
+  { marker: "anthropic-ai", operator: "anthropic", ua_class: "ai_crawler" },
+  { marker: "perplexitybot", operator: "perplexity", ua_class: "ai_crawler" },
+  { marker: "perplexity-user", operator: "perplexity", ua_class: "ai_agent_browser" },
+  { marker: "google-cloudvertexbot", operator: "google", ua_class: "ai_crawler" },
+  { marker: "google-gemininotebook", operator: "google", ua_class: "ai_agent_browser" },
+  { marker: "google-notebooklm", operator: "google", ua_class: "ai_agent_browser" },
+  { marker: "google-agent", operator: "google", ua_class: "ai_agent_browser" },
+  { marker: "meta-externalagent", operator: "meta", ua_class: "ai_crawler" },
+  { marker: "meta-webindexer", operator: "meta", ua_class: "ai_crawler" },
+  { marker: "meta-externalfetcher", operator: "meta", ua_class: "ai_agent_browser" },
+  { marker: "amazonbot", operator: "amazon", ua_class: "ai_crawler" },
+  { marker: "amzn-searchbot", operator: "amazon", ua_class: "ai_crawler" },
+  { marker: "amzn-user", operator: "amazon", ua_class: "ai_agent_browser" },
+  { marker: "bedrockbot", operator: "amazon", ua_class: "ai_crawler" },
+  { marker: "mistralai-training", operator: "mistral", ua_class: "ai_crawler" },
+  { marker: "mistralai-index", operator: "mistral", ua_class: "ai_crawler" },
+  { marker: "mistralai-user", operator: "mistral", ua_class: "ai_agent_browser" },
+  { marker: "duckassistbot", operator: "duckduckgo", ua_class: "ai_agent_browser" },
+  { marker: "ccbot", operator: "commoncrawl", ua_class: "ai_crawler" },
+  { marker: "bytespider", operator: "bytedance", ua_class: "ai_crawler" },
+  { marker: "youbot", operator: "you", ua_class: "ai_crawler" },
+  { marker: "diffbot-user", operator: "diffbot", ua_class: "ai_agent_browser" },
+  { marker: "diffbot", operator: "diffbot", ua_class: "ai_crawler" },
+  { marker: "timpibot", operator: "unknown", ua_class: "ai_crawler" },
+  { marker: "omgilibot", operator: "unknown", ua_class: "ai_crawler" },
+  { marker: "cohere-ai", operator: "cohere", ua_class: "ai_agent_browser" },
+  { marker: "ai2bot", operator: "ai2", ua_class: "ai_crawler" },
+  { marker: "kimibot", operator: "moonshot", ua_class: "ai_crawler" },
+  { marker: "kimi-searchbot", operator: "moonshot", ua_class: "ai_crawler" },
+  { marker: "kimi-user", operator: "moonshot", ua_class: "ai_agent_browser" },
+  { marker: "linerbot", operator: "unknown", ua_class: "ai_crawler" },
+  { marker: "liner-user", operator: "unknown", ua_class: "ai_agent_browser" },
+  { marker: "exasearchbot", operator: "unknown", ua_class: "ai_crawler" },
+  { marker: "exauser", operator: "unknown", ua_class: "ai_agent_browser" },
+  { marker: "elevenlabsbot", operator: "unknown", ua_class: "ai_crawler" },
+  { marker: "sbintuitionsbot", operator: "unknown", ua_class: "ai_crawler" },
+  { marker: "velenpublicwebcrawler", operator: "unknown", ua_class: "ai_crawler" },
+  { marker: "aifinpay-agent", operator: "aifinpay", ua_class: "aifp_agent" },
+  { marker: "headlesschrome", operator: "unknown", ua_class: "unknown" },
+  { marker: "phantomjs", operator: "unknown", ua_class: "unknown" },
+];
+
+/** robots.txt product tokens as each operator publishes them, for site checks and edge rules. */
+export const ROBOTS_TOKENS: readonly RobotsTokenEntry[] = [
+  { token: "GPTBot", operator: "openai", ua_class: "ai_crawler" },
+  { token: "OAI-SearchBot", operator: "openai", ua_class: "ai_crawler" },
+  { token: "ChatGPT-User", operator: "openai", ua_class: "ai_agent_browser" },
+  { token: "ClaudeBot", operator: "anthropic", ua_class: "ai_crawler" },
+  { token: "Claude-SearchBot", operator: "anthropic", ua_class: "ai_crawler" },
+  { token: "Claude-User", operator: "anthropic", ua_class: "ai_agent_browser" },
+  { token: "anthropic-ai", operator: "anthropic", ua_class: "ai_crawler" },
+  { token: "PerplexityBot", operator: "perplexity", ua_class: "ai_crawler" },
+  { token: "Perplexity-User", operator: "perplexity", ua_class: "ai_agent_browser" },
+  { token: "Google-CloudVertexBot", operator: "google", ua_class: "ai_crawler" },
+  { token: "Google-Extended", operator: "google", ua_class: "ai_crawler" },
+  { token: "meta-externalagent", operator: "meta", ua_class: "ai_crawler" },
+  { token: "meta-webindexer", operator: "meta", ua_class: "ai_crawler" },
+  { token: "meta-externalfetcher", operator: "meta", ua_class: "ai_agent_browser" },
+  { token: "Amazonbot", operator: "amazon", ua_class: "ai_crawler" },
+  { token: "Amzn-SearchBot", operator: "amazon", ua_class: "ai_crawler" },
+  { token: "Amzn-User", operator: "amazon", ua_class: "ai_agent_browser" },
+  { token: "bedrockbot", operator: "amazon", ua_class: "ai_crawler" },
+  { token: "amazon-kendra", operator: "amazon", ua_class: "ai_crawler" },
+  { token: "amazon-QBusiness", operator: "amazon", ua_class: "ai_crawler" },
+  { token: "Applebot-Extended", operator: "apple", ua_class: "ai_crawler" },
+  { token: "MistralAI-Training", operator: "mistral", ua_class: "ai_crawler" },
+  { token: "MistralAI-Index", operator: "mistral", ua_class: "ai_crawler" },
+  { token: "MistralAI-User", operator: "mistral", ua_class: "ai_agent_browser" },
+  { token: "DuckAssistBot", operator: "duckduckgo", ua_class: "ai_agent_browser" },
+  { token: "CCBot", operator: "commoncrawl", ua_class: "ai_crawler" },
+  { token: "Bytespider", operator: "bytedance", ua_class: "ai_crawler" },
+  { token: "Diffbot-User", operator: "diffbot", ua_class: "ai_agent_browser" },
+  { token: "Diffbot", operator: "diffbot", ua_class: "ai_crawler" },
+  { token: "webzio-extended", operator: "unknown", ua_class: "ai_crawler" },
+  { token: "KimiBot", operator: "moonshot", ua_class: "ai_crawler" },
+  { token: "Kimi-SearchBot", operator: "moonshot", ua_class: "ai_crawler" },
+  { token: "Kimi-User", operator: "moonshot", ua_class: "ai_agent_browser" },
+  { token: "LinerBot", operator: "unknown", ua_class: "ai_crawler" },
+  { token: "Liner-User", operator: "unknown", ua_class: "ai_agent_browser" },
+  { token: "ExaSearchBot", operator: "unknown", ua_class: "ai_crawler" },
+  { token: "ElevenlabsBot", operator: "unknown", ua_class: "ai_crawler" },
+  { token: "SBIntuitionsBot", operator: "unknown", ua_class: "ai_crawler" },
+  { token: "VelenPublicWebCrawler", operator: "unknown", ua_class: "ai_crawler" },
+];
+// </generated:agents-v1>
 
 /** What a gate event says about who asked. Normalised values only — the raw
  *  User-Agent, IP and headers never leave the request. */
@@ -73,88 +176,6 @@ export interface AgentIdentity {
    *  scanners send "ChatGPT-User" and "Claude-SearchBot" to look trusted. */
   verified: boolean;
 }
-
-export interface AiAgentUaEntry {
-  /** Lowercase User-Agent substring. */
-  marker: string;
-  operator: GateOperator;
-  ua_class: UaClass;
-}
-
-/**
- * Self-identifying AI crawler / agent User-Agent substrings, lowercase, with
- * who runs each and what it is. The one source of truth for both questions —
- * "charge it?" (knownAiAgent) and "whose is it?" (classifyAgent) — so the two
- * cannot disagree about a marker.
- *
- * Curated, not exhaustive — new crawlers appear monthly, and each entry is a
- * revenue opportunity, not a threat signature. Sources: the population
- * Cloudflare's verified-bot list classifies as AI, plus the operators that
- * publish their UA strings. First match wins.
- */
-export const AI_AGENT_UA_TABLE: readonly AiAgentUaEntry[] = [
-  // OpenAI
-  { marker: "gptbot", operator: "openai", ua_class: "ai_crawler" },
-  { marker: "oai-searchbot", operator: "openai", ua_class: "ai_crawler" },
-  { marker: "chatgpt-user", operator: "openai", ua_class: "ai_agent_browser" },
-  // Anthropic. Claude-SearchBot and Claude-User are the current published
-  // names; claude-web and anthropic-ai are the retired ones, kept for the
-  // fetchers that still send them.
-  { marker: "claudebot", operator: "anthropic", ua_class: "ai_crawler" },
-  { marker: "claude-searchbot", operator: "anthropic", ua_class: "ai_crawler" },
-  { marker: "claude-user", operator: "anthropic", ua_class: "ai_agent_browser" },
-  { marker: "claude-web", operator: "anthropic", ua_class: "ai_agent_browser" },
-  { marker: "anthropic-ai", operator: "anthropic", ua_class: "ai_crawler" },
-  // Perplexity
-  { marker: "perplexitybot", operator: "perplexity", ua_class: "ai_crawler" },
-  { marker: "perplexity-user", operator: "perplexity", ua_class: "ai_agent_browser" },
-  // Common Crawl (feeds many trainers)
-  { marker: "ccbot", operator: "commoncrawl", ua_class: "ai_crawler" },
-  // ByteDance
-  { marker: "bytespider", operator: "bytedance", ua_class: "ai_crawler" },
-  // Google's opt-out-able training fetcher (distinct from Googlebot search)
-  { marker: "google-extended", operator: "google", ua_class: "ai_crawler" },
-  // Apple
-  { marker: "applebot-extended", operator: "apple", ua_class: "ai_crawler" },
-  // Meta
-  { marker: "meta-externalagent", operator: "meta", ua_class: "ai_crawler" },
-  { marker: "facebookbot", operator: "meta", ua_class: "ai_crawler" },
-  // Amazon
-  { marker: "amazonbot", operator: "amazon", ua_class: "ai_crawler" },
-  // Others with published AI/LLM fetchers. Their operators have no id in
-  // GATE_OPERATORS, so they report as "unknown" rather than a free-text name.
-  { marker: "youbot", operator: "unknown", ua_class: "ai_crawler" },
-  { marker: "diffbot", operator: "unknown", ua_class: "ai_crawler" },
-  { marker: "timpibot", operator: "unknown", ua_class: "ai_crawler" },
-  { marker: "omgilibot", operator: "unknown", ua_class: "ai_crawler" },
-  { marker: "cohere-ai", operator: "unknown", ua_class: "ai_agent_browser" },
-  { marker: "ai2bot", operator: "unknown", ua_class: "ai_crawler" },
-  { marker: "mistralai", operator: "unknown", ua_class: "ai_agent_browser" },
-
-  // Our own clients. An agent built on @aifinpay/agent or aifinpay-agent (py)
-  // is an AI agent by construction, and until 2026-09-02 this list did not say
-  // so: aifinpay-agent-node/0.3.0 and aifinpay-agent-py/1.0.0 were served 200
-  // by a page gate using knownAiAgent, so they never saw the 402 and never
-  // paid. Verified live against a partner's gate before and after.
-  //
-  // The AIFP-Agent-Id check below already covers the AIFP-1 client, which sets
-  // that header on every request including the first. It does NOT cover
-  // node/src/agent.ts, and the Python client sets it nowhere — so the outcome
-  // depended on which of our own clients an integrator picked. Naming the UA
-  // makes it depend on nothing.
-  { marker: "aifinpay-agent", operator: "aifinpay", ua_class: "aifp_agent" },
-  // Automation frameworks in their DEFAULT configuration. Headless
-  // Chromium/Chrome announces itself as "HeadlessChrome/126…" unless the
-  // driver overrides the UA — so an un-disguised Playwright/Puppeteer visit
-  // is a self-identifying machine, same as the crawlers above. One that
-  // spoofs a human UA has left "by declaration" territory; that class is an
-  // anti-bot product's job, not this list's. A machine, but not necessarily
-  // an AI one: ua_class "unknown".
-  // NOT "electron": Electron UAs are real humans inside app webviews
-  // (Slack, Notion), and exempting humans is this predicate's entire promise.
-  { marker: "headlesschrome", operator: "unknown", ua_class: "unknown" },
-  { marker: "phantomjs", operator: "unknown", ua_class: "unknown" },
-];
 
 /** The markers alone, in table order. Derived, so it cannot drift from the table. */
 export const AI_AGENT_UA_MARKERS: readonly string[] = AI_AGENT_UA_TABLE.map((entry) => entry.marker);

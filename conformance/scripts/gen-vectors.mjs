@@ -32,6 +32,7 @@ const fixtures = {
     claudebot: "Mozilla/5.0 (compatible; ClaudeBot/1.0; +claudebot@anthropic.com)",
     perplexity: "Mozilla/5.0 (compatible; PerplexityBot/1.0)",
     chatgpt: "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0",
+    claude_user: "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Claude-User/1.0; +Claude-User@anthropic.com)",
     sdk: "aifinpay-agent-node/2.14.0",
     none: null,
   },
@@ -62,6 +63,17 @@ const profiles = {
   "policy-verified": {
     ...base, mode: "enforce", charge: "agents", resources: STANDARD,
     operator_rules: [{ operator: "aifinpay", action: "allow", verified_only: true }, { ua_class: "aifp_agent", action: "block" }], operator_default: "charge",
+  },
+  "policy-class": {
+    ...base, mode: "enforce", charge: "agents", resources: STANDARD,
+    operator_rules: [{ operator: "openai", action: "allow" }, { ua_class: "ai_crawler", action: "block" }, { ua_class: "ai_agent_browser", action: "allow" }], operator_default: "charge",
+  },
+  "policy-default-block": { ...base, mode: "enforce", charge: "agents", resources: STANDARD, operator_rules: [{ operator: "openai", action: "allow" }], operator_default: "block" },
+  "policy-verified-block": { ...base, mode: "enforce", charge: "agents", resources: STANDARD, operator_rules: [{ operator: "aifinpay", action: "block", verified_only: true }], operator_default: "charge" },
+  "policy-block-agents": { ...base, mode: "enforce", charge: "agents", resources: STANDARD, operator_rules: [{ operator: "aifinpay", action: "block" }], operator_default: "charge" },
+  "policy-unknown-id": {
+    ...base, mode: "enforce", charge: "agents", resources: STANDARD,
+    operator_rules: [{ operator: "not-an-operator", action: "allow" }, { operator: "anthropic", action: "block" }], operator_default: "charge",
   },
 };
 
@@ -262,6 +274,23 @@ eventCase("policy.allow_event", "must", "policy-enforce", "An allowed operator i
 add("policy.default_block_reader", "must", "policy-block-all", "A default block never reaches a reader", [step(get("chrome"), served()), step(get("none"), noOrigin(403))]);
 add("policy.shadow_block", "must", "policy-shadow", "Shadow serves what a rule would block and says so", step(get("claudebot"), served({ "aifp-shadow-status": "403" })));
 add("policy.verified_only", "parity", "policy-verified", "A verified_only rule answers only after the receipt verifies", [step(pay(), served({ "aifp-paywall": "exempt" })), step(get("chrome", PAID, { agent: "payer" }), noOrigin(403))], { receipts: { r: R() } });
+const BLOCKED = "blocked by merchant policy (operator rule)";
+add("policy.class_block", "must", "policy-class", "A rule for a class blocks an operator with no rule of its own", step(get("claudebot"), refused403(BLOCKED)));
+add("policy.class_allow", "must", "policy-class", "A rule for a class serves an operator with no rule of its own free", step(get("claude_user"), served({ "aifp-paywall": "exempt" })));
+add("policy.operator_beats_class", "must", "policy-class", "The rule for the operator beats the rule for its class", step(get("gptbot"), served({ "aifp-paywall": "exempt" })));
+add("policy.default_block_operator_allow", "must", "policy-default-block", "Under a default block an allowed operator is served free, the rest refused, a reader served",
+  [step(get("gptbot"), served({ "aifp-paywall": "exempt" })), step(get("claudebot"), refused403(BLOCKED)), step(get("chrome"), served())]);
+add("policy.verified_only_claim", "must", "policy-verified-block", "A verified_only block skips a claim, which is charged, and answers a verified receipt",
+  [step(get("chrome", PAID, { agent: "payer" }), noOrigin(402)), step(pay(), refused403(BLOCKED))], { receipts: { r: R() } });
+add("policy.block_before_receipt", "must", "policy-block-agents", "A block answers before any receipt check: a good receipt and a forged one get the rule's 403 and nothing is metered",
+  [step(pay(), { ...refused403(BLOCKED), headers: { "aifp-quota-remaining": null } }), step(pay("x"), refused403(BLOCKED))], { receipts: { r: R(), x: R({}, { mutate: "tamper_payload" }) } });
+add("policy.allow_spends_nothing", "must", "policy-verified", "An allow with a valid receipt spends nothing", [1, 2, 3].map(() => step(pay("one"), served({ "aifp-paywall": "exempt", "aifp-quota-remaining": null }))), { receipts: { one: R({ unit_quota: 1 }) } });
+add("policy.shadow_allow", "must", "policy-shadow", "Shadow serves an allowed operator with no would-be status", step(get("gptbot"), served({ "aifp-mode": "shadow", "aifp-shadow-status": null })));
+add("policy.unknown_operator_ignored", "must", "policy-unknown-id", "A rule naming an operator id the gate does not know is ignored, and the other rules still apply",
+  [step(get("gptbot"), noOrigin(402)), step(get("claudebot"), refused403(BLOCKED))]);
+for (const name of Object.keys(profiles).filter((p) => p.startsWith("policy-"))) {
+  add(`policy.reader_${name.slice("policy-".length).replaceAll("-", "_")}`, "must", name, "A reader is never matched by a rule", step(get("chrome"), served({ "aifp-shadow-status": null })));
+}
 
 // ── spellings of a protected path ─────────────────────────────────────────
 const alias = (id, title, path) => add(`path.${id}`, "must", "content-enforce", title, step(get("gptbot", path), noOrigin(NOT_SERVED)));

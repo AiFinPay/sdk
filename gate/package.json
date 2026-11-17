@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/gate",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Merchant-side AIFP-1 paywall for your own API — 402 challenge, local receipt verification, billing-unit quota metering.",
   "type": "module",
   "main": "dist/index.js",
@@ -25,15 +25,19 @@
     "./testing": {
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
-    }
+    },
+    "./agents.json": "./data/agents-v1.json"
   },
   "files": [
     "dist",
+    "data",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "agents": "node scripts/gen-agents.mjs",
+    "agents:check": "node scripts/gen-agents.mjs --check",
     "test": "vitest run",
     "prepublishOnly": "npm run build",
     "lint": "eslint .",

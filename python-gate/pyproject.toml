@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aifinpay-gate"
-version = "0.8.0"
+version = "0.9.0"
 description = "Accept AIFP-1 payments from AI agents in a Python API — ASGI (FastAPI, Starlette) and WSGI (Flask, Django) middleware. Port of @aifinpay/gate."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -33,3 +33,6 @@ Issues = "https://github.com/AiFinPay/sdk/issues"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["aifinpay_gate*"]
+
+[tool.setuptools.package-data]
+aifinpay_gate = ["data/agents-v1.json"]

@@ -50,9 +50,10 @@ export {
   AI_AGENT_UA_MARKERS,
   AI_AGENT_UA_TABLE,
   GATE_OPERATORS,
+  ROBOTS_TOKENS,
   UA_CLASSES,
 } from "./agents.js";
-export type { AgentIdentity, AiAgentUaEntry, GateOperator, UaClass } from "./agents.js";
+export type { AgentIdentity, AiAgentUaEntry, GateOperator, RobotsTokenEntry, UaClass } from "./agents.js";
 export { decideOperator, normalizeOperatorPolicy, OPERATOR_ACTIONS, OPERATOR_DEFAULT } from "./operator-policy.js";
 export type { OperatorDecision } from "./operator-policy.js";
 export { scopeCovers } from "./scope.js";

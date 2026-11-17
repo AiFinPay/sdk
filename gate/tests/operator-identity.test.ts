@@ -67,6 +67,13 @@ describe("the marker table", () => {
       "apple",
       "amazon",
       "commoncrawl",
+      "mistral",
+      "duckduckgo",
+      "cohere",
+      "moonshot",
+      "you",
+      "diffbot",
+      "ai2",
       "aifinpay",
       "unknown",
     ]);

@@ -6,3 +6,4 @@ migrations/*.sql
 .env
 .env.*
 !.env.example
+data/agents-v1.json

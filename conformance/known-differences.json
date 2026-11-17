@@ -14,5 +14,21 @@
     "cache.exempt": "decision: no-store on a reader's copy costs the site its CDN on protected paths",
     "cache.shadow_agent": "decision: a handler's own Cache-Control wins in shadow, which must not change what the site does",
     "mode.shadow_elsewhere": "by design: a request outside every route never reaches the gate's decision"
+  },
+  "hosted-gateway": {
+    "policy.allow": "decision: a hosted surface charges an allow that rests on a User-Agent or AIFP-Agent-Id alone, because its paid address forwards with the site's origin secret; free access for a named crawler is given at the site's own edge",
+    "policy.allow_event": "decision: a hosted surface charges an allow that rests on a User-Agent or AIFP-Agent-Id alone, because its paid address forwards with the site's origin secret; free access for a named crawler is given at the site's own edge",
+    "policy.class_allow": "decision: a hosted surface charges an allow that rests on a User-Agent or AIFP-Agent-Id alone, because its paid address forwards with the site's origin secret; free access for a named crawler is given at the site's own edge",
+    "policy.operator_beats_class": "decision: a hosted surface charges an allow that rests on a User-Agent or AIFP-Agent-Id alone, because its paid address forwards with the site's origin secret; free access for a named crawler is given at the site's own edge",
+    "policy.default_block_operator_allow": "decision: a hosted surface charges an allow that rests on a User-Agent or AIFP-Agent-Id alone, because its paid address forwards with the site's origin secret; free access for a named crawler is given at the site's own edge",
+    "policy.shadow_allow": "decision: a hosted surface charges an allow that rests on a User-Agent or AIFP-Agent-Id alone, because its paid address forwards with the site's origin secret; free access for a named crawler is given at the site's own edge"
+  },
+  "hosted-gate": {
+    "policy.allow": "decision: a hosted surface charges an allow that rests on a User-Agent or AIFP-Agent-Id alone, because its paid address forwards with the site's origin secret; free access for a named crawler is given at the site's own edge",
+    "policy.allow_event": "decision: a hosted surface charges an allow that rests on a User-Agent or AIFP-Agent-Id alone, because its paid address forwards with the site's origin secret; free access for a named crawler is given at the site's own edge",
+    "policy.class_allow": "decision: a hosted surface charges an allow that rests on a User-Agent or AIFP-Agent-Id alone, because its paid address forwards with the site's origin secret; free access for a named crawler is given at the site's own edge",
+    "policy.operator_beats_class": "decision: a hosted surface charges an allow that rests on a User-Agent or AIFP-Agent-Id alone, because its paid address forwards with the site's origin secret; free access for a named crawler is given at the site's own edge",
+    "policy.default_block_operator_allow": "decision: a hosted surface charges an allow that rests on a User-Agent or AIFP-Agent-Id alone, because its paid address forwards with the site's origin secret; free access for a named crawler is given at the site's own edge",
+    "policy.shadow_allow": "decision: a hosted surface charges an allow that rests on a User-Agent or AIFP-Agent-Id alone, because its paid address forwards with the site's origin secret; free access for a named crawler is given at the site's own edge"
   }
 }

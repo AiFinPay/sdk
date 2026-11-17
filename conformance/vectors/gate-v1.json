@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "reference": "@aifinpay/gate 0.11.0",
+ "reference": "@aifinpay/gate 0.12.0",
  "fixtures": {
   "merchant_id": "mrch_0123456789abcdef",
   "other_merchant_id": "mrch_fedcba9876543210",
@@ -23,6 +23,7 @@
    "claudebot": "Mozilla/5.0 (compatible; ClaudeBot/1.0; +claudebot@anthropic.com)",
    "perplexity": "Mozilla/5.0 (compatible; PerplexityBot/1.0)",
    "chatgpt": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0",
+   "claude_user": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Claude-User/1.0; +Claude-User@anthropic.com)",
    "sdk": "aifinpay-agent-node/2.14.0",
    "none": null
   }
@@ -268,6 +269,154 @@
     }
    ],
    "operator_default": "charge"
+  },
+  "policy-class": {
+   "network_mode": "live",
+   "site_verified": true,
+   "mode": "enforce",
+   "charge": "agents",
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
+    }
+   ],
+   "operator_rules": [
+    {
+     "operator": "openai",
+     "action": "allow"
+    },
+    {
+     "ua_class": "ai_crawler",
+     "action": "block"
+    },
+    {
+     "ua_class": "ai_agent_browser",
+     "action": "allow"
+    }
+   ],
+   "operator_default": "charge"
+  },
+  "policy-default-block": {
+   "network_mode": "live",
+   "site_verified": true,
+   "mode": "enforce",
+   "charge": "agents",
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
+    }
+   ],
+   "operator_rules": [
+    {
+     "operator": "openai",
+     "action": "allow"
+    }
+   ],
+   "operator_default": "block"
+  },
+  "policy-verified-block": {
+   "network_mode": "live",
+   "site_verified": true,
+   "mode": "enforce",
+   "charge": "agents",
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
+    }
+   ],
+   "operator_rules": [
+    {
+     "operator": "aifinpay",
+     "action": "block",
+     "verified_only": true
+    }
+   ],
+   "operator_default": "charge"
+  },
+  "policy-block-agents": {
+   "network_mode": "live",
+   "site_verified": true,
+   "mode": "enforce",
+   "charge": "agents",
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
+    }
+   ],
+   "operator_rules": [
+    {
+     "operator": "aifinpay",
+     "action": "block"
+    }
+   ],
+   "operator_default": "charge"
+  },
+  "policy-unknown-id": {
+   "network_mode": "live",
+   "site_verified": true,
+   "mode": "enforce",
+   "charge": "agents",
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
+    }
+   ],
+   "operator_rules": [
+    {
+     "operator": "not-an-operator",
+     "action": "allow"
+    },
+    {
+     "operator": "anthropic",
+     "action": "block"
+    }
+   ],
+   "operator_default": "charge"
   }
  },
  "golden": {
@@ -423,6 +572,13 @@
   "apple",
   "amazon",
   "commoncrawl",
+  "mistral",
+  "duckduckgo",
+  "cohere",
+  "moonshot",
+  "you",
+  "diffbot",
+  "ai2",
   "aifinpay",
   "unknown"
  ],
@@ -3716,6 +3872,17 @@
      "request": {
       "method": "GET",
       "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; claude-agent/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
       "ua": "Mozilla/5.0 (compatible; claude-web/1.0)"
      },
      "expect": {
@@ -3760,6 +3927,171 @@
      "request": {
       "method": "GET",
       "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; google-cloudvertexbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; google-gemininotebook/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; google-notebooklm/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; google-agent/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; meta-externalagent/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; meta-webindexer/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; meta-externalfetcher/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; amazonbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; amzn-searchbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; amzn-user/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; bedrockbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; mistralai-training/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; mistralai-index/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; mistralai-user/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; duckassistbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
       "ua": "Mozilla/5.0 (compatible; ccbot/1.0)"
      },
      "expect": {
@@ -3782,62 +4114,18 @@
      "request": {
       "method": "GET",
       "path": "/paid/a",
-      "ua": "Mozilla/5.0 (compatible; google-extended/1.0)"
-     },
-     "expect": {
-      "status": 402,
-      "origin": false
-     }
-    },
-    {
-     "request": {
-      "method": "GET",
-      "path": "/paid/a",
-      "ua": "Mozilla/5.0 (compatible; applebot-extended/1.0)"
-     },
-     "expect": {
-      "status": 402,
-      "origin": false
-     }
-    },
-    {
-     "request": {
-      "method": "GET",
-      "path": "/paid/a",
-      "ua": "Mozilla/5.0 (compatible; meta-externalagent/1.0)"
-     },
-     "expect": {
-      "status": 402,
-      "origin": false
-     }
-    },
-    {
-     "request": {
-      "method": "GET",
-      "path": "/paid/a",
-      "ua": "Mozilla/5.0 (compatible; facebookbot/1.0)"
-     },
-     "expect": {
-      "status": 402,
-      "origin": false
-     }
-    },
-    {
-     "request": {
-      "method": "GET",
-      "path": "/paid/a",
-      "ua": "Mozilla/5.0 (compatible; amazonbot/1.0)"
-     },
-     "expect": {
-      "status": 402,
-      "origin": false
-     }
-    },
-    {
-     "request": {
-      "method": "GET",
-      "path": "/paid/a",
       "ua": "Mozilla/5.0 (compatible; youbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; diffbot-user/1.0)"
      },
      "expect": {
       "status": 402,
@@ -3903,7 +4191,106 @@
      "request": {
       "method": "GET",
       "path": "/paid/a",
-      "ua": "Mozilla/5.0 (compatible; mistralai/1.0)"
+      "ua": "Mozilla/5.0 (compatible; kimibot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; kimi-searchbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; kimi-user/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; linerbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; liner-user/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; exasearchbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; exauser/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; elevenlabsbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; sbintuitionsbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; velenpublicwebcrawler/1.0)"
      },
      "expect": {
       "status": 402,
@@ -4512,6 +4899,17 @@
      "request": {
       "method": "GET",
       "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; claude-agent/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
       "ua": "Mozilla/5.0 (compatible; claude-web/1.0)"
      },
      "expect": {
@@ -4556,6 +4954,171 @@
      "request": {
       "method": "GET",
       "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; google-cloudvertexbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; google-gemininotebook/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; google-notebooklm/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; google-agent/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; meta-externalagent/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; meta-webindexer/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; meta-externalfetcher/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; amazonbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; amzn-searchbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; amzn-user/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; bedrockbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; mistralai-training/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; mistralai-index/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; mistralai-user/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; duckassistbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
       "ua": "Mozilla/5.0 (compatible; ccbot/1.0)"
      },
      "expect": {
@@ -4578,62 +5141,18 @@
      "request": {
       "method": "GET",
       "path": "/paid/a",
-      "ua": "Mozilla/5.0 (compatible; google-extended/1.0)"
-     },
-     "expect": {
-      "status": 402,
-      "origin": false
-     }
-    },
-    {
-     "request": {
-      "method": "GET",
-      "path": "/paid/a",
-      "ua": "Mozilla/5.0 (compatible; applebot-extended/1.0)"
-     },
-     "expect": {
-      "status": 402,
-      "origin": false
-     }
-    },
-    {
-     "request": {
-      "method": "GET",
-      "path": "/paid/a",
-      "ua": "Mozilla/5.0 (compatible; meta-externalagent/1.0)"
-     },
-     "expect": {
-      "status": 402,
-      "origin": false
-     }
-    },
-    {
-     "request": {
-      "method": "GET",
-      "path": "/paid/a",
-      "ua": "Mozilla/5.0 (compatible; facebookbot/1.0)"
-     },
-     "expect": {
-      "status": 402,
-      "origin": false
-     }
-    },
-    {
-     "request": {
-      "method": "GET",
-      "path": "/paid/a",
-      "ua": "Mozilla/5.0 (compatible; amazonbot/1.0)"
-     },
-     "expect": {
-      "status": 402,
-      "origin": false
-     }
-    },
-    {
-     "request": {
-      "method": "GET",
-      "path": "/paid/a",
       "ua": "Mozilla/5.0 (compatible; youbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; diffbot-user/1.0)"
      },
      "expect": {
       "status": 402,
@@ -4699,7 +5218,106 @@
      "request": {
       "method": "GET",
       "path": "/paid/a",
-      "ua": "Mozilla/5.0 (compatible; mistralai/1.0)"
+      "ua": "Mozilla/5.0 (compatible; kimibot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; kimi-searchbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; kimi-user/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; linerbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; liner-user/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; exasearchbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; exauser/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; elevenlabsbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; sbintuitionsbot/1.0)"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "Mozilla/5.0 (compatible; velenpublicwebcrawler/1.0)"
      },
      "expect": {
       "status": 402,
@@ -4794,6 +5412,13 @@
      "kind": "402",
      "resource": "/paid/*",
      "operator": "anthropic",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "anthropic",
      "ua_class": "ai_crawler",
      "verified": false
     },
@@ -4808,6 +5433,111 @@
      "kind": "402",
      "resource": "/paid/*",
      "operator": "perplexity",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "google",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "google",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "google",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "google",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "meta",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "meta",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "meta",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "amazon",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "amazon",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "amazon",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "amazon",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "mistral",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "mistral",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "mistral",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "duckduckgo",
      "ua_class": "ai_agent_browser",
      "verified": false
     },
@@ -4828,35 +5558,21 @@
     {
      "kind": "402",
      "resource": "/paid/*",
-     "operator": "google",
+     "operator": "you",
      "ua_class": "ai_crawler",
      "verified": false
     },
     {
      "kind": "402",
      "resource": "/paid/*",
-     "operator": "apple",
-     "ua_class": "ai_crawler",
+     "operator": "diffbot",
+     "ua_class": "ai_agent_browser",
      "verified": false
     },
     {
      "kind": "402",
      "resource": "/paid/*",
-     "operator": "meta",
-     "ua_class": "ai_crawler",
-     "verified": false
-    },
-    {
-     "kind": "402",
-     "resource": "/paid/*",
-     "operator": "meta",
-     "ua_class": "ai_crawler",
-     "verified": false
-    },
-    {
-     "kind": "402",
-     "resource": "/paid/*",
-     "operator": "amazon",
+     "operator": "diffbot",
      "ua_class": "ai_crawler",
      "verified": false
     },
@@ -4877,8 +5593,50 @@
     {
      "kind": "402",
      "resource": "/paid/*",
+     "operator": "cohere",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "ai2",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "moonshot",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "moonshot",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "moonshot",
+     "ua_class": "ai_agent_browser",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
      "operator": "unknown",
      "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "ai_agent_browser",
      "verified": false
     },
     {
@@ -4906,7 +5664,14 @@
      "kind": "402",
      "resource": "/paid/*",
      "operator": "unknown",
-     "ua_class": "ai_agent_browser",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "ai_crawler",
      "verified": false
     },
     {
@@ -5172,6 +5937,571 @@
      "claims": {}
     }
    }
+  },
+  {
+   "id": "policy.class_block",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-class",
+   "title": "A rule for a class blocks an operator with no rule of its own",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "claudebot"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false,
+      "body": {
+       "subset": {
+        "error": "AIFP-403",
+        "detail": "blocked by merchant policy (operator rule)"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "policy.class_allow",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-class",
+   "title": "A rule for a class serves an operator with no rule of its own free",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "claude_user"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-paywall": "exempt"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "policy.operator_beats_class",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-class",
+   "title": "The rule for the operator beats the rule for its class",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-paywall": "exempt"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "policy.default_block_operator_allow",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-default-block",
+   "title": "Under a default block an allowed operator is served free, the rest refused, a reader served",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-paywall": "exempt"
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "claudebot"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false,
+      "body": {
+       "subset": {
+        "error": "AIFP-403",
+        "detail": "blocked by merchant policy (operator rule)"
+       }
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ]
+  },
+  {
+   "id": "policy.verified_only_claim",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-verified-block",
+   "title": "A verified_only block skips a claim, which is charged, and answers a verified receipt",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false,
+      "body": {
+       "subset": {
+        "error": "AIFP-403",
+        "detail": "blocked by merchant policy (operator rule)"
+       }
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "policy.block_before_receipt",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-block-agents",
+   "title": "A block answers before any receipt check: a good receipt and a forged one get the rule's 403 and nothing is metered",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false,
+      "body": {
+       "subset": {
+        "error": "AIFP-403",
+        "detail": "blocked by merchant policy (operator rule)"
+       }
+      },
+      "headers": {
+       "aifp-quota-remaining": null
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false,
+      "body": {
+       "subset": {
+        "error": "AIFP-403",
+        "detail": "blocked by merchant policy (operator rule)"
+       }
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    },
+    "x": {
+     "claims": {},
+     "sign": {
+      "mutate": "tamper_payload"
+     }
+    }
+   }
+  },
+  {
+   "id": "policy.allow_spends_nothing",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-verified",
+   "title": "An allow with a valid receipt spends nothing",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "one",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-paywall": "exempt",
+       "aifp-quota-remaining": null
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "one",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-paywall": "exempt",
+       "aifp-quota-remaining": null
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "one",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-paywall": "exempt",
+       "aifp-quota-remaining": null
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "one": {
+     "claims": {
+      "unit_quota": 1
+     }
+    }
+   }
+  },
+  {
+   "id": "policy.shadow_allow",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-shadow",
+   "title": "Shadow serves an allowed operator with no would-be status",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-mode": "shadow",
+       "aifp-shadow-status": null
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "policy.unknown_operator_ignored",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-unknown-id",
+   "title": "A rule naming an operator id the gate does not know is ignored, and the other rules still apply",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "claudebot"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false,
+      "body": {
+       "subset": {
+        "error": "AIFP-403",
+        "detail": "blocked by merchant policy (operator rule)"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "policy.reader_enforce",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-enforce",
+   "title": "A reader is never matched by a rule",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-shadow-status": null
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "policy.reader_shadow",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-shadow",
+   "title": "A reader is never matched by a rule",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-shadow-status": null
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "policy.reader_block_all",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-block-all",
+   "title": "A reader is never matched by a rule",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-shadow-status": null
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "policy.reader_verified",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-verified",
+   "title": "A reader is never matched by a rule",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-shadow-status": null
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "policy.reader_class",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-class",
+   "title": "A reader is never matched by a rule",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-shadow-status": null
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "policy.reader_default_block",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-default-block",
+   "title": "A reader is never matched by a rule",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-shadow-status": null
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "policy.reader_verified_block",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-verified-block",
+   "title": "A reader is never matched by a rule",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-shadow-status": null
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "policy.reader_block_agents",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-block-agents",
+   "title": "A reader is never matched by a rule",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-shadow-status": null
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "policy.reader_unknown_id",
+   "group": "policy",
+   "level": "must",
+   "profile": "policy-unknown-id",
+   "title": "A reader is never matched by a rule",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-shadow-status": null
+      }
+     }
+    }
+   ]
   },
   {
    "id": "path.case",

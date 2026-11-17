@@ -12,20 +12,32 @@ report operator / ua_class / verified on every event. A port of
 gate/src/agents.ts — tests/test_parity.py holds the two tables equal.
 """
 
-# Closed sets, shared verbatim with the AiFinPay gate-events ingest (which
-# refuses any other value) and the site-check probe. An operator without an id
-# here is "unknown", never a free-text name: the value becomes a counter key.
+# Closed sets from data/agents-v1.json; the gate-events ingest refuses any other value.
+# <generated:agents-v1> by gate/scripts/gen-agents.mjs from data/agents-v1.json; do not edit by hand.
 GATE_OPERATORS = (
-    "openai", "anthropic", "perplexity", "google", "microsoft", "meta", "bytedance",
-    "apple", "amazon", "commoncrawl", "aifinpay", "unknown",
+    "openai",
+    "anthropic",
+    "perplexity",
+    "google",
+    "microsoft",
+    "meta",
+    "bytedance",
+    "apple",
+    "amazon",
+    "commoncrawl",
+    "mistral",
+    "duckduckgo",
+    "cohere",
+    "moonshot",
+    "you",
+    "diffbot",
+    "ai2",
+    "aifinpay",
+    "unknown",
 )
-# ai_crawler: bulk fetch for training or a search index. ai_agent_browser: fetch
-# because a person asked an assistant. aifp_agent: speaks AIFP. human: a
-# User-Agent with no automation marker (a stealth bot lands here too). unknown:
-# automation of unknown purpose — no User-Agent, headless browsers.
 UA_CLASSES = ("ai_crawler", "ai_agent_browser", "aifp_agent", "human", "unknown")
 
-# (marker, operator, ua_class) — lowercase User-Agent substrings; first match wins.
+# (marker, operator, ua_class): lowercase User-Agent substrings in match order, first match wins.
 AI_AGENT_UA_TABLE = (
     ("gptbot", "openai", "ai_crawler"),
     ("oai-searchbot", "openai", "ai_crawler"),
@@ -33,28 +45,93 @@ AI_AGENT_UA_TABLE = (
     ("claudebot", "anthropic", "ai_crawler"),
     ("claude-searchbot", "anthropic", "ai_crawler"),
     ("claude-user", "anthropic", "ai_agent_browser"),
+    ("claude-agent", "anthropic", "ai_agent_browser"),
     ("claude-web", "anthropic", "ai_agent_browser"),
     ("anthropic-ai", "anthropic", "ai_crawler"),
     ("perplexitybot", "perplexity", "ai_crawler"),
     ("perplexity-user", "perplexity", "ai_agent_browser"),
+    ("google-cloudvertexbot", "google", "ai_crawler"),
+    ("google-gemininotebook", "google", "ai_agent_browser"),
+    ("google-notebooklm", "google", "ai_agent_browser"),
+    ("google-agent", "google", "ai_agent_browser"),
+    ("meta-externalagent", "meta", "ai_crawler"),
+    ("meta-webindexer", "meta", "ai_crawler"),
+    ("meta-externalfetcher", "meta", "ai_agent_browser"),
+    ("amazonbot", "amazon", "ai_crawler"),
+    ("amzn-searchbot", "amazon", "ai_crawler"),
+    ("amzn-user", "amazon", "ai_agent_browser"),
+    ("bedrockbot", "amazon", "ai_crawler"),
+    ("mistralai-training", "mistral", "ai_crawler"),
+    ("mistralai-index", "mistral", "ai_crawler"),
+    ("mistralai-user", "mistral", "ai_agent_browser"),
+    ("duckassistbot", "duckduckgo", "ai_agent_browser"),
     ("ccbot", "commoncrawl", "ai_crawler"),
     ("bytespider", "bytedance", "ai_crawler"),
-    ("google-extended", "google", "ai_crawler"),
-    ("applebot-extended", "apple", "ai_crawler"),
-    ("meta-externalagent", "meta", "ai_crawler"),
-    ("facebookbot", "meta", "ai_crawler"),
-    ("amazonbot", "amazon", "ai_crawler"),
-    ("youbot", "unknown", "ai_crawler"),
-    ("diffbot", "unknown", "ai_crawler"),
+    ("youbot", "you", "ai_crawler"),
+    ("diffbot-user", "diffbot", "ai_agent_browser"),
+    ("diffbot", "diffbot", "ai_crawler"),
     ("timpibot", "unknown", "ai_crawler"),
     ("omgilibot", "unknown", "ai_crawler"),
-    ("cohere-ai", "unknown", "ai_agent_browser"),
-    ("ai2bot", "unknown", "ai_crawler"),
-    ("mistralai", "unknown", "ai_agent_browser"),
+    ("cohere-ai", "cohere", "ai_agent_browser"),
+    ("ai2bot", "ai2", "ai_crawler"),
+    ("kimibot", "moonshot", "ai_crawler"),
+    ("kimi-searchbot", "moonshot", "ai_crawler"),
+    ("kimi-user", "moonshot", "ai_agent_browser"),
+    ("linerbot", "unknown", "ai_crawler"),
+    ("liner-user", "unknown", "ai_agent_browser"),
+    ("exasearchbot", "unknown", "ai_crawler"),
+    ("exauser", "unknown", "ai_agent_browser"),
+    ("elevenlabsbot", "unknown", "ai_crawler"),
+    ("sbintuitionsbot", "unknown", "ai_crawler"),
+    ("velenpublicwebcrawler", "unknown", "ai_crawler"),
     ("aifinpay-agent", "aifinpay", "aifp_agent"),
     ("headlesschrome", "unknown", "unknown"),
     ("phantomjs", "unknown", "unknown"),
 )
+
+# (token, operator, ua_class): robots.txt product tokens as each operator publishes them.
+ROBOTS_TOKENS = (
+    ("GPTBot", "openai", "ai_crawler"),
+    ("OAI-SearchBot", "openai", "ai_crawler"),
+    ("ChatGPT-User", "openai", "ai_agent_browser"),
+    ("ClaudeBot", "anthropic", "ai_crawler"),
+    ("Claude-SearchBot", "anthropic", "ai_crawler"),
+    ("Claude-User", "anthropic", "ai_agent_browser"),
+    ("anthropic-ai", "anthropic", "ai_crawler"),
+    ("PerplexityBot", "perplexity", "ai_crawler"),
+    ("Perplexity-User", "perplexity", "ai_agent_browser"),
+    ("Google-CloudVertexBot", "google", "ai_crawler"),
+    ("Google-Extended", "google", "ai_crawler"),
+    ("meta-externalagent", "meta", "ai_crawler"),
+    ("meta-webindexer", "meta", "ai_crawler"),
+    ("meta-externalfetcher", "meta", "ai_agent_browser"),
+    ("Amazonbot", "amazon", "ai_crawler"),
+    ("Amzn-SearchBot", "amazon", "ai_crawler"),
+    ("Amzn-User", "amazon", "ai_agent_browser"),
+    ("bedrockbot", "amazon", "ai_crawler"),
+    ("amazon-kendra", "amazon", "ai_crawler"),
+    ("amazon-QBusiness", "amazon", "ai_crawler"),
+    ("Applebot-Extended", "apple", "ai_crawler"),
+    ("MistralAI-Training", "mistral", "ai_crawler"),
+    ("MistralAI-Index", "mistral", "ai_crawler"),
+    ("MistralAI-User", "mistral", "ai_agent_browser"),
+    ("DuckAssistBot", "duckduckgo", "ai_agent_browser"),
+    ("CCBot", "commoncrawl", "ai_crawler"),
+    ("Bytespider", "bytedance", "ai_crawler"),
+    ("Diffbot-User", "diffbot", "ai_agent_browser"),
+    ("Diffbot", "diffbot", "ai_crawler"),
+    ("webzio-extended", "unknown", "ai_crawler"),
+    ("KimiBot", "moonshot", "ai_crawler"),
+    ("Kimi-SearchBot", "moonshot", "ai_crawler"),
+    ("Kimi-User", "moonshot", "ai_agent_browser"),
+    ("LinerBot", "unknown", "ai_crawler"),
+    ("Liner-User", "unknown", "ai_agent_browser"),
+    ("ExaSearchBot", "unknown", "ai_crawler"),
+    ("ElevenlabsBot", "unknown", "ai_crawler"),
+    ("SBIntuitionsBot", "unknown", "ai_crawler"),
+    ("VelenPublicWebCrawler", "unknown", "ai_crawler"),
+)
+# </generated:agents-v1>
 
 AI_AGENT_UA_MARKERS = tuple(marker for marker, _, _ in AI_AGENT_UA_TABLE)
 

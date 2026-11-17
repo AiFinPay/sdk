@@ -6,6 +6,17 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## One list of AI crawlers and agents — gate 0.12.0, aifinpay-gate 0.9.0
+
+- `gate/data/agents-v1.json` is the one list of AI crawlers, assistants and agents,
+  each row with the operator page that names its token. Both gates generate their
+  tables from it; other repositories keep a byte copy.
+- Seven new operator ids. The gate-events ingest must accept them before either
+  gate is published.
+- Conformance: the vectors follow the file, and new `policy.*` cases hold every
+  operator-rule outcome. The hosted surfaces' allow-only-when-verified rule is in
+  `conformance/known-differences.json`.
+
 ## Minimum batch $0.02 — agent 2.14.0, Python 2.11.0, gate 0.9.0, aifinpay-gate 0.6.0, MCP 2.16.0
 
 - The agent SDKs buy the minimum batch the 402 advertises, falling back to
