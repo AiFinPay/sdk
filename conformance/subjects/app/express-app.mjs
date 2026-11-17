@@ -28,6 +28,8 @@ app.use(G.aifpGate({
   store: G.redisStore(redis, { keyPrefix: "conformance:" }),
   ...(profile.network_known === false ? { networkMode: null } : {}),
   ...(profile.charge === "agents" ? { shouldCharge: G.knownAiAgent } : {}),
+  ...(profile.script_clients ? { scriptClients: profile.script_clients } : {}),
+  ...(profile.script_client_allow ? { scriptClientAllow: profile.script_client_allow } : {}),
   onEvent: reporter.onEvent,
 }));
 app.use(express.raw({ type: () => true, limit: "2mb" }));

@@ -18,7 +18,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Protocol, Sequence
 
-from .agents import classify_agent
+from .agents import identify_request, known_ai_agent
 from .challenge import DEFAULT_API_BASE, build_challenge
 from .license import license_headers, receipt_license
 from .operator_policy import decide_operator, normalize_operator_policy
@@ -33,6 +33,9 @@ DETAIL_QUOTA_EXHAUSTED = "quota exhausted — prepay the next batch"
 DETAIL_RECEIPT_EXPIRED = "receipt expired — prepay a new batch"
 DETAIL_VERIFY_FAILED = "receipt verification failed (signature/issuer/audience)"
 HEADER_QUOTA_REMAINING = "AIFP-Quota-Remaining"
+# The ``detail`` of a serve event for a script client that ``script_clients="charge"`` would have refused.
+DETAIL_SCRIPT_CLIENT_OBSERVED = "script client served free in observe; charge would answer 402"
+SCRIPT_CLIENTS_MODES = ("observe", "charge", "allow")
 # On every response from a gate in shadow mode. Enforce sends no such header —
 # its 402 says what it is.
 HEADER_MODE = "AIFP-Mode"
@@ -174,6 +177,8 @@ class Gate:
         reporting_context: Optional[Callable[[GateRequest], Dict[str, Any]]] = None,
         allow: Optional[Callable[[Dict[str, Any]], bool]] = None,
         should_charge: Optional[Callable[[GateRequest], bool]] = None,
+        script_clients: str = "observe",
+        script_client_allow: Sequence[str] = (),
         operator_policy: Any = None,
         now: Callable[[], float] = time.time,
     ):
@@ -199,6 +204,11 @@ class Gate:
         # meant to watch) or shadow (a paywall that stops charging).
         if mode not in MODES:
             raise ValueError(f'mode must be "shadow" or "enforce": {mode!r}')
+        if script_clients not in SCRIPT_CLIENTS_MODES:
+            raise ValueError(f'script_clients must be "observe", "charge" or "allow": {script_clients!r}')
+        if isinstance(script_client_allow, str) or not all(
+                isinstance(s, str) and s for s in script_client_allow):
+            raise ValueError(f"script_client_allow must be a list of non-empty strings: {script_client_allow!r}")
         if not callable(network_mode) and network_mode is not None and network_mode not in NETWORK_MODES:
             raise ValueError(f'network_mode must be "live" or "test": {network_mode!r}')
         # As Route does: an unknown tier would price the mount as standard.
@@ -236,6 +246,9 @@ class Gate:
         self.reporting_context = reporting_context
         self.allow = allow
         self.should_charge = should_charge
+        # Script clients under should_charge=known_ai_agent: "charge", "observe" (free with a detail) or "allow".
+        self.script_clients = script_clients
+        self.script_client_allow = tuple(s.lower() for s in script_client_allow)
         # The merchant's allow / charge / block per operator, as the public
         # merchant view carries it (GET /v1/merchants/:id → operator_rules,
         # operator_default): a dict, or a callable returning the current one.
@@ -331,9 +344,9 @@ class Gate:
         except Exception:  # noqa: BLE001 — observability is never load-bearing
             pass
 
-    def _charges(self, req: GateRequest) -> bool:
+    def _charges(self, req: GateRequest, script_rule: Optional[str] = None) -> bool:
         """WHO pays. A predicate that raises charges."""
-        if self.should_charge is None:
+        if self.should_charge is None or script_rule == "charge":
             return True
         try:
             return bool(self.should_charge(req))
@@ -433,16 +446,19 @@ class Gate:
 
     def _decide(self, req: GateRequest) -> Optional[GateResult]:
         path, ambiguous = inspect_path(req.path, case_sensitive=self.case_sensitive)
-        # An origin may read this path differently from the gate, so no price is
-        # safe to quote. A reader still gets the page.
-        if ambiguous and self.mode == "enforce" and not self.resource and self._charges(req):
-            return GateResult(False, 400, _json_headers(), body={
-                "error": "noncanonical_path", "detail": "this path means different things to different servers",
-            })
         # Who the request says it is: normalised values, never the raw
         # User-Agent, IP or headers. Upgraded to verified only once the receipt
         # checks out — a User-Agent or AIFP-Agent-Id header is a claim.
-        who = classify_agent(req)
+        who, script = identify_request(req, self.script_client_allow)
+        # Only the shipped predicate hands script clients to the script_clients option.
+        script_rule = self.script_clients if script and self.should_charge is known_ai_agent else None
+        exempt_detail = DETAIL_SCRIPT_CLIENT_OBSERVED if script_rule == "observe" else None
+        # An origin may read this path differently from the gate, so no price is
+        # safe to quote. A reader still gets the page.
+        if ambiguous and self.mode == "enforce" and not self.resource and self._charges(req, script_rule):
+            return GateResult(False, 400, _json_headers(), body={
+                "error": "noncanonical_path", "detail": "this path means different things to different servers",
+            })
         if self.routes is not None:
             route = self.route_for(path, getattr(req, "method", None))
             if route is None:
@@ -490,8 +506,8 @@ class Gate:
 
         # WHO pays — before the missing-receipt challenge, or a human reader
         # would meet the 402.
-        if not self._charges(req):
-            return self._serve_exempt(resource, weight, path, who=who, agent=agent_header)
+        if not self._charges(req, script_rule):
+            return self._serve_exempt(resource, weight, path, who=who, agent=agent_header, detail=exempt_detail)
 
         token = req.header("AIFP-Receipt")
         if not token:

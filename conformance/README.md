@@ -36,6 +36,7 @@ A subject is a module exporting `{ id, label, capabilities, supports(profile), s
 | `proxy` | | `pass.*`: the subject proxies to `ctx.origin` |
 | `pre_cache` | | the decision runs before any cache, so a reader's copy may be cacheable |
 | `real_cache` | | `cache.real_*`: a real cache sits in the chain |
+| `script_clients` | | `script.*` cases whose profile sets `script_clients`: the subject passes it and `script_client_allow` to the gate |
 
 `--ratchet` compares against `known-differences.json`: a new failure or a fixed one fails the run. Adding a line there is a decision, and its reason says whose. A reason starting `flaky:` tolerates both.
 

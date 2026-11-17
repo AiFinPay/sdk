@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "reference": "@aifinpay/gate 0.11.1",
+ "reference": "@aifinpay/gate 0.12.0",
  "fixtures": {
   "merchant_id": "mrch_0123456789abcdef",
   "other_merchant_id": "mrch_fedcba9876543210",
@@ -24,6 +24,10 @@
    "perplexity": "Mozilla/5.0 (compatible; PerplexityBot/1.0)",
    "chatgpt": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0",
    "sdk": "aifinpay-agent-node/2.14.0",
+   "curl": "curl/8.5.0",
+   "monitor": "curl/8.5.0 StatusCake",
+   "ruby_device": "Mozilla/5.0 (Linux; Android 14; Ruby Build/UP1A.231005.007) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+   "firefox_android": "Mozilla/5.0 (Android 14; Mobile; rv:132.0) Gecko/132.0 Firefox/132.0",
    "none": null
   }
  },
@@ -235,6 +239,51 @@
     }
    ],
    "operator_default": "charge"
+  },
+  "scripts-charge": {
+   "network_mode": "live",
+   "site_verified": true,
+   "mode": "enforce",
+   "charge": "agents",
+   "script_clients": "charge",
+   "script_client_allow": [
+    "statuscake"
+   ],
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
+    }
+   ]
+  },
+  "scripts-allow": {
+   "network_mode": "live",
+   "site_verified": true,
+   "mode": "enforce",
+   "charge": "agents",
+   "script_clients": "allow",
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
+    }
+   ]
   },
   "policy-block-all": {
    "network_mode": "live",
@@ -5068,6 +5117,318 @@
    },
    "needs": [
     "events"
+   ]
+  },
+  {
+   "id": "script.observed",
+   "group": "script",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A script client is served free by default (observe)",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "curl"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-paywall": "exempt"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "script.observed_local",
+   "group": "script",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An observed script client is not sent to the ingest",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "curl"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "events": [],
+   "needs": [
+    "events"
+   ]
+  },
+  {
+   "id": "script.charged",
+   "group": "script",
+   "level": "must",
+   "profile": "scripts-charge",
+   "title": "A script client is charged when the site says charge",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "curl"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "needs": [
+    "script_clients"
+   ]
+  },
+  {
+   "id": "script.charged_event",
+   "group": "script",
+   "level": "must",
+   "profile": "scripts-charge",
+   "title": "A charged script client reports as unknown automation",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "curl"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "events": [
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "unknown",
+     "ua_class": "unknown",
+     "verified": false
+    }
+   ],
+   "needs": [
+    "events",
+    "script_clients"
+   ]
+  },
+  {
+   "id": "script.allowed",
+   "group": "script",
+   "level": "must",
+   "profile": "scripts-allow",
+   "title": "A script client is served free when the site says allow",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "curl"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-paywall": "exempt"
+      }
+     }
+    }
+   ],
+   "needs": [
+    "script_clients"
+   ]
+  },
+  {
+   "id": "script.allow_list",
+   "group": "script",
+   "level": "must",
+   "profile": "scripts-charge",
+   "title": "An allow-listed User-Agent is a reader, even under charge",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "monitor"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-paywall": "exempt"
+      }
+     }
+    }
+   ],
+   "needs": [
+    "script_clients"
+   ]
+  },
+  {
+   "id": "script.browser",
+   "group": "script",
+   "level": "must",
+   "profile": "scripts-charge",
+   "title": "A browser is a reader under charge",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-paywall": "exempt"
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "firefox_android"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-paywall": "exempt"
+      }
+     }
+    }
+   ],
+   "needs": [
+    "script_clients"
+   ]
+  },
+  {
+   "id": "script.marker_rule",
+   "group": "script",
+   "level": "must",
+   "profile": "scripts-charge",
+   "title": "A browser carrying a marker word its rule does not match is a reader",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "ruby_device"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-paywall": "exempt"
+      }
+     }
+    }
+   ],
+   "needs": [
+    "script_clients"
+   ]
+  },
+  {
+   "id": "script.crawler",
+   "group": "script",
+   "level": "must",
+   "profile": "scripts-allow",
+   "title": "A named crawler keeps its operator and is charged under allow",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "events": [
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false
+    }
+   ],
+   "needs": [
+    "events",
+    "script_clients"
+   ]
+  },
+  {
+   "id": "script.aifp_header",
+   "group": "script",
+   "level": "must",
+   "profile": "scripts-allow",
+   "title": "A script client with an agent id pays under allow",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "curl",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "needs": [
+    "script_clients"
+   ]
+  },
+  {
+   "id": "script.receipt",
+   "group": "script",
+   "level": "must",
+   "profile": "scripts-charge",
+   "title": "A script client with a receipt is metered",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "curl",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "2"
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   },
+   "needs": [
+    "script_clients"
    ]
   },
   {

@@ -59,22 +59,79 @@ AI_AGENT_UA_TABLE = (
 AI_AGENT_UA_MARKERS = tuple(marker for marker, _, _ in AI_AGENT_UA_TABLE)
 
 
+# HTTP libraries and command-line clients in their default configuration: (marker, "prefix" | "word").
+SCRIPT_CLIENT_MARKERS = (
+    ("curl/", "prefix"),
+    ("wget/", "prefix"),
+    ("python-requests", "prefix"),
+    ("python-urllib", "prefix"),
+    ("python-httpx", "prefix"),
+    ("httpx/", "word"),
+    ("aiohttp", "word"),
+    ("go-http-client", "prefix"),
+    ("node-fetch", "prefix"),
+    ("undici", "prefix"),
+    ("axios/", "prefix"),
+    ("got (", "prefix"),
+    ("okhttp", "prefix"),
+    ("java/", "prefix"),
+    ("apache-httpclient", "prefix"),
+    ("libwww-perl", "prefix"),
+    ("scrapy", "prefix"),
+    ("guzzlehttp", "prefix"),
+    ("ruby", "prefix"),
+    ("faraday", "prefix"),
+    ("restsharp", "prefix"),
+    ("postmanruntime", "prefix"),
+    ("insomnia", "prefix"),
+    ("httpie", "prefix"),
+    ("colly", "prefix"),
+    ("puppeteer", "word"),
+    ("playwright", "word"),
+    ("selenium", "word"),
+)
+
+
+def is_script_client_ua(ua: str) -> bool:
+    """True when a lowercase User-Agent matches a SCRIPT_CLIENT_MARKERS entry under its rule."""
+    for marker, match in SCRIPT_CLIENT_MARKERS:
+        if match == "prefix":
+            if ua.startswith(marker):
+                return True
+            continue
+        at = ua.find(marker)
+        while at != -1:
+            if at == 0 or not ("a" <= ua[at - 1] <= "z" or "0" <= ua[at - 1] <= "9"):
+                return True
+            at = ua.find(marker, at + 1)
+    return False
+
+
+def identify_request(req, script_client_allow=()) -> tuple:
+    """(identity, script): who asked, and whether the gate's script_clients option decides for it."""
+    if req.header("AIFP-Receipt") or req.header("AIFP-Agent-Id"):
+        return {"operator": "aifinpay", "ua_class": "aifp_agent", "verified": False}, False
+    ua = (req.header("user-agent") or "").lower()
+    if not ua:
+        return {"operator": "unknown", "ua_class": "unknown", "verified": False}, False  # no browser sends none
+    for marker, operator, ua_class in AI_AGENT_UA_TABLE:
+        if marker in ua:
+            return {"operator": operator, "ua_class": ua_class, "verified": False}, False
+    if not any(allowed in ua for allowed in script_client_allow) and is_script_client_ua(ua):
+        return {"operator": "unknown", "ua_class": "unknown", "verified": False}, True
+    return {"operator": "unknown", "ua_class": "human", "verified": False}, False
+
+
 def classify_agent(req) -> dict:
     """Who a request says it is. Never ``verified: True`` — every input here is
     a header the client wrote; the gate upgrades an event only after the
     request's receipt verifies. Never returns the raw User-Agent."""
-    if req.header("AIFP-Receipt") or req.header("AIFP-Agent-Id"):
-        return {"operator": "aifinpay", "ua_class": "aifp_agent", "verified": False}
-    ua = (req.header("user-agent") or "").lower()
-    if not ua:
-        return {"operator": "unknown", "ua_class": "unknown", "verified": False}  # no browser sends none
-    for marker, operator, ua_class in AI_AGENT_UA_TABLE:
-        if marker in ua:
-            return {"operator": operator, "ua_class": ua_class, "verified": False}
-    return {"operator": "unknown", "ua_class": "human", "verified": False}
+    return identify_request(req)[0]
 
 
 def known_ai_agent(req) -> bool:
     # A paying agent must never be exempted by a human-looking User-Agent:
     # classify_agent puts AIFP-Receipt / AIFP-Agent-Id first for that reason.
-    return classify_agent(req)["ua_class"] != "human"
+    # Script clients are the gate's script_clients decision, not this predicate's.
+    who, script = identify_request(req)
+    return who["ua_class"] != "human" and not script

@@ -58,7 +58,7 @@ export type GateOperator = (typeof GATE_OPERATORS)[number];
  * - `aifp_agent` — speaks AIFP: sent AIFP-Receipt / AIFP-Agent-Id, or is one of our clients.
  * - `human` — a User-Agent with no automation marker. A stealth bot lands here too;
  *   the name says what the request claims, not what was proven.
- * - `unknown` — automation of unknown purpose: no User-Agent at all, headless browsers.
+ * - `unknown` — automation of unknown purpose: no User-Agent at all, headless browsers, script clients.
  */
 export const UA_CLASSES = ["ai_crawler", "ai_agent_browser", "aifp_agent", "human", "unknown"] as const;
 export type UaClass = (typeof UA_CLASSES)[number];
@@ -159,23 +159,84 @@ export const AI_AGENT_UA_TABLE: readonly AiAgentUaEntry[] = [
 /** The markers alone, in table order. Derived, so it cannot drift from the table. */
 export const AI_AGENT_UA_MARKERS: readonly string[] = AI_AGENT_UA_TABLE.map((entry) => entry.marker);
 
+export interface ScriptClientEntry {
+  /** Lowercase User-Agent substring. */
+  marker: string;
+  /** `prefix`: the User-Agent starts with it. `word`: it follows the start or a character other than a-z and 0-9. */
+  match: "prefix" | "word";
+}
+
+/** HTTP libraries and command-line clients in their default configuration; checked after AI_AGENT_UA_TABLE. */
+export const SCRIPT_CLIENT_MARKERS: readonly ScriptClientEntry[] = [
+  { marker: "curl/", match: "prefix" },
+  { marker: "wget/", match: "prefix" },
+  { marker: "python-requests", match: "prefix" },
+  { marker: "python-urllib", match: "prefix" },
+  { marker: "python-httpx", match: "prefix" },
+  { marker: "httpx/", match: "word" },
+  { marker: "aiohttp", match: "word" },
+  { marker: "go-http-client", match: "prefix" },
+  { marker: "node-fetch", match: "prefix" },
+  { marker: "undici", match: "prefix" },
+  { marker: "axios/", match: "prefix" },
+  { marker: "got (", match: "prefix" },
+  { marker: "okhttp", match: "prefix" },
+  { marker: "java/", match: "prefix" },
+  { marker: "apache-httpclient", match: "prefix" },
+  { marker: "libwww-perl", match: "prefix" },
+  { marker: "scrapy", match: "prefix" },
+  { marker: "guzzlehttp", match: "prefix" },
+  { marker: "ruby", match: "prefix" },
+  { marker: "faraday", match: "prefix" },
+  { marker: "restsharp", match: "prefix" },
+  { marker: "postmanruntime", match: "prefix" },
+  { marker: "insomnia", match: "prefix" },
+  { marker: "httpie", match: "prefix" },
+  { marker: "colly", match: "prefix" },
+  { marker: "puppeteer", match: "word" },
+  { marker: "playwright", match: "word" },
+  { marker: "selenium", match: "word" },
+];
+
+/** True when a lowercase User-Agent matches a SCRIPT_CLIENT_MARKERS entry under its rule. */
+export function isScriptClientUa(ua: string): boolean {
+  return SCRIPT_CLIENT_MARKERS.some(({ marker, match }) => {
+    if (match === "prefix") return ua.startsWith(marker);
+    for (let at = ua.indexOf(marker); at !== -1; at = ua.indexOf(marker, at + 1)) {
+      if (at === 0 || !/[a-z0-9]/.test(ua[at - 1])) return true;
+    }
+    return false;
+  });
+}
+
+/** Who asked, and whether it is a script client the gate's scriptClients option decides for. */
+export function identifyRequest(
+  req: GateRequest,
+  scriptClientAllow: readonly string[] = []
+): { identity: AgentIdentity; script: boolean } {
+  if (req.header("AIFP-Receipt") || req.header("AIFP-Agent-Id")) {
+    return { identity: { operator: "aifinpay", ua_class: "aifp_agent", verified: false }, script: false };
+  }
+  const ua = (req.header("user-agent") ?? "").toLowerCase();
+  if (!ua) return { identity: { operator: "unknown", ua_class: "unknown", verified: false }, script: false };
+  for (const entry of AI_AGENT_UA_TABLE) {
+    if (ua.includes(entry.marker)) {
+      return { identity: { operator: entry.operator, ua_class: entry.ua_class, verified: false }, script: false };
+    }
+  }
+  if (!scriptClientAllow.some((allowed) => ua.includes(allowed)) && isScriptClientUa(ua)) {
+    return { identity: { operator: "unknown", ua_class: "unknown", verified: false }, script: true };
+  }
+  return { identity: { operator: "unknown", ua_class: "human", verified: false }, script: false };
+}
+
 /**
  * Who a request says it is, normalised to the enums above. Never returns
  * `verified: true` — every input here is a header the client wrote. The gate
  * upgrades an event to verified only after the request's receipt verifies.
  */
 export function classifyAgent(req: GateRequest): AgentIdentity {
-  // Speaking the protocol IS the declaration, whatever the User-Agent says.
-  if (req.header("AIFP-Receipt") || req.header("AIFP-Agent-Id")) {
-    return { operator: "aifinpay", ua_class: "aifp_agent", verified: false };
-  }
-  const ua = (req.header("user-agent") ?? "").toLowerCase();
-  // No User-Agent at all: no browser does that; scripts do.
-  if (!ua) return { operator: "unknown", ua_class: "unknown", verified: false };
-  for (const entry of AI_AGENT_UA_TABLE) {
-    if (ua.includes(entry.marker)) return { operator: entry.operator, ua_class: entry.ua_class, verified: false };
-  }
-  return { operator: "unknown", ua_class: "human", verified: false };
+  return identifyRequest(req).identity;
 }
 
 /**
@@ -189,9 +250,7 @@ export function classifyAgent(req: GateRequest): AgentIdentity {
  * mode.
  */
 export function knownAiAgent(req: GateRequest): boolean {
-  // A paying agent must never be exempted by a human-looking User-Agent, or
-  // its receipt spend would stop metering — classifyAgent puts AIFP-Receipt /
-  // AIFP-Agent-Id first for exactly that reason. Everything that is not a
-  // plain "human" is charged, including no User-Agent at all.
-  return classifyAgent(req).ua_class !== "human";
+  // Script clients are the gate's scriptClients decision, not this predicate's.
+  const { identity, script } = identifyRequest(req);
+  return identity.ua_class !== "human" && !script;
 }

@@ -37,6 +37,8 @@ gate = Gate(
     jwks_uri=f"{env['AIFP_API']}/.well-known/jwks.json",
     api_base=env["AIFP_API"],
     should_charge=known_ai_agent if profile["charge"] == "agents" else None,
+    script_clients=profile.get("script_clients", "observe"),
+    script_client_allow=profile.get("script_client_allow", ()),
     operator_policy=policy,
     network_mode=policy.get("network_mode", "live") if policy and profile.get("network_known") is not False else None,
     on_event=reporter.on_event,

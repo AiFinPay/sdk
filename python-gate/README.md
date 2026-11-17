@@ -110,6 +110,8 @@ and expires with the receipt.
 | Option | Default | |
 |---|---|---|
 | `should_charge` | everyone pays | `known_ai_agent` for content sites: human browsers read free and never see a 402; self-identifying AI crawlers and anything speaking AIFP pay. A predicate that raises charges. |
+| `script_clients` | `"observe"` | With `should_charge=known_ai_agent`, what a script client (curl, an HTTP library: `SCRIPT_CLIENT_MARKERS`) gets: `"observe"` serves it free and puts `DETAIL_SCRIPT_CLIENT_OBSERVED` in the `serve` event's `detail`, `"charge"` answers 402 without a receipt, `"allow"` serves it free with no detail. Any other value raises `ValueError`. |
+| `script_client_allow` | `()` | Lowercase User-Agent substrings never treated as script clients (a monitor, a feed reader, a partner). |
 | `allow(ctx)` | — | Your veto after verification, before metering (a refused call costs nothing). Return `False` → 403. |
 | `on_store_error` | `"closed"` | `"open"` serves un-metered calls when the store is down (`AIFP-Meter: degraded`). |
 | `require_agent_match` | `True` | Refuse a caller whose `AIFP-Agent-Id` names someone other than the receipt's payer; a caller naming nobody is served (anti-accident, not anti-theft). |
@@ -119,6 +121,10 @@ and expires with the receipt.
 | `jwks` | fetched | Pin the key set and skip network I/O (redeploy on key rotation). |
 | `on_event(e)` | — | `402` / `serve` / `403` / `meter_error` events for your metrics. |
 | `refund_on_error` (adapters) | `False` | Give the units back when your handler answers 5xx. |
+
+## Script clients
+
+A script client is classified `operator: "unknown"`, `ua_class: "unknown"`. Order, first match wins: `AIFP-Receipt` or `AIFP-Agent-Id` (an AIFP agent, pays); no User-Agent or a named AI crawler, as before; the allow list; the script-client table; anything else is a reader. Then a free route, then the operator rules (a rule on `ua_class: "unknown"` covers script clients), then `should_charge` with `script_clients`. Only `known_ai_agent` itself hands script clients to `script_clients`; your own predicate, even one wrapping it, decides alone, and without `should_charge` everyone pays. The observe detail stays in `on_event`: the reporter does not send exempt `unknown` serves. Same table, options and answers as `@aifinpay/gate`.
 
 ## How a path is read
 

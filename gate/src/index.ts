@@ -15,11 +15,13 @@
 // ──────────────────────────────────────────────────────────────────────────
 
 export { createGate, refundUnits } from "./core.js";
-export type { GateOptions } from "./core.js";
+export type { GateOptions, ScriptClientsMode } from "./core.js";
 export {
   DETAIL_QUOTA_EXHAUSTED,
   DETAIL_RECEIPT_EXPIRED,
   DETAIL_VERIFY_FAILED,
+  DETAIL_SCRIPT_CLIENT_OBSERVED,
+  SCRIPT_CLIENTS_MODES,
   HEADER_QUOTA_REMAINING,
   HEADER_MODE,
   HEADER_SHADOW_STATUS,
@@ -49,10 +51,11 @@ export {
   classifyAgent,
   AI_AGENT_UA_MARKERS,
   AI_AGENT_UA_TABLE,
+  SCRIPT_CLIENT_MARKERS,
   GATE_OPERATORS,
   UA_CLASSES,
 } from "./agents.js";
-export type { AgentIdentity, AiAgentUaEntry, GateOperator, UaClass } from "./agents.js";
+export type { AgentIdentity, AiAgentUaEntry, GateOperator, ScriptClientEntry, UaClass } from "./agents.js";
 export { decideOperator, normalizeOperatorPolicy, OPERATOR_ACTIONS, OPERATOR_DEFAULT } from "./operator-policy.js";
 export type { OperatorDecision } from "./operator-policy.js";
 export { scopeCovers } from "./scope.js";

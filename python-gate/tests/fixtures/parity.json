@@ -1,11 +1,11 @@
 {
- "generated_from": "@aifinpay/gate 0.11.1",
+ "generated_from": "@aifinpay/gate 0.12.0",
  "jwks": {
   "keys": [
    {
-    "kty": "OKP",
     "crv": "Ed25519",
     "x": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw",
+    "kty": "OKP",
     "kid": "fixture-1",
     "alg": "EdDSA",
     "use": "sig"
@@ -185,6 +185,126 @@
     "unknown",
     "unknown"
    ]
+  ],
+  "SCRIPT_CLIENT_MARKERS": [
+   [
+    "curl/",
+    "prefix"
+   ],
+   [
+    "wget/",
+    "prefix"
+   ],
+   [
+    "python-requests",
+    "prefix"
+   ],
+   [
+    "python-urllib",
+    "prefix"
+   ],
+   [
+    "python-httpx",
+    "prefix"
+   ],
+   [
+    "httpx/",
+    "word"
+   ],
+   [
+    "aiohttp",
+    "word"
+   ],
+   [
+    "go-http-client",
+    "prefix"
+   ],
+   [
+    "node-fetch",
+    "prefix"
+   ],
+   [
+    "undici",
+    "prefix"
+   ],
+   [
+    "axios/",
+    "prefix"
+   ],
+   [
+    "got (",
+    "prefix"
+   ],
+   [
+    "okhttp",
+    "prefix"
+   ],
+   [
+    "java/",
+    "prefix"
+   ],
+   [
+    "apache-httpclient",
+    "prefix"
+   ],
+   [
+    "libwww-perl",
+    "prefix"
+   ],
+   [
+    "scrapy",
+    "prefix"
+   ],
+   [
+    "guzzlehttp",
+    "prefix"
+   ],
+   [
+    "ruby",
+    "prefix"
+   ],
+   [
+    "faraday",
+    "prefix"
+   ],
+   [
+    "restsharp",
+    "prefix"
+   ],
+   [
+    "postmanruntime",
+    "prefix"
+   ],
+   [
+    "insomnia",
+    "prefix"
+   ],
+   [
+    "httpie",
+    "prefix"
+   ],
+   [
+    "colly",
+    "prefix"
+   ],
+   [
+    "puppeteer",
+    "word"
+   ],
+   [
+    "playwright",
+    "word"
+   ],
+   [
+    "selenium",
+    "word"
+   ]
+  ],
+  "DETAIL_SCRIPT_CLIENT_OBSERVED": "script client served free in observe; charge would answer 402",
+  "SCRIPT_CLIENTS_MODES": [
+   "observe",
+   "charge",
+   "allow"
   ],
   "GATE_OPERATORS": [
    "openai",
@@ -6152,6 +6272,993 @@
        "detail": "operator policy: allow (operator=openai)",
        "operator": "openai",
        "ua_class": "ai_crawler",
+       "verified": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "script clients: observe",
+   "opts": {
+    "resource": "/paid",
+    "shouldCharge": "known",
+    "scriptClients": "observe",
+    "scriptClientAllow": [
+     "statuscake"
+    ]
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "curl/8.5.0"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Paywall": "exempt"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "exempt"
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "unknown",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": null,
+       "exempt": true,
+       "detail": "script client served free in observe; charge would answer 402",
+       "operator": "unknown",
+       "ua_class": "unknown",
+       "verified": false
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Python/3.12 aiohttp/3.9.5"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Paywall": "exempt"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "exempt"
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "unknown",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": null,
+       "exempt": true,
+       "detail": "script client served free in observe; charge would answer 402",
+       "operator": "unknown",
+       "ua_class": "unknown",
+       "verified": false
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "curl/8.5.0 StatusCake"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Paywall": "exempt"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "exempt"
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "unknown",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": null,
+       "exempt": true,
+       "operator": "unknown",
+       "ua_class": "human",
+       "verified": false
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Mozilla/5.0 (Macintosh) Safari/605.1.15"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Paywall": "exempt"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "exempt"
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "human",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": null,
+       "exempt": true,
+       "operator": "unknown",
+       "ua_class": "human",
+       "verified": false
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Mozilla/5.0 (compatible; GPTBot/1.1) python-requests/2.32.3"
+     },
+     "result": {
+      "ok": false,
+      "status": 402,
+      "headers": {
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "body": {
+       "error": "AIFP-402",
+       "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+       "protocol": "AIFP-1",
+       "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+       "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+       "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+       "merchant_id": "mrch_parity",
+       "resource": "/paid",
+       "tier": "standard",
+       "unit_weight": 1,
+       "unit_price_usd": "0.0005",
+       "min_requests": 40,
+       "scope": "exact",
+       "no_minimum_fee": true,
+       "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+       "how_to_pay": [
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+        "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
+       ],
+       "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+      }
+     },
+     "identity": {
+      "operator": "openai",
+      "ua_class": "ai_crawler",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "operator": "openai",
+       "ua_class": "ai_crawler",
+       "verified": false
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "curl/8.5.0",
+      "AIFP-Agent-Id": "0xclaimed"
+     },
+     "result": {
+      "ok": false,
+      "status": 402,
+      "headers": {
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "body": {
+       "error": "AIFP-402",
+       "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+       "protocol": "AIFP-1",
+       "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+       "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+       "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+       "merchant_id": "mrch_parity",
+       "resource": "/paid",
+       "tier": "standard",
+       "unit_weight": 1,
+       "unit_price_usd": "0.0005",
+       "min_requests": 40,
+       "scope": "exact",
+       "no_minimum_fee": true,
+       "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+       "how_to_pay": [
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+        "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
+       ],
+       "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "script clients: charge",
+   "opts": {
+    "resource": "/paid",
+    "shouldCharge": "known",
+    "scriptClients": "charge",
+    "scriptClientAllow": [
+     "statuscake"
+    ]
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "curl/8.5.0"
+     },
+     "result": {
+      "ok": false,
+      "status": 402,
+      "headers": {
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "body": {
+       "error": "AIFP-402",
+       "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+       "protocol": "AIFP-1",
+       "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+       "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+       "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+       "merchant_id": "mrch_parity",
+       "resource": "/paid",
+       "tier": "standard",
+       "unit_weight": 1,
+       "unit_price_usd": "0.0005",
+       "min_requests": 40,
+       "scope": "exact",
+       "no_minimum_fee": true,
+       "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+       "how_to_pay": [
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+        "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
+       ],
+       "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "unknown",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "operator": "unknown",
+       "ua_class": "unknown",
+       "verified": false
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Python/3.12 aiohttp/3.9.5"
+     },
+     "result": {
+      "ok": false,
+      "status": 402,
+      "headers": {
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "body": {
+       "error": "AIFP-402",
+       "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+       "protocol": "AIFP-1",
+       "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+       "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+       "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+       "merchant_id": "mrch_parity",
+       "resource": "/paid",
+       "tier": "standard",
+       "unit_weight": 1,
+       "unit_price_usd": "0.0005",
+       "min_requests": 40,
+       "scope": "exact",
+       "no_minimum_fee": true,
+       "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+       "how_to_pay": [
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+        "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
+       ],
+       "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "unknown",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "operator": "unknown",
+       "ua_class": "unknown",
+       "verified": false
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "curl/8.5.0 StatusCake"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Paywall": "exempt"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "exempt"
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "unknown",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": null,
+       "exempt": true,
+       "operator": "unknown",
+       "ua_class": "human",
+       "verified": false
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Mozilla/5.0 (Macintosh) Safari/605.1.15"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Paywall": "exempt"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "exempt"
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "human",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": null,
+       "exempt": true,
+       "operator": "unknown",
+       "ua_class": "human",
+       "verified": false
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Mozilla/5.0 (compatible; GPTBot/1.1) python-requests/2.32.3"
+     },
+     "result": {
+      "ok": false,
+      "status": 402,
+      "headers": {
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "body": {
+       "error": "AIFP-402",
+       "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+       "protocol": "AIFP-1",
+       "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+       "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+       "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+       "merchant_id": "mrch_parity",
+       "resource": "/paid",
+       "tier": "standard",
+       "unit_weight": 1,
+       "unit_price_usd": "0.0005",
+       "min_requests": 40,
+       "scope": "exact",
+       "no_minimum_fee": true,
+       "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+       "how_to_pay": [
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+        "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
+       ],
+       "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+      }
+     },
+     "identity": {
+      "operator": "openai",
+      "ua_class": "ai_crawler",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "operator": "openai",
+       "ua_class": "ai_crawler",
+       "verified": false
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "curl/8.5.0",
+      "AIFP-Agent-Id": "0xclaimed"
+     },
+     "result": {
+      "ok": false,
+      "status": 402,
+      "headers": {
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "body": {
+       "error": "AIFP-402",
+       "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+       "protocol": "AIFP-1",
+       "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+       "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+       "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+       "merchant_id": "mrch_parity",
+       "resource": "/paid",
+       "tier": "standard",
+       "unit_weight": 1,
+       "unit_price_usd": "0.0005",
+       "min_requests": 40,
+       "scope": "exact",
+       "no_minimum_fee": true,
+       "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+       "how_to_pay": [
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+        "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
+       ],
+       "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "script clients: allow",
+   "opts": {
+    "resource": "/paid",
+    "shouldCharge": "known",
+    "scriptClients": "allow",
+    "scriptClientAllow": [
+     "statuscake"
+    ]
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "curl/8.5.0"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Paywall": "exempt"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "exempt"
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "unknown",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": null,
+       "exempt": true,
+       "operator": "unknown",
+       "ua_class": "unknown",
+       "verified": false
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Python/3.12 aiohttp/3.9.5"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Paywall": "exempt"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "exempt"
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "unknown",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": null,
+       "exempt": true,
+       "operator": "unknown",
+       "ua_class": "unknown",
+       "verified": false
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "curl/8.5.0 StatusCake"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Paywall": "exempt"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "exempt"
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "unknown",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": null,
+       "exempt": true,
+       "operator": "unknown",
+       "ua_class": "human",
+       "verified": false
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Mozilla/5.0 (Macintosh) Safari/605.1.15"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Paywall": "exempt"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "exempt"
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "human",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": null,
+       "exempt": true,
+       "operator": "unknown",
+       "ua_class": "human",
+       "verified": false
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Mozilla/5.0 (compatible; GPTBot/1.1) python-requests/2.32.3"
+     },
+     "result": {
+      "ok": false,
+      "status": 402,
+      "headers": {
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "body": {
+       "error": "AIFP-402",
+       "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+       "protocol": "AIFP-1",
+       "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+       "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+       "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+       "merchant_id": "mrch_parity",
+       "resource": "/paid",
+       "tier": "standard",
+       "unit_weight": 1,
+       "unit_price_usd": "0.0005",
+       "min_requests": 40,
+       "scope": "exact",
+       "no_minimum_fee": true,
+       "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+       "how_to_pay": [
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+        "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
+       ],
+       "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+      }
+     },
+     "identity": {
+      "operator": "openai",
+      "ua_class": "ai_crawler",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "operator": "openai",
+       "ua_class": "ai_crawler",
+       "verified": false
+      }
+     ]
+    },
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "curl/8.5.0",
+      "AIFP-Agent-Id": "0xclaimed"
+     },
+     "result": {
+      "ok": false,
+      "status": 402,
+      "headers": {
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "body": {
+       "error": "AIFP-402",
+       "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+       "protocol": "AIFP-1",
+       "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+       "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+       "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+       "merchant_id": "mrch_parity",
+       "resource": "/paid",
+       "tier": "standard",
+       "unit_weight": 1,
+       "unit_price_usd": "0.0005",
+       "min_requests": 40,
+       "scope": "exact",
+       "no_minimum_fee": true,
+       "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+       "how_to_pay": [
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+        "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
+       ],
+       "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "script clients: no predicate charges everyone",
+   "opts": {
+    "resource": "/paid",
+    "scriptClients": "allow"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "curl/8.5.0"
+     },
+     "result": {
+      "ok": false,
+      "status": 402,
+      "headers": {
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "body": {
+       "error": "AIFP-402",
+       "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+       "protocol": "AIFP-1",
+       "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+       "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+       "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+       "merchant_id": "mrch_parity",
+       "resource": "/paid",
+       "tier": "standard",
+       "unit_weight": 1,
+       "unit_price_usd": "0.0005",
+       "min_requests": 40,
+       "scope": "exact",
+       "no_minimum_fee": true,
+       "settlement_terms_from": "POST https://api.aifinpay.io/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+       "how_to_pay": [
+        "POST https://api.aifinpay.io/v1/quote {\"merchant_id\":\"mrch_parity\",\"resource\":\"/paid\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+        "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+        "POST https://api.aifinpay.io/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+        "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
+       ],
+       "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "unknown",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "operator": "unknown",
+       "ua_class": "unknown",
+       "verified": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "script clients: shadow charge, would-be 402",
+   "opts": {
+    "resource": "/paid",
+    "mode": "shadow",
+    "shouldCharge": "known",
+    "scriptClients": "charge"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "User-Agent": "Wget/1.21.4"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Mode": "shadow",
+       "AIFP-Shadow-Status": "402",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "aifp": {
+       "agent": null,
+       "receipt_id": "",
+       "resource": "/paid",
+       "weight": 0,
+       "unit_quota": 0,
+       "used": 0,
+       "remaining": 0,
+       "mode": "shadow",
+       "shadow": {
+        "status": 402,
+        "error": "AIFP-402",
+        "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+        "weight": 1
+       }
+      }
+     },
+     "identity": {
+      "operator": "unknown",
+      "ua_class": "unknown",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "402",
+       "resource": "/paid",
+       "weight": 1,
+       "operator": "unknown",
+       "ua_class": "unknown",
        "verified": false
       }
      ]

@@ -109,11 +109,19 @@ describe("shouldCharge — who pays on a content site", () => {
     expect(byHeader.ok, "AIFP-Agent-Id alone must be charged").toBe(false);
     if (!byHeader.ok) expect(byHeader.status).toBe(402);
 
-    // The pre-2.6.1 Python request, for the record: a library default UA and
-    // no AIFP header is indistinguishable from a script a human runs.
-    const before = await gate(req("/articles", { "User-Agent": "python-requests/2.32.3" }));
-    expect(before.ok).toBe(true);
-    if (before.ok) expect(before.aifp.mode).toBe("exempt");
+    // A library default UA with no AIFP header is a script client: scriptClients decides.
+    const bare = { "User-Agent": "python-requests/2.32.3" };
+    const observed = await gate(req("/articles", bare));
+    expect(observed.ok, "observe (default) serves it free").toBe(true);
+    if (observed.ok) expect(observed.aifp.mode).toBe("exempt");
+
+    const charged = await (await contentGate({ scriptClients: "charge" })).gate(req("/articles", bare));
+    expect(charged.ok, "charge refuses it").toBe(false);
+    if (!charged.ok) expect(charged.status).toBe(402);
+
+    const allowed = await (await contentGate({ scriptClients: "allow" })).gate(req("/articles", bare));
+    expect(allowed.ok, "allow serves it free").toBe(true);
+    if (allowed.ok) expect(allowed.aifp.mode).toBe("exempt");
   });
 
   it("a crawler WITH a receipt is served and metered", async () => {

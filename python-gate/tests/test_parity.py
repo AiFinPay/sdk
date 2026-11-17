@@ -26,6 +26,9 @@ def test_constants_match_the_node_package():
     assert g.HEADER_SHADOW_STATUS == C["HEADER_SHADOW_STATUS"]
     assert list(g.AI_AGENT_UA_MARKERS) == C["AI_AGENT_UA_MARKERS"]
     assert [list(row) for row in g.AI_AGENT_UA_TABLE] == C["AI_AGENT_UA_TABLE"]
+    assert [list(row) for row in g.SCRIPT_CLIENT_MARKERS] == C["SCRIPT_CLIENT_MARKERS"]
+    assert g.DETAIL_SCRIPT_CLIENT_OBSERVED == C["DETAIL_SCRIPT_CLIENT_OBSERVED"]
+    assert list(g.SCRIPT_CLIENTS_MODES) == C["SCRIPT_CLIENTS_MODES"]
     assert list(g.GATE_OPERATORS) == C["GATE_OPERATORS"]
     assert list(g.UA_CLASSES) == C["UA_CLASSES"]
     assert g.TIER_WEIGHTS == C["TIER_WEIGHTS"]
@@ -78,6 +81,7 @@ def test_every_node_scenario_replays_identically(scenario):
         weight=o.get("weight"), require_agent_match=o.get("requireAgentMatch", True), network_mode=o.get("networkMode"), api_base=o.get("apiBase"),
         mode=o.get("mode") or "enforce", on_event=events.append, operator_policy=o.get("operatorPolicy"),
         should_charge=g.known_ai_agent if o.get("shouldCharge") == "known" else None,
+        script_clients=o.get("scriptClients") or "observe", script_client_allow=o.get("scriptClientAllow") or (),
     )
     for i, r in enumerate(scenario["requests"]):
         request = g.SimpleRequest(r["path"], r["headers"])

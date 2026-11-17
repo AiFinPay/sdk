@@ -1,5 +1,22 @@
 # Changelog
 
+## @aifinpay/gate 0.12.0 — script clients can be sent to pay
+
+- `SCRIPT_CLIENT_MARKERS` lists HTTP libraries and command-line clients in
+  their default configuration (`curl/`, `python-requests`, `go-http-client`…),
+  each with a `prefix` or `word` rule. Such a request is classified
+  `operator: "unknown"`, `ua_class: "unknown"`; it was `human`.
+- With `shouldCharge: knownAiAgent`, the new `scriptClients` option decides:
+  `"observe"` (default) serves it free as before and sets
+  `detail: DETAIL_SCRIPT_CLIENT_OBSERVED` on the `serve` event, `"charge"`
+  answers 402 without a receipt, `"allow"` serves it free. `scriptClientAllow`
+  takes User-Agent substrings that are never script clients. An unknown value
+  throws at construction.
+- `knownAiAgent` returns false for a script client, as before. A predicate of
+  your own decides alone. An operator rule on `ua_class: "unknown"` now covers
+  script clients. An AIFP header or receipt is unaffected.
+- Vectors: `script.*`, behind the new `script_clients` capability.
+
 ## @aifinpay/gate 0.11.1 — a gate that does not know its network refuses a testnet receipt
 
 - A gate with no `networkMode` and no registry that reports one (a static mount)

@@ -10,7 +10,7 @@ export default {
   id: "gate-node",
   label: "@aifinpay/gate on Express",
   usesRedis: true,
-  capabilities: ["events", "restart", "fault:jwks", "fault:store", "fault:record", "llms_txt_absent"],
+  capabilities: ["events", "restart", "fault:jwks", "fault:store", "fault:record", "script_clients", "llms_txt_absent"],
   version: () => JSON.parse(readFileSync(join(gateDir, "package.json"), "utf8")).version,
   async start(ctx) {
     const app = managed(process.execPath, [join(here, "app/express-app.mjs")], {
