@@ -121,7 +121,8 @@ export interface GateOptions {
   caseSensitive?: boolean;
   /** Which network this site charges on, so a testnet receipt does not open a
    *  live site or the reverse. A gate with a `registry` reads it from the public
-   *  merchant view. Unknown (a static mount with nothing here) is not checked. */
+   *  merchant view. Unknown (a static mount with nothing here) refuses a test
+   *  receipt and takes a live one. */
   networkMode?: NetworkMode | null | (() => NetworkMode | null | undefined);
   /** Give a unit back when your handler fails. Off by default — see README. */
   refundOnError?: boolean;
@@ -640,6 +641,10 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     const network = networkFor();
     if (network && (payload.network_mode === "test" ? "test" : "live") !== network) {
       return forbid(resource, weight, "receipt was paid on another network than this site charges on");
+    }
+    // A site that has not said it is a test site is treated as live for a test receipt.
+    if (!network && payload.network_mode === "test") {
+      return forbid(resource, weight, "receipt was paid on a test network; this site has not said it is a test site");
     }
 
     // ── 6. Scope ──────────────────────────────────────────────────────────

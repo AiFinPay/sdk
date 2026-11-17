@@ -501,18 +501,77 @@ describe("a receipt from another network", () => {
     expect((await paid("live", {})).status).toBe(200);
   });
 
-  it("an unknown site is not checked", async () => {
-    expect((await paid(null, { network_mode: "test" })).status).toBe(200);
+  it("an unknown site refuses a test receipt and takes a live one", async () => {
+    expect((await paid(null, { network_mode: "test" })).status).toBe(403);
+    expect((await paid(null, {})).status).toBe(200);
   });
 
   it("the option wins over the registry, and may be a function", async () => {
     expect((await paid("test", {}, { networkMode: "live" })).status).toBe(200);
     expect((await paid("live", {}, { networkMode: () => "test" })).status).toBe(403);
-    expect((await paid("live", { network_mode: "test" }, { networkMode: null })).status).toBe(200);
+    expect((await paid("test", { network_mode: "test" }, { networkMode: null })).status).toBe(403);
+    expect((await paid("test", {}, { networkMode: null })).status).toBe(200);
   });
 
   it("a mode the gate does not know refuses to start", () => {
     expect(() => createGate({ merchantId: MERCHANT, networkMode: "Live" as never })).toThrow(/networkMode/);
+  });
+});
+
+describe("a gate that does not know its network", () => {
+  const UNKNOWN = "receipt was paid on a test network; this site has not said it is a test site";
+  const pay = async (options: Partial<GateOptions>, claims: Record<string, unknown>) => {
+    const { gate, iss, events } = await gateWith(options);
+    const answer = await gate(
+      req("/paid/a", { "AIFP-Receipt": await iss.sign({ resource: "/paid/*", unit_quota: 2, ...claims }) })
+    );
+    return { answer, events };
+  };
+  const staticMount = { registry: undefined, resource: "/paid/*" } as Partial<GateOptions>;
+
+  it("live site: a test receipt is refused as before", async () => {
+    const { answer } = await pay({ networkMode: "live" }, { network_mode: "test" });
+    expect(answer.status).toBe(403);
+    expect(!answer.ok && answer.body.detail).toContain("another network");
+  });
+
+  it("test site: a live or unmarked receipt is refused as before", async () => {
+    expect((await pay({ networkMode: "test" }, { network_mode: "live" })).answer.status).toBe(403);
+    expect((await pay({ networkMode: "test" }, {})).answer.status).toBe(403);
+  });
+
+  it("unknown: a live or unmarked receipt is served", async () => {
+    for (const options of [{}, staticMount, { ...staticMount, networkMode: () => null }]) {
+      expect((await pay(options, { network_mode: "live" })).answer.status).toBe(200);
+      expect((await pay(options, {})).answer.status).toBe(200);
+    }
+  });
+
+  it("unknown: a test receipt is refused, on a static mount, a null option and a function returning nothing", async () => {
+    for (const options of [
+      {},
+      staticMount,
+      { ...staticMount, networkMode: null },
+      { ...staticMount, networkMode: () => null },
+      { ...staticMount, networkMode: () => undefined },
+    ]) {
+      const { answer, events } = await pay(options, { network_mode: "test" });
+      expect(answer.status).toBe(403);
+      expect(!answer.ok && answer.body).toMatchObject({ error: "AIFP-403", detail: UNKNOWN });
+      expect(events.at(-1)).toMatchObject({ kind: "403" });
+    }
+  });
+
+  it("a site that says it is a test site still takes a test receipt", async () => {
+    expect((await pay({ ...staticMount, networkMode: "test" }, { network_mode: "test" })).answer.status).toBe(200);
+    expect((await pay({ registry: registry(SECTIONS, "test") }, { network_mode: "test" })).answer.status).toBe(200);
+  });
+
+  it("shadow reads it as a would-be 403 and serves, as for a mismatch", async () => {
+    const { answer } = await pay({ mode: "shadow" }, { network_mode: "test" });
+    expect(answer.status).toBe(200);
+    expect(answer.headers["AIFP-Shadow-Status"]).toBe("403");
+    expect(answer.ok && answer.aifp).toMatchObject({ mode: "shadow", shadow: { status: 403, detail: UNKNOWN } });
   });
 });
 

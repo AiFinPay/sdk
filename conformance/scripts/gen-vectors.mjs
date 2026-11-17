@@ -50,6 +50,8 @@ const profiles = {
     resources: [{ pattern: PATTERN, tier: "standard" }, { pattern: "/paid/premium/*", tier: "premium" }, { pattern: "/open/*", tier: "standard", paywall: false }],
   },
   "testsite-enforce": { network_mode: "test", site_verified: false, mode: "enforce", charge: "agents", resources: STANDARD },
+  // A live site whose gate was not told its network (a static mount); a gate that reads the record knows it is live.
+  "unsaid-enforce": { ...base, network_known: false, mode: "enforce", charge: "agents", resources: STANDARD },
   "policy-enforce": {
     ...base, mode: "enforce", charge: "agents", resources: STANDARD,
     operator_rules: [{ operator: "openai", action: "allow" }, { operator: "anthropic", action: "block" }], operator_default: "charge",
@@ -157,6 +159,8 @@ add("receipt.no_agent_header", "must", "content-enforce", "A receipt with no AIF
 add("receipt.agent_case", "should", "content-enforce", "An EVM payer compares without checksum case", step(pay("r", PAID, { agent: "payer_upper" }), served()), { receipts: { r: R() } });
 add("receipt.test_on_live", "must", "content-enforce", "A testnet receipt does not open a live site", step(pay("x"), refused403()), { receipts: { x: R({ network_mode: "test" }) } });
 add("receipt.test_on_test", "must", "testsite-enforce", "A testnet receipt opens a test site", step(pay("x"), served()), { receipts: { x: R({ network_mode: "test" }) } });
+add("receipt.test_on_unsaid", "must", "unsaid-enforce", "A testnet receipt does not open a site that has not said it is a test site", step(pay("x"), refused403()), { receipts: { x: R({ network_mode: "test" }) } });
+add("receipt.live_on_unsaid", "must", "unsaid-enforce", "A live or unmarked receipt opens a site that has not said its network", [step(pay("x"), served()), step(pay("y"), served())], { receipts: { x: R(), y: R({ network_mode: "live" }) } });
 add("receipt.live_on_test", "parity", "testsite-enforce", "A live receipt does not open a test site", step(pay("x"), refused403()), { receipts: { x: R() } });
 add("receipt.no_kid", "parity", "content-enforce", "A signed token with no kid verifies against a one-key set", step(pay("x"), served()), { receipts: { x: R({}, { header: { kid: null } }) } });
 add("receipt.no_typ", "parity", "content-enforce", "A signed token with no typ verifies", step(pay("x"), served()), { receipts: { x: R({}, { header: { typ: null } }) } });

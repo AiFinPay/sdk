@@ -228,7 +228,7 @@ class Gate:
         # a cheaper price or walk around a route. True for an origin where they differ.
         self.case_sensitive = case_sensitive
         # Which network this site charges on: "live", "test", or a callable
-        # returning the current one. None is not checked.
+        # returning the current one. None refuses a test receipt and takes a live one.
         self.network_mode = network_mode
         self.on_store_error = on_store_error
         self.on_event = on_event
@@ -545,6 +545,11 @@ class Gate:
         network = self.network_mode() if callable(self.network_mode) else self.network_mode
         if network and ("test" if payload.get("network_mode") == "test" else "live") != network:
             return self._forbid(resource, weight, "receipt was paid on another network than this site charges on",
+                                who=who, agent=agent_header)
+        # A site that has not said it is a test site is treated as live for a test receipt.
+        if not network and payload.get("network_mode") == "test":
+            return self._forbid(resource, weight,
+                                "receipt was paid on a test network; this site has not said it is a test site",
                                 who=who, agent=agent_header)
 
         bought = payload.get("resource")

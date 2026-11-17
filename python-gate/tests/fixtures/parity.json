@@ -1,11 +1,11 @@
 {
- "generated_from": "@aifinpay/gate 0.11.0",
+ "generated_from": "@aifinpay/gate 0.11.1",
  "jwks": {
   "keys": [
    {
+    "kty": "OKP",
     "crv": "Ed25519",
     "x": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw",
-    "kty": "OKP",
     "kid": "fixture-1",
     "alg": "EdDSA",
     "use": "sig"
@@ -4881,6 +4881,97 @@
      "path": "/paid",
      "headers": {
       "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwMSIsIm5vbmNlIjoibi0xIiwibmV0d29ya19tb2RlIjoidGVzdCJ9.4znZ9I_YiTyJMqSXMWiWXV24Haw7apT1J3pE7zsiR-3kbiM20KgS_BcwG4Uf-qEPNpmU4ALsVopnwQzPL3OaDQ"
+     },
+     "result": {
+      "ok": true,
+      "status": 200,
+      "headers": {
+       "AIFP-Quota-Remaining": "2",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "aifp": {
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "resource": "/paid",
+       "weight": 1,
+       "unit_quota": 3,
+       "used": 1,
+       "remaining": 2,
+       "mode": "paid"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "serve",
+       "resource": "/paid",
+       "weight": 1,
+       "agent": "0x00000000000000000000000000000000000000a1",
+       "receipt_id": "rcpt_0000000000000001",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "network: test receipt on a site that has not said",
+   "opts": {
+    "resource": "/paid"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwMSIsIm5vbmNlIjoibi0xIiwibmV0d29ya19tb2RlIjoidGVzdCJ9.4znZ9I_YiTyJMqSXMWiWXV24Haw7apT1J3pE7zsiR-3kbiM20KgS_BcwG4Uf-qEPNpmU4ALsVopnwQzPL3OaDQ"
+     },
+     "result": {
+      "ok": false,
+      "status": 403,
+      "headers": {
+       "Content-Type": "application/json",
+       "Cache-Control": "private, no-store, max-age=0"
+      },
+      "body": {
+       "error": "AIFP-403",
+       "detail": "receipt was paid on a test network; this site has not said it is a test site"
+      }
+     },
+     "identity": {
+      "operator": "aifinpay",
+      "ua_class": "aifp_agent",
+      "verified": false
+     },
+     "events": [
+      {
+       "kind": "403",
+       "resource": "/paid",
+       "weight": 1,
+       "detail": "receipt was paid on a test network; this site has not said it is a test site",
+       "operator": "aifinpay",
+       "ua_class": "aifp_agent",
+       "verified": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "network: live receipt on a site that has not said",
+   "opts": {
+    "resource": "/paid"
+   },
+   "requests": [
+    {
+     "path": "/paid",
+     "headers": {
+      "AIFP-Receipt": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMSJ9.eyJpc3MiOiJodHRwczovL2FwaS5haWZpbnBheS5pbyIsImF1ZCI6Im1yY2hfcGFyaXR5Iiwic3ViIjoiMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGExIiwiaWF0IjoxNzU4NzAwMDAwLCJleHAiOjQxMDI0NDQ4MDAsInJlc291cmNlIjoiL3BhaWQiLCJzY29wZSI6ImV4YWN0IiwiYW1vdW50IjoiMC4xIiwidW5pdF9xdW90YSI6MywicmVjZWlwdF9pZCI6InJjcHRfMDAwMDAwMDAwMDAwMDAwMSIsIm5vbmNlIjoibi0xIiwibmV0d29ya19tb2RlIjoibGl2ZSJ9.e3T2lMjYCfEff_CYUPQptXGCvtNDgF4PxFyVKbJgW89WAwP7Uy5xAJsy2W9b93P49LJnT2wOcwva2fHF0k7TBg"
      },
      "result": {
       "ok": true,

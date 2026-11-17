@@ -93,6 +93,8 @@ const scenarios = [
   { name: "network: test receipt on a live site", opts: { resource: "/paid", networkMode: "live" }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({ network_mode: "test" }) } }] },
   { name: "network: live receipt on a test site", opts: { resource: "/paid", networkMode: "test" }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({}) } }] },
   { name: "network: each on its own", opts: { resource: "/paid", networkMode: "test" }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({ network_mode: "test" }) } }] },
+  { name: "network: test receipt on a site that has not said", opts: { resource: "/paid" }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({ network_mode: "test" }) } }] },
+  { name: "network: live receipt on a site that has not said", opts: { resource: "/paid" }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({ network_mode: "live" }) } }] },
   { name: "shadow: a good receipt spends nothing", opts: { resource: "/paid", mode: "shadow" }, reqs: [1, 2, 3].map(() => ({ path: "/paid", headers: { "AIFP-Receipt": singleUse } })) },
   { name: "mount spelled with a capital and a slash", opts: { resource: "/Paid/" }, reqs: [{ path: "/paid", headers: { "AIFP-Receipt": await t({ resource: "/paid" }) } }] },
   { name: "no resource: the path as an origin reads it", opts: {}, reqs: [{ path: "/PAID/a/?x=1", headers: {} }, { path: "/%70aid;x=1/a", headers: {} }] },

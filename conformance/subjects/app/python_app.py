@@ -38,7 +38,7 @@ gate = Gate(
     api_base=env["AIFP_API"],
     should_charge=known_ai_agent if profile["charge"] == "agents" else None,
     operator_policy=policy,
-    network_mode=policy.get("network_mode", "live") if policy else None,
+    network_mode=policy.get("network_mode", "live") if policy and profile.get("network_known") is not False else None,
     on_event=reporter.on_event,
 )
 

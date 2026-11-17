@@ -1,3 +1,7 @@
+## 0.8.1 — a gate that does not know its network refuses a testnet receipt
+
+- Port of `@aifinpay/gate` 0.11.1, on ASGI and WSGI alike: with no `network_mode` (or a callable returning `None`) a receipt paid on a test network is refused with 403 instead of opening the site; a live or unmarked receipt is served as before. A test site says so with `network_mode="test"`. Parity fixture regenerated.
+
 ## 0.8.0 — the content licence travels with the content
 
 - The 402 no longer carries `protocol_fee_bps`, and `PROTOCOL_FEE_BPS` /

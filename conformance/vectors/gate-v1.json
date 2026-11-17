@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "reference": "@aifinpay/gate 0.11.0",
+ "reference": "@aifinpay/gate 0.11.1",
  "fixtures": {
   "merchant_id": "mrch_0123456789abcdef",
   "other_merchant_id": "mrch_fedcba9876543210",
@@ -136,6 +136,27 @@
   "testsite-enforce": {
    "network_mode": "test",
    "site_verified": false,
+   "mode": "enforce",
+   "charge": "agents",
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
+    }
+   ]
+  },
+  "unsaid-enforce": {
+   "network_mode": "live",
+   "site_verified": true,
+   "network_known": false,
    "mode": "enforce",
    "charge": "agents",
    "resources": [
@@ -1887,6 +1908,82 @@
     "x": {
      "claims": {
       "network_mode": "test"
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.test_on_unsaid",
+   "group": "receipt",
+   "level": "must",
+   "profile": "unsaid-enforce",
+   "title": "A testnet receipt does not open a site that has not said it is a test site",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {
+      "network_mode": "test"
+     }
+    }
+   }
+  },
+  {
+   "id": "receipt.live_on_unsaid",
+   "group": "receipt",
+   "level": "must",
+   "profile": "unsaid-enforce",
+   "title": "A live or unmarked receipt opens a site that has not said its network",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "x",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "y",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "receipts": {
+    "x": {
+     "claims": {}
+    },
+    "y": {
+     "claims": {
+      "network_mode": "live"
      }
     }
    }
