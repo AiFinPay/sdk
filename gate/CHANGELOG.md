@@ -1,5 +1,14 @@
 # Changelog
 
+## @aifinpay/gate 0.11.1 — a gate that does not know its network refuses a testnet receipt
+
+- A gate with no `networkMode` and no registry that reports one (a static mount)
+  used to skip the network check, so a receipt paid on a test network opened a
+  live site. It now answers 403 "receipt was paid on a test network; this site
+  has not said it is a test site"; a live or unmarked receipt is served as before.
+  A test site says so with `networkMode: "test"` or its merchant record. Shadow
+  reads it as a would-be 403. Vectors: `receipt.test_on_unsaid`, `receipt.live_on_unsaid`.
+
 ## @aifinpay/gate 0.11.0 — the content licence travels with the content
 
 - The 402 no longer carries `protocol_fee_bps`, and `PROTOCOL_FEE_BPS` is no

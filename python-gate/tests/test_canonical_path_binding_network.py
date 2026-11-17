@@ -117,11 +117,45 @@ def test_the_402_asks_for_the_header_it_will_compare():
     ("test", {}, 403),
     ("test", {"network_mode": "test"}, 200),
     ("live", {}, 200),
-    (None, {"network_mode": "test"}, 200),
+    (None, {"network_mode": "test"}, 403),
+    (None, {}, 200),
     (lambda: "test", {}, 403),
 ])
 def test_a_receipt_from_another_network(site, claims, status):
     assert gate(network_mode=site).decide(req(token(**claims))).status == status
+
+
+UNKNOWN_NETWORK = "receipt was paid on a test network; this site has not said it is a test site"
+
+
+@pytest.mark.parametrize("site", [None, lambda: None])
+@pytest.mark.parametrize("claims,status", [({"network_mode": "test"}, 403), ({"network_mode": "live"}, 200), ({}, 200)])
+def test_a_gate_that_does_not_know_its_network(site, claims, status):
+    answer = gate(network_mode=site).decide(req(token(**claims)))
+    assert answer.status == status
+    if status == 403:
+        assert answer.body == {"error": "AIFP-403", "detail": UNKNOWN_NETWORK}
+
+
+def test_a_gate_that_does_not_know_its_network_refuses_a_test_receipt_on_both_adapters():
+    gt = gate()
+    test_receipt = {"AIFP-Receipt": token(network_mode="test")}
+    live_receipt = {"AIFP-Receipt": token()}
+    assert call_asgi(g.AifpGateMiddleware(app, gt), "/paid", test_receipt)[0] == 403
+    assert call_wsgi(g.AifpGateWSGI(wsgi_app, gt), "/paid", test_receipt)[0].startswith("403")
+    assert call_asgi(g.AifpGateMiddleware(app, gate()), "/paid", live_receipt)[0] == 200
+    assert call_wsgi(g.AifpGateWSGI(wsgi_app, gate()), "/paid", live_receipt)[0].startswith("200")
+
+
+def test_a_site_that_says_it_is_a_test_site_still_takes_a_test_receipt():
+    assert gate(network_mode="test").decide(req(token(network_mode="test"))).status == 200
+    assert gate(network_mode=lambda: "test").decide(req(token(network_mode="test"))).status == 200
+
+
+def test_shadow_reads_an_unknown_network_test_receipt_as_a_would_be_refusal():
+    answer = gate(mode="shadow").decide(req(token(network_mode="test")))
+    assert answer.status == 200 and answer.headers[g.HEADER_SHADOW_STATUS] == "403"
+    assert answer.aifp["shadow"]["detail"] == UNKNOWN_NETWORK
 
 
 def test_a_network_mode_the_gate_does_not_know_refuses_to_start():

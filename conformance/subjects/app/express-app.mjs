@@ -26,6 +26,7 @@ app.use(G.aifpDiscovery({
 app.use(G.aifpGate({
   merchantId: env.AIFP_MERCHANT_ID, registry, apiBase: env.AIFP_API, jwksUri: env.AIFP_JWKS_URI, mode: profile.mode,
   store: G.redisStore(redis, { keyPrefix: "conformance:" }),
+  ...(profile.network_known === false ? { networkMode: null } : {}),
   ...(profile.charge === "agents" ? { shouldCharge: G.knownAiAgent } : {}),
   onEvent: reporter.onEvent,
 }));
