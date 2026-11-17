@@ -13,6 +13,15 @@ from the corresponding CI or payment artifacts.
   request; only an expired authorization is signed again, once. MCP is not
   part of this change.
 
+## MCP 2.17.0 — local settings summary for the owner's dashboard
+
+- A linked agent's MCP reports a non-secret summary of its local settings
+  (version, payments on or off, `AIFINPAY_GATEWAY_ORIGINS`, the per-payment and
+  daily USD limits, pay chain and asset) to
+  `POST /v1/agents/<address>/local-settings`, signed by the agent's own key, so
+  the dashboard can show what the agent's computer enforces. Keys, the
+  passphrase, file paths and the RPC URL are never sent.
+
 ## Minimum batch $0.02 — agent 2.14.0, Python 2.11.0, gate 0.9.0, aifinpay-gate 0.6.0, MCP 2.16.0
 
 - The agent SDKs buy the minimum batch the 402 advertises, falling back to

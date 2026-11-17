@@ -1,5 +1,6 @@
 import type { ToolContext } from "../server.js";
 import { payChain } from "../pay-chains.js";
+import { reportLocalSettings } from "../local-settings.js";
 
 /**
  * `agent_claim_self` — agent attaches itself to a user's AiFinPay account
@@ -43,7 +44,9 @@ export function agentClaimSelfTool() {
       "generates a one-time URL at https://dash.aifinpay.io → My Agents → Link an agent → " +
       "Claim via MCP and gives it to you; pass it here. Do not open the URL in a browser " +
       "tool: that links nothing. The tool signs only an AiFinPay claim challenge for this " +
-      "agent's own address and moves no funds.",
+      "agent's own address and, after an EVM claim, a summary of this server's payment " +
+      "settings for the owner's dashboard (never keys, the passphrase or file paths); it " +
+      "moves no funds.",
     inputSchema: {
       type: "object",
       properties: {
@@ -306,6 +309,8 @@ export async function runAgentClaimSelf(ctx: ToolContext, args: Record<string, u
       content: [{ type: "text", text: `${primarySolana ? "Solana" : "EVM"} claim failed: ${primary.reason}` }],
     };
   }
+  // The owner's dashboard shows the linked EVM wallet's local settings.
+  if (!primarySolana) await reportLocalSettings(ctx, { afterClaim: true });
   const secondary = await claimFamily(!primarySolana);
   const evmResult = primarySolana ? secondary : primary;
   const solanaResult = primarySolana ? primary : secondary;

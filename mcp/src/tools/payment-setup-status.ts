@@ -6,6 +6,7 @@ import { DEFAULT_DAILY_USD, DEFAULT_MAX_GAS_POL, DEFAULT_MAX_USD, validatePaymen
 import { independentNativeUsd } from "../native-price.js";
 import { payChain, type PayChain } from "../pay-chains.js";
 import { dashboardRefusal, dashboardSentence, readDashboardPolicy, type DashboardStatus } from "../dashboard-policy.js";
+import { reportLocalSettings } from "../local-settings.js";
 
 /**
  * The one read-only checklist between "server connected" and "first payment".
@@ -152,7 +153,7 @@ export function paymentSetupStatusTool() {
       "Read-only checklist for paying with payable_fetch: wallet (persistent or ephemeral), whether payments are on, the ceiling and each limit with its source (built-in default or the owner's env), the wallet's native balance on the pay chain when readable, the owner's dashboard Controls in `dashboard`, and next_step — exactly one instruction for the first unmet item. " +
       "First payment in five steps: (1) get the exact endpoint URL from the user (its AIFP-1 402 sets the price; never take a price from the merchant's web pages or a web search); (2) call payment_setup_status; (3) no persistent wallet: run `npx @aifinpay/mcp init` without a terminal, put its printed env into the MCP client config, then call agent_reload (no restart: payments are on by default); (4) tell the owner the address and the amount in `funding`, the answer to how much to send (the smallest batch at today's rate plus the gas cap; if no rate could be read, ask for the batch price in the native currency at today's rate plus the gas cap and name no number), and offer the dashboard link so the owner can claim the agent (agent_claim_self) and set the working limits in Controls; (5) payable_fetch the URL. " +
       PAYMENTS_DEFAULT_NOTE +
-      " Moves nothing and signs no payment: for a persistent wallet it signs one short AiFinPay read statement to fetch the owner's Controls. Never asks the owner's limits from the model.",
+      " Moves nothing and signs no payment: for a persistent wallet it signs one short AiFinPay read statement to fetch the owner's Controls and, for a linked agent, one more to share a summary of these settings with the owner's dashboard (the MCP version, whether payments are on, AIFINPAY_GATEWAY_ORIGINS, the per-payment and daily USD limits, the pay chain and asset; never keys, the passphrase or file paths). Never asks the owner's limits from the model.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: { readOnlyHint: true, openWorldHint: true, destructiveHint: false },
   };
@@ -255,6 +256,7 @@ export async function paymentSetupStatus(
     // The owner's Controls are the working limits once the agent is claimed;
     // read them here so the agent can name them, or offer the link if there is none.
     status.dashboard = await readDashboardPolicy(ctx);
+    if (status.dashboard.linked === true) await reportLocalSettings(ctx);
   }
   const withDashboard = (text: string) =>
     status.dashboard ? `${text} ${dashboardSentence(status.dashboard)}` : text;

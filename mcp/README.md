@@ -4,12 +4,10 @@ AiFinPay MCP server for persistent agent identity, Agent Passport resolution,
 route discovery and non-signing settlement invoices. Canonical domain:
 **aifinpay.io**.
 
-Version **2.13.0** is prepared in this checkout, on the published agent 2.9.0
-and canonical skill 2.11.0 (AiFinPay/skill 0490615, published 2026-10-22). The separate canonical producer's final immutable
-source pin is a required handoff, not a moving-branch substitution.
-The published baseline checked2026-10-04 was MCP2.5.0. Package publication and
-real registry dependency/lock refresh remain release gates; a source-cohort
-build does not prove those steps. Owner-enabled v1.4 purchases with `payable_fetch` are
+The `@aifinpay/agent` and `@aifinpay/skill` releases this package installs
+are named in `package.json` and resolved in `package-lock.json`;
+`aifinpay://skill` serves the guide bundled from that skill release.
+Owner-enabled v1.4 purchases with `payable_fetch` are
 released: on Polygon since 2.2.0, on Base (ETH or USDC) since 2.5.0; site-wide
 batches with `scope: "merchant"` since 2.4.1. Since 2.12.1 payments are on by
 default: a persistent wallet created with `init` can pay with no payment env at
@@ -115,6 +113,13 @@ wallet's own key (EIP-191 over `["AiFinPay agent policy read v1", <backend
 origin>, <lowercase address>, <expires_at>]`, valid 60 s); it signs no payment
 and changes nothing. It is not made on `payable_fetch`'s refusal path, for an
 ephemeral wallet or on Solana.
+
+For a linked agent, `payment_setup_status` and, after an EVM claim,
+`agent_claim_self` also share a summary of this server's settings with the
+owner's dashboard (`POST /v1/agents/<address>/local-settings`, signed by the
+wallet's own key): the MCP version, whether payments are on,
+`AIFINPAY_GATEWAY_ORIGINS`, the per-payment and daily USD limits, the pay chain
+and asset — never keys, the passphrase, file paths or the RPC URL.
 
 ## Indexed wallet derivation
 
@@ -234,7 +239,8 @@ chat that has no AiFinPay MCP, links nothing; such an agent is linked by signed
 message in My Agents instead. An account with 2FA on links the same way: the
 URL was made in a session that already passed the second factor. The tool contacts
 only AiFinPay origins, signs only the claim challenge for this agent's own
-address, and moves no funds. The owner-selected payment family must be confirmed successfully;
+address (and, after an EVM claim, the settings summary under "Owner limits"),
+and moves no funds. The owner-selected payment family must be confirmed successfully;
 the second wallet is best-effort. Use the selected wallet's Fund panel for
 available networks and assets; binding does not activate a disabled network.
 Offer this to the owner after `init` (step 4 above): from then on the owner
