@@ -2,6 +2,7 @@
 // Writes vectors/gate-v1.json. Golden bodies come from the built ../gate, so a change there shows as a stale file.
 //   (cd ../gate && npm ci && npm run build) && node scripts/gen-vectors.mjs
 //   node scripts/gen-vectors.mjs --check
+import { createHmac } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -368,14 +369,67 @@ const vectors = {
   cases,
 };
 
-const text = JSON.stringify(vectors, null, 1) + "\n";
+// Reader proof: computed here with plain HMAC, independent of any gate, so every port is held to the same bytes.
+const readerOut = resolve(here, "../vectors/reader-proof-v1.json");
+const READER = { cookie: "__aifp_human", ttl_seconds: 2592000, now: 1800000000 };
+const keyA = "reader-key-0123456789abcdef0123456789";
+const keyB = "reader-key-fedcba9876543210fedcba9876";
+const chrome = fixtures.user_agents.chrome;
+const sig = (key, exp, ua) => createHmac("sha256", Buffer.from(key, "utf8")).update(`${exp}\n${ua}`, "utf8").digest("base64url");
+const value = (key, exp, ua) => `${exp}.${sig(key, exp, ua)}`;
+const N = READER.now, LATER = N + 3600;
+const issue = [
+ { name: "issue.chrome", key: keyA, now: N, user_agent: chrome, cookie: value(keyA, N + READER.ttl_seconds, chrome) },
+ { name: "issue.empty_ua", key: keyA, now: N, user_agent: "", cookie: value(keyA, N + READER.ttl_seconds, "") },
+ { name: "issue.non_ascii_ua", key: keyB, now: N, user_agent: "Mozilla/5.0 (X11; Linux) Café/1.0", cookie: value(keyB, N + READER.ttl_seconds, "Mozilla/5.0 (X11; Linux) Café/1.0") },
+];
+const good = value(keyA, LATER, chrome);
+const C = (v) => `${READER.cookie}=${v}`;
+const verify = [
+ { name: "verify.valid", cookie_header: C(good), valid: true },
+ { name: "verify.among_others", cookie_header: `theme=dark; ${C(good)}; _ga=GA1.2.3`, valid: true },
+ { name: "verify.no_space", cookie_header: `theme=dark;${C(good)}`, valid: true },
+ { name: "verify.tab", cookie_header: `theme=dark;\t${C(good)}`, valid: true },
+ { name: "verify.empty_ua", user_agent: "", cookie_header: C(value(keyA, LATER, "")), valid: true },
+ { name: "verify.non_ascii_ua", user_agent: "Mozilla/5.0 (X11; Linux) Café/1.0", cookie_header: C(value(keyA, LATER, "Mozilla/5.0 (X11; Linux) Café/1.0")), valid: true },
+ { name: "verify.no_header", cookie_header: "", valid: false },
+ { name: "verify.no_cookie", cookie_header: "theme=dark", valid: false },
+ { name: "verify.empty_value", cookie_header: C(""), valid: false },
+ { name: "verify.expired", cookie_header: C(value(keyA, N - 1, chrome)), valid: false },
+ { name: "verify.expires_now", cookie_header: C(value(keyA, N, chrome)), valid: false },
+ { name: "verify.wrong_ua", user_agent: chrome.replace("131", "132"), cookie_header: C(good), valid: false },
+ { name: "verify.ua_for_empty", user_agent: chrome, cookie_header: C(value(keyA, LATER, "")), valid: false },
+ { name: "verify.wrong_key", cookie_header: C(value(keyB, LATER, chrome)), valid: false },
+ { name: "verify.forged_sig", cookie_header: C(`${LATER}.${sig(keyA, LATER, chrome).replace(/^./, (c) => (c === "A" ? "B" : "A"))}`), valid: false },
+ { name: "verify.exp_moved", cookie_header: C(`${LATER + 1}.${sig(keyA, LATER, chrome)}`), valid: false },
+ { name: "verify.padded_sig", cookie_header: C(`${good}=`), valid: false },
+ { name: "verify.exp_leading_zero", cookie_header: C(value(keyA, `0${LATER}`, chrome)), valid: false },
+ { name: "verify.exp_plus", cookie_header: C(value(keyA, `+${LATER}`, chrome)), valid: false },
+ { name: "verify.exp_fraction", cookie_header: C(value(keyA, `${LATER}.5`, chrome)), valid: false },
+ { name: "verify.exp_exponent", cookie_header: C(value(keyA, "1e10", chrome)), valid: false },
+ { name: "verify.exp_unsafe", cookie_header: C(value(keyA, "9007199254740993", chrome)), valid: false },
+ { name: "verify.first_wins", cookie_header: `${C(value(keyA, N - 1, chrome))}; ${C(good)}`, valid: false },
+ { name: "verify.name_prefix", cookie_header: `x${C(good)}`, valid: false },
+ { name: "verify.name_suffix", cookie_header: `${READER.cookie}_x=${good}`, valid: false },
+ { name: "verify.space_before_value", cookie_header: `${READER.cookie}= ${good}`, valid: false },
+].map((v) => ({ key: keyA, user_agent: chrome, now: N, ...v }));
+const readerVectors = { schema: 1, ...READER, set_cookie: `${READER.cookie}=<value>; Path=/; Max-Age=${READER.ttl_seconds}; HttpOnly; Secure; SameSite=Lax`, issue, verify };
+
+const outputs = [
+  [out, JSON.stringify(vectors, null, 1) + "\n", `${cases.length} cases`],
+  [readerOut, JSON.stringify(readerVectors, null, 1) + "\n", `${issue.length + verify.length} reader-proof vectors`],
+];
 if (process.argv.includes("--check")) {
-  if (readFileSync(out, "utf8") !== text) {
-    console.error("vectors/gate-v1.json is stale: run scripts/gen-vectors.mjs");
-    process.exit(1);
+  for (const [file, text, what] of outputs) {
+    if (readFileSync(file, "utf8") !== text) {
+      console.error(`${file} is stale: run scripts/gen-vectors.mjs`);
+      process.exit(1);
+    }
+    console.log(`vectors up to date: ${what}`);
   }
-  console.log(`vectors up to date: ${cases.length} cases`);
 } else {
-  writeFileSync(out, text);
-  console.log(`wrote ${out}: ${cases.length} cases, ${Object.keys(profiles).length} profiles`);
+  for (const [file, text, what] of outputs) {
+    writeFileSync(file, text);
+    console.log(`wrote ${file}: ${what}`);
+  }
 }

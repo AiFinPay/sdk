@@ -1,0 +1,240 @@
+{
+ "schema": 1,
+ "cookie": "__aifp_human",
+ "ttl_seconds": 2592000,
+ "now": 1800000000,
+ "set_cookie": "__aifp_human=<value>; Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax",
+ "issue": [
+  {
+   "name": "issue.chrome",
+   "key": "reader-key-0123456789abcdef0123456789",
+   "now": 1800000000,
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "cookie": "1802592000.vsvderSh1DKsSynR57c3KdId92w-zY-tUt81r8jk3qc"
+  },
+  {
+   "name": "issue.empty_ua",
+   "key": "reader-key-0123456789abcdef0123456789",
+   "now": 1800000000,
+   "user_agent": "",
+   "cookie": "1802592000.nrMm3B0ijjRgmWg15DlpUgleblxJxHplQbEwqxblrHQ"
+  },
+  {
+   "name": "issue.non_ascii_ua",
+   "key": "reader-key-fedcba9876543210fedcba9876",
+   "now": 1800000000,
+   "user_agent": "Mozilla/5.0 (X11; Linux) Café/1.0",
+   "cookie": "1802592000.YnX-0YimdZprY44mELu5rXT2jYhBKfCSfxpNbUSSjVY"
+  }
+ ],
+ "verify": [
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.valid",
+   "cookie_header": "__aifp_human=1800003600.Mux2HGdr3s3wc93dHLAlQokpMXPk6OUvZVkB-RbEzGc",
+   "valid": true
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.among_others",
+   "cookie_header": "theme=dark; __aifp_human=1800003600.Mux2HGdr3s3wc93dHLAlQokpMXPk6OUvZVkB-RbEzGc; _ga=GA1.2.3",
+   "valid": true
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.no_space",
+   "cookie_header": "theme=dark;__aifp_human=1800003600.Mux2HGdr3s3wc93dHLAlQokpMXPk6OUvZVkB-RbEzGc",
+   "valid": true
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.tab",
+   "cookie_header": "theme=dark;\t__aifp_human=1800003600.Mux2HGdr3s3wc93dHLAlQokpMXPk6OUvZVkB-RbEzGc",
+   "valid": true
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "",
+   "now": 1800000000,
+   "name": "verify.empty_ua",
+   "cookie_header": "__aifp_human=1800003600.euLEFdKzHNEiFQrlXdBQtpvEEVuRDyJyDZAunZHplIQ",
+   "valid": true
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (X11; Linux) Café/1.0",
+   "now": 1800000000,
+   "name": "verify.non_ascii_ua",
+   "cookie_header": "__aifp_human=1800003600.tKfdDsfaF6BI4xfaeTo-31YMBtV9AVrgzm9HjD8UVYA",
+   "valid": true
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.no_header",
+   "cookie_header": "",
+   "valid": false
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.no_cookie",
+   "cookie_header": "theme=dark",
+   "valid": false
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.empty_value",
+   "cookie_header": "__aifp_human=",
+   "valid": false
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.expired",
+   "cookie_header": "__aifp_human=1799999999.aA0GdmIIFstU5WCrxx3_hulq-qPwgT-cMNL_9POaFig",
+   "valid": false
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.expires_now",
+   "cookie_header": "__aifp_human=1800000000.iNvY8FXohqyf6MeVyk8MqwcCZh7L5HmCfstt_SsKz0U",
+   "valid": false
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.wrong_ua",
+   "cookie_header": "__aifp_human=1800003600.Mux2HGdr3s3wc93dHLAlQokpMXPk6OUvZVkB-RbEzGc",
+   "valid": false
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.ua_for_empty",
+   "cookie_header": "__aifp_human=1800003600.euLEFdKzHNEiFQrlXdBQtpvEEVuRDyJyDZAunZHplIQ",
+   "valid": false
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.wrong_key",
+   "cookie_header": "__aifp_human=1800003600.S3XMM9YFr2cgigzKyVvGOuBRXDONHTmx3XqABrx0s7k",
+   "valid": false
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.forged_sig",
+   "cookie_header": "__aifp_human=1800003600.Aux2HGdr3s3wc93dHLAlQokpMXPk6OUvZVkB-RbEzGc",
+   "valid": false
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.exp_moved",
+   "cookie_header": "__aifp_human=1800003601.Mux2HGdr3s3wc93dHLAlQokpMXPk6OUvZVkB-RbEzGc",
+   "valid": false
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.padded_sig",
+   "cookie_header": "__aifp_human=1800003600.Mux2HGdr3s3wc93dHLAlQokpMXPk6OUvZVkB-RbEzGc=",
+   "valid": false
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.exp_leading_zero",
+   "cookie_header": "__aifp_human=01800003600.ph6vcjW4hlh43Vapp5Gd0RY1Tk7czpa36Pmdunvdjdo",
+   "valid": false
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.exp_plus",
+   "cookie_header": "__aifp_human=+1800003600.Tj7Db1iJjK7-Ts2HXJiz09jEN7-LAoIAwiaT0Buk9Ow",
+   "valid": false
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.exp_fraction",
+   "cookie_header": "__aifp_human=1800003600.5.VNJ10ooqw5Rl2Qg_ql3B6-7tZw5Tq13pmy5Ocu5lP1w",
+   "valid": false
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.exp_exponent",
+   "cookie_header": "__aifp_human=1e10.KgZaeTDlU4vnaq20KEJWylQRWgDOpLtjqTIvQgEy830",
+   "valid": false
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.exp_unsafe",
+   "cookie_header": "__aifp_human=9007199254740993.JTV3dn6kUUs4zY9lb1dAdDmb9lDFSmoj2dqRIS4gxjI",
+   "valid": false
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.first_wins",
+   "cookie_header": "__aifp_human=1799999999.aA0GdmIIFstU5WCrxx3_hulq-qPwgT-cMNL_9POaFig; __aifp_human=1800003600.Mux2HGdr3s3wc93dHLAlQokpMXPk6OUvZVkB-RbEzGc",
+   "valid": false
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.name_prefix",
+   "cookie_header": "x__aifp_human=1800003600.Mux2HGdr3s3wc93dHLAlQokpMXPk6OUvZVkB-RbEzGc",
+   "valid": false
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.name_suffix",
+   "cookie_header": "__aifp_human_x=1800003600.Mux2HGdr3s3wc93dHLAlQokpMXPk6OUvZVkB-RbEzGc",
+   "valid": false
+  },
+  {
+   "key": "reader-key-0123456789abcdef0123456789",
+   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+   "now": 1800000000,
+   "name": "verify.space_before_value",
+   "cookie_header": "__aifp_human= 1800003600.Mux2HGdr3s3wc93dHLAlQokpMXPk6OUvZVkB-RbEzGc",
+   "valid": false
+  }
+ ]
+}

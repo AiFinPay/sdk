@@ -1,5 +1,19 @@
 # Changelog
 
+## @aifinpay/gate 0.12.0 — unproven pays
+
+- New: `unprovenPays({ readerProof, verifySearchBot?, freeBots? })`, a
+  `shouldCharge` that is false only for a reader with a valid `__aifp_human`
+  cookie or a crawler verified by forward-confirmed reverse DNS in a free
+  category; everyone else gets the 402. `createReaderProof({ key, ttlSeconds })`
+  issues and verifies the cookie; `verifySearchBot({ userAgent, ip, resolve?, now?, timeoutMs? })`
+  checks Googlebot, Bingbot, Applebot, YandexBot and Baiduspider against
+  `SEARCH_BOT_TABLE`, with an injectable resolver and a bounded cache. A DNS
+  error or timeout is not verified.
+- `GateRequest` gains an optional `ip`; `aifpGate` sets it from Express `req.ip`.
+  Nothing else reads it, so existing options behave as before.
+- Vectors: `conformance/vectors/reader-proof-v1.json`, SPEC section "Reader proof".
+
 ## @aifinpay/gate 0.11.1 — a gate that does not know its network refuses a testnet receipt
 
 - A gate with no `networkMode` and no registry that reports one (a static mount)

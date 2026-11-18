@@ -1,11 +1,11 @@
 {
- "generated_from": "@aifinpay/gate 0.11.1",
+ "generated_from": "@aifinpay/gate 0.12.0",
  "jwks": {
   "keys": [
    {
-    "kty": "OKP",
     "crv": "Ed25519",
     "x": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw",
+    "kty": "OKP",
     "kid": "fixture-1",
     "alg": "EdDSA",
     "use": "sig"

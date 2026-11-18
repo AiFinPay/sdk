@@ -41,6 +41,19 @@ An adapter owns everything platform-shaped and decides nothing.
 | Upstream | A proxy does not forward `AIFP-Receipt`. |
 | Failure | Shadow: the site goes on whatever is down. Enforce: an agent gets a 503, and a reader is served wherever the adapter can tell one apart. A proxy whose decision service is down cannot: everyone on a gated location gets the 503, so gate only the locations that charge. An origin that cannot be reached is not a gate outage: it is said so, and costs no units where the adapter can give them back. |
 
+## Reader proof
+
+`vectors/reader-proof-v1.json` holds it; every implementation of the cookie (Node and Python gates, the Cloudflare Worker, the CMS plugins) must answer each vector as written.
+
+| Rule | |
+|---|---|
+| Cookie | `__aifp_human` = `<exp>.<sig>`. |
+| `exp` | Unix seconds in canonical decimal: digits only, no sign, no leading zero, a safe integer (≤ 2^53 − 1). Valid while `exp` is greater than now; a cookie expiring this second is expired. |
+| `sig` | HMAC-SHA-256 with the site's reader key (32 bytes or more; a text key is its UTF-8 bytes) over the UTF-8 bytes of `<exp>\n<user-agent>`, base64url without padding (43 characters). A missing User-Agent is the empty string. Compared in constant time where the platform has it. |
+| Parsing | The `Cookie` header is split at `;` followed by optional spaces or tabs; the first part that starts with `__aifp_human=` is the cookie, and nothing else is consulted. |
+| Issue | `Set-Cookie: __aifp_human=<value>; Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax`, `exp` = now + 2592000. |
+| Who reads free | A valid cookie for the request's User-Agent, or a verified bot in a free category. A request carrying `AIFP-Receipt` or `AIFP-Agent-Id` is charged regardless. |
+
 ## Who is not a gate
 
 `@aifinpay/agent`, `aifinpay-agent` and `@aifinpay/mcp` pay. They read the 402 (`challenge.payable`) and hold receipts; they decide nothing about access.

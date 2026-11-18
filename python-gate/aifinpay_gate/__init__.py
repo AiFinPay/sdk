@@ -28,10 +28,21 @@ from .reporter import GateReporter, GateReporterV2, ReportingFlow
 from .pricing import MIN_BATCH_UNITS, TIER_WEIGHTS, UNIT_PRICE_USD, min_requests_for_tier, unit_price_usd, weight_for_tier
 from .scope import pattern_covers, scope_covers
 from .stores import REDIS_INCRBY_SCRIPT, MemoryStore, RedisStore, StoreCapacityError
+from .unproven import (
+    FREE_BOT_CATEGORIES,
+    READER_COOKIE,
+    READER_TTL_SECONDS,
+    SEARCH_BOT_CACHE_MAX,
+    SEARCH_BOT_TABLE,
+    ReaderProof,
+    SystemResolver,
+    unproven_pays,
+    verify_search_bot,
+)
 from .verify import Verifier
 from .wsgi import AifpGateWSGI
 
-__version__ = "0.8.1"
+__version__ = "0.9.0"
 
 __all__ = [
     "AI_AGENT_UA_MARKERS", "AI_AGENT_UA_TABLE", "AifpGateMiddleware", "AifpGateWSGI", "DETAIL_QUOTA_EXHAUSTED", "DETAIL_RECEIPT_EXPIRED",
@@ -39,4 +50,6 @@ __all__ = [
     "NO_STORE", "RedisStore", "Route", "SimpleRequest", "StoreCapacityError", "TIER_WEIGHTS", "UA_CLASSES", "UNIT_PRICE_USD", "Verifier",
     "build_challenge", "build_discovery_document", "classify_agent", "decide_operator", "discovery_link_header", "is_html_content_type", "known_ai_agent", "min_requests_for_tier",
     "InspectedPath", "inspect_path", "spelled_as_path", "normalize_operator_policy", "pattern_covers", "scope_covers", "unit_price_usd", "weight_for_tier",
+    "FREE_BOT_CATEGORIES", "READER_COOKIE", "READER_TTL_SECONDS", "ReaderProof", "SEARCH_BOT_CACHE_MAX", "SEARCH_BOT_TABLE", "SystemResolver",
+    "unproven_pays", "verify_search_bot",
 ]

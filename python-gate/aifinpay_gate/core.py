@@ -65,6 +65,8 @@ class SimpleRequest:
     path: str
     headers: Dict[str, str] = field(default_factory=dict)
     method: str = "GET"
+    # The client's address; only unproven_pays reads it. Behind a proxy, the real client's.
+    ip: Optional[str] = None
 
     def __post_init__(self):
         self._lower = {k.lower(): v for k, v in self.headers.items()}

@@ -185,6 +185,44 @@ A predicate that **throws** charges the request. Of the two wrong answers a
 broken detector can give, a 402 to one human is visible and recoverable; a
 crawler served free is silent and permanent.
 
+### Unproven pays
+
+`knownAiAgent` charges whoever names itself an agent. `unprovenPays` charges
+whoever has not proven it may read free: a reader with a signed cookie, or a
+search crawler confirmed by DNS. Everyone else gets the 402 with the price.
+
+```ts
+import { aifpGate, createReaderProof, unprovenPays } from "@aifinpay/gate";
+
+const readerProof = createReaderProof({ key: process.env.AIFP_READER_KEY! }); // 32+ bytes
+app.set("trust proxy", "loopback"); // so req.ip is the client, not your proxy
+app.use("/articles", aifpGate({ merchantId, registry, shouldCharge: unprovenPays({ readerProof }) }));
+
+// After your own browser check passes:
+res.setHeader("Set-Cookie", readerProof.setCookie(readerProof.issue(req.get("user-agent"))));
+```
+
+- **Reader cookie** `__aifp_human` = `<exp>.<sig>`: HMAC-SHA-256 of
+  `<exp>\n<user-agent>` with your reader key, base64url without padding, valid
+  30 days for the User-Agent it was issued to. The bytes are shared with the
+  Python gate and the Cloudflare Worker:
+  [`conformance/vectors/reader-proof-v1.json`](../conformance/vectors/reader-proof-v1.json).
+  This package does not run the browser check; it issues and verifies the cookie.
+- **Verified search crawler** (`verifySearchBot`): the User-Agent names exactly
+  one operator in `SEARCH_BOT_TABLE`, the PTR of the client address ends with
+  that operator's domain, and that name resolves back to the same address.
+  Answers are cached per operator and address, 24 h verified and 1 h refused,
+  at most `SEARCH_BOT_CACHE_MAX` entries. A DNS error or timeout is not
+  verified: the crawler pays. `freeBots` (default `search`, `preview`,
+  `monitoring`) says which categories read free; a verified AI crawler never does.
+- **The client address** is `GateRequest.ip`. `aifpGate` fills it from Express
+  `req.ip`, which behind a proxy or load balancer is the proxy unless you set
+  [`trust proxy`](https://expressjs.com/en/guide/behind-proxies.html). A
+  hand-built `GateRequest` must pass the real client address; without one no
+  crawler is verified and all of them pay.
+- `AIFP-Receipt` or `AIFP-Agent-Id` on the request is charged whatever else it
+  carries, so a receipt is always metered.
+
 ### robots.txt decides whether any of this runs at all
 
 ```
