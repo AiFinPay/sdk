@@ -5,6 +5,7 @@ receipt verification against the AiFinPay JWKS, the same post-increment quota
 metering. See README.md.
 """
 
+from .about import ABOUT_DESCRIPTION_MAX, ABOUT_TITLE_MAX, page_about, plain_text
 from .agents import AI_AGENT_UA_MARKERS, AI_AGENT_UA_TABLE, GATE_OPERATORS, UA_CLASSES, classify_agent, known_ai_agent
 from .asgi import AifpGateMiddleware
 from .challenge import build_challenge
@@ -42,7 +43,7 @@ from .unproven import (
 from .verify import Verifier
 from .wsgi import AifpGateWSGI
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 
 __all__ = [
     "AI_AGENT_UA_MARKERS", "AI_AGENT_UA_TABLE", "AifpGateMiddleware", "AifpGateWSGI", "DETAIL_QUOTA_EXHAUSTED", "DETAIL_RECEIPT_EXPIRED",
@@ -52,4 +53,5 @@ __all__ = [
     "InspectedPath", "inspect_path", "spelled_as_path", "normalize_operator_policy", "pattern_covers", "scope_covers", "unit_price_usd", "weight_for_tier",
     "FREE_BOT_CATEGORIES", "READER_COOKIE", "READER_TTL_SECONDS", "ReaderProof", "SEARCH_BOT_CACHE_MAX", "SEARCH_BOT_TABLE", "SystemResolver",
     "unproven_pays", "verify_search_bot",
+    "ABOUT_DESCRIPTION_MAX", "ABOUT_TITLE_MAX", "page_about", "plain_text",
 ]

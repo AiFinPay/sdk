@@ -1,3 +1,16 @@
+## 0.10.0 — the 402 says what the page is
+
+- Port of `@aifinpay/gate` 0.13.0: `Gate(..., about=fn)`, where `fn(req)` returns a
+  dict with `title` and/or `description`, or `None`. The 402 carries
+  `about` right after `resource`, as plain text capped at 200 and 300 code
+  points, byte for byte as Node (`conformance/vectors/about-v1.json`).
+  Information only; a function that raises or returns another shape leaves the
+  402 unchanged, and without it the 402 does not change. Exports `page_about`,
+  `plain_text`, `ABOUT_TITLE_MAX`, `ABOUT_DESCRIPTION_MAX`. Parity fixture
+  regenerated for the new reference version.
+- README: the three modes of "who reads for free" named "AI agents only",
+  "Strict" and "Everyone pays".
+
 ## 0.9.0 — unproven pays
 
 - Port of `@aifinpay/gate` 0.12.0: `unproven_pays(reader_proof, verify_search_bot=None, free_bots=...)`,

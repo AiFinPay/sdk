@@ -177,6 +177,7 @@ class Gate:
         allow: Optional[Callable[[Dict[str, Any]], bool]] = None,
         should_charge: Optional[Callable[[GateRequest], bool]] = None,
         operator_policy: Any = None,
+        about: Optional[Callable[[GateRequest], Optional[Dict[str, Any]]]] = None,
         now: Callable[[], float] = time.time,
     ):
         if not merchant_id:
@@ -244,6 +245,8 @@ class Gate:
         # Applied after classification and before should_charge; see
         # operator_policy.py. None, or a policy without rules, changes nothing.
         self.operator_policy = operator_policy
+        # What the page is, added to the 402 as plain text; a raise or another shape leaves the 402 unchanged.
+        self.about = about
         self._now = now
         self.verify = Verifier(issuer, merchant_id, clock_tolerance_s, jwks_uri, jwks, now=now)
 
@@ -366,11 +369,21 @@ class Gate:
                        "weight": weight},
         })
 
+    def _describe(self, req: GateRequest) -> Any:
+        """The site's own function: a raise is the same as saying nothing."""
+        if self.about is None or self.mode != "enforce":
+            return None
+        try:
+            return self.about(req)
+        except Exception:  # noqa: BLE001
+            return None
+
     def _challenge(self, resource: str, weight: int, tier: str, detail: Optional[str] = None, *,
-                   who: Dict[str, Any], agent: Optional[str] = None) -> GateResult:
+                   who: Dict[str, Any], agent: Optional[str] = None, req: Optional[GateRequest] = None) -> GateResult:
         self._emit({"kind": "402", "resource": resource, "weight": weight, "detail": detail}, who)
         body = build_challenge(self.merchant_id, resource, tier, weight, detail=detail, api_base=self.api_base,
-                               min_batch_units=self.min_batch_units)
+                               min_batch_units=self.min_batch_units,
+                               about=self._describe(req) if req is not None else None)
         return self._refuse(resource, weight, GateResult(False, 402, _json_headers(), body=body), agent)
 
     def _forbid(self, resource: str, weight: int, detail: str, *, who: Dict[str, Any],
@@ -497,7 +510,7 @@ class Gate:
 
         token = req.header("AIFP-Receipt")
         if not token:
-            return self._challenge(resource, weight, tier, who=who, agent=agent_header)
+            return self._challenge(resource, weight, tier, who=who, agent=agent_header, req=req)
 
         kind, payload = self.verify(token)
         if kind != "ok":
@@ -509,7 +522,8 @@ class Gate:
                 if decided is not None:
                     return decided
             if kind == "expired":
-                return self._challenge(resource, weight, tier, DETAIL_RECEIPT_EXPIRED, who=who, agent=agent_header)
+                return self._challenge(resource, weight, tier, DETAIL_RECEIPT_EXPIRED, who=who, agent=agent_header,
+                                       req=req)
             if kind == "jwks_unavailable":
                 # Fail CLOSED: failing open would make a paid API free for the
                 # length of an AiFinPay outage.
@@ -641,7 +655,8 @@ class Gate:
         if used > limit:
             self._undo(used_key, weight)
             self._undo(nonce_key, 1)
-            return self._challenge(resource, weight, tier, DETAIL_QUOTA_EXHAUSTED, who=who, agent=agent_header)
+            return self._challenge(resource, weight, tier, DETAIL_QUOTA_EXHAUSTED, who=who, agent=agent_header,
+                                   req=req)
 
         self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": sub, "receipt_id": receipt_id}, who)
         remaining = _int_if_whole(limit - used)

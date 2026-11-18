@@ -29,6 +29,11 @@ app.use(G.aifpGate({
   ...(profile.network_known === false ? { networkMode: null } : {}),
   ...(profile.charge === "agents" ? { shouldCharge: G.knownAiAgent } : {}),
   onEvent: reporter.onEvent,
+  ...(profile.about ? { about: (req) => {
+    const said = profile.about[req.path.split("?")[0]];
+    if (said === "throw") throw new Error("about failed");
+    return said;
+  } } : {}),
 }));
 app.use(express.raw({ type: () => true, limit: "2mb" }));
 app.use((req, res) => {

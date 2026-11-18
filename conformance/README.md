@@ -36,9 +36,10 @@ A subject is a module exporting `{ id, label, capabilities, supports(profile), s
 | `proxy` | | `pass.*`: the subject proxies to `ctx.origin` |
 | `pre_cache` | | the decision runs before any cache, so a reader's copy may be cacheable |
 | `real_cache` | | `cache.real_*`: a real cache sits in the chain |
+| `about` | | `about.*` that need the 402's `about` object: the subject passes the profile's `about` map to the gate's function, `"throw"` throwing |
 
 `--ratchet` compares against `known-differences.json`: a new failure or a fixed one fails the run. Adding a line there is a decision, and its reason says whose. A reason starting `flaky:` tolerates both.
 
 ## Change the vectors
 
-Edit `scripts/gen-vectors.mjs` and regenerate. It also writes `vectors/reader-proof-v1.json`, the reader cookie computed with plain HMAC; the Node and Python gate unit tests read it directly. Golden bodies come from the built `../gate`, so a change to the 402 shows up as a stale file in CI. A body change is a contract change: it needs its own proposal, and every port follows.
+Edit `scripts/gen-vectors.mjs` and regenerate. It also writes `vectors/reader-proof-v1.json`, the reader cookie computed with plain HMAC, and `vectors/about-v1.json`, the page description rules with the expected text written out; the Node and Python gate unit tests read both directly. Golden bodies come from the built `../gate`, so a change to the 402 shows up as a stale file in CI. A body change is a contract change: it needs its own proposal, and every port follows.

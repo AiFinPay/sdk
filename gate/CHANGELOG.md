@@ -1,5 +1,23 @@
 # Changelog
 
+## @aifinpay/gate 0.13.0 — the 402 says what the page is
+
+- New option `about: (req) => { title?, description? } | null | undefined`, sync or
+  async. When it returns text, the 402 carries `about: { title, description }`
+  right after `resource`: plain text, tags stripped, entities decoded, control
+  characters removed, whitespace collapsed, title cut at 200 and description at
+  300 code points with nothing added. Information only: the quote request,
+  the receipt, the meter and the events do not depend on it. A function that
+  throws, rejects or returns another shape leaves the 402 unchanged; without
+  the option the 402 is byte for byte what it was. Shadow and readers served
+  free do not call it.
+- Exports `pageAbout`, `plainText`, `ABOUT_TITLE_MAX`, `ABOUT_DESCRIPTION_MAX`
+  and the `PageAbout` type.
+- Vectors: `conformance/vectors/about-v1.json`, cases `about.*`, SPEC section
+  "About the page".
+- README: the three modes of "who reads for free" named "AI agents only",
+  "Strict" and "Everyone pays".
+
 ## @aifinpay/gate 0.12.0 — unproven pays
 
 - New: `unprovenPays({ readerProof, verifySearchBot?, freeBots? })`, a

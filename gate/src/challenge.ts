@@ -1,5 +1,6 @@
 import type { GateErrorBody, Tier } from "./types.js";
 import { minRequestsForTier, unitPriceUsd } from "./pricing.js";
+import { pageAbout } from "./about.js";
 
 /**
  * The 402 body, byte-for-byte what the hosted gateway emits.
@@ -34,10 +35,13 @@ export function buildChallenge(args: {
    *  are relative inside our own backend's gate, which is where they were
    *  copied from — correct there, wrong here.) */
   apiBase?: string;
+  /** What the page is; sanitised here, omitted when empty or malformed. */
+  about?: unknown;
 }): GateErrorBody {
   const { merchantId, resource, tier, weight } = args;
   const api = (args.apiBase ?? "https://api.aifinpay.io").replace(/\/+$/, "");
   const minRequests = args.minRequests ?? minRequestsForTier(tier, args.minBatchUnits);
+  const about = args.about === undefined ? null : pageAbout(args.about);
   return {
     error: "AIFP-402",
     detail: args.detail || "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
@@ -48,6 +52,7 @@ export function buildChallenge(args: {
       "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
     merchant_id: merchantId,
     resource,
+    ...(about ? { about } : {}),
     tier,
     unit_weight: weight,
     unit_price_usd: args.unitPriceUsd ?? unitPriceUsd(tier),

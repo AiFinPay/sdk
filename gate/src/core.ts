@@ -37,6 +37,7 @@ import { decideOperator, type OperatorDecision } from "./operator-policy.js";
 import type { ResourceRegistry } from "./registry.js";
 import type { GateReporterV2, ReportingContext } from "./reporter.js";
 import type { DiscoveryLinkSetting } from "./discovery-link.js";
+import type { PageAbout } from "./about.js";
 
 export interface GateOptions {
   /** "mrch_…" — must equal the receipt's `aud`, which is what stops a receipt
@@ -182,6 +183,8 @@ export interface GateOptions {
    * ignores it.
    */
   discoveryLink?: DiscoveryLinkSetting;
+  /** What the page is, added to the 402 as plain text; a throw or another shape leaves the 402 unchanged. */
+  about?: (req: GateRequest) => PageAbout | null | undefined | Promise<PageAbout | null | undefined>;
 }
 
 const DEFAULT_ISSUER = "https://api.aifinpay.io";
@@ -293,6 +296,16 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     return typeof registry?.networkMode === "function" ? (registry.networkMode() ?? null) : null;
   };
 
+  // The site's own function: a throw or a rejection is the same as saying nothing.
+  const describe = async (req: GateRequest): Promise<unknown> => {
+    if (!options.about) return undefined;
+    try {
+      return (await options.about(req)) ?? undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
   const decide = async function gate(req: GateRequest, resolved?: (resource: string) => void): Promise<GateResult> {
     const { path, ambiguous } = inspectPath(req.path, { caseSensitive });
     // An unregistered path is quoted as the agent asked for it: its payer compares the 402 with its own URL.
@@ -344,8 +357,14 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // to come from the mount, so a premium route quoted unit_price_usd $0.0005 and
     // then metered 10 units — the agent was told one price and charged another.
     // Whatever tier is advertised here must be the one `weight` was derived from.
-    const challenge = (resource: string, weight: number, effectiveTier: Tier, detail?: string): GateResult => {
+    const challenge = async (
+      resource: string,
+      weight: number,
+      effectiveTier: Tier,
+      detail?: string
+    ): Promise<GateResult> => {
       note({ kind: "402", resource, weight, detail });
+      const about = mode === "enforce" ? await describe(req) : undefined;
       return refuse(resource, weight, {
         ok: false,
         status: 402,
@@ -358,6 +377,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
           detail,
           apiBase: options.apiBase,
           minBatchUnits: options.minBatchUnits,
+          ...(about !== undefined ? { about } : {}),
         }),
       });
     };

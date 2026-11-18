@@ -24,6 +24,13 @@ def record():
         return json.loads(r.read())
 
 
+def about(req):
+    said = profile.get("about", {}).get(req.path.split("?")[0])
+    if said == "throw":
+        raise RuntimeError("about failed")
+    return said
+
+
 try:
     policy = record()
 except Exception:
@@ -40,6 +47,7 @@ gate = Gate(
     operator_policy=policy,
     network_mode=policy.get("network_mode", "live") if policy and profile.get("network_known") is not False else None,
     on_event=reporter.on_event,
+    about=about if profile.get("about") else None,
 )
 
 

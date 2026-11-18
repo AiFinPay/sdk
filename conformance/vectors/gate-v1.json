@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "reference": "@aifinpay/gate 0.12.0",
+ "reference": "@aifinpay/gate 0.13.0",
  "fixtures": {
   "merchant_id": "mrch_0123456789abcdef",
   "other_merchant_id": "mrch_fedcba9876543210",
@@ -289,6 +289,42 @@
     }
    ],
    "operator_default": "charge"
+  },
+  "about-enforce": {
+   "network_mode": "live",
+   "site_verified": true,
+   "mode": "enforce",
+   "charge": "agents",
+   "resources": [
+    {
+     "pattern": "/paid/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/paid-internal/*",
+     "tier": "standard"
+    },
+    {
+     "pattern": "/report",
+     "tier": "standard"
+    }
+   ],
+   "about": {
+    "/paid/a": {
+     "title": "Fish and chips",
+     "description": "Where to eat them."
+    },
+    "/paid/markup": {
+     "title": "<h1>Menu</h1> <em>today</em>",
+     "description": "<p>Daily&nbsp;&nbsp;specials</p>\n<p>Fish &amp; chips &mdash; fresh</p>"
+    },
+    "/paid/long": {
+     "title": "tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+     "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "/paid/throws": "throw",
+    "/paid/shape": "a string is not an object"
+   }
   }
  },
  "golden": {
@@ -397,6 +433,34 @@
    "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
    "merchant_id": "mrch_0123456789abcdef",
    "resource": "/paid/*",
+   "tier": "standard",
+   "unit_weight": 1,
+   "unit_price_usd": "0.0005",
+   "min_requests": 40,
+   "scope": "exact",
+   "no_minimum_fee": true,
+   "settlement_terms_from": "POST {{api}}/v1/quote — returns accepted_chains, accepted_assets, amount, order_id and expiry",
+   "how_to_pay": [
+    "POST {{api}}/v1/quote {\"merchant_id\":\"mrch_0123456789abcdef\",\"resource\":\"/paid/*\",\"tier\":\"standard\",\"scope\":\"exact\",\"requests\":40,\"payer\":\"<your wallet address>\"} — payer is required; raise requests to buy more than the minimum batch; check amount, scope, expiry and payer before paying",
+    "settle the quoted batch on-chain from your own wallet (order_id = quote_id)",
+    "POST {{api}}/v1/pay {quote_id, chain, asset, tx_ref, payment_authorization} + Idempotency-Key header -> quota receipt (wallet-signature-v1). Keep the quote until you hold the receipt; on a timeout retry with the same key and tx_ref — never pay again",
+    "retry this request with headers: AIFP-Receipt: <receipt JWT> and AIFP-Agent-Id: <the address that paid>"
+   ],
+   "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported clients and payment availability. Wallet setup alone does not enable settlement."
+  },
+  "challenge.about": {
+   "error": "AIFP-402",
+   "detail": "Payment Required — prepay a batch of requests and retry with the AIFP-Receipt header",
+   "protocol": "AIFP-1",
+   "documentation_url": "https://github.com/AiFinPay/sdk/blob/main/AGENT-FLOW.md",
+   "instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay/SKILL.md",
+   "merchant_instructions_url": "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
+   "merchant_id": "mrch_0123456789abcdef",
+   "resource": "/paid/*",
+   "about": {
+    "title": "Fish and chips",
+    "description": "Where to eat them."
+   },
    "tier": "standard",
    "unit_weight": 1,
    "unit_price_usd": "0.0005",
@@ -7254,6 +7318,275 @@
      }
     }
    }
+  },
+  {
+   "id": "about.unset",
+   "group": "about",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "With no about option the 402 is byte for byte what it was",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "golden": "challenge.standard",
+       "order": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "about.present",
+   "group": "about",
+   "level": "must",
+   "profile": "about-enforce",
+   "title": "The 402 says what the page is",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "subset": {
+        "about": {
+         "title": "Fish and chips",
+         "description": "Where to eat them."
+        }
+       }
+      }
+     }
+    }
+   ],
+   "needs": [
+    "about"
+   ]
+  },
+  {
+   "id": "about.exact",
+   "group": "about",
+   "level": "parity",
+   "profile": "about-enforce",
+   "title": "The 402 with about equals the reference, key order included",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "golden": "challenge.about",
+       "order": true
+      }
+     }
+    }
+   ],
+   "needs": [
+    "about"
+   ]
+  },
+  {
+   "id": "about.markup",
+   "group": "about",
+   "level": "must",
+   "profile": "about-enforce",
+   "title": "Markup is stripped, entities decoded and whitespace collapsed",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/markup",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "subset": {
+        "about": {
+         "title": "Menu today",
+         "description": "Daily specials Fish & chips — fresh"
+        }
+       }
+      }
+     }
+    }
+   ],
+   "needs": [
+    "about"
+   ]
+  },
+  {
+   "id": "about.cut",
+   "group": "about",
+   "level": "must",
+   "profile": "about-enforce",
+   "title": "A long title is cut at 200 characters and a description at 300, with nothing added",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/long",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "subset": {
+        "about": {
+         "title": "tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+         "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        }
+       }
+      }
+     }
+    }
+   ],
+   "needs": [
+    "about"
+   ]
+  },
+  {
+   "id": "about.absent",
+   "group": "about",
+   "level": "must",
+   "profile": "about-enforce",
+   "title": "A page the site says nothing about gets the plain 402",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/b",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "golden": "challenge.standard",
+       "order": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "about.throws",
+   "group": "about",
+   "level": "must",
+   "profile": "about-enforce",
+   "title": "A function that throws leaves the 402 as it was",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/throws",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "golden": "challenge.standard",
+       "order": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "about.shape",
+   "group": "about",
+   "level": "must",
+   "profile": "about-enforce",
+   "title": "A function that returns another shape leaves the 402 as it was",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/shape",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "golden": "challenge.standard",
+       "order": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "about.receipt",
+   "group": "about",
+   "level": "must",
+   "profile": "about-enforce",
+   "title": "About changes nothing for a receipt: it opens the page and meters one unit",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "2"
+      }
+     }
+    }
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "about.reader",
+   "group": "about",
+   "level": "must",
+   "profile": "about-enforce",
+   "title": "A reader is still served free",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-paywall": "exempt"
+      }
+     }
+    }
+   ]
   },
   {
    "id": "method.post",
