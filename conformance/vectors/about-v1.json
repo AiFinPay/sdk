@@ -1,0 +1,377 @@
+{
+ "schema": 1,
+ "title_max": 200,
+ "description_max": 300,
+ "vectors": [
+  {
+   "name": "plain",
+   "value": {
+    "title": "How to brew coffee",
+    "description": "A short guide."
+   },
+   "about": {
+    "title": "How to brew coffee",
+    "description": "A short guide."
+   }
+  },
+  {
+   "name": "title_only",
+   "value": {
+    "title": "T"
+   },
+   "about": {
+    "title": "T"
+   }
+  },
+  {
+   "name": "description_only",
+   "value": {
+    "description": "D"
+   },
+   "about": {
+    "description": "D"
+   }
+  },
+  {
+   "name": "null_field",
+   "value": {
+    "title": null,
+    "description": "D"
+   },
+   "about": {
+    "description": "D"
+   }
+  },
+  {
+   "name": "extra_keys",
+   "value": {
+    "title": "T",
+    "price": "0"
+   },
+   "about": {
+    "title": "T"
+   }
+  },
+  {
+   "name": "tags",
+   "value": {
+    "title": "<b>Bold</b> move",
+    "description": "<p>One</p> <p>two</p>"
+   },
+   "about": {
+    "title": "Bold move",
+    "description": "One two"
+   }
+  },
+  {
+   "name": "tags_adjacent",
+   "value": {
+    "title": "<em>Ex</em>ample<br/>s"
+   },
+   "about": {
+    "title": "Examples"
+   }
+  },
+  {
+   "name": "tag_attributes",
+   "value": {
+    "title": "<a href=\"/x\" title='y'>Link</a> text"
+   },
+   "about": {
+    "title": "Link text"
+   }
+  },
+  {
+   "name": "tag_contents_kept",
+   "value": {
+    "title": "<script>alert(1)</script>Hi"
+   },
+   "about": {
+    "title": "alert(1)Hi"
+   }
+  },
+  {
+   "name": "comment",
+   "value": {
+    "title": "a<!-- note -->b"
+   },
+   "about": {
+    "title": "ab"
+   }
+  },
+  {
+   "name": "not_a_tag",
+   "value": {
+    "title": "1 < 2 and 3 > 2",
+    "description": "a <3 b"
+   },
+   "about": {
+    "title": "1 < 2 and 3 > 2",
+    "description": "a <3 b"
+   }
+  },
+  {
+   "name": "unclosed_tag",
+   "value": {
+    "title": "x <b"
+   },
+   "about": {
+    "title": "x <b"
+   }
+  },
+  {
+   "name": "entities",
+   "value": {
+    "title": "Fish &amp; chips &mdash; &#8220;fresh&#x201D; &copy;"
+   },
+   "about": {
+    "title": "Fish & chips — “fresh” ©"
+   }
+  },
+  {
+   "name": "entities_once",
+   "value": {
+    "title": "&amp;lt;b&amp;gt;"
+   },
+   "about": {
+    "title": "&lt;b&gt;"
+   }
+  },
+  {
+   "name": "entity_text_is_not_a_tag",
+   "value": {
+    "title": "&lt;b&gt;bold&lt;/b&gt;"
+   },
+   "about": {
+    "title": "<b>bold</b>"
+   }
+  },
+  {
+   "name": "entity_unknown",
+   "value": {
+    "title": "&bogus; &amp &AMP;"
+   },
+   "about": {
+    "title": "&bogus; &amp &AMP;"
+   }
+  },
+  {
+   "name": "entity_invalid_number",
+   "value": {
+    "title": "&#0; &#xD800; &#1114112;"
+   },
+   "about": {
+    "title": "&#0; &#xD800; &#1114112;"
+   }
+  },
+  {
+   "name": "entity_astral",
+   "value": {
+    "title": "&#128512;&#x1F600;"
+   },
+   "about": {
+    "title": "😀😀"
+   }
+  },
+  {
+   "name": "nbsp",
+   "value": {
+    "title": "a&nbsp;&nbsp;b"
+   },
+   "about": {
+    "title": "a b"
+   }
+  },
+  {
+   "name": "whitespace",
+   "value": {
+    "title": "  a\t\n b  c　 "
+   },
+   "about": {
+    "title": "a b c"
+   }
+  },
+  {
+   "name": "control",
+   "value": {
+    "title": "a\u0000b\u0007cdef"
+   },
+   "about": {
+    "title": "abcd ef"
+   }
+  },
+  {
+   "name": "control_between_spaces",
+   "value": {
+    "title": "a \u0001 b"
+   },
+   "about": {
+    "title": "a b"
+   }
+  },
+  {
+   "name": "control_entity",
+   "value": {
+    "title": "a&#7;b"
+   },
+   "about": {
+    "title": "ab"
+   }
+  },
+  {
+   "name": "lone_surrogate",
+   "value": {
+    "title": "a\ud800b\udc00c"
+   },
+   "about": {
+    "title": "abc"
+   }
+  },
+  {
+   "name": "bom_kept",
+   "value": {
+    "title": "﻿Title"
+   },
+   "about": {
+    "title": "﻿Title"
+   }
+  },
+  {
+   "name": "zero_width_kept",
+   "value": {
+    "title": "a​b"
+   },
+   "about": {
+    "title": "a​b"
+   }
+  },
+  {
+   "name": "cut_title",
+   "value": {
+    "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   },
+   "about": {
+    "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   }
+  },
+  {
+   "name": "cut_description",
+   "value": {
+    "description": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+   },
+   "about": {
+    "description": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+   }
+  },
+  {
+   "name": "at_cap",
+   "value": {
+    "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "description": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+   },
+   "about": {
+    "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "description": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+   }
+  },
+  {
+   "name": "cut_code_points",
+   "value": {
+    "title": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+   },
+   "about": {
+    "title": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+   }
+  },
+  {
+   "name": "cut_no_trailing_space",
+   "value": {
+    "title": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bcd"
+   },
+   "about": {
+    "title": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+   }
+  },
+  {
+   "name": "cut_after_markup",
+   "value": {
+    "title": "<b>zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz</b>tail"
+   },
+   "about": {
+    "title": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+   }
+  },
+  {
+   "name": "cut_after_collapse",
+   "value": {
+    "title": "w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   w   "
+   },
+   "about": {
+    "title": "w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w w"
+   }
+  },
+  {
+   "name": "empty",
+   "value": {
+    "title": "",
+    "description": "  "
+   },
+   "about": null
+  },
+  {
+   "name": "only_markup",
+   "value": {
+    "title": "<br>",
+    "description": "<p> </p>"
+   },
+   "about": null
+  },
+  {
+   "name": "empty_object",
+   "value": {},
+   "about": null
+  },
+  {
+   "name": "null",
+   "value": null,
+   "about": null
+  },
+  {
+   "name": "string",
+   "value": "Fish and chips",
+   "about": null
+  },
+  {
+   "name": "array",
+   "value": [
+    {
+     "title": "T"
+    }
+   ],
+   "about": null
+  },
+  {
+   "name": "number",
+   "value": 42,
+   "about": null
+  },
+  {
+   "name": "title_not_text",
+   "value": {
+    "title": 5,
+    "description": "D"
+   },
+   "about": null
+  },
+  {
+   "name": "description_not_text",
+   "value": {
+    "title": "T",
+    "description": [
+     "D"
+    ]
+   },
+   "about": null
+  }
+ ]
+}

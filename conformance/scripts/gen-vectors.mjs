@@ -66,6 +66,17 @@ const profiles = {
     ...base, mode: "enforce", charge: "agents", resources: STANDARD,
     operator_rules: [{ operator: "aifinpay", action: "allow", verified_only: true }, { ua_class: "aifp_agent", action: "block" }], operator_default: "charge",
   },
+  "about-enforce": {
+    ...base, mode: "enforce", charge: "agents", resources: STANDARD,
+    // What the subject's `about` function returns per path; "throw" throws, anything else is returned as is.
+    about: {
+      "/paid/a": { title: "Fish and chips", description: "Where to eat them." },
+      "/paid/markup": { title: "<h1>Menu</h1> <em>today</em>", description: "<p>Daily&nbsp;&nbsp;specials</p>\n<p>Fish &amp; chips &mdash; fresh</p>" },
+      "/paid/long": { title: "t".repeat(250), description: "d".repeat(350) },
+      "/paid/throws": "throw",
+      "/paid/shape": "a string is not an object",
+    },
+  },
 };
 
 const challengeArgs = (tier, resource = PATTERN, detail) => ({ merchantId: MERCHANT, resource, tier, weight: G.weightForTier(tier), apiBase: API, ...(detail ? { detail } : {}) });
@@ -75,6 +86,7 @@ const golden = {
   "challenge.premium": G.buildChallenge(challengeArgs("premium")),
   "challenge.expired": G.buildChallenge(challengeArgs("standard", PATTERN, G.DETAIL_RECEIPT_EXPIRED)),
   "challenge.exhausted": G.buildChallenge(challengeArgs("standard", PATTERN, G.DETAIL_QUOTA_EXHAUSTED)),
+  "challenge.about": G.buildChallenge({ ...challengeArgs("standard"), about: profiles["about-enforce"].about["/paid/a"] }),
   "discovery.standard": G.buildDiscoveryDocument({ merchantId: MERCHANT, apiBase: API, resources: [{ resource: PATTERN, tier: "standard", scope: "prefix" }] }),
 };
 const detail = {
@@ -353,6 +365,19 @@ add("license.not_on_forged", "must", "content-enforce", "A forged receipt with a
 add("license.not_on_exhausted", "must", "content-enforce", "A drained receipt is refused without its licence", [step(pay("one"), served({ "aifp-license": { contains: LIC.id } })), step(pay("one"), { status: [402, 403], origin: false, headers: { "aifp-license": null } })], { receipts: { one: R({ unit_quota: 1, lic: LIC }) } });
 add("license.malformed_ignored", "must", "content-enforce", "A malformed licence claim is ignored, not echoed", step(pay("m"), served({ "aifp-license": null })), { receipts: { m: R({ lic: { ...LIC, id: "evil", url: "https://evil.example" } }) } });
 
+// ── about the page ────────────────────────────────────────────────────────
+const plain402 = { ...noOrigin(402), body: { golden: "challenge.standard", order: true } };
+add("about.unset", "must", "content-enforce", "With no about option the 402 is byte for byte what it was", step(get("gptbot"), plain402));
+add("about.present", "must", "about-enforce", "The 402 says what the page is", step(get("gptbot"), { ...noOrigin(402), body: { subset: { about: { title: "Fish and chips", description: "Where to eat them." } } } }), { needs: ["about"] });
+add("about.exact", "parity", "about-enforce", "The 402 with about equals the reference, key order included", step(get("gptbot"), { ...noOrigin(402), body: { golden: "challenge.about", order: true } }), { needs: ["about"] });
+add("about.markup", "must", "about-enforce", "Markup is stripped, entities decoded and whitespace collapsed", step(get("gptbot", "/paid/markup"), { ...noOrigin(402), body: { subset: { about: { title: "Menu today", description: "Daily specials Fish & chips \u2014 fresh" } } } }), { needs: ["about"] });
+add("about.cut", "must", "about-enforce", "A long title is cut at 200 characters and a description at 300, with nothing added", step(get("gptbot", "/paid/long"), { ...noOrigin(402), body: { subset: { about: { title: "t".repeat(200), description: "d".repeat(300) } } } }), { needs: ["about"] });
+add("about.absent", "must", "about-enforce", "A page the site says nothing about gets the plain 402", step(get("gptbot", "/paid/b"), plain402));
+add("about.throws", "must", "about-enforce", "A function that throws leaves the 402 as it was", step(get("gptbot", "/paid/throws"), plain402));
+add("about.shape", "must", "about-enforce", "A function that returns another shape leaves the 402 as it was", step(get("gptbot", "/paid/shape"), plain402));
+add("about.receipt", "must", "about-enforce", "About changes nothing for a receipt: it opens the page and meters one unit", step(pay(), quota(2)), { receipts: { r: R() } });
+add("about.reader", "must", "about-enforce", "A reader is still served free", step(get("chrome"), served({ "aifp-paywall": "exempt" })));
+
 // ── verbs ─────────────────────────────────────────────────────────────────
 add("method.post", "must", "content-enforce", "A POST is charged like a GET", step({ method: "POST", path: PAID, ua: "gptbot" }, noOrigin(402)));
 add("method.head", "must", "content-enforce", "A HEAD is charged like a GET", step({ method: "HEAD", path: PAID, ua: "gptbot" }, noOrigin(402)));
@@ -415,9 +440,63 @@ const verify = [
 ].map((v) => ({ key: keyA, user_agent: chrome, now: N, ...v }));
 const readerVectors = { schema: 1, ...READER, set_cookie: `${READER.cookie}=<value>; Path=/; Max-Age=${READER.ttl_seconds}; HttpOnly; Secure; SameSite=Lax`, issue, verify };
 
+// About the page: expected text written out here, not taken from a gate, so every port is held to the same bytes.
+const aboutOut = resolve(here, "../vectors/about-v1.json");
+const A = (name, value, about) => ({ name, value, about });
+const aboutVectors = {
+  schema: 1,
+  title_max: 200,
+  description_max: 300,
+  vectors: [
+    A("plain", { title: "How to brew coffee", description: "A short guide." }, { title: "How to brew coffee", description: "A short guide." }),
+    A("title_only", { title: "T" }, { title: "T" }),
+    A("description_only", { description: "D" }, { description: "D" }),
+    A("null_field", { title: null, description: "D" }, { description: "D" }),
+    A("extra_keys", { title: "T", price: "0" }, { title: "T" }),
+    A("tags", { title: "<b>Bold</b> move", description: "<p>One</p> <p>two</p>" }, { title: "Bold move", description: "One two" }),
+    A("tags_adjacent", { title: "<em>Ex</em>ample<br/>s" }, { title: "Examples" }),
+    A("tag_attributes", { title: "<a href=\"/x\" title='y'>Link</a> text" }, { title: "Link text" }),
+    A("tag_contents_kept", { title: "<script>alert(1)</script>Hi" }, { title: "alert(1)Hi" }),
+    A("comment", { title: "a<!-- note -->b" }, { title: "ab" }),
+    A("not_a_tag", { title: "1 < 2 and 3 > 2", description: "a <3 b" }, { title: "1 < 2 and 3 > 2", description: "a <3 b" }),
+    A("unclosed_tag", { title: "x <b" }, { title: "x <b" }),
+    A("entities", { title: "Fish &amp; chips &mdash; &#8220;fresh&#x201D; &copy;" }, { title: "Fish & chips \u2014 \u201Cfresh\u201D \u00A9" }),
+    A("entities_once", { title: "&amp;lt;b&amp;gt;" }, { title: "&lt;b&gt;" }),
+    A("entity_text_is_not_a_tag", { title: "&lt;b&gt;bold&lt;/b&gt;" }, { title: "<b>bold</b>" }),
+    A("entity_unknown", { title: "&bogus; &amp &AMP;" }, { title: "&bogus; &amp &AMP;" }),
+    A("entity_invalid_number", { title: "&#0; &#xD800; &#1114112;" }, { title: "&#0; &#xD800; &#1114112;" }),
+    A("entity_astral", { title: "&#128512;&#x1F600;" }, { title: "\uD83D\uDE00\uD83D\uDE00" }),
+    A("nbsp", { title: "a&nbsp;&nbsp;b" }, { title: "a b" }),
+    A("whitespace", { title: "  a\t\n b\u00A0\u2003c\u3000 " }, { title: "a b c" }),
+    A("control", { title: "a\u0000b\u0007c\u007Fd\u0085e\u009Bf" }, { title: "abcd ef" }),
+    A("control_between_spaces", { title: "a \u0001 b" }, { title: "a b" }),
+    A("control_entity", { title: "a&#7;b" }, { title: "ab" }),
+    A("lone_surrogate", { title: "a\uD800b\uDC00c" }, { title: "abc" }),
+    A("bom_kept", { title: "\uFEFFTitle" }, { title: "\uFEFFTitle" }),
+    A("zero_width_kept", { title: "a\u200Bb" }, { title: "a\u200Bb" }),
+    A("cut_title", { title: "x".repeat(250) }, { title: "x".repeat(200) }),
+    A("cut_description", { description: "y".repeat(350) }, { description: "y".repeat(300) }),
+    A("at_cap", { title: "x".repeat(200), description: "y".repeat(300) }, { title: "x".repeat(200), description: "y".repeat(300) }),
+    A("cut_code_points", { title: "\uD83D\uDE00".repeat(201) }, { title: "\uD83D\uDE00".repeat(200) }),
+    A("cut_no_trailing_space", { title: "a".repeat(199) + " bcd" }, { title: "a".repeat(199) }),
+    A("cut_after_markup", { title: "<b>" + "z".repeat(200) + "</b>tail" }, { title: "z".repeat(200) }),
+    A("cut_after_collapse", { title: "w   ".repeat(150) }, { title: "w ".repeat(99) + "w" }),
+    A("empty", { title: "", description: "  " }, null),
+    A("only_markup", { title: "<br>", description: "<p> </p>" }, null),
+    A("empty_object", {}, null),
+    A("null", null, null),
+    A("string", "Fish and chips", null),
+    A("array", [{ title: "T" }], null),
+    A("number", 42, null),
+    A("title_not_text", { title: 5, description: "D" }, null),
+    A("description_not_text", { title: "T", description: ["D"] }, null),
+  ],
+};
+
 const outputs = [
   [out, JSON.stringify(vectors, null, 1) + "\n", `${cases.length} cases`],
   [readerOut, JSON.stringify(readerVectors, null, 1) + "\n", `${issue.length + verify.length} reader-proof vectors`],
+  [aboutOut, JSON.stringify(aboutVectors, null, 1) + "\n", `${aboutVectors.vectors.length} about vectors`],
 ];
 if (process.argv.includes("--check")) {
   for (const [file, text, what] of outputs) {

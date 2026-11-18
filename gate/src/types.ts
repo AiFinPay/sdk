@@ -138,6 +138,8 @@ export interface GateErrorBody {
   protocol?: "AIFP-1";
   merchant_id?: string;
   resource?: string;
+  /** What the page is, from the `about` option. Information only: not quoted, signed or metered. */
+  about?: { title?: string; description?: string };
   /** Which paths a receipt for this resource opens. "exact" unless the mount
    *  says otherwise — an agent cannot tell what it is buying without this. */
   scope?: "exact" | "prefix" | "merchant";

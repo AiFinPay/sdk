@@ -187,6 +187,14 @@ crawler served free is silent and permanent.
 
 ### Unproven pays
 
+Who reads for free is one of three modes:
+
+| Mode               | `shouldCharge`    | Who pays                                                                                     |
+| ------------------ | ----------------- | -------------------------------------------------------------------------------------------- |
+| **AI agents only** | `knownAiAgent`    | Clients that say they are AI agents pay. Everyone else reads.                                |
+| **Strict**         | `unprovenPays(…)` | Only readers who passed a silent check and verified search engines read. Everyone else pays. |
+| **Everyone pays**  | omitted           | Every request without a receipt pays. For APIs, catalogs and data feeds.                     |
+
 `knownAiAgent` charges whoever names itself an agent. `unprovenPays` charges
 whoever has not proven it may read free: a reader with a signed cookie, or a
 search crawler confirmed by DNS. Everyone else gets the 402 with the price.
@@ -222,6 +230,41 @@ res.setHeader("Set-Cookie", readerProof.setCookie(readerProof.issue(req.get("use
   crawler is verified and all of them pay.
 - `AIFP-Receipt` or `AIFP-Agent-Id` on the request is charged whatever else it
   carries, so a receipt is always metered.
+
+### Tell agents what a page is
+
+The 402 says the price and how to pay. `about` lets it also say what the page
+is, so an agent can decide whether it is worth buying:
+
+```ts
+aifpGate({
+  merchantId,
+  registry,
+  about: async (req) => {
+    const page = await pages.byPath(req.path); // your own lookup; null when it is not one page
+    return page ? { title: page.title, description: page.summary } : null;
+  },
+});
+```
+
+```json
+{ "error": "AIFP-402", "resource": "/articles/*", "about": { "title": "Fish and chips", "description": "Where to eat them." }, "tier": "standard", … }
+```
+
+- Return `{ title?, description? }` or nothing, sync or async. Use the page's
+  own title and a summary you wrote; never an excerpt of the paid text, which
+  gives away what is being sold. Return nothing for an archive, a feed or an
+  API route.
+- The gate makes it plain text: tags stripped, entities decoded, control
+  characters removed, whitespace collapsed, the title cut at 200 and the
+  description at 300 characters, with nothing added. The rules and the bytes are
+  shared with the Python gate:
+  [`conformance/vectors/about-v1.json`](../conformance/vectors/about-v1.json).
+- Information only: the quote, the receipt, the meter and the events do not
+  depend on it. A function that throws or returns another shape leaves the 402
+  as it would be without it. Without the option the 402 does not change.
+- Shadow sends no 402, so it does not call the function; neither does a reader
+  who reads free.
 
 ### robots.txt decides whether any of this runs at all
 
@@ -476,6 +519,7 @@ genuinely more expensive than its tier.
 | `networkMode`       | from registry | `"live"` or `"test"`, or a function returning it, for a gate without a registry: a testnet receipt does not open a live site or the reverse. Unknown refuses a testnet receipt.                                  |
 | `refundOnError`     | `false`       | Give the call's units back on a 5xx (Express adapter). Read the warning below first.                                                                                                                             |
 | `minBatchUnits`     | `20000`       | Minimum batch the 402 advertises, in 6-dp stable minor units ($0.02). Match the server's minimum; never go below it.                                                                                             |
+| `about`             | —             | `(req) => ({ title, description })` for the 402: what the page is, as plain text. See "Tell agents what a page is".                                                                                              |
 
 **How a path is read.** A pattern is matched against the path as an origin
 could resolve it: percent-decoded, `;params` dropped, empty segments and a

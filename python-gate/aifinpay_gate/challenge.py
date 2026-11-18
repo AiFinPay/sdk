@@ -6,6 +6,7 @@ Node package's output, byte for byte."""
 
 from typing import Any, Dict, Optional
 
+from .about import page_about
 from .pricing import min_requests_for_tier, unit_price_usd
 
 DEFAULT_API_BASE = "https://api.aifinpay.io"
@@ -23,6 +24,7 @@ def build_challenge(
     min_requests: Optional[int] = None,
     api_base: Optional[str] = None,
     min_batch_units: Optional[int] = None,
+    about: Any = None,
 ) -> Dict[str, Any]:
     # Absolute on purpose: this gate runs on the merchant's host, so a relative
     # "/v1/quote" would send the agent to the merchant's own server.
@@ -34,7 +36,8 @@ def build_challenge(
         requests_ = min_requests_for_tier(tier, min_batch_units)
     else:
         requests_ = min_requests_for_tier(tier)
-    return {
+    described = page_about(about) if about is not None else None
+    body = {
         "error": "AIFP-402",
         "detail": detail or DEFAULT_DETAIL,
         "protocol": "AIFP-1",
@@ -44,6 +47,7 @@ def build_challenge(
             "https://raw.githubusercontent.com/AiFinPay/skill/main/agent/skills/aifinpay-merchant/SKILL.md",
         "merchant_id": merchant_id,
         "resource": resource,
+        **({"about": described} if described else {}),
         "tier": tier,
         "unit_weight": weight,
         "unit_price_usd": unit_price or unit_price_usd(tier),
@@ -65,3 +69,4 @@ def build_challenge(
         "no_wallet": "npx @aifinpay/mcp init — creates or selects a local wallet; read instructions_url for supported "
                      "clients and payment availability. Wallet setup alone does not enable settlement.",
     }
+    return body

@@ -75,6 +75,14 @@ else:                     # paid: add result.headers to your response; result.ai
 
 ## Unproven pays
 
+Who reads for free is one of three modes:
+
+| Mode | `should_charge` | Who pays |
+|---|---|---|
+| **AI agents only** | `known_ai_agent` | Clients that say they are AI agents pay. Everyone else reads. |
+| **Strict** | `unproven_pays(…)` | Only readers who passed a silent check and verified search engines read. Everyone else pays. |
+| **Everyone pays** | `None` | Every request without a receipt pays. For APIs, catalogs and data feeds. |
+
 `known_ai_agent` charges whoever names itself an agent. `unproven_pays` charges
 whoever has not proven it may read free: a reader with a signed cookie, or a
 search crawler confirmed by DNS. Everyone else gets the 402 with the price.
@@ -106,6 +114,31 @@ response.headers["Set-Cookie"] = reader_proof.set_cookie(reader_proof.issue(requ
   takes `ip=`. Without an address no crawler is verified and all of them pay.
 - `AIFP-Receipt` or `AIFP-Agent-Id` on the request is charged whatever else it
   carries, so a receipt is always metered.
+
+## Tell agents what a page is
+
+`about` lets the 402 say what the page is, so an agent can decide whether it is
+worth buying:
+
+```python
+def about(req):
+    page = pages.by_path(req.path)  # your own lookup; None when it is not one page
+    return {"title": page.title, "description": page.summary} if page else None
+
+gate = Gate(merchant_id, routes=[Route("/articles/*")], about=about)
+```
+
+The 402 then carries `"about": {"title": "…", "description": "…"}` right after
+`resource`. Return a dict with `title` and/or `description`, or `None`. Use the
+page's own title and a summary you wrote, never an excerpt of the paid text.
+The gate makes it plain text (tags stripped, entities decoded, control
+characters removed, whitespace collapsed, title cut at 200 and description at
+300 characters, nothing added), byte for byte as `@aifinpay/gate`
+([`conformance/vectors/about-v1.json`](../conformance/vectors/about-v1.json)).
+It is information only: the quote, the receipt, the meter and the events do not
+depend on it. A function that raises or returns another shape leaves the 402 as
+it would be without it; without the option the 402 does not change. Shadow
+does not call it, nor does a reader who reads free.
 
 ## Routes
 

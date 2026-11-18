@@ -9,7 +9,7 @@ export const pythonSubject = (id, label, server) => ({
   id,
   label,
   usesRedis: true,
-  capabilities: ["events", "restart", "fault:jwks", "fault:store", "fault:record"],
+  capabilities: ["events", "restart", "fault:jwks", "fault:store", "fault:record", "about"],
   async start(ctx) {
     const app = managed(python, [join(here, "app/python_app.py")], {
       PORT: String(ctx.port), AIFP_SERVER: server, AIFP_MERCHANT_ID: ctx.merchantId, AIFP_MERCHANT_SECRET: ctx.secret, AIFP_API: ctx.apiHttps,

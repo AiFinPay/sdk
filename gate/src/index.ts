@@ -78,6 +78,8 @@ export { matchResource } from "./match.js";
 export { inspectPath, spelledAsPath } from "./path.js";
 export type { InspectedPath } from "./path.js";
 export { buildChallenge } from "./challenge.js";
+export { ABOUT_DESCRIPTION_MAX, ABOUT_TITLE_MAX, pageAbout, plainText } from "./about.js";
+export type { PageAbout } from "./about.js";
 export { HEADER_LICENSE, licenseHeaders, receiptLicense } from "./license.js";
 export type { ReceiptLicense } from "./license.js";
 export { createVerifier } from "./verify.js";

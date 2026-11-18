@@ -54,6 +54,20 @@ An adapter owns everything platform-shaped and decides nothing.
 | Issue | `Set-Cookie: __aifp_human=<value>; Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax`, `exp` = now + 2592000. |
 | Who reads free | A valid cookie for the request's User-Agent, or a verified bot in a free category. A request carrying `AIFP-Receipt` or `AIFP-Agent-Id` is charged regardless. |
 
+## About the page
+
+`vectors/about-v1.json` holds the text rules; every implementation that adds `about` must answer each vector as written. A port that does not implement it yet reports the `about.*` cases that need the `about` capability as not applicable.
+
+| Rule | |
+|---|---|
+| Field | `about: { "title": "…", "description": "…" }` in the 402 body, right after `resource`. Both optional; the object is omitted when neither has text. |
+| Source | The site's own function of the request. Never generated from the paid content. |
+| Text | Tags (`<` followed by a letter, `/`, `!` or `?`, up to the next `>`) removed; numeric references and the named set in `gate/src/about.ts` decoded once, anything else left as written; Unicode control characters (Cc) other than whitespace and unpaired surrogates removed; runs of whitespace (`\t \n \v \f \r`, space, U+0085, U+00A0, U+1680, U+2000 to U+200A, U+2028, U+2029, U+202F, U+205F, U+3000) made one space; a leading and a trailing space removed. |
+| Cap | Title 200 and description 300 Unicode code points, cut at a code point with nothing added, then a trailing space removed. |
+| Shape | Not an object, or a `title` or `description` that is present and not text: omitted. A function that throws: omitted. Either way the 402 is otherwise unchanged. |
+| Unset | No function: the 402 is byte for byte the reference 402 without it. |
+| Scope | Information only. The quote request the 402 describes, the receipt, the meter and the events do not depend on it. Shadow sends no 402, so it does not ask. |
+
 ## Who is not a gate
 
 `@aifinpay/agent`, `aifinpay-agent` and `@aifinpay/mcp` pay. They read the 402 (`challenge.payable`) and hold receipts; they decide nothing about access.
