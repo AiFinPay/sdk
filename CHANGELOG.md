@@ -6,6 +6,12 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## MCP 2.17.2 — real remaining quota on self-metered sites
+
+- `agent_quota` shows what the site itself counted when AiFinPay's record is
+  higher, so a batch read at a WordPress, Drupal or own-gate site no longer
+  reads as unused.
+
 ## MCP 2.17.1 — paid content comes with its licence
 
 - `payable_fetch` returns the content licence the page was sold under

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.17.2 — agent_quota shows what is really left on self-metered sites
+
+- A site running its own gate (WordPress, Drupal, `@aifinpay/gate`) counts use
+  locally and does not report it to AiFinPay, so AiFinPay's record kept saying
+  40 of 40 after the agent had read pages. `agent_quota` now takes, per
+  receipt, the lower of AiFinPay's record and the count the site itself last
+  sent to this agent (`aifp-quota-remaining`, kept in the receipt cache and in
+  the saved payment state), marks it `counted_by: "site"`, and hides a batch
+  the site has spent unless `include_exhausted` is set. A higher local count
+  never raises AiFinPay's record.
+
 ## 2.17.1 — paid content comes with its licence; a short coin is named
 
 - `payable_fetch` returns `license` when the paid page carries `AIFP-License`

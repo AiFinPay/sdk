@@ -104,7 +104,14 @@ describe("agent_quota", () => {
   it("shows what the site itself last reported when it is lower than AiFinPay's record", async () => {
     const { ctx } = ctxWith([
       batch({ receipt_id: "rcpt_site", quota: 40, unit_quota: 40, used: 0, remaining: 40 }),
-      batch({ receipt_id: "rcpt_done", merchant_id: "mrch_licences", quota: 40, unit_quota: 40, used: 0, remaining: 40 }),
+      batch({
+        receipt_id: "rcpt_done",
+        merchant_id: "mrch_licences",
+        quota: 40,
+        unit_quota: 40,
+        used: 0,
+        remaining: 40,
+      }),
       batch({ receipt_id: "rcpt_same", merchant_id: "mrch_other", quota: 40, unit_quota: 40, used: 0, remaining: 40 }),
     ]);
     (ctx.agent as unknown as Record<string, unknown>).aifp1Receipts = {
@@ -124,12 +131,18 @@ describe("agent_quota", () => {
     expect(byId.rcpt_same.counted_by).toBeUndefined();
     expect(out.totals.mrch_ratersapp).toEqual({ remaining: 34, batches: 1 });
     const all = parse(await runAgentQuota(ctx, { include_exhausted: true }));
-    expect(all.batches.find((b: { receipt_id: string }) => b.receipt_id === "rcpt_done")).toMatchObject({ remaining: 0, used: 40, counted_by: "site" });
+    expect(all.batches.find((b: { receipt_id: string }) => b.receipt_id === "rcpt_done")).toMatchObject({
+      remaining: 0,
+      used: 40,
+      counted_by: "site",
+    });
   });
 
   it("keeps a site's count across a restart from the saved payment state", async () => {
     const { ctx } = ctxWith([batch({ receipt_id: "rcpt_saved", quota: 40, unit_quota: 40, used: 0, remaining: 40 })]);
-    (ctx as unknown as Record<string, unknown>).paymentState = { read: () => ({ receipts: [{ receiptId: "rcpt_saved", remaining: 12 }] }) };
+    (ctx as unknown as Record<string, unknown>).paymentState = {
+      read: () => ({ receipts: [{ receiptId: "rcpt_saved", remaining: 12 }] }),
+    };
     const out = parse(await runAgentQuota(ctx, {}));
     expect(out.batches[0]).toMatchObject({ remaining: 12, used: 28, counted_by: "site" });
   });
