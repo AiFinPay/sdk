@@ -792,7 +792,14 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       return challenge(resource, weight, effectiveTier, DETAIL_QUOTA_EXHAUSTED);
     }
 
-    note({ kind: "serve", resource, weight, agent: payload.sub, receipt_id: payload.receipt_id });
+    note({
+      kind: "serve",
+      resource,
+      weight,
+      agent: payload.sub,
+      receipt_id: payload.receipt_id,
+      remaining: limit - used,
+    });
     const aifp: AifpContext = {
       agent: payload.sub ?? null,
       receipt_id: payload.receipt_id,

@@ -6,6 +6,13 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## Receipt use from self-hosted gates — gate 0.14.0, Python gate 0.11.0
+
+- `@aifinpay/gate` and `aifinpay-gate` report how much of each receipt they
+  spent to `POST /v1/merchants/:id/receipt-use` (receipt id and lowest
+  remaining, batches of 100), so AiFinPay's record matches the site. Vectors in
+  `conformance/vectors/receipt-use-v1.json`.
+
 ## MCP 2.17.2 — real remaining quota on self-metered sites
 
 - `agent_quota` shows what the site itself counted when AiFinPay's record is

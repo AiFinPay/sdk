@@ -68,6 +68,17 @@ An adapter owns everything platform-shaped and decides nothing.
 | Unset | No function: the 402 is byte for byte the reference 402 without it. |
 | Scope | Information only. The quote request the 402 describes, the receipt, the meter and the events do not depend on it. Shadow sends no 402, so it does not ask. |
 
+## Receipt use
+
+`vectors/receipt-use-v1.json` holds the request bodies; every gate that meters receipts (Node and Python gates, the CMS plugins) must send each vector's `bodies` byte for byte after recording its `spends`.
+
+| Rule | |
+|---|---|
+| Record | After every spend that metered units: the receipt's `receipt_id` (`rcpt_` and 16 lowercase hex, never the token) and the integer units left (0 or more). Anything else is not recorded. A shadow serve, an exempt serve and a meter failure spend nothing and record nothing. |
+| Coalesce | One entry per receipt, the lowest `remaining` seen. |
+| Send | `POST /v1/merchants/{merchant_id}/receipt-use`, `AIFP-Merchant-Secret` as for events, `{"uses":[{"receipt_id":…,"remaining":…}]}` compact, ordered by `receipt_id`, at most 100 per request, on the gate's event flush schedule. Whenever the site has its merchant secret: it is accounting, not the request-reporting opt-in. |
+| Outcome | `200 {"applied":n,"ignored":m}` removes what was sent. 404 (an API without the route), another 4xx or a redirect drops what is held; the next spend records again. Network failure, timeout, 408, 429 or 5xx keeps it for a bounded number of attempts. Never retried in a loop, never delays or fails a response, never changes event reporting. |
+
 ## Who is not a gate
 
 `@aifinpay/agent`, `aifinpay-agent` and `@aifinpay/mcp` pay. They read the 402 (`challenge.payable`) and hold receipts; they decide nothing about access.

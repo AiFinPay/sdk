@@ -190,6 +190,8 @@ export interface GateEvent {
   weight: number;
   agent?: string | null;
   receipt_id?: string;
+  /** Only on a paid "serve": units the receipt has left after this spend. */
+  remaining?: number;
   detail?: string;
   /** `resource` is the raw request path because no registered pattern covers
    *  it. For a local consumer only: the reporter never sends one. */

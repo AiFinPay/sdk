@@ -203,7 +203,11 @@ describe("shadow and enforce emit the same events until enforce would spend", ()
   it("same events, different responses", async () => {
     const enforce = await script("enforce");
     const shadow = await script("shadow");
-    expect(shadow.events.slice(0, 7)).toEqual(enforce.events.slice(0, 7));
+    // Only a spend carries `remaining`: enforce spent the batch, shadow spent nothing.
+    expect(enforce.events.slice(5, 7).map((e) => e.remaining)).toEqual([1, 0]);
+    expect(shadow.events.some((e) => "remaining" in e)).toBe(false);
+    const unspent = (events: GateEvent[]) => events.map(({ remaining: _remaining, ...e }) => e);
+    expect(shadow.events.slice(0, 7)).toEqual(unspent(enforce.events.slice(0, 7)));
     expect(shadow.events[9]).toEqual(enforce.events[9]);
     expect(shadow.events.map((e) => e.kind)).toEqual([
       "402",

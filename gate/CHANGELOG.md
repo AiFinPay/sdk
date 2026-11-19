@@ -1,5 +1,21 @@
 # Changelog
 
+## @aifinpay/gate 0.14.0 — AiFinPay sees how much of a receipt is used
+
+- `createGateReporter` now also sends receipt use: after every paid `serve` it
+  holds the receipt id (never the token) and the units left, the lowest per
+  receipt, and posts them in batches of at most 100, ordered by id, to
+  `POST /v1/merchants/:id/receipt-use` with the merchant secret, on the event
+  flush schedule. So AiFinPay's receipt record, the dashboard and the agent show
+  what this gate counted. Accounting, not request reporting: no reader data.
+- A 404 (an API without the route), another 4xx or a redirect drops what is held
+  and the next spend tries again; a network error, timeout, 408, 429 or 5xx keeps
+  it for up to 5 attempts. Gate events, their queue and their stop-on-refusal
+  are unchanged, and no outcome reaches a request.
+- The paid `serve` event carries `remaining`; a shadow or exempt serve does not.
+  `reporter.stats.uses` reports `queued`, `delivered`, `dropped`, `lastError`.
+- Vectors: `conformance/vectors/receipt-use-v1.json`, SPEC section "Receipt use".
+
 ## @aifinpay/gate 0.13.0 — the 402 says what the page is
 
 - New option `about: (req) => { title?, description? } | null | undefined`, sync or
