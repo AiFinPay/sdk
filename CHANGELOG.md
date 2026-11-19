@@ -6,6 +6,12 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## MCP 2.17.1 — paid content comes with its licence
+
+- `payable_fetch` returns the content licence the page was sold under
+  (`license`: id, revision, terms, text URL) and tells the agent to follow it;
+  a balance error names the coin that is short instead of always POL.
+
 ## Signed EVM quotes — agent 2.17.0, Python 2.13.0
 
 - Both agent SDKs sign every EVM `/v1/quote` with the paying wallet

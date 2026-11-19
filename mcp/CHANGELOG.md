@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.17.1 — paid content comes with its licence; a short coin is named
+
+- `payable_fetch` returns `license` when the paid page carries `AIFP-License`
+  (sent by `@aifinpay/gate`, `aifinpay-gate`, the WordPress plugin and the
+  Drupal module from the receipt's `lic`): id, revision, sha256, `url`,
+  `text_url`, and the terms read from that URL on the AiFinPay API, with one
+  line telling the agent to use the content only as the terms allow. A header
+  that names another origin, another merchant than one this wallet holds a
+  receipt for, another revision or a query is dropped and nothing is read for
+  it. If the terms cannot be read, `terms_unavailable: true`. The raw header is
+  also in `headers`.
+- `V14_INSUFFICIENT_BALANCE` now says which coin is short: the payment asset
+  (for example USDC) when the token balance cannot cover the price, the native
+  coin when only the gas is short. Before, both read "needs enough POL".
+
 ## 2.17.0 — a linked agent shares its local settings with the owner's dashboard
 
 - For a linked agent, `payment_setup_status` (persistent wallet, EVM pay chain,
