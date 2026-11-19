@@ -116,23 +116,33 @@ export async function runAgentQuota(ctx: ToolContext, args: Record<string, unkno
   }
 
   const now = Math.floor(Date.now() / 1000);
+  // A site that meters itself tells only the agent what is left; take the lower count.
+  const siteCount = solanaSelection ? new Map<string, number>() : localRemaining(ctx);
 
   let batches = (body.receipts ?? [])
     .filter((r) => r.exp == null || r.exp > now)
     .filter((r) => (merchantFilter ? r.merchant_id === merchantFilter : true))
-    .filter((r) => includeExhausted || (r.remaining ?? 0) > 0)
-    .map((r) => ({
-      merchant_id: r.merchant_id,
-      resource: r.resource,
-      scope: r.scope ?? "exact",
-      tier: r.tier,
-      used: r.used ?? 0,
-      remaining: r.remaining ?? 0,
-      quota: solanaSelection ? r.unit_quota! : (r.quota ?? 1),
-      paid: r.amount != null ? `${r.amount} ${r.currency ?? "USD"}` : undefined,
-      expires: r.exp != null ? new Date(r.exp * 1000).toISOString() : undefined,
-      receipt_id: r.receipt_id,
-    }));
+    .map((r) => {
+      const recorded = r.remaining ?? 0;
+      const site = r.receipt_id !== undefined ? siteCount.get(r.receipt_id) : undefined;
+      const lower = site !== undefined && site < recorded;
+      const remaining = lower ? site : recorded;
+      const quota = solanaSelection ? r.unit_quota! : (r.quota ?? 1);
+      return {
+        merchant_id: r.merchant_id,
+        resource: r.resource,
+        scope: r.scope ?? "exact",
+        tier: r.tier,
+        used: lower ? Math.max(r.used ?? 0, (r.unit_quota ?? quota) - remaining) : (r.used ?? 0),
+        remaining,
+        ...(lower ? { counted_by: "site" as const } : {}),
+        quota,
+        paid: r.amount != null ? `${r.amount} ${r.currency ?? "USD"}` : undefined,
+        expires: r.exp != null ? new Date(r.exp * 1000).toISOString() : undefined,
+        receipt_id: r.receipt_id,
+      };
+    })
+    .filter((b) => includeExhausted || b.remaining > 0);
 
   // Most useful first: the batches with the most room to spend.
   batches = batches.sort((a, b) => b.remaining - a.remaining);
@@ -163,13 +173,34 @@ export async function runAgentQuota(ctx: ToolContext, args: Record<string, unkno
         ? merchantFilter
           ? `no active quota at ${merchantFilter} — a new batch starts when payable_fetch pays that service's 402`
           : "no active quota anywhere — pay a service's 402 to start a batch"
-        : "`remaining` is authoritative where AiFinPay meters (hosted gateway); a merchant running its own @aifinpay/gate meters locally and our copy can lag behind by their traffic.",
+        : "`remaining` is the lower of AiFinPay's record and the count the site itself last reported to this agent (`counted_by: \"site\"`). A site running its own gate counts locally and does not report use to AiFinPay, so AiFinPay's record alone can read higher.",
   };
 
   return {
     content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
     structuredContent: payload,
   };
+}
+
+/** What each site last told this agent is left, by receipt id; persisted receipts too, so a restart keeps it. */
+function localRemaining(ctx: ToolContext): Map<string, number> {
+  const out = new Map<string, number>();
+  const note = (id: unknown, remaining: unknown) => {
+    if (typeof id !== "string" || typeof remaining !== "number" || !Number.isFinite(remaining) || remaining < 0) return;
+    const prior = out.get(id);
+    out.set(id, prior === undefined ? remaining : Math.min(prior, remaining));
+  };
+  try {
+    for (const entry of ctx.agent.aifp1Receipts?.list?.() ?? []) note(entry.receiptId, entry.remaining);
+  } catch {
+    // An unreadable cache leaves AiFinPay's record as the answer.
+  }
+  try {
+    for (const entry of ctx.paymentState?.read().receipts ?? []) note(entry.receiptId, entry.remaining);
+  } catch {
+    // Same for unreadable payment state.
+  }
+  return out;
 }
 
 function errorResult(...lines: string[]) {
