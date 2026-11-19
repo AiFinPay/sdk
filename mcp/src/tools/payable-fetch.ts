@@ -27,12 +27,20 @@ const MERCHANT_ID = /^[A-Za-z0-9_.:-]{1,64}$/;
 // The hosted gateway addresses merchants by slug; every other origin is a site
 // running its own paywall, whose AIFP-1 resource is the full request path.
 const HOSTED_GATEWAY_ORIGIN = "https://gateway.aifinpay.io";
+const API_ORIGIN = "https://api.aifinpay.io";
+// AIFP-License as the gates send it with content a receipt unlocked.
+const LICENSE_HEADER =
+  /^id=(clic_[A-Za-z0-9_-]{1,64}); rev=([1-9][0-9]{0,8}); sha256=([0-9a-f]{64}); url="([^"\s]{1,500})"$/;
+const LICENSE_PATH = /^\/v1\/merchants\/([A-Za-z0-9_.:-]{1,64})\/license\/([1-9][0-9]{0,8})$/;
+const LICENSE_NOTICE =
+  "This content was sold under this licence. Use it only as its terms allow; the licence text at text_url governs.";
+const licenseBlocks = new Map<string, Record<string, unknown>>();
 
 export function payableFetchTool() {
   return {
     name: "payable_fetch",
     description:
-      'Fetch a GET resource from an AiFinPay merchant, paying its AIFP-1 402 when needed. Always listed: until a persistent wallet exists (npx @aifinpay/mcp init, then agent_reload) it signs nothing and returns the payment_setup_status checklist with the one next step. Payments are on by default within a built-in ceiling of $5 per payment and $20 per 24 hours (the owner can only lower it in env; the working limits are the dashboard Controls after agent_claim_self) and only ever reach a merchant registered with AiFinPay, through a quote signed by the AiFinPay backend; a 402 never chooses who is paid. Without AIFINPAY_GATEWAY_ORIGINS it pays only a merchant whose site AiFinPay reports as DNS-verified, on that very site (or through the AiFinPay hosted gateway); with it, only the origins the owner listed; AIFINPAY_PAYMENTS_ENABLED=0 turns payments off.  Buys a prepaid batch through verified v1.4 on the chain the owner set in AIFINPAY_PAY_CHAIN (Polygon by default; other supported networks require explicit owner selection) — in its native currency (POL, SOL, ETH, AVAX, BNB or XRP), or in the stablecoin the owner set in AIFINPAY_PAY_ASSET (e.g. USDC; gas is still native; on Arc only USDC, which is also its gas) — within owner limits, then reuses its receipt. With scope "merchant" one batch covers every path on the site. Pending payments are recovered without sending another transaction. Other payment protocols are unsupported. The price is the AIFP-1 402 of this exact URL, not the merchant\'s website plans; if the endpoint is not known, ask the user for it instead of browsing the site.',
+      'Fetch a GET resource from an AiFinPay merchant, paying its AIFP-1 402 when needed. Always listed: until a persistent wallet exists (npx @aifinpay/mcp init, then agent_reload) it signs nothing and returns the payment_setup_status checklist with the one next step. Payments are on by default within a built-in ceiling of $5 per payment and $20 per 24 hours (the owner can only lower it in env; the working limits are the dashboard Controls after agent_claim_self) and only ever reach a merchant registered with AiFinPay, through a quote signed by the AiFinPay backend; a 402 never chooses who is paid. Without AIFINPAY_GATEWAY_ORIGINS it pays only a merchant whose site AiFinPay reports as DNS-verified, on that very site (or through the AiFinPay hosted gateway); with it, only the origins the owner listed; AIFINPAY_PAYMENTS_ENABLED=0 turns payments off.  Buys a prepaid batch through verified v1.4 on the chain the owner set in AIFINPAY_PAY_CHAIN (Polygon by default; other supported networks require explicit owner selection) — in its native currency (POL, SOL, ETH, AVAX, BNB or XRP), or in the stablecoin the owner set in AIFINPAY_PAY_ASSET (e.g. USDC; gas is still native; on Arc only USDC, which is also its gas) — within owner limits, then reuses its receipt. With scope "merchant" one batch covers every path on the site. When the merchant sells under a content licence, the paid result carries `license` (id, terms, text_url): use the content only as it allows. Pending payments are recovered without sending another transaction. Other payment protocols are unsupported. The price is the AIFP-1 402 of this exact URL, not the merchant\'s website plans; if the endpoint is not known, ask the user for it instead of browsing the site.',
     inputSchema: {
       type: "object",
       properties: {
@@ -387,13 +395,14 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
           return value.replace(/\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[redacted token]");
         };
         const headers: Record<string, string> = {};
-        for (const name of ["content-type", "aifp-quota-remaining", "aifp-quota-total"]) {
+        for (const name of ["content-type", "aifp-quota-remaining", "aifp-quota-total", "aifp-license"]) {
           const value = response.headers.get(name);
           if (value !== null) headers[name] = redact(value);
         }
         const bounded = await boundedBody(response);
         const body = redact(bounded.body);
         const truncated = bounded.truncated;
+        const license = response.ok ? await paidLicense(ctx, response.headers.get("aifp-license")) : undefined;
         return {
           content: [
             {
@@ -402,6 +411,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
                 status: response.status,
                 ok: response.ok,
                 headers,
+                ...(license ? { license } : {}),
                 body,
                 truncated,
                 receipts: ctx.agent.getReceiptCacheSummary(),
@@ -473,8 +483,14 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
     }
     if (!state?.pending && error instanceof Error && error.name === "V14SettlementError") {
       const code = (error as Error & { code?: string }).code;
+      const asset = ctx.config.payAsset ?? on.native;
+      const shortOf = /^token balance/.test(error.message)
+        ? `The wallet holds too little ${asset} on ${label} for this purchase. Add ${asset} to ${ctx.agent.evmAddress}; its ${on.native} pays only the gas.`
+        : /^native balance/.test(error.message)
+          ? `The wallet holds too little ${on.native} on ${label} for the gas. Add ${on.native} to ${ctx.agent.evmAddress}.`
+          : `The wallet needs enough ${on.native} on ${label} for the quoted purchase plus the owner-capped gas fee.`;
       const messages: Record<string, string> = {
-        V14_INSUFFICIENT_BALANCE: `The wallet needs enough ${on.native} on ${label} for the quoted purchase plus the owner-capped gas fee.`,
+        V14_INSUFFICIENT_BALANCE: shortOf,
         V14_GAS_BUDGET_EXCEEDED: `Estimated gas exceeds the owner's gas cap (AIFINPAY_MAX_GAS, in ${on.native}). The owner can review the limit; the agent cannot raise it.`,
         V14_PAUSED: "The approved payment deployment is paused. No payment was sent.",
         V14_EXPIRED: "The signed quote expired before submission. Request a fresh quote.",
@@ -492,6 +508,61 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
         : "Payment request failed before completion. Check owner configuration, wallet, supported route, network and spending limits. No fallback payment was attempted."
     );
   }
+}
+
+/** The licence the paid content came with, and its terms from the AiFinPay API; nothing if the header is not one. */
+async function paidLicense(ctx: ToolContext, header: string | null): Promise<Record<string, unknown> | undefined> {
+  const match = header === null ? null : LICENSE_HEADER.exec(header.trim());
+  if (!match) return undefined;
+  const [, id, rev, sha256, raw] = match;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return undefined;
+  }
+  const origins = [API_ORIGIN, new URL(ctx.config.baseUrl ?? API_ORIGIN).origin];
+  const path = LICENSE_PATH.exec(url.pathname);
+  if (!origins.includes(url.origin) || url.search || url.hash || !path || path[2] !== rev) return undefined;
+  // Only the licence of a merchant this wallet holds a receipt for.
+  if (!ctx.agent.aifp1Receipts.list().some((entry) => entry.merchantId === path[1])) return undefined;
+  const license = {
+    id,
+    revision: Number(rev),
+    sha256,
+    url: url.href,
+    text_url: `${url.href}/text`,
+    notice: LICENSE_NOTICE,
+  };
+  let block = licenseBlocks.get(url.href);
+  if (!block) {
+    try {
+      const response = await ctx.agent.inner.fetchImpl(url.href, { method: "GET", redirect: "error" });
+      const json = response.ok ? ((await response.json()) as Record<string, unknown>) : null;
+      const document = (json?.document ?? {}) as Record<string, unknown>;
+      if (
+        json &&
+        json.license_id === id &&
+        Number(json.revision) === Number(rev) &&
+        json.terms &&
+        typeof json.terms === "object"
+      ) {
+        const picked = {
+          status: json.status,
+          title: typeof document.title === "string" ? document.title : undefined,
+          version: typeof document.version === "string" ? document.version : undefined,
+          terms: json.terms,
+        };
+        if (JSON.stringify(picked).length <= 8_000) {
+          block = picked;
+          licenseBlocks.set(url.href, block);
+        }
+      }
+    } catch {
+      block = undefined;
+    }
+  }
+  return block ? { ...license, ...block } : { ...license, terms_unavailable: true };
 }
 
 async function boundedBody(response: Response, limit = 64 * 1024): Promise<{ body: string; truncated: boolean }> {

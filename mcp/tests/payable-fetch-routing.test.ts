@@ -607,3 +607,93 @@ describe("payable_fetch names the connected AI client", () => {
     expect(f.fetchPaid.mock.calls[0][2]).not.toHaveProperty("framework");
   });
 });
+
+describe("payable_fetch content licence", () => {
+  const sha = "a".repeat(64);
+  const licenseUrl = (rev: number, merchant = "merchant_one", origin = "https://api.aifinpay.io") =>
+    `${origin}/v1/merchants/${merchant}/license/${rev}`;
+  const header = (rev: number, url = licenseUrl(rev)) => `id=clic_demo; rev=${rev}; sha256=${sha}; url="${url}"`;
+  const paidWith = (f: ReturnType<typeof fixture>, licenseHeader: string) =>
+    f.fetchPaid.mockImplementation(async () => {
+      f.cache.put(receipt);
+      return new Response("article", { headers: { "content-type": "text/html", "aifp-license": licenseHeader } });
+    });
+
+  it("returns the licence the content was sold under, with its terms", async () => {
+    const f = fixture();
+    paidWith(f, header(3));
+    f.price.mockImplementation(async (url: unknown) =>
+      String(url) === licenseUrl(3)
+        ? Response.json({
+            license_id: "clic_demo",
+            revision: 3,
+            status: "active",
+            document: { title: "AiFinPay Standard Content Licence", version: "2.1" },
+            terms: { training: { default: "prohibited" } },
+          })
+        : new Response("unexpected", { status: 500 })
+    );
+    const out = output(await runPayableFetch(f.ctx, args));
+    expect(out.headers["aifp-license"]).toBe(header(3));
+    expect(out.license).toEqual({
+      id: "clic_demo",
+      revision: 3,
+      sha256: sha,
+      url: licenseUrl(3),
+      text_url: `${licenseUrl(3)}/text`,
+      notice: expect.stringContaining("Use it only as its terms allow"),
+      status: "active",
+      title: "AiFinPay Standard Content Licence",
+      version: "2.1",
+      terms: { training: { default: "prohibited" } },
+    });
+  });
+
+  it.each([
+    ["another origin", header(3, licenseUrl(3, "merchant_one", "https://licence.example"))],
+    ["another merchant", header(3, licenseUrl(3, "merchant_two"))],
+    ["another revision", header(3, licenseUrl(4))],
+    ["a query", header(3, `${licenseUrl(3)}?x=1`)],
+    ["a malformed header", `id=clic_demo; rev=3; url="${licenseUrl(3)}"`],
+  ])("drops a licence that names %s and reads nothing for it", async (_name, licenseHeader) => {
+    const f = fixture();
+    paidWith(f, licenseHeader);
+    const out = output(await runPayableFetch(f.ctx, args));
+    expect(out.license).toBeUndefined();
+    expect(f.price).not.toHaveBeenCalled();
+  });
+
+  it("keeps the licence it came with when its terms cannot be read", async () => {
+    const f = fixture();
+    paidWith(f, header(5));
+    f.price.mockResolvedValue(new Response("down", { status: 503 }));
+    const out = output(await runPayableFetch(f.ctx, args));
+    expect(out.license).toMatchObject({ id: "clic_demo", revision: 5, terms_unavailable: true });
+    expect(out.license.terms).toBeUndefined();
+  });
+
+  it("does not take terms that belong to another licence", async () => {
+    const f = fixture();
+    paidWith(f, header(6));
+    f.price.mockResolvedValue(Response.json({ license_id: "clic_other", revision: 6, terms: { training: {} } }));
+    const out = output(await runPayableFetch(f.ctx, args));
+    expect(out.license).toMatchObject({ id: "clic_demo", terms_unavailable: true });
+  });
+});
+
+describe("payable_fetch says which coin is short", () => {
+  const short = (message: string) =>
+    Object.assign(new Error(message), { name: "V14SettlementError", code: "V14_INSUFFICIENT_BALANCE" });
+  it.each([
+    ["token balance cannot cover the authorized gross", "too little USDC on Polygon for this purchase"],
+    ["native balance cannot cover approval and settlement gas", "too little POL on Polygon for the gas"],
+    ["balance cannot cover authorized gross and estimated transaction fees", "needs enough POL on Polygon"],
+  ])("%s", async (detail, said) => {
+    const f = fixture();
+    (f.ctx.config as { payAsset?: string }).payAsset = "USDC";
+    f.fetchPaid.mockRejectedValue(short(detail));
+    const result = await runPayableFetch(f.ctx, args);
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain(said);
+  });
+});
