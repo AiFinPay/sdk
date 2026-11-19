@@ -98,7 +98,40 @@ describe("agent_quota", () => {
   it("carries the honesty caveat about self-metered merchants", async () => {
     const { ctx } = ctxWith([batch()]);
     const out = parse(await runAgentQuota(ctx, {}));
-    expect(out.note).toContain("meters locally");
+    expect(out.note).toContain("counts locally and does not report use to AiFinPay");
+  });
+
+  it("shows what the site itself last reported when it is lower than AiFinPay's record", async () => {
+    const { ctx } = ctxWith([
+      batch({ receipt_id: "rcpt_site", quota: 40, unit_quota: 40, used: 0, remaining: 40 }),
+      batch({ receipt_id: "rcpt_done", merchant_id: "mrch_licences", quota: 40, unit_quota: 40, used: 0, remaining: 40 }),
+      batch({ receipt_id: "rcpt_same", merchant_id: "mrch_other", quota: 40, unit_quota: 40, used: 0, remaining: 40 }),
+    ]);
+    (ctx.agent as unknown as Record<string, unknown>).aifp1Receipts = {
+      list: () => [
+        { receiptId: "rcpt_site", remaining: 34 },
+        { receiptId: "rcpt_done", remaining: 0 },
+        { receiptId: "rcpt_same", remaining: 45 },
+      ],
+    };
+    const out = parse(await runAgentQuota(ctx, {}));
+    const byId = Object.fromEntries(out.batches.map((b: { receipt_id: string }) => [b.receipt_id, b]));
+    expect(byId.rcpt_site).toMatchObject({ remaining: 34, used: 6, counted_by: "site" });
+    // Spent at the site: not active any more.
+    expect(byId.rcpt_done).toBeUndefined();
+    // A higher local count never raises AiFinPay's record.
+    expect(byId.rcpt_same).toMatchObject({ remaining: 40, used: 0 });
+    expect(byId.rcpt_same.counted_by).toBeUndefined();
+    expect(out.totals.mrch_ratersapp).toEqual({ remaining: 34, batches: 1 });
+    const all = parse(await runAgentQuota(ctx, { include_exhausted: true }));
+    expect(all.batches.find((b: { receipt_id: string }) => b.receipt_id === "rcpt_done")).toMatchObject({ remaining: 0, used: 40, counted_by: "site" });
+  });
+
+  it("keeps a site's count across a restart from the saved payment state", async () => {
+    const { ctx } = ctxWith([batch({ receipt_id: "rcpt_saved", quota: 40, unit_quota: 40, used: 0, remaining: 40 })]);
+    (ctx as unknown as Record<string, unknown>).paymentState = { read: () => ({ receipts: [{ receiptId: "rcpt_saved", remaining: 12 }] }) };
+    const out = parse(await runAgentQuota(ctx, {}));
+    expect(out.batches[0]).toMatchObject({ remaining: 12, used: 28, counted_by: "site" });
   });
 
   it("asks the configured backend for THIS agent's address, nothing else", async () => {
