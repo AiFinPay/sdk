@@ -1,0 +1,48 @@
+{
+    "network": "tronNile",
+    "chainId": 3448148188,
+    "timestamp": "2026-11-20T09:43:54.728Z",
+    "deployer": "TYubN69EG6mnymXntxmhP66TG9yZuVVf9F",
+    "deployerMode": "private-key",
+    "splitterVersion": "1.4",
+    "splitter": {
+        "address": "TE9qwx8WxtoXKuJQYihtqrz9udMHonV3i7",
+        "deployTx": "43f5d5bd77ddf6d5b86eb269f057630059e753da6f305d66f578c72945c4790f",
+        "admin": "TGAv2tKpuUcLcxga9fSNVdx4dqQDCqXXWK",
+        "treasury": "TGAv2tKpuUcLcxga9fSNVdx4dqQDCqXXWK",
+        "pauser": "TGAv2tKpuUcLcxga9fSNVdx4dqQDCqXXWK",
+        "signer": "TTepMhQqVtQ2vrJqvrP67twVN6gfTDjpDL",
+        "tokenList": "TVCfbMcekcYCigWPAuhvViiEMxFQCYbKm2",
+        "profiles": "TMyqARj1Lq1sWjwArEbPiEy9A3rJiPUsBx",
+        "stablecoins": [
+            {
+                "address": "TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf",
+                "symbol": "USDT",
+                "name": "Tether USD (Nile)",
+                "source": "Nile testnet USDT used by the AiFinPay backend"
+            }
+        ],
+        "routes": {
+            "names": [
+                "agent-x402",
+                "merchant-aifp1"
+            ],
+            "ids": [
+                "0x8dc505be335e565d2a5e2c96057c7fb0caff7c5009f61b82ac3ef5e7a9ec0f1e",
+                "0xb9dbf587b0df69870df1e60b22fba0317f53eb19d78a573abf94fc384a339a89"
+            ],
+            "treasuryBps": [
+                0,
+                100
+            ],
+            "ipCreatorBps": [
+                0,
+                0
+            ]
+        }
+    },
+    "runtimeCodeHash": "0xf08ab394010e333b38c4afdfe070e6c53196dc14f7909325ebaceab936fd5ea5",
+    "status": "enabled",
+    "settlementEnabled": true,
+    "disabledReason": ""
+}
