@@ -13,6 +13,16 @@ from the corresponding CI or payment artifacts.
 - Add explicit environment/version-bound inspection and enabled-record selection.
   Keep payment execution unsupported pending backend and verified executor support.
 
+## Deployments 2.2.0 — Tron registry snapshots
+
+- Package curated Tron B2BSplitter v1.4 deployment records in the shared
+  registry format with immutable upstream provenance, and add `tron` /
+  `tronDeployment` to the payment deployment schema.
+- Ship Tron ABI artifacts as `registry/abi/tron/<Contract>/<Contract>.json`,
+  matching the EVM layout, without Hardhat `.dbg.json` files.
+- Preserve upstream settlement metadata without adding SDK execution support or
+  changing the EVM/Solana grabber.
+
 ## Deployments 2.1.5 — NEAR ABI artifact access
 
 - Load NEAR ABI JSON documents through `ArtifactRegistry` with lookup and

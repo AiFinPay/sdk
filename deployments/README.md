@@ -86,13 +86,14 @@ registry/
 │   ├── solana/deployments.json # Solana v1.4 program deployments
 │   ├── casper/deployments.json # Casper deployments
 │   ├── near/deployments.json   # Curated NEAR account/WASM snapshots
+│   ├── tron/v1.4/deployments.json # Curated Tron B2BSplitter v1.4 snapshots
 │   └── aptos/                  # Aptos deployment snapshots
 │       ├── deployments.json
 │       └── multisig-deployments.json
 ├── abi/
 │   ├── aptos/       # Aptos splitter ABI snapshots
 │   ├── evm/         # EVM ABI bundles (including the linted B2BSplitterV14 ABI)
-│   └── tron/        # Tron ABI bundles when applicable
+│   └── tron/        # Tron Hardhat ABI artifacts (<Contract>/<Contract>.json)
 └── idl/
     ├── solana/      # Solana IDL (splitter-v14 mainnet/devnet)
     ├── aptos/       # Aptos IDL artifacts
@@ -114,6 +115,11 @@ NEAR deployment records are curated package data, not grabber outputs or
 programmatic deployment lookup APIs. NEAR ABI documents are available through
 `ArtifactRegistry`. See the [NEAR registry guide](registry/splitter/near/README.md)
 for provenance, field normalization, governance caveats, and refresh instructions.
+
+Tron deployment records are curated package data, not grabber outputs or
+programmatic deployment lookup APIs. Each record's `abi` field points to the
+packaged ABI artifact. See the [Tron registry guide](registry/splitter/tron/README.md)
+for provenance, field mapping and refresh instructions.
 
 ## Exports
 

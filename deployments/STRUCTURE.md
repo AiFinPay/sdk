@@ -26,9 +26,12 @@ deployments/
     │   │   └── v1.1/deployments.json  # EVM v1.1 legacy
     │   ├── solana/deployments.json # Solana v1.4 program deployments
     │   ├── casper/deployments.json # Casper deployments
-    │   └── near/                  # Curated NEAR deployment snapshots
+    │   ├── near/                  # Curated NEAR deployment snapshots
+    │   │   ├── README.md
+    │   │   └── deployments.json
+    │   └── tron/                  # Curated Tron deployment snapshots
     │       ├── README.md
-    │       └── deployments.json
+    │       └── v1.4/deployments.json
     ├── abi/               # EVM / Tron ABI bundles
     └── idl/               # Solana / Aptos / Casper IDL artifacts
 ```
@@ -43,7 +46,7 @@ deployments/
 | `src/grabber.ts` | GitHub listing helpers, EVM + Solana fetch + latest-per-chain selection, deployment file writer, O(1) lookup helpers. |
 | `src/types.ts` | Registry TypeScript types: `DeploymentRegistry`, `EcosystemRegistry`, `EvmDeployment`, `SolanaDeployment`, `Stablecoin`, type guards. |
 | `src/build.ts` | CLI entry point for `npm run registry:build`; writes deployment files to `registry/splitter/evm/v1.4/` and `registry/splitter/solana/`. |
-| `src/reference/payment-deployments.schema.json` | Shared JSON Schema defining deployment record shapes for EVM, Solana, Casper, Aptos and NEAR. |
+| `src/reference/payment-deployments.schema.json` | Shared JSON Schema defining deployment record shapes for EVM, Solana, Casper, Aptos, NEAR and Tron. |
 
 
 ## Tests (`tests/`)
@@ -71,6 +74,7 @@ verification checklist; this layout is not an availability report.
 - `casper/deployments.json` — Casper deployment records
 - `aptos/` — curated Aptos mainnet/testnet payment and multisig snapshots
 - `near/` — curated NEAR mainnet/testnet account/WASM and council snapshots
+- `tron/v1.4/deployments.json` — curated Tron B2BSplitter v1.4 snapshots
 - `INDEX.md` — registry links and verification checklist
 - Each deployment JSON references `src/reference/payment-deployments.schema.json` using a relative `$schema` link.
 
@@ -94,7 +98,8 @@ registry/abi/
 │   ├── B2BSplitterV14/B2BSplitterV14-linted.json # Required for Arc and subsequent EVM deployments
 │   └── TimelockWrapper/TimelockWrapper.json
 └── tron/
-    └── .gitkeep
+    ├── B2BSplitterV14/B2BSplitterV14.json
+    └── TimelockWrapper/TimelockWrapper.json
 ```
 
 ### `registry/idl/`
@@ -134,7 +139,8 @@ package.json
 registry/abi/evm/B2BSplitterV14/B2BSplitterV14.json
 registry/abi/evm/B2BSplitterV14/B2BSplitterV14-linted.json
 registry/abi/evm/TimelockWrapper/TimelockWrapper.json
-registry/abi/tron/.gitkeep
+registry/abi/tron/B2BSplitterV14/B2BSplitterV14.json
+registry/abi/tron/TimelockWrapper/TimelockWrapper.json
 registry/abi/aptos/splitter/splitter-mainnet-<address>.json
 registry/abi/aptos/splitter/splitter-testnet-<address>.json
 registry/splitter/INDEX.md
@@ -145,6 +151,8 @@ registry/splitter/casper/deployments.json
 registry/splitter/casper/README.md
 registry/splitter/near/README.md
 registry/splitter/near/deployments.json
+registry/splitter/tron/README.md
+registry/splitter/tron/v1.4/deployments.json
 registry/splitter/evm/v1.1/deployments.json
 registry/splitter/evm/v1.1/README.md
 registry/splitter/evm/v1.2/deployments.json
