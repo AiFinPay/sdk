@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.17.1 — Tron deployment metadata
+
+- `TRON_V14_DEPLOYMENTS` (and `TRON_V14_DEPLOYMENTS_SOURCE`) export the Tron v1.4
+  splitter records from `@aifinpay/deployments` 2.2.0, generated and validated
+  like the Aptos and NEAR tables. Metadata only: the SDK has no Tron executor,
+  so no Tron payment route is added.
+
 ## 2.17.0 — the paying wallet signs every EVM quote
 
 - Every EVM `/v1/quote` carries a `quote_authorization` (`payer`, random `nonce`,
