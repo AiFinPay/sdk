@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.18.0 — pays with what the wallet holds, in the owner's order
+
+- With nothing set, `payable_fetch` may pay in the pay chain's pinned
+  stablecoins (read from `@aifinpay/agent`) and then its native coin: on
+  Polygon USDC, USDC.e, POL. Per payment it reads the URL's 402, keeps the
+  options the merchant settles on (`settlement_chains`), reads the wallet's
+  balances (cached 60 s) and pays with the first option that covers the price
+  plus that chain's gas cap. The owner's USD caps apply as before; a native
+  option still needs the independent price.
+- `AIFINPAY_PAY_OPTIONS` (`chain:ASSET`, comma-separated) sets the order and
+  the only options allowed. An option on a chain other than the pay chain or
+  Polygon is refused, because it has no gas cap. `AIFINPAY_PAY_ASSET` alone
+  keeps exactly one option, as before; setting both is refused.
+- The option last paid with and the balances read are kept in the payment
+  state file (never the keystore) and tried first while they still cover the
+  price; the new read decides.
+- The answer names `paid_with`. When nothing can pay, nothing is quoted and the
+  message lists each option's balance, the gas cap and what the merchant
+  accepts.
+- `payment_setup_status` lists `pay_options` with balances, and counts a
+  stablecoin that covers the smallest batch, with the gas cap in hand, as
+  ready. The local-settings report gains `pay_options`.
+- With more than one option the server reads the URL once before the SDK does:
+  a paid request makes one more GET than before; free content is still one.
+
 ## 2.17.2 — agent_quota shows what is really left on self-metered sites
 
 - A site running its own gate (WordPress, Drupal, `@aifinpay/gate`) counts use

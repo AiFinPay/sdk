@@ -432,8 +432,8 @@ if (arg === "init") {
       `AiFinPay. It holds nothing yet, so it can spend nothing. To let it pay, fund\n` +
       `the EVM address on Polygon with the batch price at today's rate plus the gas\n` +
       `cap, in POL; payment_setup_status prices it (the smallest batch is $0.02).\n` +
-      `To pay in USDC, set "AIFINPAY_PAY_ASSET": "USDC" and hold USDC for the batch\n` +
-      `plus POL up to the gas cap. Check the balance before funding or paying.\n\n` +
+      `It pays in USDC first when the wallet holds it, with POL up to the gas cap\n` +
+      `for gas, otherwise in POL. Check the balance before funding or paying.\n\n` +
       `Set the working limits in your dashboard:\n` +
       `  https://dash.aifinpay.io → My Agents → Claim via MCP, then give the\n` +
       `  one-time URL to the agent (tool agent_claim_self). Controls there set the\n` +

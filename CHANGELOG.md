@@ -6,6 +6,13 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## MCP 2.18.0 — pays with what the wallet holds
+
+- `payable_fetch` pays in the pay chain's stablecoins or its native coin,
+  whichever the wallet holds, in the owner's order (`AIFINPAY_PAY_OPTIONS`);
+  `AIFINPAY_PAY_ASSET` alone keeps one asset. The answer names `paid_with`, and
+  `payment_setup_status` and the local-settings report list the options.
+
 ## MCP 2.17.2 — real remaining quota on self-metered sites
 
 - `agent_quota` shows what the site itself counted when AiFinPay's record is
