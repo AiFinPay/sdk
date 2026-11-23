@@ -1,3 +1,16 @@
+## 0.11.0 — AiFinPay sees how much of a receipt is used
+
+- Port of `@aifinpay/gate` 0.14.0: `GateReporter` also sends receipt use. After
+  every paid `serve` it holds the receipt id (never the token) and the units
+  left, the lowest per receipt, and posts them in batches of at most 100,
+  ordered by id, to `POST /v1/merchants/:id/receipt-use` with the merchant
+  secret, from its own worker thread on the event schedule. A 404, another 4xx
+  or a redirect drops what is held and the next spend tries again; a network
+  error, timeout, 408, 429 or 5xx keeps it for up to 5 attempts. Gate events
+  are unchanged and no outcome reaches a request. The paid `serve` event
+  carries `remaining`; `reporter.stats["uses"]` reports the counts. Bodies byte
+  for byte as Node (`conformance/vectors/receipt-use-v1.json`).
+
 ## 0.10.0 — the 402 says what the page is
 
 - Port of `@aifinpay/gate` 0.13.0: `Gate(..., about=fn)`, where `fn(req)` returns a

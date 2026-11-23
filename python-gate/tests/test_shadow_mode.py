@@ -109,7 +109,11 @@ def _script(mode):
 def test_shadow_and_enforce_emit_the_same_events_until_enforce_would_spend():
     enforce_events, enforce = _script("enforce")
     shadow_events, shadow = _script("shadow")
-    assert shadow_events[:7] == enforce_events[:7] and shadow_events[9] == enforce_events[9]
+    # Only a spend carries "remaining": enforce spent the batch, shadow spent nothing.
+    assert [e.get("remaining") for e in enforce_events[5:7]] == [1, 0]
+    assert not any("remaining" in e for e in shadow_events)
+    unspent = [{k: v for k, v in e.items() if k != "remaining"} for e in enforce_events[:7]]
+    assert shadow_events[:7] == unspent and shadow_events[9] == enforce_events[9]
     assert [e["kind"] for e in shadow_events] == [
         "402", "serve", "403", "403", "402", "serve", "serve", "serve", "serve", "402"]
     assert [e["kind"] for e in enforce_events] == [

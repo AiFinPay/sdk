@@ -658,8 +658,9 @@ class Gate:
             return self._challenge(resource, weight, tier, DETAIL_QUOTA_EXHAUSTED, who=who, agent=agent_header,
                                    req=req)
 
-        self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": sub, "receipt_id": receipt_id}, who)
         remaining = _int_if_whole(limit - used)
+        self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": sub, "receipt_id": receipt_id,
+                    "remaining": remaining}, who)
         return GateResult(True, 200, {HEADER_QUOTA_REMAINING: str(remaining), "Cache-Control": NO_STORE, **licensed}, aifp={
             "agent": sub, "receipt_id": receipt_id, "resource": resource, "weight": weight,
             "unit_quota": _int_if_whole(limit), "used": used, "remaining": remaining, "mode": "paid",

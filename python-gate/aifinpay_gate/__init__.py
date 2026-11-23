@@ -43,7 +43,7 @@ from .unproven import (
 from .verify import Verifier
 from .wsgi import AifpGateWSGI
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"
 
 __all__ = [
     "AI_AGENT_UA_MARKERS", "AI_AGENT_UA_TABLE", "AifpGateMiddleware", "AifpGateWSGI", "DETAIL_QUOTA_EXHAUSTED", "DETAIL_RECEIPT_EXPIRED",

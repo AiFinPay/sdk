@@ -275,3 +275,25 @@ drops unsent events and tells the worker to stop. An already in-flight socket
 operation may finish later, but it cannot start another request. Neither method
 promises delivery. A reporter inherited across fork refuses to report and
 exposes `wrong_process`; construct a fresh reporter in each worker.
+
+### Receipt use
+
+The same reporter tells AiFinPay how much of each receipt your gate has spent,
+so the agent, the dashboard and AiFinPay's receipt record show what your
+counter shows. After every paid `serve` it holds the receipt id (never the
+receipt itself) and the units left, keeping only the lowest per receipt, and a
+second daemon thread posts them on the same schedule to
+`POST /v1/merchants/:id/receipt-use`:
+
+```json
+{ "uses": [{ "receipt_id": "rcpt_0123456789abcdef", "remaining": 34 }] }
+```
+
+Batches hold at most 100 receipts, ordered by id. This is accounting, not
+request reporting: it carries no reader data. A 404 (an API that predates the
+route), a refusal or a redirect drops what is held and the next spend tries
+again; a network error, timeout, 408, 429 or 5xx keeps it for the next attempt
+(at most 5). Gate events are untouched either way, and no outcome reaches a
+request. `reporter.stats["uses"]` has `queued`, `delivered`, `dropped` and
+`last_error`; `flush` and `close` cover it within the same deadline. The bodies
+are byte for byte `conformance/vectors/receipt-use-v1.json`.

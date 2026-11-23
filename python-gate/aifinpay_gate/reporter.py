@@ -42,6 +42,186 @@ class _NoRedirect(HTTPRedirectHandler):
         raise _RedirectBlocked()
 
 
+_RECEIPT_ID = re.compile(r"rcpt_[0-9a-f]{16}")
+
+
+def _use_failure(status):
+    """(error, keep) for a non-2xx answer from /receipt-use."""
+    if 300 <= status < 400:
+        return "redirect", False
+    if status in (401, 403):
+        return "auth", False
+    if status in (408, 429) or status >= 500:
+        return "server", True
+    if 400 <= status < 500:
+        return "rejected", False
+    return "server", True
+
+
+class _ReceiptUses:
+    """Lowest remaining per receipt id, posted to /receipt-use from its own
+    thread. Independent of the event queue: no outcome here touches events."""
+
+    MAX_HELD = 1000
+    MAX_BATCH = 100
+
+    def __init__(self, owner, endpoint):
+        self._owner = owner  # read for _opener, _secret and timing at send time
+        self._endpoint = endpoint
+        self._condition = threading.Condition()
+        self._held = {}
+        self._due = None
+        self._failures = 0
+        self._passes = 0
+        self._sending = False
+        self._closed = False
+        self._terminate = False
+        self._thread = None
+        self._delivered = 0
+        self._dropped = 0
+        self._last_error = None
+
+    def stats(self):
+        with self._condition:
+            return {"queued": len(self._held), "delivered": self._delivered,
+                    "dropped": self._dropped, "last_error": self._last_error}
+
+    def record(self, receipt_id, remaining):
+        if not isinstance(receipt_id, str) or not _RECEIPT_ID.fullmatch(receipt_id):
+            return
+        if type(remaining) is not int or remaining < 0:
+            return
+        with self._condition:
+            if self._closed:
+                self._dropped += 1
+                return
+            held = self._held.get(receipt_id)
+            if held is None and len(self._held) >= self.MAX_HELD:
+                self._dropped += 1
+                self._last_error = "queue_full"
+                return
+            if held is None or remaining < held:
+                self._held[receipt_id] = remaining
+            if self._due is None:
+                self._due = time.monotonic() + self._owner.DELAY
+            if self._thread is None:
+                self._thread = threading.Thread(target=self._run, name="aifinpay-gate-receipt-use", daemon=True)
+                self._thread.start()
+            self._condition.notify_all()
+
+    def request(self, closing=False):
+        """Ask for one pass now; returns the pass count to wait for, or None."""
+        with self._condition:
+            if closing:
+                self._closed = True
+            if not self._held or self._thread is None:
+                return None
+            self._due = time.monotonic()
+            self._condition.notify_all()
+            return self._passes + (2 if self._sending else 1)
+
+    def wait(self, ticket, deadline):
+        with self._condition:
+            while ticket is not None and self._passes < ticket and not self._terminate:
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    return
+                self._condition.wait(timeout=left)
+
+    def close(self, ticket, deadline):
+        self.wait(ticket, deadline)
+        with self._condition:
+            self._closed = self._terminate = True
+            if self._held:
+                self._dropped += len(self._held)
+                self._held = {}
+                self._last_error = "shutdown"
+            self._condition.notify_all()
+        if self._thread is not None:
+            self._thread.join(timeout=max(0.0, deadline - time.monotonic()))
+
+    def _run(self):
+        while True:
+            with self._condition:
+                if self._terminate:
+                    return
+                now = time.monotonic()
+                if not self._held or self._due is None or now < self._due:
+                    self._condition.wait(timeout=None if self._due is None else max(0.01, self._due - now))
+                    continue
+                self._due = None
+                self._sending = True
+            try:
+                self._pass()
+            finally:
+                with self._condition:
+                    self._sending = False
+                    self._passes += 1
+                    self._condition.notify_all()
+
+    def _pass(self):
+        with self._condition:
+            ids = sorted(self._held)
+        for start in range(0, len(ids), self.MAX_BATCH):
+            with self._condition:
+                if self._terminate:
+                    return
+                items = [{"receipt_id": rid, "remaining": self._held[rid]}
+                         for rid in ids[start:start + self.MAX_BATCH] if rid in self._held]
+            if not items:
+                continue
+            error, keep = self._post(items)
+            with self._condition:
+                if error is None:
+                    for item in items:
+                        if self._held.get(item["receipt_id"]) == item["remaining"]:
+                            del self._held[item["receipt_id"]]
+                    self._delivered += len(items)
+                    self._failures = 0
+                    self._last_error = None
+                    continue
+                self._last_error = error
+                if keep:
+                    self._failures += 1
+                    if self._failures < self._owner.MAX_ATTEMPTS:
+                        self._due = time.monotonic() + min(30, self._owner.DELAY * 2 ** self._failures)
+                        return
+                # 404 from an older backend, any refusal, or retries used up: drop what is held, try again next spend.
+                self._dropped += len(self._held)
+                self._held = {}
+                self._failures = 0
+                if keep:
+                    self._last_error = "retry_exhausted"
+                return
+
+    def _post(self, items):
+        body = json.dumps({"uses": items}, separators=(",", ":")).encode("utf-8")
+        request = Request(self._endpoint, data=body, method="POST", headers={
+            "Content-Type": "application/json", "AIFP-Merchant-Secret": self._owner._secret})
+        try:
+            with self._owner._opener.open(request, timeout=self._owner.HTTP_TIMEOUT) as response:
+                if not 200 <= response.status < 300:
+                    return _use_failure(response.status)
+                raw = response.read(4097)
+                result = json.loads(raw) if len(raw) <= 4096 else {}
+                applied, ignored = result.get("applied"), result.get("ignored")
+                if (type(applied) is not int or type(ignored) is not int
+                        or applied < 0 or ignored < 0 or applied + ignored != len(items)):
+                    return "invalid_response", True
+                return None, False
+        except _RedirectBlocked:
+            return "redirect", False
+        except HTTPError as error:
+            code = error.code
+            error.close()
+            return _use_failure(code)
+        except (TimeoutError, URLError) as error:
+            reason = error.reason if isinstance(error, URLError) else error
+            return ("timeout" if isinstance(reason, TimeoutError) else "network"), True
+        except Exception:
+            return "invalid_response", True
+
+
 class GateReporter:
     """One reporter per merchant per worker process, created after a fork.
 
@@ -76,6 +256,7 @@ class GateReporter:
             raise ValueError("GateReporter: api_base must be an HTTPS origin") from None
         self._endpoint = "https://" + base.netloc + "/v1/merchants/" + merchant_id + "/gate-events"
         self._secret = merchant_secret
+        self._uses = _ReceiptUses(self, "https://" + base.netloc + "/v1/merchants/" + merchant_id + "/receipt-use")
         self._opener = build_opener(_NoRedirect())
         self._pid = os.getpid()
         self._condition = threading.Condition()
@@ -104,13 +285,15 @@ class GateReporter:
     def _snapshot(self):
         return {"queued": len(self._queue), "delivered": self._delivered,
                 "dropped": self._dropped, "retries": self._retries,
-                "last_error": self._last_error, "stopped": self._stopped, "closed": self._closed}
+                "last_error": self._last_error, "stopped": self._stopped, "closed": self._closed,
+                "uses": self._uses.stats()}
 
     @property
     def stats(self):
         if os.getpid() != self._pid:
             return {"queued": 0, "delivered": 0, "dropped": 0, "retries": 0,
-                    "last_error": "wrong_process", "stopped": True, "closed": True}
+                    "last_error": "wrong_process", "stopped": True, "closed": True,
+                    "uses": {"queued": 0, "delivered": 0, "dropped": 0, "last_error": "wrong_process"}}
         with self._condition:
             return self._snapshot()
 
@@ -128,6 +311,8 @@ class GateReporter:
             return  # Never acquire a possibly inherited locked mutex after fork.
         if not isinstance(event, dict) or event.get("kind") not in ("402", "serve"):
             return
+        if event["kind"] == "serve" and "remaining" in event:
+            self._uses.record(event.get("receipt_id"), event["remaining"])
         # A raw path is private, and one refused batch would stop this reporter for good.
         if event.get("unregistered"):
             return
@@ -297,11 +482,21 @@ class GateReporter:
                 self._condition.notify_all()
 
     def flush(self, timeout=10.0):
-        """Wait at most timeout seconds for one attempt per pending event.
+        """Wait at most timeout seconds for one attempt per pending event and
+        one pass over held receipt use.
 
         Return status even on timeout; the background worker retains retries.
         Calls from the reporter worker itself are rejected to avoid a deadlock.
         """
+        if os.getpid() != self._pid or threading.current_thread() is self._worker or timeout < 0:
+            return self._flush_events(timeout)
+        deadline = time.monotonic() + timeout
+        ticket = self._uses.request()
+        result = self._flush_events(timeout)
+        self._uses.wait(ticket, deadline)
+        return {**result, "uses": self._uses.stats()}
+
+    def _flush_events(self, timeout):
         if os.getpid() != self._pid:
             return self.stats
         if threading.current_thread() is self._worker:
@@ -334,7 +529,9 @@ class GateReporter:
         deadline = time.monotonic() + max(0.0, timeout)
         with self._condition:
             self._closed = True
-        self.flush(timeout=max(0.0, deadline - time.monotonic()))
+        ticket = self._uses.request(closing=True)
+        self._flush_events(timeout=max(0.0, deadline - time.monotonic()))
+        self._uses.close(ticket, deadline)
         with self._condition:
             self._terminate = True
             if self._queue:
