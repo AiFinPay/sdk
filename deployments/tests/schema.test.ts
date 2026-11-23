@@ -157,7 +157,7 @@ describe("payment deployment schema references", () => {
       expect(Number.isNaN(Date.parse(deployment.timestamp))).toBe(false);
       expect(deployment.sourceArtifact.startsWith(artifactPrefix + deployment.network + "-")).toBe(true);
       expect(deployment.sourceArtifact).not.toContain("latest");
-      expect(deployment.settlementEnabled).toBe(!isTestnet);
+      expect(deployment.settlementEnabled).toBe(true);
       expect(deployment.splitter.paused).toBe(isTestnet);
       expect(deployment.splitter.routes).toEqual([
         { route_id: "ROUTE_AGENT_X402", treasury_bps: 0, ip_creator_bps: 0 },
