@@ -11,7 +11,8 @@ from the corresponding CI or payment artifacts.
 - `payable_fetch` pays in the pay chain's stablecoins or its native coin,
   whichever the wallet holds, in the owner's order (`AIFINPAY_PAY_OPTIONS`);
   `AIFINPAY_PAY_ASSET` alone keeps one asset. The answer names `paid_with`, and
-  `payment_setup_status` and the local-settings report list the options.
+  `payment_setup_status` lists the options. A paid request with more than one
+  allowed option makes one extra GET to read the price first.
 
 ## MCP 2.17.2 — real remaining quota on self-metered sites
 

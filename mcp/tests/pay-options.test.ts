@@ -9,7 +9,6 @@ import { paymentSetupStatus } from "../src/tools/payment-setup-status.js";
 import { PaymentStateStore } from "../src/payment-state.js";
 import { loadConfigFromEnv, payOptions, validatePaymentConfig, type McpConfig } from "../src/config.js";
 import { forgetBalances } from "../src/pay-options.js";
-import { localSettings } from "../src/local-settings.js";
 import { PAY_CHAINS, pinnedStablecoins } from "../src/pay-chains.js";
 import type { ToolContext } from "../src/server.js";
 import { payableNetwork } from "./offline-pay-network.js";
@@ -130,12 +129,6 @@ describe("what the owner allows", () => {
     expect(validatePaymentConfig(config)).toBe(5n * 10n ** 14n);
     // Without Polygon listed, the POL cap still has no meaning on Base.
     expect(() => validatePaymentConfig({ ...config, payOptions: ["base:USDC"] })).toThrow(/AIFINPAY_MAX_GAS_POL caps POL gas/);
-  });
-  it("the local-settings report carries the order", () => {
-    expect(localSettings({ ...owner, payOptions: ["polygon:POL", "polygon:USDC"] })!.pay_options).toEqual([
-      "polygon:POL",
-      "polygon:USDC",
-    ]);
   });
 });
 

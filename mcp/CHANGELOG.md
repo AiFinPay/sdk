@@ -21,9 +21,8 @@
   accepts.
 - `payment_setup_status` lists `pay_options` with balances, and counts a
   stablecoin that covers the smallest batch, with the gas cap in hand, as
-  ready. The local-settings report gains `pay_options`.
-- With more than one option the server reads the URL once before the SDK does:
-  a paid request makes one more GET than before; free content is still one.
+  ready.
+- A paid request with more than one allowed option makes one extra GET to read the price first.
 
 ## 2.17.2 — agent_quota shows what is really left on self-metered sites
 

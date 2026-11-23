@@ -11,8 +11,8 @@ import type { ToolContext } from "../src/server.js";
 
 // The cross-repo fixture: aifinpay-web tests the same string.
 const FIXTURE =
-  '["AiFinPay agent local settings v1","https://api.aifinpay.io","0x00000000000000000000000000000000000000aa",1763222400,{"mcp_version":"2.17.0","payments_enabled":true,"site_origins":["https://news.example"],"max_usd":5,"daily_usd":20,"pay_chain":"polygon","pay_asset":"USDC","pay_options":["polygon:USDC"]}]';
-const KEYS = ["mcp_version", "payments_enabled", "site_origins", "max_usd", "daily_usd", "pay_chain", "pay_asset", "pay_options"];
+  '["AiFinPay agent local settings v1","https://api.aifinpay.io","0x00000000000000000000000000000000000000aa",1763222400,{"mcp_version":"2.17.0","payments_enabled":true,"site_origins":["https://news.example"],"max_usd":5,"daily_usd":20,"pay_chain":"polygon","pay_asset":"USDC"}]';
+const KEYS = ["mcp_version", "payments_enabled", "site_origins", "max_usd", "daily_usd", "pay_chain", "pay_asset"];
 const VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 const PRIVATE_KEY = `0x${"5c".repeat(32)}` as const;
 const signer = privateKeyToAccount(PRIVATE_KEY);
@@ -125,7 +125,6 @@ describe("local settings report", () => {
       daily_usd: 20,
       pay_chain: "polygon",
       pay_asset: "USDC",
-      pay_options: ["polygon:USDC"],
     });
     const message = m.localSettingsStatement("https://api.aifinpay.io", lower, expiresAt, body);
     const signature = headers.get("aifp-agent-signature") as `0x${string}`;
@@ -170,11 +169,10 @@ describe("local settings report", () => {
       daily_usd: 20,
       pay_chain: "base",
       pay_asset: "ETH",
-      pay_options: ["base:USDC", "base:ETH"],
     });
   });
 
-  it("sends the eight keys and none of the secrets, paths or hosts in config, and logs nothing", async () => {
+  it("sends the seven keys and none of the secrets, paths or hosts in config, and logs nothing", async () => {
     vi.stubEnv("AIFINPAY_CLAIM_ORIGINS", "https://claim-origin.example");
     const secrets = {
       walletPassphrase: "passphrase-value",
