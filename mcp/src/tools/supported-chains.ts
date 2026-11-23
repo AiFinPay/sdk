@@ -1,4 +1,10 @@
-import { V14_DEPLOYMENTS, SOLANA_V14_DEPLOYMENTS } from "@aifinpay/agent";
+import {
+  V14_DEPLOYMENTS,
+  SOLANA_V14_DEPLOYMENTS,
+  APTOS_V14_DEPLOYMENTS,
+  NEAR_V14_DEPLOYMENTS,
+  TRON_V14_DEPLOYMENTS,
+} from "@aifinpay/agent";
 import type { ToolContext } from "../server.js";
 
 /** Casper deployments — static from @aifinpay/deployments registry (not re-exported by agent). */
@@ -31,14 +37,15 @@ export function deploymentInfoTool() {
   return {
     name: "deployment_info",
     description:
-      "Get AiFinPay deployment details across EVM, Solana, and Casper — addresses, stablecoins, program IDs, and settlement status. " +
-      "Filter by ecosystem (evm/solana/casper), environment (prod/dev), or network name.",
+      "Get AiFinPay deployment details across EVM, Solana, Aptos, NEAR, Tron and Casper — addresses, stablecoins, program IDs, and settlement status. " +
+      "Registry metadata only: a listed network is not necessarily payable by payable_fetch. " +
+      "Filter by ecosystem, environment (prod/dev), or network name.",
     inputSchema: {
       type: "object",
       properties: {
         ecosystem: {
           type: "string",
-          enum: ["evm", "solana", "casper"],
+          enum: ["evm", "solana", "aptos", "near", "tron", "casper"],
           description: "Filter by ecosystem. Omit for all.",
         },
         environment: {
@@ -106,6 +113,44 @@ export async function runDeploymentInfo(_ctx: ToolContext, args: Record<string, 
       disabledReason: d.disabledReason,
       programId: d.programId,
       idl: d.idl,
+    }));
+  }
+
+  // ── Aptos / NEAR / Tron ──────────────────────────────────────────────────
+  const select = <T extends { environment: string; network: string }>(records: (T | undefined)[]): T[] =>
+    records.filter(
+      (d): d is T => d !== undefined && (!environment || d.environment === environment) && (!network || d.network === network)
+    );
+
+  if (!ecosystem || ecosystem === "aptos") {
+    result.aptos = select(Object.values(APTOS_V14_DEPLOYMENTS)).map((d) => ({
+      network: d.network,
+      chainId: d.chainId,
+      environment: d.environment,
+      settlementEnabled: d.settlementEnabled,
+      packageAddress: d.packageAddress,
+      packageName: d.packageName,
+    }));
+  }
+
+  if (!ecosystem || ecosystem === "near") {
+    result.near = select(Object.values(NEAR_V14_DEPLOYMENTS)).map((d) => ({
+      network: d.network,
+      environment: d.environment,
+      settlementEnabled: d.settlementEnabled,
+      contractAccountId: d.contractAccountId,
+      treasuryAccountId: d.treasuryAccountId,
+    }));
+  }
+
+  if (!ecosystem || ecosystem === "tron") {
+    result.tron = select(Object.values(TRON_V14_DEPLOYMENTS)).map((d) => ({
+      network: d.network,
+      chainId: d.chainId,
+      environment: d.environment,
+      settlementEnabled: d.settlementEnabled,
+      contracts: d.contracts,
+      stablecoins: d.assets.map((a) => ({ symbol: a.symbol, name: a.name ?? a.symbol, address: a.address })),
     }));
   }
 
