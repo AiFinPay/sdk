@@ -23,12 +23,20 @@ export interface PendingPayment {
   site: string;
   amountUsd: number;
 }
+/** The option the last payment used and the balances read for it; a hint for the next choice, never authority. */
+export interface PaidWith {
+  chain: string;
+  asset: string;
+  at: number;
+  balances: { chain: string; asset: string; units: string; decimals: number; at: number }[];
+}
 export interface PaymentState {
   version: 1;
   address: string;
   receipts: Aifp1CachedReceipt[];
   pending?: PendingPayment;
   spend: { at: number; usd: number; tx: string; failure?: true }[];
+  paidWith?: PaidWith;
 }
 
 export class PaymentStateError extends Error {}
@@ -69,6 +77,14 @@ function validPending(state: PendingPayment): boolean {
     /^0x[0-9a-fA-F]{64}$/.test(r.txRef) &&
     typeof state.serializedTransaction === "string" &&
     /^0x[0-9a-fA-F]+$/.test(state.serializedTransaction)
+  );
+}
+
+function validPaidWith(p: PaidWith): boolean {
+  const name = (v: unknown) => typeof v === "string" && /^[A-Za-z0-9.]{1,32}$/.test(v);
+  return (
+    !!p && name(p.chain) && name(p.asset) && Number.isFinite(p.at) && Array.isArray(p.balances) &&
+    p.balances.every((b) => name(b.chain) && name(b.asset) && /^[0-9]{1,78}$/.test(b.units) && Number.isInteger(b.decimals) && Number.isFinite(b.at))
   );
 }
 
@@ -157,6 +173,7 @@ export class PaymentStateStore {
     if (state.pending && !validPending(state.pending)) {
       throw new PaymentStateError("Invalid pending payment; manual reconciliation required");
     }
+    if (state.paidWith !== undefined && !validPaidWith(state.paidWith)) delete state.paidWith;
     return state;
   }
   save(state: PaymentState): void {

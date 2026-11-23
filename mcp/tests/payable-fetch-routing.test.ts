@@ -68,6 +68,7 @@ function fixture() {
       maxAmountUsd: 0.2,
       dailyAmountUsd: 0.3,
       maxGasPol: "0.05",
+      payAsset: "POL",
       walletHome: home,
       gatewayOrigins: [origin],
       gatewayPathMode: "direct",

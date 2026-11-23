@@ -7,7 +7,7 @@ import {
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { readFileSync } from "node:fs";
-import type { McpConfig } from "./config.js";
+import { payOptions, type McpConfig } from "./config.js";
 import { loadWalletIdentity } from "./identity.js";
 import { agentHistoryTool, runAgentHistory } from "./tools/agent-history.js";
 import { devPaymentQuoteTool, runDevPaymentQuote } from "./tools/dev-payment-quote.js";
@@ -308,6 +308,14 @@ function assertInjectedWalletChain(config: McpConfig): void {
   ) {
     throw new Error("The injected EVM wallet client must support on-chain transaction submission");
   }
+  let options: { chain: string }[] = [];
+  try {
+    options = payOptions(config);
+  } catch {
+    // validatePaymentConfig names the refused setting.
+  }
+  if (options.some((o) => o.chain !== selected.name))
+    throw new Error(`The injected EVM wallet client signs on ${selected.name} only; list only ${selected.name} in AIFINPAY_PAY_OPTIONS`);
   const expectedChainId = PAYMENT_CHAINS[selected.name].chainId;
   if (!wallet.chain || wallet.chain.id !== expectedChainId) {
     throw new Error(`The injected EVM wallet client must be configured for ${selected.name} (${expectedChainId})`);

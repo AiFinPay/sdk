@@ -105,6 +105,7 @@ describe("payable_fetch without an owner allowlist", () => {
         maxAmountUsd: 5,
         dailyAmountUsd: 20,
         maxGasPol: "0.3",
+        payAsset: "POL",
         walletHome: home,
         ...(gatewayOrigins ? { gatewayOrigins } : {}),
       },

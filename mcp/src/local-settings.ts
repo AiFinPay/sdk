@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { validatePaymentConfig, type McpConfig } from "./config.js";
+import { payOptions, validatePaymentConfig, type McpConfig } from "./config.js";
 import { policyIssuer, STATEMENT_LIFETIME_S } from "./dashboard-policy.js";
 import { payChain, type PayChain } from "./pay-chains.js";
 import type { ToolContext } from "./server.js";
@@ -16,6 +16,8 @@ export interface LocalSettings {
   daily_usd: number;
   pay_chain: string;
   pay_asset: string;
+  /** The owner's order, "chain:ASSET"; empty on Solana. */
+  pay_options: string[];
 }
 
 /** Address and settings the backend already answered 200 or 409 for in this process. */
@@ -34,9 +36,11 @@ export function localSettingsStatement(
 /** Undefined when the settings would be refused for payments anyway, so a report would mislead. */
 export function localSettings(config: McpConfig): LocalSettings | undefined {
   let chain: PayChain;
+  let options: string[];
   try {
     chain = payChain(config.payChain);
     validatePaymentConfig({ ...config, paymentsEnabled: true });
+    options = payOptions(config).map((o) => `${o.chain}:${o.asset}`);
   } catch {
     return undefined;
   }
@@ -50,6 +54,7 @@ export function localSettings(config: McpConfig): LocalSettings | undefined {
     daily_usd: dailyAmountUsd,
     pay_chain: chain.name,
     pay_asset: config.payAsset ?? chain.native,
+    pay_options: options,
   };
 }
 

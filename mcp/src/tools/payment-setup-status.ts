@@ -2,7 +2,16 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import type { ToolContext } from "../server.js";
-import { DEFAULT_DAILY_USD, DEFAULT_MAX_GAS_POL, DEFAULT_MAX_USD, validatePaymentConfig, type McpConfig } from "../config.js";
+import {
+  DEFAULT_DAILY_USD,
+  DEFAULT_MAX_GAS_POL,
+  DEFAULT_MAX_USD,
+  payOptions,
+  validatePaymentConfig,
+  type McpConfig,
+  type PayOption,
+} from "../config.js";
+import { chooseOption, formatUnits, readBalance, readOptions } from "../pay-options.js";
 import { independentNativeUsd } from "../native-price.js";
 import { payChain, type PayChain } from "../pay-chains.js";
 import { dashboardRefusal, dashboardSentence, readDashboardPolicy, type DashboardStatus } from "../dashboard-policy.js";
@@ -112,6 +121,8 @@ export interface PaymentSetupStatus {
   payments_enabled: boolean;
   pay_chain: string;
   pay_asset: string;
+  /** What payable_fetch may pay with, in the owner's order; balances once read. */
+  pay_options?: { chain: string; asset: string; balance?: string; balance_error?: string }[];
   /** The built-in ceiling; the env limits below can only lower it. */
   ceiling: { max_usd: number; daily_usd: number };
   limits: { max_usd: Limit; daily_usd: Limit; gas_cap: Limit; origins: Limit };
@@ -218,8 +229,10 @@ export async function paymentSetupStatus(
   // Validation is the server's own, run as if payments were enabled: it names
   // the first limit the server would refuse instead of just "disabled".
   let configError: string | undefined;
+  let allowed: PayOption[] = [];
   try {
     validatePaymentConfig({ ...config, paymentsEnabled: true });
+    allowed = payOptions(config);
   } catch (error) {
     configError = (error as Error).message;
   }
@@ -229,6 +242,7 @@ export async function paymentSetupStatus(
     payments_enabled: Boolean(config.paymentsEnabled),
     pay_chain: chain.name,
     pay_asset: config.payAsset ?? chain.native,
+    ...(allowed.length ? { pay_options: allowed.map(({ chain, asset }) => ({ chain, asset })) } : {}),
     ceiling: { max_usd: DEFAULT_MAX_USD, daily_usd: DEFAULT_DAILY_USD },
     limits,
     ...(configError ? { config_error: configError } : {}),
@@ -286,10 +300,21 @@ export async function paymentSetupStatus(
   }
   if (status.funding) {
     try {
-      const balance = await nativeBalance(ctx, rpc, ctx.agent.evmAddress);
+      const balance = (await readBalance(ctx, chain, chain.native, 0)).units;
       status.balance = { amount: formatNative(balance), asset: chain.native, chain: chain.name, rpc };
       const needed = status.funding.amount !== undefined ? Number(status.funding.amount) : Number(gasCap);
-      if (Number(status.balance.amount) < needed) {
+      const rate = status.funding.rate_usd;
+      const states = await readOptions(ctx, allowed, {
+        priceUsd: SMALLEST_BATCH_USD,
+        ...(rate !== undefined ? { nativeUsd: { [chain.name]: rate } } : {}),
+      });
+      status.pay_options = states.map((s) => ({
+        chain: s.chain,
+        asset: s.asset,
+        ...(s.balance ? { balance: formatUnits(s.balance) } : { balance_error: s.error ?? "not read" }),
+      }));
+      // A stablecoin that covers the smallest batch, with the gas cap in hand, pays too.
+      if (Number(status.balance.amount) < needed && !chooseOption(states)) {
         status.next_step = withDashboard(
           status.funding.amount !== undefined
             ? `Fund ${ctx.agent.evmAddress} on ${chain.label} with about ${status.funding.amount} ${chain.native} (the smallest batch is $${SMALLEST_BATCH_USD.toFixed(2)} ≈ ${status.funding.batch_native} ${chain.native} at today's rate plus up to ${gasCap} ${chain.native} gas; it holds ${status.balance.amount}), then call payment_setup_status again.`
@@ -387,21 +412,6 @@ function unready(ctx: ToolContext, source: string, chain: PayChain, error: strin
     balance: "unknown",
     next_step: `Owner setting refused: ${error}. The owner fixes AIFINPAY_PAY_CHAIN in the MCP client config and reconnects.`,
   };
-}
-
-/** eth_getBalance over the pay chain's RPC: a read, through the same guarded fetch as every other request. */
-async function nativeBalance(ctx: ToolContext, rpc: string, address: string): Promise<bigint> {
-  const response = await ctx.agent.inner.fetchImpl(rpc, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getBalance", params: [address, "latest"] }),
-    signal: AbortSignal.timeout(ctx.config.timeoutMs ?? 10_000),
-  });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const body = (await response.json()) as { result?: unknown; error?: { message?: string } };
-  if (typeof body.result !== "string" || !/^0x[0-9a-fA-F]+$/.test(body.result))
-    throw new Error(body.error?.message ?? "malformed eth_getBalance result");
-  return BigInt(body.result);
 }
 
 function formatNative(wei: bigint): string {

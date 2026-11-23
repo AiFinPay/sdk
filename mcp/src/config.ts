@@ -1,6 +1,12 @@
-import { paymentStableAsset, solanaStableMint } from "@aifinpay/agent";
-import type { EvmWalletClient } from "@aifinpay/agent";
-import { payChain } from "./pay-chains.js";
+import { PAYMENT_CHAINS, nativePayable, paymentStableAsset, solanaStableMint } from "@aifinpay/agent";
+import type { Aifp1V14Chain, EvmWalletClient } from "@aifinpay/agent";
+import { PAY_CHAINS, payChain, pinnedStablecoins, type PayChain } from "./pay-chains.js";
+
+/** One way payable_fetch may pay: an asset on an EVM chain. */
+export interface PayOption {
+  chain: Aifp1V14Chain;
+  asset: string;
+}
 
 /** Runtime configuration loaded from env. */
 export interface McpConfig {
@@ -52,6 +58,8 @@ export interface McpConfig {
   /** What payable_fetch pays with: the chain's native currency (default) or a
    *  stablecoin the SDK pins for that chain, e.g. "USDC". Gas is native either way. */
   payAsset?: string;
+  /** Owner's ordered `chain:ASSET` list (AIFINPAY_PAY_OPTIONS), EVM only; see payOptions(). */
+  payOptions?: string[];
 
   /** Hard cap on a single payment to prevent runaway agents. */
   maxAmountUsd?: number;
@@ -115,6 +123,7 @@ export function loadConfigFromEnv(): McpConfig {
     maxFeeLamports: process.env.AIFINPAY_MAX_FEE_LAMPORTS || undefined,
     maxGasPol: process.env.AIFINPAY_MAX_GAS_POL || undefined,
     payAsset: process.env.AIFINPAY_PAY_ASSET || undefined,
+    payOptions: splitList(process.env.AIFINPAY_PAY_OPTIONS),
     devMode: process.env.AIFINPAY_MODE === "dev",
     seedHash: process.env.SEED_HASH,
     agentsFile: process.env.AIFINPAY_AGENTS_FILE || undefined,
@@ -232,14 +241,7 @@ function ownerCeiling(name: string, raw: string | undefined, ceiling: number): n
 export function validatePaymentConfig(config: McpConfig): bigint {
   if (!config.paymentsEnabled) throw new Error("Payments disabled by the owner (AIFINPAY_PAYMENTS_ENABLED=0)");
   const chain = payChain(config.payChain);
-  // A testnet pays only in dev mode and a mainnet only in live mode, so one can
-  // never stand in for the other (Solana checks its cluster the same way below).
-  if (chain.name !== "solana" && (config.devMode === true) !== (chain.testnet === true))
-    throw new Error(
-      chain.testnet
-        ? `${chain.name} is a testnet: set AIFINPAY_MODE=dev to pay on it`
-        : "MCP receipt payments on EVM mainnets support live mode only"
-    );
+  if (chain.name !== "solana") assertMode(chain, config.devMode);
   if (config.rpcUrl !== undefined) {
     let rpc: URL | undefined;
     try {
@@ -275,6 +277,7 @@ export function validatePaymentConfig(config: McpConfig): bigint {
       }))
   )
     throw new Error("AIFINPAY_GATEWAY_ORIGINS must list exact HTTPS origins; unset it to accept the origin of each URL");
+  const options = payOptions(config);
   if (chain.name === "solana") {
     const expectedNetwork = config.devMode ? "devnet" : "mainnet";
     if (config.solanaNetwork !== expectedNetwork)
@@ -304,26 +307,86 @@ export function validatePaymentConfig(config: McpConfig): bigint {
     !paymentStableAsset(chain.name, config.payAsset)
   )
     throw new Error(`AIFINPAY_PAY_ASSET must be "${chain.native}" or a stablecoin symbol pinned for ${chain.name}`);
-  if (chain.noNativePayment && (config.payAsset === undefined || config.payAsset === chain.native))
+  if (chain.noNativePayment && config.payOptions === undefined && (config.payAsset === undefined || config.payAsset === chain.native))
     throw new Error(
       `${chain.label} has no native payment: set AIFINPAY_PAY_ASSET to a stablecoin pinned for ${chain.name}; ${chain.native} pays gas only`
     );
   // The POL-named cap means POL. Read on another chain it would silently cap
   // ETH gas at a number chosen for POL — 0.3 POL is ~$0.04, 0.3 ETH is ~$800.
-  if (config.maxGasPol !== undefined && chain.name !== "polygon")
+  if (config.maxGasPol !== undefined && chain.name !== "polygon" && !options.some((o) => o.chain === "polygon"))
     throw new Error(
       `AIFINPAY_MAX_GAS_POL caps POL gas and does not apply on ${chain.name}; set AIFINPAY_MAX_GAS in ${chain.native}`
     );
-  if (config.maxGas !== undefined && config.maxGasPol !== undefined && config.maxGas !== config.maxGasPol)
+  const wei = payChainGasCap(config, chain);
+  for (const option of options) {
+    assertMode(PAY_CHAINS[option.chain], config.devMode);
+    optionGasCap(config, option.chain);
+  }
+  return wei;
+}
+
+// A testnet pays only in dev mode and a mainnet only in live mode (Solana checks its cluster the same way).
+function assertMode(chain: PayChain, devMode: boolean | undefined): void {
+  if ((devMode === true) !== (chain.testnet === true))
+    throw new Error(
+      chain.testnet
+        ? `${chain.name} is a testnet: set AIFINPAY_MODE=dev to pay on it`
+        : "MCP receipt payments on EVM mainnets support live mode only"
+    );
+}
+
+function payChainGasCap(config: McpConfig, chain: PayChain): bigint {
+  if (chain.name === "polygon" && config.maxGas !== undefined && config.maxGasPol !== undefined && config.maxGas !== config.maxGasPol)
     throw new Error("AIFINPAY_MAX_GAS and AIFINPAY_MAX_GAS_POL disagree; set one");
   const name = config.maxGas !== undefined || chain.name !== "polygon" ? "AIFINPAY_MAX_GAS" : "AIFINPAY_MAX_GAS_POL";
-  const gas = config.maxGas ?? config.maxGasPol ?? (chain.name === "polygon" ? DEFAULT_MAX_GAS_POL : undefined);
+  const gas = chain.name === "polygon" ? (config.maxGas ?? config.maxGasPol ?? DEFAULT_MAX_GAS_POL) : config.maxGas;
+  return gasWei(name, gas, chain.native);
+}
+
+function gasWei(name: string, gas: string | undefined, native: string): bigint {
   if (typeof gas !== "string" || !/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,18})?$/.test(gas))
-    throw new Error(
-      `${name} must be a positive decimal with at most 18 places: the gas cap per payment in ${chain.native}`
-    );
+    throw new Error(`${name} must be a positive decimal with at most 18 places: the gas cap per payment in ${native}`);
   const [whole, fraction = ""] = gas.split(".");
   const wei = BigInt(whole) * 10n ** 18n + BigInt(fraction.padEnd(18, "0"));
   if (wei <= 0n || wei >= 2n ** 256n) throw new Error(`${name} is outside the supported range`);
   return wei;
+}
+
+/** Gas cap in the option chain's native coin: AIFINPAY_MAX_GAS on the pay chain, the POL cap on Polygon, none elsewhere. */
+export function optionGasCap(config: McpConfig, chain: Aifp1V14Chain): bigint {
+  const pay = payChain(config.payChain);
+  if (chain === pay.name) return payChainGasCap(config, pay);
+  if (chain === "polygon") return gasWei("AIFINPAY_MAX_GAS_POL", config.maxGasPol ?? DEFAULT_MAX_GAS_POL, "POL");
+  throw new Error(
+    `AIFINPAY_PAY_OPTIONS lists ${chain}, which has no gas cap here: AIFINPAY_MAX_GAS is in ${pay.native} for ${pay.name}. To pay on ${chain}, set AIFINPAY_PAY_CHAIN=${chain} and AIFINPAY_MAX_GAS in ${PAY_CHAINS[chain].native}`
+  );
+}
+
+/** In the owner's order: AIFINPAY_PAY_OPTIONS, else AIFINPAY_PAY_ASSET alone, else the pay chain's pinned stablecoins then its native coin. */
+export function payOptions(config: McpConfig): PayOption[] {
+  const pay = payChain(config.payChain);
+  if (config.payOptions !== undefined) {
+    if (pay.name === "solana")
+      throw new Error("AIFINPAY_PAY_OPTIONS lists EVM options; Solana pays with AIFINPAY_PAY_CHAIN=solana and AIFINPAY_PAY_ASSET");
+    if (config.payAsset !== undefined) throw new Error("Set AIFINPAY_PAY_OPTIONS or AIFINPAY_PAY_ASSET, not both");
+    const seen = new Set<string>();
+    return config.payOptions.map((entry) => {
+      const [name, asset, extra] = entry.split(":");
+      const chain = Object.hasOwn(PAY_CHAINS, name) ? PAY_CHAINS[name as Aifp1V14Chain] : undefined;
+      if (!chain || !asset || extra !== undefined)
+        throw new Error(`AIFINPAY_PAY_OPTIONS: "${entry}" must be chain:ASSET on a supported EVM chain, e.g. polygon:USDC`);
+      const option = { chain: name as Aifp1V14Chain, asset };
+      const payable = paymentStableAsset(option.chain, asset) || (asset === chain.native && nativePayable(PAYMENT_CHAINS[option.chain]));
+      if (!payable) throw new Error(`AIFINPAY_PAY_OPTIONS: ${asset} is not payable on ${name}`);
+      if (seen.has(entry)) throw new Error(`AIFINPAY_PAY_OPTIONS lists ${entry} twice`);
+      seen.add(entry);
+      return option;
+    });
+  }
+  if (pay.name === "solana") return [];
+  const chain = pay.name as Aifp1V14Chain;
+  if (config.payAsset !== undefined) return [{ chain, asset: config.payAsset }];
+  const assets = pinnedStablecoins(chain);
+  if (nativePayable(PAYMENT_CHAINS[chain]) && !assets.includes(pay.native)) assets.push(pay.native);
+  return assets.map((asset) => ({ chain, asset }));
 }
