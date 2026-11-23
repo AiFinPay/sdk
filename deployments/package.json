@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/deployments",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Contracts deployment registry for AiFinPay SDK and Agent Passport identity and settlement protocol.",
   "keywords": [
     "aifinpay",
@@ -41,7 +41,7 @@
     "build": "tsc -p tsconfig.json",
     "registry:build": "node dist/build.js",
     "test": "vitest run",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm install && npm run build"
   },
   "license": "MIT",
   "repository": {
