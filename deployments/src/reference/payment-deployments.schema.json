@@ -35,7 +35,7 @@
       "format": "date-time"
     },
     "ecosystem": {
-      "enum": ["evm", "solana", "casper", "aptos", "near"]
+      "enum": ["evm", "solana", "casper", "aptos", "near", "tron"]
     },
     "protocolVersion": {
       "type": "string"
@@ -194,6 +194,29 @@
           "deployments": {
             "items": {
               "$ref": "#/$defs/nearDeployment"
+            }
+          }
+        }
+      }
+    }
+,
+    {
+      "if": {
+        "properties": {
+          "ecosystem": {
+            "const": "tron"
+          }
+        },
+        "required": ["ecosystem"]
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "required": ["commit", "path"]
+          },
+          "deployments": {
+            "items": {
+              "$ref": "#/$defs/tronDeployment"
             }
           }
         }
@@ -612,6 +635,111 @@
             },
             "additionalProperties": true
           }
+        }
+      },
+      "additionalProperties": true
+    },
+    "tronAddress": {
+      "type": "string",
+      "pattern": "^T[1-9A-HJ-NP-Za-km-z]{33}$"
+    },
+    "tronDeployment": {
+      "type": "object",
+      "required": [
+        "network",
+        "chainId",
+        "environment",
+        "testnet",
+        "settlementEnabled",
+        "runtimeCodeHash",
+        "contracts",
+        "assets",
+        "sourceArtifact"
+      ],
+      "properties": {
+        "network": {
+          "type": "string",
+          "minLength": 1
+        },
+        "chainId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "environment": {
+          "enum": ["dev", "prod"]
+        },
+        "testnet": {
+          "type": "boolean"
+        },
+        "settlementEnabled": {
+          "type": "boolean"
+        },
+        "runtimeCodeHash": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{64}$"
+        },
+        "contracts": {
+          "type": "object",
+          "required": [
+            "splitter",
+            "tokenList",
+            "profiles",
+            "admin",
+            "signer",
+            "pauser",
+            "treasury"
+          ],
+          "properties": {
+            "splitter": {
+              "$ref": "#/$defs/tronAddress"
+            },
+            "tokenList": {
+              "$ref": "#/$defs/tronAddress"
+            },
+            "profiles": {
+              "$ref": "#/$defs/tronAddress"
+            },
+            "admin": {
+              "$ref": "#/$defs/tronAddress"
+            },
+            "signer": {
+              "$ref": "#/$defs/tronAddress"
+            },
+            "pauser": {
+              "$ref": "#/$defs/tronAddress"
+            },
+            "treasury": {
+              "$ref": "#/$defs/tronAddress"
+            }
+          },
+          "additionalProperties": true
+        },
+        "assets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["symbol", "name", "address"],
+            "properties": {
+              "symbol": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "address": {
+                "$ref": "#/$defs/tronAddress"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "abi": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceArtifact": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "additionalProperties": true
