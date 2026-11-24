@@ -175,7 +175,10 @@ describe("aifinpay-mcp init", () => {
     expect(JSON.stringify(blocks).includes(secret)).toBe(false);
   });
 
-  it.each([false, true])(
+  // The publish barrier patches node:fs from a preload. Bun neither re-binds named
+  // ESM imports after syncBuiltinESMExports() nor lets plugins override builtins,
+  // so the barrier cannot engage there; Node (CI) covers this race.
+  it.skipIf(Boolean(process.versions.bun)).each([false, true])(
     "concurrent init preserves one wallet (encrypted=%s)",
     async (encrypted) => {
       const barrier = join(home, "init-barrier.mjs");
