@@ -82,6 +82,7 @@ import {
 } from "./settlementAccountV14.js";
 import type { SdkEnvironment } from "./deploymentResolver.js";
 import { reportingHeaders, type AgentFramework } from "./agent.js";
+import { SDK_USER_AGENT } from "./version.js";
 import type { SolanaV14Deployment } from "./generated/solanaV14Deployments.generated.js";
 
 // ── Errors ────────────────────────────────────────────────────────────────
@@ -1347,6 +1348,35 @@ export interface Aifp1FetchOptions {
   framework?: AgentFramework;
   /** How long to keep retrying /v1/pay while the chain catches up (AIFP-425). */
   settlementConfirmMs?: number;
+  /** Synchronous progress hook; events carry no URL, address, id or amount, and a throw is ignored. */
+  onFlowEvent?: (event: Aifp1FlowEvent) => void;
+}
+
+export type Aifp1FlowEvent =
+  | { type: "challenge_received"; direct: boolean }
+  | { type: "receipt_cache"; hit: boolean }
+  | { type: "quote_refused" | "pay_refused"; status: number; reason?: string };
+
+function emitFlowEvent(hook: Aifp1FetchOptions["onFlowEvent"], event: Aifp1FlowEvent): void {
+  try {
+    // An async hook's rejection must not become an unhandled one.
+    void Promise.resolve(hook?.(event) as unknown).catch(() => {});
+  } catch {
+    // A hook cannot change the payment flow.
+  }
+}
+
+/** A refusal's `error` code, only when it cannot carry an address or other identifier. */
+function refusalEvent(type: "quote_refused" | "pay_refused", status: number, text: string): Aifp1FlowEvent {
+  let reason: unknown;
+  try {
+    reason = JSON.parse(text)?.error;
+  } catch {
+    /* not JSON */
+  }
+  return typeof reason === "string" && /^(?:[a-z][a-z0-9_]{0,47}|AIFP-\d{3})$/.test(reason)
+    ? { type, status, reason }
+    : { type, status };
 }
 
 /** Fallback batch value in USD when a 402 states no minimum; the server answers 400 naming its real minimum. */
@@ -1914,6 +1944,10 @@ export async function aifp1Fetch(
     headers.delete("AIFP-Reporting-Token");
     headers.set("AIFP-Agent-Id", deps.agentId);
     if (deps.framework) headers.set("AIFP-Agent-Framework", deps.framework);
+    const callerAgent = headers.get("User-Agent");
+    if (!callerAgent) headers.set("User-Agent", SDK_USER_AGENT);
+    else if (!callerAgent.split(/\s+/).includes(SDK_USER_AGENT))
+      headers.set("User-Agent", `${callerAgent} ${SDK_USER_AGENT}`);
     if (direct) headers.delete("AIFP-Receipt");
     if (receiptJwt) {
       headers.set("AIFP-Receipt", receiptJwt);
@@ -1955,6 +1989,7 @@ export async function aifp1Fetch(
       if (held) resp = await send(held.jwt);
     }
   }
+  emitFlowEvent(opts.onFlowEvent, { type: "receipt_cache", hit: held !== undefined });
   if (held) {
     // Absent header, not "zero left": the gateway sets AIFP-Quota-Remaining
     // only on a metered paid call, and `Number(null)` is 0 — reading it
@@ -2041,6 +2076,7 @@ export async function aifp1Fetch(
   ) {
     throw new Aifp1QuoteError("direct AIFP-1 resource or merchant changed during receipt verification");
   }
+  emitFlowEvent(opts.onFlowEvent, { type: "challenge_received", direct });
 
   // The batch we were spending is spent (or expired) — the gateway just said
   // so. Forget it before quoting the next one, or find() would keep handing
@@ -2204,7 +2240,8 @@ export async function aifp1Fetch(
             quoteBody,
             opts.paymentIssuer ?? DEFAULT_API_BASE,
             opts.apiTimeoutMs,
-            opts.reportingToken
+            opts.reportingToken,
+            opts.onFlowEvent
           )
         : await requestQuote(
             deps,
@@ -2236,7 +2273,8 @@ export async function aifp1Fetch(
                     );
                 }
               : undefined,
-            opts.reportingToken
+            opts.reportingToken,
+            opts.onFlowEvent
           );
     if (admission && !admission.quoteJson) {
       const quoteJson = JSON.stringify(quote);
@@ -2940,7 +2978,8 @@ async function requestQuote(
   body: Record<string, unknown> | string,
   timeoutMs?: number,
   onRefusal?: (status: number, detail: Record<string, unknown> | null) => Promise<void>,
-  reportingToken?: string
+  reportingToken?: string,
+  onFlowEvent?: Aifp1FetchOptions["onFlowEvent"]
 ): Promise<Aifp1Quote> {
   let r: Response;
   let text: string;
@@ -2952,6 +2991,7 @@ async function requestQuote(
         method: "POST",
         headers: {
           "content-type": "application/json",
+          "User-Agent": SDK_USER_AGENT,
           "AIFP-Agent-Id": deps.agentId,
           ...(deps.framework ? { "AIFP-Agent-Framework": deps.framework } : {}),
           ...reportingHeaders(reportingToken, `${apiBase}/v1/quote`),
@@ -2964,6 +3004,7 @@ async function requestQuote(
     throw new Aifp1QuoteError(`POST ${apiBase}/v1/quote failed: ${(e as Error).message}`);
   }
   if (!r.ok) {
+    emitFlowEvent(onFlowEvent, refusalEvent("quote_refused", r.status, text));
     let detail = null;
     try {
       detail = JSON.parse(text);
@@ -3007,7 +3048,8 @@ async function requestEvmQuote(
   body: Record<string, unknown>,
   issuer: string,
   timeoutMs?: number,
-  reportingToken?: string
+  reportingToken?: string,
+  onFlowEvent?: Aifp1FetchOptions["onFlowEvent"]
 ): Promise<Aifp1Quote> {
   const signed = async () => {
     const auth = {
@@ -3032,7 +3074,8 @@ async function requestEvmQuote(
           refusal.status = status;
           refusal.detail = detail;
         },
-        reportingToken
+        reportingToken,
+        onFlowEvent
       );
     } catch (e) {
       if (e instanceof Aifp1ActiveReceiptError) throw e;
@@ -3181,6 +3224,7 @@ async function submitPayment(
           headers: {
             "content-type": "application/json",
             "Idempotency-Key": idempotencyKey,
+            "User-Agent": SDK_USER_AGENT,
             "AIFP-Agent-Id": deps.agentId,
             ...(deps.framework ? { "AIFP-Agent-Framework": deps.framework } : {}),
           },
@@ -3240,6 +3284,7 @@ async function submitPayment(
     // A 503 after settlement may mean accounting is unavailable, or that a
     // committed response was lost. Retry issuance, never the transfer.
     if (![425, 503].includes(r.status) || Date.now() >= deadline) {
+      emitFlowEvent(opts.onFlowEvent, refusalEvent("pay_refused", r.status, text));
       throw failure(
         `POST /v1/pay → ${r.status} after on-chain settlement ${txRef} for quote ${quote.quote_id}: ${lastDetail}`
       );
@@ -3274,7 +3319,7 @@ async function verifyPaidReceipt(
   const { response, text } = await settlementHttp(
     fetchImpl,
     `${issuer.replace(/\/$/, "")}/.well-known/jwks.json`,
-    {},
+    { headers: { "User-Agent": SDK_USER_AGENT } },
     timeoutMs
   );
   if (!response.ok) reject();

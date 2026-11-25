@@ -1,5 +1,6 @@
 import { resolveAgentPassport, agentPassportWallet, type AgentPassportNetwork } from "./agentPassport.js";
 import { aifinpayApiUrl } from "./apiUrl.js";
+import { SDK_USER_AGENT } from "./version.js";
 import { PublicKey } from "@solana/web3.js";
 import { solanaV14Inventory } from "./settlementSolanaV14.js";
 import type { SolanaNetwork } from "./generated/solanaV14Deployments.generated.js";
@@ -160,7 +161,7 @@ export async function getAgentHistory(options: AgentHistoryOptions): Promise<Rec
     query.set("program", selected.program!);
   }
   const response = await fetchImpl(aifinpayApiUrl(base, `/v1/agents/${selected.address}/${source}?${query}`), {
-    headers: { accept: "application/json" },
+    headers: { accept: "application/json", "user-agent": SDK_USER_AGENT },
   });
   if (!response.ok)
     throw new Error(`Payment history unavailable: HTTP ${response.status}; source=${source}; chain=${network}.`);
@@ -248,7 +249,7 @@ export async function getQuota(options: QuotaOptions): Promise<QuotaSummary> {
   const response = await fetchImpl(
     aifinpayApiUrl(base, `/v1/agents/${selected.address}/receipts${query.size ? `?${query}` : ""}`),
     {
-      headers: { accept: "application/json" },
+      headers: { accept: "application/json", "user-agent": SDK_USER_AGENT },
     }
   );
   if (!response.ok) throw new Error(`Quota lookup failed: HTTP ${response.status}`);

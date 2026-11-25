@@ -8,13 +8,13 @@ import { detectFacilitator } from "./facilitators/detect.js";
 import type { PayOptions } from "./facilitators/base.js";
 import { privateKeyToAccount } from "viem/accounts";
 import type { AgentWallet } from "./agentWallet.js";
+import { SDK_USER_AGENT } from "./version.js";
 
 // Canonical domain is aifinpay.io. The legacy aifinpay.company host still
 // answers, with a 301 to aifinpay.io — do not use it: a client that follows a
 // 301 may re-send a POST as a GET and lose the body.
 const DEFAULT_BASE_URL = "https://aifinpay.io";
 const DEFAULT_TIMEOUT_MS = 30_000;
-const SDK_UA = "aifinpay-agent-node/0.3.0";
 
 /** The AI clients the AiFinPay backend records for AIFP-Agent-Framework. */
 export const AGENT_FRAMEWORKS = Object.freeze([
@@ -454,7 +454,7 @@ export class Agent {
   /** `headers` plus the SDK's own, which replace a caller's copy in any letter case. */
   private sdkHeaders(headers: Record<string, string> = {}): Record<string, string> {
     const sdk: Record<string, string> = {
-      "user-agent": SDK_UA,
+      "user-agent": SDK_USER_AGENT,
       ...(this.framework ? { "aifp-agent-framework": this.framework } : {}),
     };
     const rest = Object.entries(headers).filter(([name]) => !Object.keys(sdk).includes(name.toLowerCase()));

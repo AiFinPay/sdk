@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.18.0 — the SDK names its version
+
+- AIFP-1 requests (merchant, `/v1/quote`, `/v1/pay`, the issuer's keys), the
+  low-level `Agent` and history, quota and passport lookups send
+  `User-Agent: aifinpay-agent-node/<version>` (`SDK_USER_AGENT`, `SDK_VERSION`).
+  The low-level `Agent` sent a fixed `0.3.0`, and AIFP-1 requests sent none. A
+  caller's own `User-Agent` on the merchant request is kept, with the SDK's
+  appended once.
+- `onFlowEvent` on the AIFP-1 fetch options reports the receipt cache, the 402
+  challenge and a refused `/v1/quote` or `/v1/pay`, with no URL, address or id.
+  A throw from it is ignored.
+
 ## 2.17.1 — Tron deployment metadata
 
 - `TRON_V14_DEPLOYMENTS` (and `TRON_V14_DEPLOYMENTS_SOURCE`) export the Tron v1.4
