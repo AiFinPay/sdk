@@ -499,7 +499,8 @@ describe("telemetry never changes a tool's answer", () => {
     const withHanging = await run(send(hanging.url));
     expect(withFailing.text).toBe(off.text);
     expect(withHanging.text).toBe(off.text);
-    expect(withHanging.ms).toBeLessThan(1000);
+    // Against the same run with telemetry off: an awaited send would add the 1.5 s timeout.
+    expect(withHanging.ms - off.ms).toBeLessThan(1000);
   });
 
   it("writes nothing to stdout, the JSON-RPC channel", async () => {
