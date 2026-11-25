@@ -13,6 +13,8 @@ process.env.AIFINPAY_HOME = join(testRoot, "wallet");
 // The agent keeps its spend ledger and gateway merchant pins here, not under
 // AIFINPAY_HOME; an inherited value would point tests at a real state directory.
 process.env.AIFINPAY_STATE_DIR = join(testRoot, "state");
+// Telemetry is on unless turned off; tests that send set their own loopback collector.
+process.env.AIFINPAY_TELEMETRY = "off";
 
 for (const name of [
   "SEED_HASH",

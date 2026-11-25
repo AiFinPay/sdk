@@ -7,5 +7,7 @@ import "./tests/test-environment.ts";
 export default defineConfig({
   test: {
     setupFiles: ["./tests/isolate-environment.ts"],
+    // Processed by Vitest so vi.resetModules() gives each telemetry test fresh package state.
+    server: { deps: { inline: ["@aifinpay/analytics"] } },
   },
 });

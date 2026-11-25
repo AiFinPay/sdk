@@ -6,6 +6,13 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## MCP 2.18.0 — usage telemetry
+
+- The MCP server sends usage events through `@aifinpay/analytics` 0.2.0: wallet
+  load, first tool call, and where a `payable_fetch` payment stops. On unless
+  `AIFINPAY_TELEMETRY=off`, `DO_NOT_TRACK=1` or `CI`; no URLs, addresses or
+  exact amounts.
+
 ## Analytics 0.2.0 — telemetry on unless turned off (unreleased)
 
 - `@aifinpay/analytics` sends unless `AIFINPAY_TELEMETRY=off` (or `0`,
