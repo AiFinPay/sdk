@@ -213,7 +213,9 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
           !railAssets.includes(pending.recovery.asset) ||
           (solana ? pending.recovery.family !== "solana" : pending.recovery.family === "solana")
         )
-          throw new Error(`Pending payment does not match the configured wallet/API/${selected.name} v1.4 route and asset`);
+          throw new Error(
+            `Pending payment does not match the configured wallet/API/${selected.name} v1.4 route and asset`
+          );
         let recovery: Aifp1PaymentRecovery;
         if (pending.recovery.family === "solana") {
           if (
@@ -334,7 +336,9 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
         let offered: OptionState[] | undefined;
         let answered: Response | undefined;
         if (options.length > 1) {
-          const remembered = options.find((o) => o.chain === state!.paidWith?.chain && o.asset === state!.paidWith?.asset);
+          const remembered = options.find(
+            (o) => o.chain === state!.paidWith?.chain && o.asset === state!.paidWith?.asset
+          );
           option = remembered ?? option;
           const first = await firstAnswer(ctx, url, parsed, pathMode);
           if (first && "response" in first) answered = first.response;
@@ -354,7 +358,9 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
                   )
                 : null;
               const merchantChains = Array.isArray(merchant?.settlement_chains)
-                ? merchant.settlement_chains.filter((c): c is string => typeof c === "string").map((c) => c.toLowerCase())
+                ? merchant.settlement_chains
+                    .filter((c): c is string => typeof c === "string")
+                    .map((c) => c.toLowerCase())
                 : undefined;
               offered = await readOptions(ctx, options, { priceUsd, merchantChains });
               const chosen = chooseOption(offered, remembered);
@@ -383,7 +389,15 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
             at: Date.now(),
             balances: offered.flatMap((o) =>
               o.balance
-                ? [{ chain: o.chain, asset: o.asset, units: o.balance.units.toString(), decimals: o.balance.decimals, at: o.balance.at }]
+                ? [
+                    {
+                      chain: o.chain,
+                      asset: o.asset,
+                      units: o.balance.units.toString(),
+                      decimals: o.balance.decimals,
+                      at: o.balance.at,
+                    },
+                  ]
                 : []
             ),
           };
@@ -392,104 +406,104 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
         const response =
           answered ??
           (await ctx.agent.fetchPaid(
-          url.href,
-          { method: "GET", redirect: "manual" },
-          {
-            apiBaseUrl: ctx.config.baseUrl,
-            paymentIssuer: ctx.config.baseUrl ?? "https://api.aifinpay.io",
-            gatewayOrigins: origins,
-            resourcePathMode: pathMode,
-            scope,
-            ...(expectedMerchantId !== undefined ? { expectedMerchantId } : {}),
-            ...(ctx.framework ? { framework: ctx.framework } : {}),
-            // A pending Solana quote pins this owner limit across restarts and
-            // rollover. Fresh daily allowance is checked again in persistPrepared
-            // under the operation lock, before any broadcast.
-            maxAmountUsd:
-              pay.name === "solana" ? maximum : Math.min(maximum, Math.max(0, ctx.config.dailyAmountUsd! - spent)),
-            nativeUsdPrice: async () => {
-              // Independent public price, never the quote API's rate: Chainlink
-              // over the agent's own RPC for the pay chain first (no extra
-              // host), then Coinbase, then CoinGecko. See ../native-price.ts.
-              const found = await independentNativeUsd({
-                fetchImpl: (input, init) => ctx.agent.inner.fetchImpl(input, init),
-                chain: pay,
-                rpc,
-              });
-              price = { usd: found.usd, observedAtMs: found.observedAtMs };
-              return price;
-            },
-            ...(pay.name === "solana"
-              ? {
-                  solanaV14: {
-                    environment: ctx.config.devMode ? ("dev" as const) : ("prod" as const),
-                    network: ctx.config.solanaNetwork!,
-                    asset: payAsset,
-                    maxFeeLamports: feeCap,
-                    onPrepared: async (prepared) => {
-                      quoted(prepared.asset, prepared.quote.amount);
-                      if (
-                        prepared.family !== "solana" ||
-                        prepared.chain !== "solana" ||
-                        prepared.solana.network !== ctx.config.solanaNetwork ||
-                        prepared.quote.payer !== ctx.agent.solanaAddress ||
-                        prepared.asset !== payAsset
-                      )
-                        throw new Error("Prepared Solana payment disagrees with the owner configuration");
-                      await confirmPayee(prepared.quote.merchant_id);
-                      if (!price || Date.now() - price.observedAtMs > 60_000 || price.observedAtMs > Date.now())
-                        throw new Error("Independent SOL price expired before preparation");
-                      const native = prepared.quote.native_settlement as { total_lamports?: string } | undefined;
-                      const floor =
-                        payAsset === "SOL"
-                          ? Math.max(
-                              Number(prepared.quote.amount),
-                              (Number(BigInt(native!.total_lamports!)) / 1e9) * price.usd
-                            )
-                          : Number(prepared.quote.amount);
-                      if (
-                        !Number.isFinite(floor) ||
-                        floor <= 0 ||
-                        !Number.isFinite(prepared.reservedAmountUsd) ||
-                        prepared.reservedAmountUsd < floor
-                      )
-                        throw new Error("Prepared Solana admission amount is inconsistent");
-                      persistPrepared(prepared, prepared.reservedAmountUsd);
-                      remember();
+            url.href,
+            { method: "GET", redirect: "manual" },
+            {
+              apiBaseUrl: ctx.config.baseUrl,
+              paymentIssuer: ctx.config.baseUrl ?? "https://api.aifinpay.io",
+              gatewayOrigins: origins,
+              resourcePathMode: pathMode,
+              scope,
+              ...(expectedMerchantId !== undefined ? { expectedMerchantId } : {}),
+              ...(ctx.framework ? { framework: ctx.framework } : {}),
+              // A pending Solana quote pins this owner limit across restarts and
+              // rollover. Fresh daily allowance is checked again in persistPrepared
+              // under the operation lock, before any broadcast.
+              maxAmountUsd:
+                pay.name === "solana" ? maximum : Math.min(maximum, Math.max(0, ctx.config.dailyAmountUsd! - spent)),
+              nativeUsdPrice: async () => {
+                // Independent public price, never the quote API's rate: Chainlink
+                // over the agent's own RPC for the pay chain first (no extra
+                // host), then Coinbase, then CoinGecko. See ../native-price.ts.
+                const found = await independentNativeUsd({
+                  fetchImpl: (input, init) => ctx.agent.inner.fetchImpl(input, init),
+                  chain: pay,
+                  rpc,
+                });
+                price = { usd: found.usd, observedAtMs: found.observedAtMs };
+                return price;
+              },
+              ...(pay.name === "solana"
+                ? {
+                    solanaV14: {
+                      environment: ctx.config.devMode ? ("dev" as const) : ("prod" as const),
+                      network: ctx.config.solanaNetwork!,
+                      asset: payAsset,
+                      maxFeeLamports: feeCap,
+                      onPrepared: async (prepared) => {
+                        quoted(prepared.asset, prepared.quote.amount);
+                        if (
+                          prepared.family !== "solana" ||
+                          prepared.chain !== "solana" ||
+                          prepared.solana.network !== ctx.config.solanaNetwork ||
+                          prepared.quote.payer !== ctx.agent.solanaAddress ||
+                          prepared.asset !== payAsset
+                        )
+                          throw new Error("Prepared Solana payment disagrees with the owner configuration");
+                        await confirmPayee(prepared.quote.merchant_id);
+                        if (!price || Date.now() - price.observedAtMs > 60_000 || price.observedAtMs > Date.now())
+                          throw new Error("Independent SOL price expired before preparation");
+                        const native = prepared.quote.native_settlement as { total_lamports?: string } | undefined;
+                        const floor =
+                          payAsset === "SOL"
+                            ? Math.max(
+                                Number(prepared.quote.amount),
+                                (Number(BigInt(native!.total_lamports!)) / 1e9) * price.usd
+                              )
+                            : Number(prepared.quote.amount);
+                        if (
+                          !Number.isFinite(floor) ||
+                          floor <= 0 ||
+                          !Number.isFinite(prepared.reservedAmountUsd) ||
+                          prepared.reservedAmountUsd < floor
+                        )
+                          throw new Error("Prepared Solana admission amount is inconsistent");
+                        persistPrepared(prepared, prepared.reservedAmountUsd);
+                        remember();
+                      },
                     },
-                  },
-                }
-              : {
-                  v14: {
-                    chain: pay.name,
-                    ...(stablePay ? { asset: payAsset } : {}),
-                    maxGasWei: gasCap,
-                    onPrepared: async (prepared) => {
-                      quoted(prepared.asset, prepared.quote.amount);
-                      await confirmPayee(prepared.quote.merchant_id);
-                      let usd: number;
-                      if (stablePay) {
-                        if (prepared.asset !== payAsset)
-                          throw new Error("Prepared payment is not in the configured asset");
-                        usd = Number(prepared.quote.amount);
-                      } else {
-                        if (!price || Date.now() - price.observedAtMs > 60_000)
-                          throw new Error("Independent price expired before preparation");
-                        const native = prepared.quote.native_settlement as { total_wei: string };
-                        usd = Math.max(
-                          Number(prepared.quote.amount),
-                          (Number(BigInt(native.total_wei)) / 1e18) * price.usd
-                        );
-                      }
-                      // Copy the full recovery, including the new wallet binding
-                      // marker and any signed approval; retain legacy byte field.
-                      persistPrepared(prepared, usd, prepared.serializedTransaction);
-                      remember();
+                  }
+                : {
+                    v14: {
+                      chain: pay.name,
+                      ...(stablePay ? { asset: payAsset } : {}),
+                      maxGasWei: gasCap,
+                      onPrepared: async (prepared) => {
+                        quoted(prepared.asset, prepared.quote.amount);
+                        await confirmPayee(prepared.quote.merchant_id);
+                        let usd: number;
+                        if (stablePay) {
+                          if (prepared.asset !== payAsset)
+                            throw new Error("Prepared payment is not in the configured asset");
+                          usd = Number(prepared.quote.amount);
+                        } else {
+                          if (!price || Date.now() - price.observedAtMs > 60_000)
+                            throw new Error("Independent price expired before preparation");
+                          const native = prepared.quote.native_settlement as { total_wei: string };
+                          usd = Math.max(
+                            Number(prepared.quote.amount),
+                            (Number(BigInt(native.total_wei)) / 1e18) * price.usd
+                          );
+                        }
+                        // Copy the full recovery, including the new wallet binding
+                        // marker and any signed approval; retain legacy byte field.
+                        persistPrepared(prepared, usd, prepared.serializedTransaction);
+                        remember();
+                      },
                     },
-                  },
-                }),
-          }
-        ));
+                  }),
+            }
+          ));
         if (response === null) {
           track("budget_cap_exceeded", { stage: "per_payment" });
           return errorResult("Payment skipped: owner budget reached.");
@@ -654,7 +668,8 @@ async function firstAnswer(
   pathMode: "gateway" | "direct"
 ): Promise<{ response: Response } | { challenge: Challenge } | null> {
   const payer = ctx.agent.evmAddress;
-  if (pathMode === "gateway" && ctx.agent.aifp1Receipts.find(parsed.site, parsed.restPath, undefined, payer)) return null;
+  if (pathMode === "gateway" && ctx.agent.aifp1Receipts.find(parsed.site, parsed.restPath, undefined, payer))
+    return null;
   const response = await ctx.agent.inner.fetchImpl(url.href, {
     method: "GET",
     redirect: "manual",
@@ -662,7 +677,10 @@ async function firstAnswer(
   });
   const body =
     response.status === 402 || response.status === 410
-      ? ((await response.clone().json().catch(() => null)) as Record<string, unknown> | null)
+      ? ((await response
+          .clone()
+          .json()
+          .catch(() => null)) as Record<string, unknown> | null)
       : null;
   if (response.status === 410 && body?.error === "gateway_retired") throw new Aifp1GatewayRetiredError(parsed.site);
   if (
