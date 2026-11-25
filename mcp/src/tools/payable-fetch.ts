@@ -6,6 +6,7 @@ import {
   assertPreparedV14Recovery,
   parseGatewayUrl,
   type Aifp1CachedReceipt,
+  type Aifp1FlowEvent,
   type V14SettlementCall,
   type Aifp1PaymentRecovery,
 } from "@aifinpay/agent";
@@ -17,7 +18,7 @@ import { PAY_CHAINS, payChain, type PayChain } from "../pay-chains.js";
 import { SMALLEST_BATCH_USD, paymentSetupStatus } from "./payment-setup-status.js";
 import { assertVerifiedMerchantSite, readMerchant, UnverifiedMerchantSiteError } from "../merchant-site.js";
 import { chooseOption, forgetBalances, formatUnits, readOptions, rpcFor, type OptionState } from "../pay-options.js";
-import { errorClass, track, usdBucket } from "../telemetry.js";
+import { errorClass, MCP_TOKEN, MCP_USER_AGENT, track, usdBucket } from "../telemetry.js";
 
 // "prefix" is left out on purpose: it needs a resource to anchor to, and the
 // owner's two real requests are "this endpoint" and "this site".
@@ -83,6 +84,8 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
   let paying: { chain: PayChain; asset: string } | undefined;
   // Where a paid fetch stopped, for telemetry only; unset outside a purchase.
   let stage: string | undefined;
+  // Status of a quote or pay refusal the SDK reported, for telemetry only.
+  let refusedStatus: number | undefined;
   try {
     const store = ctx.paymentState;
     // Not set up: say exactly what is missing instead of refusing in one line.
@@ -407,8 +410,15 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
           answered ??
           (await ctx.agent.fetchPaid(
             url.href,
-            { method: "GET", redirect: "manual" },
+            { method: "GET", redirect: "manual", headers: { "User-Agent": MCP_TOKEN } },
             {
+              onFlowEvent: (event: Aifp1FlowEvent) => {
+                if (event.type === "challenge_received")
+                  track("aifp1_challenge_received", { outcome: event.direct ? "direct" : "gateway", http_status: 402 });
+                else if (event.type === "receipt_cache")
+                  track(event.hit ? "aifp1_receipt_cached_hit" : "aifp1_receipt_cached_miss");
+                else refusedStatus = event.status;
+              },
               apiBaseUrl: ctx.config.baseUrl,
               paymentIssuer: ctx.config.baseUrl ?? "https://api.aifinpay.io",
               gatewayOrigins: origins,
@@ -581,7 +591,9 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
         stage: error instanceof PaymentStateError ? "setup" : settlement ? "settle" : stage,
         error_class: errorClass(error),
         http_status:
-          error instanceof Aifp1GatewayRetiredError ? 410 : (error as { status?: unknown } | undefined)?.status,
+          error instanceof Aifp1GatewayRetiredError
+            ? 410
+            : ((error as { status?: unknown } | undefined)?.status ?? refusedStatus),
       });
     if (error instanceof PaymentStateError) return errorResult(error.message);
     // Set before any payment step runs; the fallback only covers a throw from
@@ -673,7 +685,11 @@ async function firstAnswer(
   const response = await ctx.agent.inner.fetchImpl(url.href, {
     method: "GET",
     redirect: "manual",
-    headers: { "AIFP-Agent-Id": payer, ...(ctx.framework ? { "AIFP-Agent-Framework": ctx.framework } : {}) },
+    headers: {
+      "User-Agent": MCP_USER_AGENT,
+      "AIFP-Agent-Id": payer,
+      ...(ctx.framework ? { "AIFP-Agent-Framework": ctx.framework } : {}),
+    },
   });
   const body =
     response.status === 402 || response.status === 410

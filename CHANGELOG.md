@@ -6,6 +6,14 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## MCP 2.20.0 — the MCP names its version
+
+- `@aifinpay/mcp` depends on `@aifinpay/agent` 2.18.0 and sends
+  `User-Agent: aifinpay-mcp/<version> aifinpay-agent-node/<SDK version>` to the
+  AiFinPay API and the merchant; `payable_fetch` reports the SDK's receipt cache
+  and 402 flow events through its existing telemetry. 2.19.0 was not published;
+  its changes ship in 2.20.0.
+
 ## Agent 2.18.0 — the SDK names its version
 
 - `@aifinpay/agent` sends `User-Agent: aifinpay-agent-node/<version>` on AIFP-1,

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { emit } from "@aifinpay/analytics";
+import { SDK_USER_AGENT } from "@aifinpay/agent";
 
 // Fields outside this list never leave the process; the package's scrubber is the second line.
 const STAGES = new Set([
@@ -30,6 +31,8 @@ const TEXT = new Map<string, RegExp>(
 export const MCP_VERSION: string = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8")
 ).version;
+export const MCP_TOKEN = `aifinpay-mcp/${MCP_VERSION}`;
+export const MCP_USER_AGENT = `${MCP_TOKEN} ${SDK_USER_AGENT}`;
 
 export function track(name: string, payload: Record<string, unknown> = {}): void {
   try {
