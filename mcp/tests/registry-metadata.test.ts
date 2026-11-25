@@ -21,9 +21,12 @@ import { createServer } from "../src/server.js";
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const serverJson = JSON.parse(read("../server.json")) as {
+  name: string;
+  version: string;
   description: string;
-  packages: { environmentVariables?: { name: string; description: string }[] }[];
+  packages: { version: string; environmentVariables?: { name: string; description: string }[] }[];
 };
+const manifest = JSON.parse(read("../package.json")) as { version: string; mcpName: string };
 const smithery = read("../smithery.yaml");
 
 // Just enough YAML for this file's two lists, without adding a dependency.
@@ -94,6 +97,12 @@ async function registeredTools(): Promise<string[]> {
 }
 
 describe("smithery.yaml and server.json describe this server", () => {
+  it("server.json names this package version, so the registry entry cannot fall behind a release", () => {
+    expect(serverJson.version).toBe(manifest.version);
+    for (const pkg of serverJson.packages) expect(pkg.version).toBe(manifest.version);
+    expect(serverJson.name).toBe(manifest.mcpName);
+  });
+
   it("advertise only tools a configured server registers, including the one that pays", async () => {
     const registered = await registeredTools();
     expect(smitheryTools.length).toBeGreaterThan(0);
