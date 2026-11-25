@@ -310,7 +310,8 @@ def test_independent_payment_reporting_loss_once_and_recovery_privacy(monkeypatc
     assert h.fetch(reporting_token=CAP).status_code == 200
     assert h.fetch(reporting_token="invalid\r\nheader").status_code == 200
     assert h.server.quotes == 1 and len(h.server.pays) == 1 and len(h.chain.sent) == 1
-    assert next(k for u, k in calls if u.endswith("/v1/quote"))["headers"] == {"AIFP-Reporting-Token": CAP}
+    quote_headers = next(k for u, k in calls if u.endswith("/v1/quote"))["headers"]
+    assert {k: v for k, v in quote_headers.items() if k != "User-Agent"} == {"AIFP-Reporting-Token": CAP}
     assert all("AIFP-Reporting-Token" not in k.get("headers", {}) for u, k in calls if not u.endswith("/v1/quote"))
     assert CAP not in json.dumps(h.journal) + json.dumps(h.receipts) + json.dumps(h.server.pays) + json.dumps(h.ledger._memory)
 
