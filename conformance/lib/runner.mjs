@@ -182,6 +182,64 @@ async function collectEvents(testCase, cp, instance, errors) {
   if (cp.state.violations.length) errors.push(`ingest refused: ${cp.state.violations.join("; ")}`);
 }
 
+const rowSums = (windows, name) => {
+  const sums = new Map();
+  for (const w of windows) for (const row of w[name] ?? []) {
+    const key = JSON.stringify(row.slice(0, -1));
+    sums.set(key, (sums.get(key) ?? 0) + row[row.length - 1]);
+  }
+  return [...sums].map(([key, n]) => JSON.stringify([...JSON.parse(key), n])).sort();
+};
+const sameRows = (windows, name, want) => JSON.stringify(rowSums(windows, name)) === JSON.stringify(want.map((r) => JSON.stringify(r)).sort());
+
+async function collectIdentity(cp, instance, profile, errors) {
+  const until = Date.now() + 8000;
+  while (Date.now() < until && !cp.state.gateSeen.length) {
+    await instance.flushEvents?.();
+    await instance.flushTraffic?.();
+    await sleep(100);
+  }
+  if (!cp.state.gateSeen.length) errors.push("identity: no request reached AiFinPay with the merchant secret");
+  for (const { url, gate, ua } of cp.state.gateSeen) {
+    if (!gate) errors.push(`identity: ${url} carried no readable AIFP-Gate`);
+    else if (gate.mode !== profile.mode || gate.charge !== profile.charge) errors.push(`identity: ${url} said mode=${gate.mode} charge=${gate.charge}, the site is ${profile.mode}/${profile.charge}`);
+    if (!ua) errors.push(`identity: ${url} carried no gate User-Agent`);
+    else if (gate && (ua.pkg !== gate.pkg || ua.ver !== gate.ver)) errors.push(`identity: ${url} User-Agent says ${ua.pkg}/${ua.ver}, AIFP-Gate says ${gate.pkg}/${gate.ver}`);
+  }
+}
+
+async function collectTraffic(testCase, cp, instance, pathPrefix, errors) {
+  const want = testCase.traffic;
+  const until = Date.now() + 8000;
+  while (Date.now() < until) {
+    await instance.flushTraffic?.();
+    if (want === null) { await sleep(400); break; }
+    if (sameRows(cp.state.traffic, "classes", want.classes)) break;
+    await sleep(100);
+  }
+  await sleep(150);
+  await instance.flushTraffic?.();
+  const accepted = cp.state.traffic;
+  if (cp.state.trafficViolations.length) errors.push(`traffic refused or skipped: ${cp.state.trafficViolations.join("; ")}`);
+  for (const name of ["operators", "sections", "networks"]) {
+    for (const w of accepted) if ((w[name] ?? []).some((row) => Array.isArray(row) && row[1] === "human")) errors.push(`traffic: ${name} carries human`);
+  }
+  if (want === null) {
+    if (accepted.length) errors.push(`traffic: expected no window accepted, got ${accepted.length}`);
+    return;
+  }
+  if (!accepted.length) errors.push("traffic: no window accepted");
+  for (const w of accepted) if (w.mode !== want.mode || w.charge !== want.charge) errors.push(`traffic: window ${w.id} says ${w.mode}/${w.charge}, expected ${want.mode}/${want.charge}`);
+  for (const name of ["classes", "operators", "sections"]) {
+    if (!want[name] || (name === "sections" && pathPrefix)) continue;
+    if (!sameRows(accepted, name, want[name])) errors.push(`traffic ${name}: expected ${want[name].map((r) => JSON.stringify(r)).sort().join(" ")} got ${rowSums(accepted, name).join(" ") || "none"}`);
+  }
+  if (testCase.fault?.traffic_times) {
+    const first = cp.state.trafficAttempts[0]?.id;
+    if (accepted.length !== 1 || accepted[0].id !== first) errors.push(`traffic: the retry must resend window ${first}, accepted ${accepted.map((w) => w.id).join(", ") || "none"}`);
+  }
+}
+
 /** Runs every case for one subject, one profile at a time. */
 export async function runSubject(subject, { only = null, log = () => {} } = {}) {
   const vectors = loadVectors();
@@ -208,7 +266,7 @@ export async function runSubject(subject, { only = null, log = () => {} } = {}) 
         continue;
       }
       cp.state.profile = profile;
-      Object.assign(cp.state.faults, { jwks: false, record: false, ingest: 0 });
+      Object.assign(cp.state.faults, { jwks: false, record: false, ingest: 0, traffic: 0, trafficTimes: 0 });
       const port = await freePort();
       const ctx = {
         vectors, fixtures, profile, profileName, dir, port, cp, origin, redis, keys,
@@ -267,7 +325,19 @@ export async function runSubject(subject, { only = null, log = () => {} } = {}) 
             cp.state.events.length = 0;
             cp.state.violations.length = 0;
           }
+          const traffic = Object.hasOwn(testCase, "traffic");
+          if (testCase.identity || traffic) {
+            if (traffic) {
+              await instance.flushTraffic?.();
+              await sleep(100);
+            }
+            for (const list of ["gateSeen", "traffic", "trafficAttempts", "trafficViolations"]) cp.state[list].length = 0;
+          }
+          if (fault.traffic) Object.assign(cp.state.faults, { traffic: fault.traffic, trafficTimes: fault.traffic_times ?? 0 });
           await runSteps(testCase, c, instance, errors);
+          if (testCase.identity) await collectIdentity(cp, instance, profile, errors);
+          // Traffic first: a sender's answer must not change what the event reporter does next.
+          if (traffic) await collectTraffic(testCase, cp, instance, c.pathPrefix, errors);
           if (testCase.events) await collectEvents(testCase, cp, instance, errors);
         } catch (err) {
           errors.push(`exception: ${err.message}`);
@@ -279,6 +349,7 @@ export async function runSubject(subject, { only = null, log = () => {} } = {}) 
               await instance.restart({ cold: true });
             }
             if (fault.ingest) cp.state.faults.ingest = 0;
+            if (fault.traffic) Object.assign(cp.state.faults, { traffic: 0, trafficTimes: 0 });
             if (fault.origin) await origin.start();
             if (fault.store) await instance.healStore();
             if (fault.decision) await instance.healDecision();

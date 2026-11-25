@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-// Writes vectors/gate-v1.json. Golden bodies come from the built ../gate, so a change there shows as a stale file.
+// Writes vectors/*.json. Golden bodies come from the built ../gate, so a change there shows as a stale file.
 //   (cd ../gate && npm ci && npm run build) && node scripts/gen-vectors.mjs
 //   node scripts/gen-vectors.mjs --check
 import { createHmac } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as T from "../lib/traffic.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const gateDir = resolve(here, "../../gate");
@@ -383,6 +384,26 @@ add("method.post", "must", "content-enforce", "A POST is charged like a GET", st
 add("method.head", "must", "content-enforce", "A HEAD is charged like a GET", step({ method: "HEAD", path: PAID, ua: "gptbot" }, noOrigin(402)));
 add("method.options", "parity", "content-enforce", "An OPTIONS is charged like a GET", step({ method: "OPTIONS", path: PAID, ua: "gptbot" }, noOrigin(402)));
 
+// ── gate identity and traffic ─────────────────────────────────────────────
+add("identity.header", "must", "content-enforce", "Every request to AiFinPay names the gate, its mode and who pays", step(get("gptbot"), noOrigin(402)), { identity: true, needs: ["identity"] });
+add("identity.shadow", "must", "content-shadow", "A shadow site says it is in shadow", step(get("gptbot"), served()), { identity: true, needs: ["identity"] });
+const trafficCase = (id, level, profile, title, steps, traffic, extra = {}) => add(id, level, profile, title, steps, { traffic, needs: ["traffic"], ...extra });
+const ENFORCE = { mode: "enforce", charge: "agents" };
+const CHALLENGED = [["ai_crawler", "challenged", 1]];
+trafficCase("traffic.window", "must", "content-enforce", "A window counts readers and agents by class, operator and section", [step(get("chrome"), served()), step(get("gptbot"), noOrigin(402))],
+  { ...ENFORCE, classes: [["ai_crawler", "challenged", 1], ["human", "served", 1]], operators: [["openai", "ai_crawler", "challenged", 1]], sections: [["/paid", "ai_crawler", 1]] });
+trafficCase("traffic.shadow", "must", "content-shadow", "Shadow reports the decision it would have made", step(get("gptbot"), served()), { mode: "shadow", charge: "agents", classes: CHALLENGED });
+trafficCase("traffic.paid", "must", "content-enforce", "A paid admission is counted as paid", step(pay(), served()),
+  { ...ENFORCE, classes: [["aifp_agent", "paid", 1]], operators: [["aifinpay", "aifp_agent", "paid", 1]] }, { receipts: { r: R() } });
+trafficCase("traffic.blocked", "parity", "policy-enforce", "A blocked operator is counted as blocked", step(get("claudebot"), refused403()), { ...ENFORCE, classes: [["ai_crawler", "blocked", 1]] });
+trafficCase("traffic.asset", "must", "content-enforce", "A page's script served free is not a visitor", [step(get("chrome", "/free/app.js"), served()), step(get("chrome"), served())], { ...ENFORCE, classes: [["human", "served", 1]] });
+trafficCase("traffic.resend", "must", "content-enforce", "A window the API could not take is sent again with the same id", step(get("gptbot"), noOrigin(402)), { ...ENFORCE, classes: CHALLENGED }, { fault: { traffic: 503, traffic_times: 1 } });
+const quietTraffic = [step(get("gptbot"), noOrigin(402)), step(get("chrome"), served())];
+const stillReported = { events: [ev("402", "openai", "ai_crawler", false)], needs: ["traffic", "events"] };
+trafficCase("traffic.old_api", "must", "content-enforce", "An API without the traffic route costs no response and no event", quietTraffic, null, { ...stillReported, fault: { traffic: 404 } });
+trafficCase("traffic.refused", "must", "content-enforce", "A refused window costs no response and no event", quietTraffic, null, { ...stillReported, fault: { traffic: 400 } });
+trafficCase("traffic.down", "must", "content-enforce", "A traffic outage costs no response and no event", quietTraffic, null, { ...stillReported, fault: { traffic: 503 } });
+
 const vectors = {
   schema: 1,
   reference: `@aifinpay/gate ${JSON.parse(readFileSync(resolve(gateDir, "package.json"), "utf8")).version}`,
@@ -493,10 +514,311 @@ const aboutVectors = {
   ],
 };
 
+// Gate identity and traffic: every expectation is written out here; the lib must agree or this throws.
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const agree = (name, got, want) => {
+  if (!same(got, want)) throw new Error(`${name}: lib/traffic.mjs gives ${JSON.stringify(got)?.slice(0, 300)}, expected ${JSON.stringify(want)?.slice(0, 300)}`);
+};
+const utf8 = (s) => Buffer.byteLength(s, "utf8");
+
+const identityOut = resolve(here, "../vectors/gate-identity-v1.json");
+const gate = (pkg, ver, platform = null, mode = null, charge = null) => ({ pkg, ver, platform, mode, charge });
+const CANON = "pkg=node; ver=0.15.0; platform=express; mode=shadow; charge=agents";
+const CANON_GATE = gate("node", "0.15.0", "express", "shadow", "agents");
+const PAD = `${CANON}; pad=`;
+const parse = [
+  { name: "canonical", header: CANON, gate: CANON_GATE },
+  { name: "no_spaces", header: "pkg=py;ver=0.11.0;platform=asgi;mode=enforce;charge=everyone", gate: gate("py", "0.11.0", "asgi", "enforce", "everyone") },
+  { name: "tabs_and_trailing", header: "\tpkg=cloudflare ;\t ver=1.0.0;platform=workers;  mode=enforce; charge=unproven;", gate: gate("cloudflare", "1.0.0", "workers", "enforce", "unproven") },
+  { name: "any_order", header: "charge=custom; mode=enforce; platform=wp6.7; ver=0.2.0; pkg=wordpress", gate: gate("wordpress", "0.2.0", "wp6.7", "enforce", "custom") },
+  { name: "unknown_keys", header: "pkg=drupal; ver=1.2.0; platform=drupal11; mode=enforce; charge=unproven; region=eu; note=\"a b, c\"; x=1=2", gate: gate("drupal", "1.2.0", "drupal11", "enforce", "unproven") },
+  { name: "pkg_and_ver_only", header: "pkg=kit; ver=0.3.1", gate: gate("kit", "0.3.1") },
+  { name: "unknown_mode", header: "pkg=node; ver=0.15.0; platform=express; mode=observe; charge=agents", gate: gate("node", "0.15.0", "express", null, "agents") },
+  { name: "unknown_charge", header: "pkg=node; ver=0.15.0; platform=express; mode=enforce; charge=verified", gate: gate("node", "0.15.0", "express", "enforce", null) },
+  { name: "prerelease", header: "pkg=node; ver=0.16.0-rc.1; platform=fastify; mode=shadow; charge=agents", gate: gate("node", "0.16.0-rc.1", "fastify", "shadow", "agents") },
+  { name: "value_32", header: `pkg=node; ver=0.15.0; platform=${"a".repeat(32)}`, gate: gate("node", "0.15.0", "a".repeat(32)) },
+  { name: "exactly_256_bytes", header: PAD + "x".repeat(256 - PAD.length), gate: CANON_GATE },
+  { name: "empty", header: "", gate: null },
+  { name: "over_256_bytes", header: PAD + "x".repeat(257 - PAD.length), gate: null },
+  { name: "over_256_bytes_multibyte", header: PAD + "\u00e9".repeat(256 - PAD.length), gate: null },
+  { name: "no_pkg", header: "ver=0.15.0; platform=express; mode=shadow; charge=agents", gate: null },
+  { name: "no_ver", header: "pkg=node; platform=express; mode=shadow; charge=agents", gate: null },
+  { name: "unknown_pkg", header: "pkg=nginx; ver=1.0.0", gate: null },
+  { name: "uppercase_value", header: "pkg=Node; ver=0.15.0", gate: null },
+  { name: "uppercase_key", header: "PKG=node; ver=0.15.0", gate: null },
+  { name: "key_with_space", header: "pkg = node; ver=0.15.0", gate: null },
+  { name: "empty_key", header: "=node; ver=0.15.0", gate: null },
+  { name: "duplicate_key", header: "pkg=node; pkg=py; ver=0.15.0", gate: null },
+  { name: "part_without_equals", header: "pkg=node; ver=0.15.0; shadow", gate: null },
+  { name: "value_with_space", header: "pkg=node; ver=0.15.0 beta", gate: null },
+  { name: "value_33", header: `pkg=node; ver=0.15.0; platform=${"a".repeat(33)}`, gate: null },
+  { name: "empty_value", header: "pkg=node; ver=0.15.0; platform=", gate: null },
+  { name: "quoted_value", header: "pkg=node; ver=\"0.15.0\"", gate: null },
+  { name: "value_with_equals", header: "pkg=node; ver=1=2", gate: null },
+  { name: "build_metadata", header: "pkg=node; ver=0.15.0+build.5", gate: null },
+  { name: "non_ascii_value", header: "pkg=node; ver=0.15.0; platform=\u0435\u043a\u0441\u043f\u0440\u0435\u0441", gate: null },
+  { name: "two_lines_joined", header: "pkg=node; ver=0.15.0, pkg=py; ver=0.1.0", gate: null },
+  { name: "only_separators", header: ";;;", gate: null },
+];
+if (utf8(parse.find((v) => v.name === "exactly_256_bytes").header) !== 256) throw new Error("exactly_256_bytes is not 256 bytes");
+if (utf8(parse.find((v) => v.name === "over_256_bytes").header) !== 257) throw new Error("over_256_bytes is not 257 bytes");
+const multibyte = parse.find((v) => v.name === "over_256_bytes_multibyte").header;
+if (multibyte.length > 256 || utf8(multibyte) <= 256) throw new Error("over_256_bytes_multibyte is not <= 256 characters and > 256 bytes");
+const userAgents = [
+  { name: "plain", user_agent: "aifinpay-gate-node/0.15.0", gate: { pkg: "node", ver: "0.15.0" } },
+  { name: "platform_tokens_after_space", user_agent: "aifinpay-gate-wordpress/0.2.0 WordPress/6.7; https://example.com", gate: { pkg: "wordpress", ver: "0.2.0" } },
+  { name: "prerelease", user_agent: "aifinpay-gate-cloudflare/1.0.0-rc.1", gate: { pkg: "cloudflare", ver: "1.0.0-rc.1" } },
+  { name: "not_at_start", user_agent: "Mozilla/5.0 aifinpay-gate-node/0.15.0", gate: null },
+  { name: "unknown_pkg", user_agent: "aifinpay-gate-nginx/1.0.0", gate: null },
+  { name: "no_ver", user_agent: "aifinpay-gate-node/", gate: null },
+  { name: "build_metadata", user_agent: "aifinpay-gate-node/0.15.0+build", gate: null },
+  { name: "no_space_after", user_agent: "aifinpay-gate-node/0.15.0;x", gate: null },
+  { name: "uppercase", user_agent: "AIFINPAY-GATE-NODE/0.15.0", gate: null },
+  { name: "agent_not_gate", user_agent: "aifinpay-agent-node/2.14.0", gate: null },
+  { name: "empty", user_agent: "", gate: null },
+];
+const fmt = (name, input, user_agent, header) => ({ name, input, user_agent, header });
+const format = [
+  fmt("node", gate("node", "0.15.0", "express", "shadow", "agents"), "aifinpay-gate-node/0.15.0", "pkg=node; ver=0.15.0; platform=express; mode=shadow; charge=agents"),
+  fmt("py", gate("py", "0.11.0", "asgi", "enforce", "everyone"), "aifinpay-gate-py/0.11.0", "pkg=py; ver=0.11.0; platform=asgi; mode=enforce; charge=everyone"),
+  fmt("wordpress_custom", gate("wordpress", "0.2.0", "wp6.7", "enforce", "custom"), "aifinpay-gate-wordpress/0.2.0", "pkg=wordpress; ver=0.2.0; platform=wp6.7; mode=enforce; charge=custom"),
+  fmt("build_metadata_dropped", gate("node", "1.2.0+build.5", "express", "enforce", "unproven"), "aifinpay-gate-node/1.2.0", "pkg=node; ver=1.2.0; platform=express; mode=enforce; charge=unproven"),
+  fmt("ver_lowercased", gate("node", "0.16.0-RC.1", "fastify", "shadow", "agents"), "aifinpay-gate-node/0.16.0-rc.1", "pkg=node; ver=0.16.0-rc.1; platform=fastify; mode=shadow; charge=agents"),
+  fmt("platform_missing", gate("drupal", "1.0.0", null, "shadow", "agents"), "aifinpay-gate-drupal/1.0.0", "pkg=drupal; ver=1.0.0; platform=unknown; mode=shadow; charge=agents"),
+  fmt("platform_outside_pattern", gate("drupal", "1.0.0", "Drupal 11", "shadow", "agents"), "aifinpay-gate-drupal/1.0.0", "pkg=drupal; ver=1.0.0; platform=unknown; mode=shadow; charge=agents"),
+  fmt("platform_too_long", gate("cloudflare", "1.0.0", "a".repeat(33), "enforce", "agents"), "aifinpay-gate-cloudflare/1.0.0", "pkg=cloudflare; ver=1.0.0; platform=unknown; mode=enforce; charge=agents"),
+  fmt("ver_empty", gate("kit", "", "kit", "shadow", "agents"), "aifinpay-gate-kit/unknown", "pkg=kit; ver=unknown; platform=kit; mode=shadow; charge=agents"),
+];
+for (const v of format) {
+  agree(`identity.format.${v.name}`, T.formatGate(v.input), { user_agent: v.user_agent, header: v.header });
+  const back = T.parseGateHeader(v.header);
+  const ua = T.parseGateUserAgent(v.user_agent);
+  agree(`identity.format.${v.name} parses back`, [back?.pkg, back?.mode, back?.charge, back?.ver], [v.input.pkg, v.input.mode, v.input.charge, ua?.ver]);
+}
+for (const v of parse) agree(`identity.parse.${v.name}`, T.parseGateHeader(v.header), v.gate);
+for (const v of userAgents) agree(`identity.user_agents.${v.name}`, T.parseGateUserAgent(v.user_agent), v.gate);
+const identityVectors = {
+  schema: 1, header: "AIFP-Gate", user_agent: "aifinpay-gate-<pkg>/<ver>", max_bytes: T.HEADER_MAX_BYTES, value_pattern: T.VALUE_PATTERN.source,
+  pkgs: T.GATE_PKGS, modes: T.GATE_MODES, charges: T.GATE_CHARGES, format, parse, user_agents: userAgents,
+};
+
+const trafficOut = resolve(here, "../vectors/gate-traffic-v1.json");
+const NOW = "2026-11-25T10:07:00Z";
+const sec = (target, section) => ({ target, section });
+const sections = [
+  sec("/", "/"), sec("", "/"), sec("/?p=123", "/"), sec("/blog", "/blog"), sec("/blog/", "/blog"), sec("/blog/2026/11/how-to-brew", "/blog"),
+  sec("/blog?utm_source=x", "/blog"), sec("/blog#top", "/blog"), sec("blog/x", "/blog"), sec("/Blog/Post", "/blog"), sec("/DOCS", "/docs"),
+  sec("//blog//x", "/blog"), sec("/my_section/x", "/my_section"), sec("/api/v1/users/42", "/api"), sec("/wp-admin/admin-ajax.php", "/wp-admin"),
+  sec("/en/blog/x", "/blog"), sec("/EN/Blog", "/blog"), sec("/en", "/"), sec("/en/", "/"), sec("/pt-br/noticias/1", "/noticias"), sec("/en_US/docs", "/docs"),
+  sec("/zh-hans/news", "/news"), sec("/en/fr/x", "/fr"), sec("/it/guide", "/guide"), sec("/ai/news", "/ai"), sec("/english/x", "/english"), sec("/en-12/x", "/en-12"),
+  sec("/en/\u041d\u043e\u0432\u0438\u043d\u0438", "_other"), sec("/2026/11/25/title", "/2026"), sec("/a1b2c3d4", "/a1b2c3d4"), sec("/a1b2c3d4e5", "_other"),
+  sec("/12345/edit", "_other"), sec("/user-829341/profile", "_other"), sec("/123e4567-e89b-12d3-a456-426614174000", "_other"),
+  sec(`/${"a".repeat(32)}`, `/${"a".repeat(32)}`), sec(`/${"a".repeat(33)}`, "_other"),
+  sec("/\u043d\u043e\u0432\u0438\u043d\u0438/\u0441\u044c\u043e\u0433\u043e\u0434\u043d\u0456", "_other"), sec("/\u0130stanbul", "_other"),
+  sec("/caf%C3%A9/menu", "_other"), sec("/%62log/x", "_other"), sec("/blog%20x", "_other"), sec("/a b/x", "_other"), sec("/robots.txt", "_other"),
+  sec("/index.php/blog/x", "_other"), sec("/.well-known/x402.json", "_other"), sec("/.env", "_other"), sec("/_next/data", "_other"), sec("/-x", "_other"),
+  sec("/blog;jsessionid=AB12/x", "_other"), sec("/a/../b", "/a"), sec("/../etc", "_other"), sec("/blog/..%2f..%2fadmin", "/blog"), sec("*", "_other"),
+];
+const cnt = (target, outcome, isCounted) => ({ target, outcome, counted: isCounted });
+const countedVectors = [
+  cnt("/static/app.js", "served", false), cnt("/static/app.js", "challenged", true), cnt("/photo.png", "paid", true), cnt("/IMG/Logo.PNG?v=3", "served", false),
+  cnt("/font.woff2", "served", false), cnt("/app.min.js?x=/a", "served", false), cnt("/blog/post", "served", true), cnt("/blog/post.html", "served", true),
+  cnt("/feed.xml", "served", true), cnt("/files/report.pdf", "served", true), cnt("/data.json", "served", true), cnt("/a.css/page", "served", true),
+  cnt("/x.js/", "served", true), cnt("/archive.jsx", "served", true), cnt("/", "served", true), cnt("/blog?file=a.png", "served", true),
+  cnt("/static/app.js", "blocked", true), cnt("/static/app.js", "error", true),
+];
+const countries = [["us", "US"], ["US", "US"], ["uA", "UA"], ["XX", "ZZ"], ["xx", "ZZ"], ["ZZ", "ZZ"], ["T1", "ZZ"], ["", "ZZ"], [null, "ZZ"], ["USA", "ZZ"], ["U", "ZZ"], [" us", "ZZ"], ["\u0443\u043a", "ZZ"], [42, "ZZ"]]
+  .map(([value, country]) => ({ value, country }));
+const networks = [[15169, "AS15169"], ["15169", "AS15169"], ["AS15169", "AS15169"], ["as15169", "AS15169"], [4294967295, "AS4294967295"], [0, "AS0"], ["AS0", "AS0"],
+  [null, "AS0"], ["", "AS0"], [4294967296, "AS0"], [-1, "AS0"], [1.5, "AS0"], ["AS01", "AS0"], ["ASN15169", "AS0"], ["15169 ", "AS0"]]
+  .map(([value, network]) => ({ value, network }));
+for (const v of sections) agree(`traffic.sections ${JSON.stringify(v.target)}`, T.sectionOf(v.target), v.section);
+for (const v of countedVectors) agree(`traffic.counted ${v.target} ${v.outcome}`, T.counted(v.target, v.outcome), v.counted);
+for (const v of countries) agree(`traffic.countries ${JSON.stringify(v.value)}`, T.countryOf(v.value), v.country);
+for (const v of networks) agree(`traffic.networks ${JSON.stringify(v.value)}`, T.networkOf(v.value), v.network);
+
+// Build: inputs here, bodies from the lib.
+const WINDOW = { id: "7b0c6f0e-3d0a-4c58-9a51-0f2d6c1b9e77", from: "2026-11-25T10:00:00Z", to: "2026-11-25T10:05:00Z", mode: "enforce", charge: "agents", sample: 1 };
+const BOTH = { country: true, network: true };
+const rq = (target, ua_class, operator, outcome, country, network, n) => ({ target, ua_class, operator, outcome, country, network, n });
+const two = (k) => String(k).padStart(2, "0");
+const MIXED = [
+  rq("/blog/a", "human", "unknown", "served", "US", 7922, 3),
+  rq("/static/app.js", "human", "unknown", "served", "US", null, 9),
+  rq("/blog/a", "ai_crawler", "openai", "challenged", "US", 8075, 2),
+  rq("/en/docs/x", "ai_crawler", "openai", "challenged", null, null, 1),
+  rq("/api/v1/x", "aifp_agent", "aifinpay", "paid", "DE", 16509, 1),
+  rq("/robots.txt", "unknown", "unknown", "served", "XX", null, 1),
+];
+const letters = (k) => "A" + String.fromCharCode(65 + k);
+const AGENT_CLASSES = G.UA_CLASSES.filter((c) => c !== "human");
+const buildInputs = [
+  ["mixed", WINDOW, BOTH, MIXED],
+  ["readers_only", WINDOW, BOTH, [rq("/", "human", "unknown", "served", "US", null, 5), rq("/", "human", "unknown", "served", "UA", null, 2)]],
+  ["nothing_counted", WINDOW, BOTH, [rq("/static/app.js", "human", "unknown", "served", "US", null, 4), rq("/logo.png", "ai_crawler", "openai", "served", "US", 8075, 1)]],
+  ["no_geo_platform", WINDOW, { country: false, network: false }, MIXED],
+  ["sample_10", { ...WINDOW, sample: 10 }, BOTH, MIXED],
+  ["section_cap", WINDOW, BOTH, [...Array.from({ length: 35 }, (_, i) => rq(`/s${two(i + 1)}/x`, "ai_crawler", "openai", "challenged", null, null, i + 1)), rq("/robots.txt", "ai_crawler", "openai", "challenged", null, null, 2)]],
+  ["country_cap", WINDOW, BOTH, [...Array.from({ length: 25 }, (_, i) => rq("/", "human", "unknown", "served", letters(i), null, i + 1)), rq("/", "human", "unknown", "served", "XX", null, 1)]],
+  ["network_cap", WINDOW, BOTH, [...Array.from({ length: 55 }, (_, i) => rq("/a", "ai_crawler", "openai", "challenged", null, i + 1, i + 1)), rq("/a", "ai_crawler", "openai", "challenged", null, null, 1)]],
+  ["cap_ties", WINDOW, BOTH, Array.from({ length: 32 }, (_, i) => rq(`/s${two(i + 1)}`, "ai_crawler", "openai", "challenged", null, null, 1))],
+  ["clamp", WINDOW, BOTH, [rq("/", "human", "unknown", "served", null, null, 2000000000)]],
+  ["row_limit", WINDOW, BOTH, [
+    ...G.GATE_OPERATORS.flatMap((op) => AGENT_CLASSES.flatMap((c) => T.OUTCOMES.map((o) => rq("/a", c, op, o, "US", 1, 1)))),
+    ...AGENT_CLASSES.flatMap((c) => Array.from({ length: 32 }, (_, i) => rq(`/s${two(i + 1)}`, c, "unknown", "served", "US", 1, 1))),
+    ...G.UA_CLASSES.flatMap((c) => Array.from({ length: 21 }, (_, i) => rq("/a", c, "unknown", "served", letters(i), 1, 1))),
+    ...AGENT_CLASSES.flatMap((c) => Array.from({ length: 51 }, (_, i) => rq("/a", c, "unknown", "served", "US", i + 2, 1))),
+  ]],
+];
+const build = buildInputs.map(([name, window, platform, requests]) => ({ name, window, platform, requests, body: T.buildTraffic(window, platform, requests) }));
+if (build.find((v) => v.name === "nothing_counted").body !== null) throw new Error("traffic.build.nothing_counted: expected no body");
+const limited = JSON.parse(build.find((v) => v.name === "row_limit").body);
+const limitedRows = ["classes", "operators", "sections", "countries", "networks"].reduce((n, t) => n + (limited[t]?.length ?? 0), 0);
+if (limited.networks || !limited.countries || limitedRows > T.MAX_ROWS) throw new Error("traffic.build.row_limit: expected networks dropped, countries kept, at most 600 rows");
+
+// Accept and refuse, at NOW, each with a fresh set of seen ids.
+const BASE = {
+  v: 1, id: "7b0c6f0e-3d0a-4c58-9a51-0f2d6c1b9e77", from: "2026-11-25T10:00:00Z", to: "2026-11-25T10:05:00Z", mode: "shadow", charge: "agents", sample: 1,
+  classes: [["ai_crawler", "challenged", 30], ["human", "served", 18234], ["unknown", "served", 120]],
+  operators: [["openai", "ai_crawler", "challenged", 30]],
+  sections: [["/blog", "ai_crawler", 26], ["_other", "unknown", 4]],
+  countries: [["US", "human", 10110], ["ZZ", "human", 4103]],
+  networks: [["AS15169", "ai_crawler", 12]],
+};
+const without = (body, ...keys) => Object.fromEntries(Object.entries(body).filter(([k]) => !keys.includes(k)));
+const MIN = without(BASE, "operators", "sections", "countries", "networks");
+const withBase = (over) => ({ ...BASE, ...over });
+const withMin = (over) => ({ ...MIN, ...over });
+const padded = (total) => {
+  const rest = JSON.stringify(BASE).slice(1);
+  const text = `{"pad":"${"x".repeat(total - rest.length - 10)}",${rest}`;
+  if (utf8(text) !== total) throw new Error(`pad: ${utf8(text)} bytes, expected ${total}`);
+  return text;
+};
+const day = (t) => `2026-11-24T${t}Z`;
+const today = (t) => `2026-11-25T${t}Z`;
+const acc = (name, carrier, rows, skipped) => ({ name, ...carrier, status: 200, rows, skipped });
+const accept = [
+  acc("base", { body: BASE }, 9, 0),
+  acc("classes_only", { body: MIN }, 3, 0),
+  acc("empty_classes", { body: withMin({ classes: [] }) }, 0, 0),
+  acc("unknown_top_level_key", { body: withBase({ future: { a: [1] } }) }, 9, 0),
+  acc("unknown_mode", { body: withBase({ mode: "observe" }) }, 9, 0),
+  acc("unknown_charge", { body: withBase({ charge: "verified" }) }, 9, 0),
+  acc("hour_window", { body: withBase({ from: today("09:05:00") }) }, 9, 0),
+  acc("to_five_minutes_ahead", { body: withBase({ from: today("10:07:00"), to: today("10:12:00") }) }, 9, 0),
+  acc("to_a_day_old", { body: withBase({ from: day("10:02:00"), to: day("10:07:00") }) }, 9, 0),
+  acc("milliseconds", { body: withBase({ from: today("10:00:00.000"), to: today("10:05:00.000") }) }, 9, 0),
+  acc("uppercase_uuid", { body: withBase({ id: BASE.id.toUpperCase() }) }, 9, 0),
+  acc("sample_1000", { body: withBase({ sample: 1000 }) }, 9, 0),
+  acc("rows.classes", { body: withMin({ classes: [["human", "served", 5], ["human", "served", 0], ["human", "served", 1000000000], ["human", "served", 5], ["robot", "served", 1], ["human", "redirected", 1], ["human", "served", "5"], ["human", "served", 1.5], ["human", "served", -1], ["human", "served", 1000000001], ["human", "served", null], ["human", "served", true], ["human", "served"], ["human", "served", 1, 1], { ua_class: "human" }, "human"] }) }, 4, 12),
+  acc("rows.operators", { body: withMin({ operators: [["openai", "ai_crawler", "challenged", 1], ["unknown", "unknown", "served", 1], ["acme", "ai_crawler", "served", 1], ["unknown", "human", "served", 1], ["openai", "ai_crawler", 1]] }) }, 3 + 2, 3),
+  acc("rows.sections", { body: withMin({ sections: [["/", "ai_crawler", 1], ["/blog", "ai_crawler", 1], ["_other", "unknown", 1], ["/a1b2c3d4", "unknown", 1], ["/blog", "human", 1], ["/Blog", "ai_crawler", 1], ["/blog/post", "ai_crawler", 1], ["blog", "ai_crawler", 1], ["/a.b", "ai_crawler", 1], ["/user-829341", "ai_crawler", 1], [`/${"a".repeat(33)}`, "ai_crawler", 1]] }) }, 3 + 4, 7),
+  acc("rows.countries", { body: withMin({ countries: [["US", "human", 1], ["ZZ", "human", 1], ["_other", "ai_crawler", 1], ["us", "human", 1], ["USA", "human", 1], ["U1", "human", 1]] }) }, 3 + 3, 3),
+  acc("rows.networks", { body: withMin({ networks: [["AS15169", "ai_crawler", 1], ["AS0", "unknown", 1], ["_other", "ai_crawler", 1], ["AS4294967295", "aifp_agent", 1], ["AS15169", "human", 1], ["15169", "ai_crawler", 1], ["AS01", "ai_crawler", 1], ["AS4294967296", "ai_crawler", 1], ["as15169", "ai_crawler", 1]] }) }, 3 + 4, 5),
+  acc("caps.sections", { body: withMin({ sections: [...Array.from({ length: 31 }, (_, i) => [`/s${two(i + 1)}`, "ai_crawler", 1]), ["_other", "ai_crawler", 1], ["/s01", "unknown", 1]] }) }, 3 + 32, 1),
+  acc("caps.countries", { body: withMin({ countries: [...Array.from({ length: 21 }, (_, i) => [letters(i), "human", 1]), ["_other", "human", 1]] }) }, 3 + 21, 1),
+  acc("caps.networks", { body: withMin({ networks: [...Array.from({ length: 51 }, (_, i) => [`AS${i + 1}`, "ai_crawler", 1]), ["_other", "ai_crawler", 1]] }) }, 3 + 51, 1),
+  acc("rows_600", { body: withMin({ classes: Array.from({ length: 600 }, () => ["human", "served", 1]) }) }, 600, 0),
+  acc("bytes_65536", { raw: padded(65536) }, 9, 0),
+];
+const rej = (name, carrier, status = 400) => ({ name, ...carrier, status });
+const reject = [
+  rej("not_json", { raw: "{\"v\":1," }),
+  rej("array", { body: [] }),
+  rej("string", { body: "x" }),
+  rej("null", { body: null }),
+  rej("v_2", { body: withBase({ v: 2 }) }),
+  rej("v_text", { body: withBase({ v: "1" }) }),
+  rej("v_missing", { body: without(BASE, "v") }),
+  rej("id_missing", { body: without(BASE, "id") }),
+  rej("id_not_uuid", { body: withBase({ id: "window-1" }) }),
+  rej("id_number", { body: withBase({ id: 42 }) }),
+  rej("from_missing", { body: without(BASE, "from") }),
+  rej("from_not_utc", { body: withBase({ from: "2026-11-25 10:00:00" }) }),
+  rej("to_offset", { body: withBase({ to: "2026-11-25T12:05:00+02:00" }) }),
+  rej("to_equals_from", { body: withBase({ to: BASE.from }) }),
+  rej("to_before_from", { body: withBase({ from: BASE.to, to: BASE.from }) }),
+  rej("window_over_an_hour", { body: withBase({ from: today("09:04:59") }) }),
+  rej("to_too_old", { body: withBase({ from: day("10:01:59"), to: day("10:06:59") }) }),
+  rej("to_too_far_ahead", { body: withBase({ from: today("10:07:01"), to: today("10:12:01") }) }),
+  rej("mode_missing", { body: without(BASE, "mode") }),
+  rej("mode_number", { body: withBase({ mode: 1 }) }),
+  rej("mode_uppercase", { body: withBase({ mode: "Shadow" }) }),
+  rej("mode_empty", { body: withBase({ mode: "" }) }),
+  rej("charge_missing", { body: without(BASE, "charge") }),
+  rej("charge_number", { body: withBase({ charge: 1 }) }),
+  rej("sample_0", { body: withBase({ sample: 0 }) }),
+  rej("sample_1001", { body: withBase({ sample: 1001 }) }),
+  rej("sample_fraction", { body: withBase({ sample: 1.5 }) }),
+  rej("sample_text", { body: withBase({ sample: "1" }) }),
+  rej("sample_missing", { body: without(BASE, "sample") }),
+  rej("classes_missing", { body: without(BASE, "classes") }),
+  rej("classes_object", { body: withBase({ classes: {} }) }),
+  rej("sections_object", { body: withBase({ sections: {} }) }),
+  rej("countries_null", { body: withBase({ countries: null }) }),
+  rej("rows_601", { body: withMin({ classes: Array.from({ length: 601 }, () => ["human", "served", 1]) }) }),
+  rej("bytes_65537", { raw: padded(65537) }, 413),
+];
+const answer = (duplicate, rows, skipped) => ({ accepted: true, duplicate, rows, skipped });
+const duplicates = [
+  { name: "same_window_twice", bodies: [BASE, BASE], answers: [answer(false, 9, 0), answer(true, 0, 0)] },
+  { name: "same_id_other_numbers", bodies: [BASE, withMin({ classes: [["human", "served", 1]] })], answers: [answer(false, 9, 0), answer(true, 0, 0)] },
+  { name: "new_id", bodies: [BASE, withBase({ id: "7b0c6f0e-3d0a-4c58-9a51-0f2d6c1b9e78" })], answers: [answer(false, 9, 0), answer(false, 9, 0)] },
+];
+const textOf = (v) => (Object.hasOwn(v, "raw") ? v.raw : JSON.stringify(v.body));
+const validate = (text, seen = new Set()) => T.validateTraffic(text, { now: NOW, operators: G.GATE_OPERATORS, uaClasses: G.UA_CLASSES, seen });
+for (const v of accept) {
+  const got = validate(textOf(v));
+  agree(`traffic.accept.${v.name}`, [got.status, got.duplicate, got.rows, got.skipped], [200, false, v.rows, v.skipped]);
+  v.skipped_rows = got.skipped_rows;
+}
+for (const v of reject) agree(`traffic.reject.${v.name}`, validate(textOf(v)).status, v.status);
+for (const v of duplicates) {
+  const seen = new Set();
+  agree(`traffic.duplicates.${v.name}`, v.bodies.map((b) => validate(JSON.stringify(b), seen)).map((r) => answer(r.duplicate, r.rows, r.skipped)), v.answers);
+}
+
+// Sender: each step is [at, closed, answers] then [sent, held, paused_until].
+const scenario = (name, ...steps) => ({
+  name,
+  steps: steps.map(([[at, closed, answers]]) => ({ at, closed, answers })),
+  expect: steps.map(([, [sent, held, paused_until = null]]) => ({ sent, held, paused_until })),
+});
+const scenarios = [
+  scenario("accepted", [[300, "w1", [200]], [["w1"], []]]),
+  scenario("old_api", [[300, "w1", [404]], [["w1"], [], 21900]], [[600, "w2", []], [[], [], 21900]], [[21600, "w3", []], [[], [], 21900]], [[21900, "w4", [200]], [["w4"], []]]),
+  scenario("refused", [[300, "w1", [400]], [["w1"], [], 86700]], [[86400, "w2", []], [[], [], 86700]], [[86700, "w3", [200]], [["w3"], []]]),
+  scenario("bad_secret", [[300, "w1", [403]], [["w1"], [], 86700]]),
+  scenario("too_large", [[300, "w1", [413]], [["w1"], [], 86700]]),
+  scenario("redirect", [[300, "w1", [302]], [["w1"], [], 86700]]),
+  scenario("busy", [[300, "w1", [429]], [["w1"], ["w1"]]], [[600, "w2", [200, 200]], [["w1", "w2"], []]]),
+  scenario("request_timeout", [[300, "w1", [408]], [["w1"], ["w1"]]], [[600, null, [200]], [["w1"], []]]),
+  scenario("lost_answer", [[300, "w1", ["none"]], [["w1"], ["w1"]]], [[600, null, [200]], [["w1"], []]]),
+  scenario("outage_keeps_three",
+    [[300, "w1", [503]], [["w1"], ["w1"]]], [[600, "w2", [503]], [["w1"], ["w1", "w2"]]], [[900, "w3", [503]], [["w1"], ["w1", "w2", "w3"]]],
+    [[1200, "w4", [503]], [["w2"], ["w2", "w3", "w4"]]], [[1500, null, ["none"]], [["w2"], ["w2", "w3", "w4"]]], [[1800, "w5", [200, 200, 200]], [["w3", "w4", "w5"], []]]),
+  scenario("stops_at_first_failure", [[300, "w1", [503]], [["w1"], ["w1"]]], [[600, "w2", [200, 500]], [["w1", "w2"], ["w2"]]]),
+  scenario("hour_old_dropped", [[300, "w1", ["none"]], [["w1"], ["w1"]]], [[4000, "w2", [200]], [["w2"], []]]),
+  scenario("exactly_an_hour_kept", [[300, "w1", [503]], [["w1"], ["w1"]]], [[3900, null, [200]], [["w1"], []]]),
+  scenario("pause_drops_held", [[300, "w1", [503]], [["w1"], ["w1"]]], [[600, "w2", [503]], [["w1"], ["w1", "w2"]]], [[900, "w3", [404]], [["w1"], [], 22500]]),
+  scenario("idle", [[300, null, []], [[], []]]),
+];
+for (const v of scenarios) agree(`traffic.sender.${v.name}`, T.senderRun(v.steps), v.expect);
+const trafficVectors = {
+  schema: 1, path: "/v1/merchants/{merchant_id}/gate-traffic", auth_header: "AIFP-Merchant-Secret", max_bytes: T.MAX_BYTES, max_rows: T.MAX_ROWS, window_seconds: 300,
+  outcomes: T.OUTCOMES, ua_classes: G.UA_CLASSES, operators: G.GATE_OPERATORS, language_prefixes: T.LANGUAGE_PREFIXES, asset_extensions: T.ASSET_EXTENSIONS, caps: T.CAPS,
+  section_pattern: T.SECTION_PATTERN.source, section_max_digits: T.SECTION_MAX_DIGITS, now: NOW,
+  sections, counted: countedVectors, countries, networks, build, accept, reject, duplicates,
+  sender: { hold: T.SENDER.hold, stale_seconds: T.SENDER.stale, pause_seconds: { 404: T.SENDER.pause404, other: T.SENDER.pauseOther }, scenarios },
+};
+
 const outputs = [
   [out, JSON.stringify(vectors, null, 1) + "\n", `${cases.length} cases`],
   [readerOut, JSON.stringify(readerVectors, null, 1) + "\n", `${issue.length + verify.length} reader-proof vectors`],
   [aboutOut, JSON.stringify(aboutVectors, null, 1) + "\n", `${aboutVectors.vectors.length} about vectors`],
+  [identityOut, JSON.stringify(identityVectors, null, 1) + "\n", `${format.length + parse.length + userAgents.length} identity vectors`],
+  [trafficOut, JSON.stringify(trafficVectors, null, 1) + "\n", `${sections.length + countedVectors.length + countries.length + networks.length + build.length + accept.length + reject.length + duplicates.length + scenarios.length} traffic vectors`],
 ];
 if (process.argv.includes("--check")) {
   for (const [file, text, what] of outputs) {
