@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.18.1 — bundles skill 2.13.0
+
+- The bundled payer guide is `@aifinpay/skill` 2.13.0: no release target or
+  dated baseline, every command installs the latest release. 2.18.0 was not
+  published.
+
 ## 2.18.0 — usage telemetry through `@aifinpay/analytics`
 
 - Depends on `@aifinpay/analytics` 0.2.0 (exact). Telemetry is on unless
