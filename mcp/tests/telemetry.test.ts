@@ -8,6 +8,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Aifp1GatewayRetiredError, Aifp1ReceiptCache } from "@aifinpay/agent";
 import type { ToolContext } from "../src/server.js";
+import { payableNetwork } from "./offline-pay-network.js";
 
 vi.mock("../src/safe-fetch.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/safe-fetch.js")>()),
@@ -149,6 +150,7 @@ function fixture(m: Loaded, config: Record<string, unknown> = {}) {
       walletHome,
       gatewayOrigins: [origin],
       gatewayPathMode: "direct",
+      payAsset: "POL",
       ...config,
     },
     paymentState: store,
@@ -192,6 +194,25 @@ const ROWS: Array<{
       return f;
     },
     events: [{ name: "aifp1_pay_failed", payload: { stage: "setup" } }],
+  },
+  {
+    row: "several options and none the wallet can pay with",
+    setup: (m) => {
+      const f = fixture(m, { payAsset: undefined });
+      (f.ctx.agent.inner as any).fetchImpl = payableNetwork({ url: args.url });
+      return f;
+    },
+    events: [{ name: "aifp1_pay_failed", payload: { stage: "funds" } }],
+  },
+  {
+    row: "several options, paid with the one the wallet holds",
+    setup: (m) => {
+      const f = fixture(m, { payAsset: undefined });
+      (f.ctx.agent.inner as any).fetchImpl = payableNetwork({ url: args.url, balances: { "polygon:POL": 10n ** 19n } });
+      payAndHold(f);
+      return f;
+    },
+    events: [quoted, paid],
   },
   {
     row: "site not approved by the owner",

@@ -108,6 +108,7 @@ function baseFixture(walletAddress = address) {
       ...owner,
       payChain: "base",
       maxGas: "0.0005",
+      payAsset: "ETH",
       walletHome: home,
       gatewayOrigins: [origin],
       gatewayPathMode: "direct",
@@ -500,6 +501,7 @@ describe("all EVM owner settings and independent prices", () => {
         );
       const f = baseFixture();
       f.ctx.config.payChain = name;
+      f.ctx.config.payAsset = chain.native;
       f.ctx.config.devMode = mode.devMode;
       expect((await runPayableFetch(f.ctx, { url: origin + "/data" })).isError).not.toBe(true);
       expect(f.fetchPaid.mock.calls[0][2].v14).toMatchObject({ chain: name, maxGasWei: 5n * 10n ** 14n });
@@ -549,6 +551,7 @@ describe("Arc: USDC is both the gas and the only pay asset", () => {
   it.each(["arc", "arctestnet"])("pays %s in USDC through the token path with a USDC gas cap", async (name) => {
     const f = baseFixture();
     f.ctx.config.payChain = name;
+    f.ctx.config.payAsset = undefined;
     f.ctx.config.maxGas = "0.05";
     f.ctx.config.devMode = name === "arctestnet";
     expect((await runPayableFetch(f.ctx, { url: origin + "/data" })).isError).not.toBe(true);

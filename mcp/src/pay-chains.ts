@@ -1,4 +1,4 @@
-import { PAYMENT_CHAINS, type Aifp1V14Chain } from "@aifinpay/agent";
+import { PAYMENT_CHAINS, V14_DEPLOYMENTS, paymentStableAsset, type Aifp1V14Chain } from "@aifinpay/agent";
 
 /**
  * The chains payable_fetch can settle on, and everything that differs between
@@ -61,6 +61,11 @@ export const SOLANA_PAY_CHAIN: Readonly<PayChain> = Object.freeze({
   maxSaneUsd: 100_000,
 });
 export const PAY_CHAIN_NAMES = [...Object.keys(PAY_CHAINS), "solana"];
+
+/** Stablecoins the SDK pins for this chain (deployed address and decimals), in registry order. */
+export function pinnedStablecoins(name: Aifp1V14Chain): string[] {
+  return (V14_DEPLOYMENTS[name]?.splitter.assets ?? []).map((a) => a.symbol).filter((s) => paymentStableAsset(name, s));
+}
 
 export function payChain(name: string | undefined): PayChain {
   if (name === "solana") return SOLANA_PAY_CHAIN;

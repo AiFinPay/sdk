@@ -8,6 +8,7 @@ const STAGES = new Set([
   "gas",
   "site",
   "setup",
+  "funds",
   "quote",
   "verify_site",
   "settle",

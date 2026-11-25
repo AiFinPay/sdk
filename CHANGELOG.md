@@ -6,6 +6,13 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## MCP 2.19.0 — pays with what the wallet holds
+
+- `payable_fetch` pays in the pay chain's stablecoins or its native coin,
+  whichever the wallet holds, in the owner's order (`AIFINPAY_PAY_OPTIONS`);
+  `AIFINPAY_PAY_ASSET` alone keeps one asset. The answer names `paid_with`, and
+  `payment_setup_status` lists the options. A paid request with more than one
+  allowed option makes one extra GET to read the price first.
 ## MCP 2.18.0 — usage telemetry
 
 - The MCP server sends usage events through `@aifinpay/analytics` 0.2.0: wallet

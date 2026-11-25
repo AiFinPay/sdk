@@ -25,6 +25,7 @@ import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { payableNetwork } from "./offline-pay-network.js";
 import { createServer } from "../src/server.js";
 import { DEFAULT_DAILY_USD, DEFAULT_MAX_GAS_POL, DEFAULT_MAX_USD, loadConfigFromEnv } from "../src/config.js";
 
@@ -608,6 +609,8 @@ async function serverWith(
     logFn: () => {},
   });
   const purchase = vi.spyOn(active.agent, "fetchPaid").mockRejectedValue(new Error("stub: no network"));
+  // The 402 and the balances payable_fetch reads before choosing what to pay with: 10 POL, no stablecoin.
+  vi.spyOn(active.agent.inner, "fetchImpl").mockImplementation(payableNetwork({ url, balances: { "polygon:POL": 10n ** 19n } }));
   const client = new Client({ name: "init-output-test", version: "1" });
   const [left, right] = InMemoryTransport.createLinkedPair();
   await active.server.connect(right);

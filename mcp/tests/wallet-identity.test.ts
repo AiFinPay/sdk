@@ -9,6 +9,7 @@ import { AiFinPayAgent, type EvmWalletClient } from "@aifinpay/agent";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { loadWalletIdentity } from "../src/identity.js";
+import { payableNetwork } from "./offline-pay-network.js";
 import { createServer } from "../src/server.js";
 import { loadConfigFromEnv } from "../src/config.js";
 
@@ -457,6 +458,10 @@ describe("persistent wallet identity", () => {
       expect(existsSync(join(f.home, "payments", expected.evmAddress.toLowerCase()))).toBe(true);
       // Past the setup gate: the next refusal is the stubbed purchase, not the checklist.
       const paid = vi.spyOn(active.agent, "fetchPaid").mockRejectedValue(new Error("stub: no network"));
+      // The 402 and the balances payable_fetch reads before choosing what to pay with: 10 POL, no stablecoin.
+      vi.spyOn(active.agent.inner, "fetchImpl").mockImplementation(
+        payableNetwork({ url: "https://merchant.example/x", balances: { "polygon:POL": 10n ** 19n } })
+      );
       const after = await client.callTool({ name: "payable_fetch", arguments: { url: "https://merchant.example/x" } });
       expect(after.isError).toBe(true);
       expect(paid).toHaveBeenCalledTimes(1);

@@ -31,7 +31,24 @@ export class UnverifiedMerchantSiteError extends Error {
   }
 }
 
-type MerchantView = { merchant_id?: unknown; site_url?: unknown; site_verified?: unknown };
+type MerchantView = { merchant_id?: unknown; site_url?: unknown; site_verified?: unknown; settlement_chains?: unknown };
+
+/** GET /v1/merchants/:id on the configured backend; null when it does not answer. */
+export async function readMerchant(
+  fetchImpl: (input: string, init?: RequestInit) => Promise<Response>,
+  apiBase: string,
+  merchantId: string
+): Promise<MerchantView | null> {
+  try {
+    const res = await fetchImpl(new URL(`/v1/merchants/${encodeURIComponent(merchantId)}`, apiBase).href, {
+      headers: { accept: "application/json" },
+      redirect: "error",
+    });
+    return res.ok ? ((await res.json()) as MerchantView) : null;
+  } catch {
+    return null;
+  }
+}
 
 const hostOf = (value: unknown): string | null => {
   if (typeof value !== "string" || !value) return null;
@@ -55,16 +72,7 @@ export async function assertVerifiedMerchantSite(opts: {
   pathMode: "gateway" | "direct";
 }): Promise<void> {
   const { merchantId } = opts;
-  let body: MerchantView | null = null;
-  try {
-    const res = await opts.fetchImpl(
-      new URL(`/v1/merchants/${encodeURIComponent(merchantId)}`, opts.apiBase).href,
-      { headers: { accept: "application/json" }, redirect: "error" }
-    );
-    if (res.ok) body = (await res.json()) as MerchantView;
-  } catch {
-    body = null;
-  }
+  const body = await readMerchant(opts.fetchImpl, opts.apiBase, merchantId);
   const origin = opts.url.origin;
   if (!body || body.merchant_id !== merchantId)
     throw new UnverifiedMerchantSiteError(merchantId, "could not be confirmed with AiFinPay", "unconfirmed", origin);

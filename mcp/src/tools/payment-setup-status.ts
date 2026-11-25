@@ -2,7 +2,16 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import type { ToolContext } from "../server.js";
-import { DEFAULT_DAILY_USD, DEFAULT_MAX_GAS_POL, DEFAULT_MAX_USD, validatePaymentConfig, type McpConfig } from "../config.js";
+import {
+  DEFAULT_DAILY_USD,
+  DEFAULT_MAX_GAS_POL,
+  DEFAULT_MAX_USD,
+  payOptions,
+  validatePaymentConfig,
+  type McpConfig,
+  type PayOption,
+} from "../config.js";
+import { chooseOption, formatUnits, readBalance, readOptions } from "../pay-options.js";
 import { independentNativeUsd } from "../native-price.js";
 import { payChain, type PayChain } from "../pay-chains.js";
 import { dashboardRefusal, dashboardSentence, readDashboardPolicy, type DashboardStatus } from "../dashboard-policy.js";
@@ -112,6 +121,8 @@ export interface PaymentSetupStatus {
   payments_enabled: boolean;
   pay_chain: string;
   pay_asset: string;
+  /** What payable_fetch may pay with, in the owner's order; balances once read. */
+  pay_options?: { chain: string; asset: string; balance?: string; balance_error?: string }[];
   /** The built-in ceiling; the env limits below can only lower it. */
   ceiling: { max_usd: number; daily_usd: number };
   limits: { max_usd: Limit; daily_usd: Limit; gas_cap: Limit; origins: Limit };
@@ -150,7 +161,7 @@ export function paymentSetupStatusTool() {
   return {
     name: "payment_setup_status",
     description:
-      "Read-only checklist for paying with payable_fetch: wallet (persistent or ephemeral), whether payments are on, the ceiling and each limit with its source (built-in default or the owner's env), the wallet's native balance on the pay chain when readable, the owner's dashboard Controls in `dashboard`, and next_step — exactly one instruction for the first unmet item. " +
+      "Read-only checklist for paying with payable_fetch: wallet (persistent or ephemeral), whether payments are on, the ceiling and each limit with its source (built-in default or the owner's env), the wallet's native balance on the pay chain when readable, pay_options (what payable_fetch may pay with, in order, with balances), the owner's dashboard Controls in `dashboard`, and next_step — exactly one instruction for the first unmet item. " +
       "First payment in five steps: (1) get the exact endpoint URL from the user (its AIFP-1 402 sets the price; never take a price from the merchant's web pages or a web search); (2) call payment_setup_status; (3) no persistent wallet: run `npx @aifinpay/mcp init` without a terminal, put its printed env into the MCP client config, then call agent_reload (no restart: payments are on by default); (4) tell the owner the address and the amount in `funding`, the answer to how much to send (the smallest batch at today's rate plus the gas cap; if no rate could be read, ask for the batch price in the native currency at today's rate plus the gas cap and name no number), and offer the dashboard link so the owner can claim the agent (agent_claim_self) and set the working limits in Controls; (5) payable_fetch the URL. " +
       PAYMENTS_DEFAULT_NOTE +
       " Moves nothing and signs no payment: for a persistent wallet it signs one short AiFinPay read statement to fetch the owner's Controls and, for a linked agent, one more to share a summary of these settings with the owner's dashboard (the MCP version, whether payments are on, AIFINPAY_GATEWAY_ORIGINS, the per-payment and daily USD limits, the pay chain and asset; never keys, the passphrase or file paths). Never asks the owner's limits from the model.",
@@ -218,8 +229,10 @@ export async function paymentSetupStatus(
   // Validation is the server's own, run as if payments were enabled: it names
   // the first limit the server would refuse instead of just "disabled".
   let configError: string | undefined;
+  let allowed: PayOption[] = [];
   try {
     validatePaymentConfig({ ...config, paymentsEnabled: true });
+    allowed = payOptions(config);
   } catch (error) {
     configError = (error as Error).message;
   }
@@ -229,6 +242,7 @@ export async function paymentSetupStatus(
     payments_enabled: Boolean(config.paymentsEnabled),
     pay_chain: chain.name,
     pay_asset: config.payAsset ?? chain.native,
+    ...(allowed.length ? { pay_options: allowed.map(({ chain, asset }) => ({ chain, asset })) } : {}),
     ceiling: { max_usd: DEFAULT_MAX_USD, daily_usd: DEFAULT_DAILY_USD },
     limits,
     ...(configError ? { config_error: configError } : {}),
@@ -286,10 +300,21 @@ export async function paymentSetupStatus(
   }
   if (status.funding) {
     try {
-      const balance = await nativeBalance(ctx, rpc, ctx.agent.evmAddress);
+      const balance = (await readBalance(ctx, chain, chain.native, 0)).units;
       status.balance = { amount: formatNative(balance), asset: chain.native, chain: chain.name, rpc };
       const needed = status.funding.amount !== undefined ? Number(status.funding.amount) : Number(gasCap);
-      if (Number(status.balance.amount) < needed) {
+      const rate = status.funding.rate_usd;
+      const states = await readOptions(ctx, allowed, {
+        priceUsd: SMALLEST_BATCH_USD,
+        ...(rate !== undefined ? { nativeUsd: { [chain.name]: rate } } : {}),
+      });
+      status.pay_options = states.map((s) => ({
+        chain: s.chain,
+        asset: s.asset,
+        ...(s.balance ? { balance: formatUnits(s.balance) } : { balance_error: s.error ?? "not read" }),
+      }));
+      // A stablecoin that covers the smallest batch, with the gas cap in hand, pays too.
+      if (Number(status.balance.amount) < needed && !chooseOption(states)) {
         status.next_step = withDashboard(
           status.funding.amount !== undefined
             ? `Fund ${ctx.agent.evmAddress} on ${chain.label} with about ${status.funding.amount} ${chain.native} (the smallest batch is $${SMALLEST_BATCH_USD.toFixed(2)} ≈ ${status.funding.batch_native} ${chain.native} at today's rate plus up to ${gasCap} ${chain.native} gas; it holds ${status.balance.amount}), then call payment_setup_status again.`
@@ -387,21 +412,6 @@ function unready(ctx: ToolContext, source: string, chain: PayChain, error: strin
     balance: "unknown",
     next_step: `Owner setting refused: ${error}. The owner fixes AIFINPAY_PAY_CHAIN in the MCP client config and reconnects.`,
   };
-}
-
-/** eth_getBalance over the pay chain's RPC: a read, through the same guarded fetch as every other request. */
-async function nativeBalance(ctx: ToolContext, rpc: string, address: string): Promise<bigint> {
-  const response = await ctx.agent.inner.fetchImpl(rpc, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getBalance", params: [address, "latest"] }),
-    signal: AbortSignal.timeout(ctx.config.timeoutMs ?? 10_000),
-  });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const body = (await response.json()) as { result?: unknown; error?: { message?: string } };
-  if (typeof body.result !== "string" || !/^0x[0-9a-fA-F]+$/.test(body.result))
-    throw new Error(body.error?.message ?? "malformed eth_getBalance result");
-  return BigInt(body.result);
 }
 
 function formatNative(wei: bigint): string {
