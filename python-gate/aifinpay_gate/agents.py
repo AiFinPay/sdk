@@ -12,6 +12,8 @@ report operator / ua_class / verified on every event. A port of
 gate/src/agents.ts — tests/test_parity.py holds the two tables equal.
 """
 
+from .identity import tag_charge
+
 # Closed sets, shared verbatim with the AiFinPay gate-events ingest (which
 # refuses any other value) and the site-check probe. An operator without an id
 # here is "unknown", never a free-text name: the value becomes a counter key.
@@ -78,3 +80,6 @@ def known_ai_agent(req) -> bool:
     # A paying agent must never be exempted by a human-looking User-Agent:
     # classify_agent puts AIFP-Receipt / AIFP-Agent-Id first for that reason.
     return classify_agent(req)["ua_class"] != "human"
+
+
+tag_charge(known_ai_agent, "agents")

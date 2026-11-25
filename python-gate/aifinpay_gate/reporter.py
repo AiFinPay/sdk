@@ -13,6 +13,8 @@ from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from .agents import GATE_OPERATORS, UA_CLASSES
+from .identity import gate_headers, user_agent
+from .traffic import TrafficSender
 
 # Exempt serves forwarded at all: agents the merchant chose to serve free. A
 # human reader's page view stays local, as it always has — forwarding every page
@@ -197,7 +199,8 @@ class _ReceiptUses:
     def _post(self, items):
         body = json.dumps({"uses": items}, separators=(",", ":")).encode("utf-8")
         request = Request(self._endpoint, data=body, method="POST", headers={
-            "Content-Type": "application/json", "AIFP-Merchant-Secret": self._owner._secret})
+            **self._owner._identity_headers(), "Content-Type": "application/json",
+            "AIFP-Merchant-Secret": self._owner._secret})
         try:
             with self._owner._opener.open(request, timeout=self._owner.HTTP_TIMEOUT) as response:
                 if not 200 <= response.status < 300:
@@ -258,6 +261,11 @@ class GateReporter:
         self._secret = merchant_secret
         self._uses = _ReceiptUses(self, "https://" + base.netloc + "/v1/merchants/" + merchant_id + "/receipt-use")
         self._opener = build_opener(_NoRedirect())
+        # The gate that feeds this reporter, set by Gate; its identity rides every request.
+        self._gate = None
+        self._traffic = TrafficSender("https://" + base.netloc + "/v1/merchants/" + merchant_id + "/gate-traffic",
+                                      merchant_secret, self._identity_headers, opener=lambda: self._opener,
+                                      redirect=(_RedirectBlocked,))
         self._pid = os.getpid()
         self._condition = threading.Condition()
         self._queue = []
@@ -282,11 +290,15 @@ class GateReporter:
     def __repr__(self):
         return "GateReporter(secret=[redacted])"
 
+    def _identity_headers(self):
+        gate = self._gate
+        return gate_headers(gate.identity()) if gate is not None else {"User-Agent": user_agent()}
+
     def _snapshot(self):
         return {"queued": len(self._queue), "delivered": self._delivered,
                 "dropped": self._dropped, "retries": self._retries,
                 "last_error": self._last_error, "stopped": self._stopped, "closed": self._closed,
-                "uses": self._uses.stats()}
+                "uses": self._uses.stats(), "traffic": self._traffic.stats}
 
     @property
     def stats(self):
@@ -362,7 +374,7 @@ class GateReporter:
     def _send(self, batch):
         body = json.dumps({"events": [item["event"] for item in batch]}, separators=(",", ":")).encode("utf-8")
         request = Request(self._endpoint, data=body, method="POST", headers={
-            "Content-Type": "application/json", "AIFP-Merchant-Secret": self._secret})
+            **self._identity_headers(), "Content-Type": "application/json", "AIFP-Merchant-Secret": self._secret})
         try:
             with self._opener.open(request, timeout=self.HTTP_TIMEOUT) as response:
                 status = response.status
@@ -522,6 +534,12 @@ class GateReporter:
                 self._condition.wait(timeout=remaining)
             return self._snapshot()
 
+    def flush_traffic(self):
+        """Close the open traffic window and send what is held, once. Never touches events or receipt use."""
+        if os.getpid() != self._pid:
+            return None
+        return self._traffic.flush()
+
     def close(self, timeout=10.0):
         """Stop acceptance, flush once within deadline, discard unsent events."""
         if os.getpid() != self._pid:
@@ -529,6 +547,7 @@ class GateReporter:
         deadline = time.monotonic() + max(0.0, timeout)
         with self._condition:
             self._closed = True
+        self._traffic.close()
         ticket = self._uses.request(closing=True)
         self._flush_events(timeout=max(0.0, deadline - time.monotonic()))
         self._uses.close(ticket, deadline)
@@ -730,7 +749,8 @@ class GateReporterV2(GateReporter):
                     result.append((None, "rejected", True))
                     return
                 req = Request(endpoint, data=raw, method="POST", headers={
-                    "Content-Type": "application/json", "AIFP-Merchant-Secret": self._secret})
+                    **self._identity_headers(), "Content-Type": "application/json",
+                    "AIFP-Merchant-Secret": self._secret})
                 try:
                     with self._opener.open(req, timeout=self.HTTP_TIMEOUT) as response:
                         status = response.status

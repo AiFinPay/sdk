@@ -52,6 +52,7 @@ class AifpGateMiddleware:
                  discovery_link=True):
         self.app = app
         self.gate = gate
+        gate.platform = "asgi"
         self.serve_discovery = serve_discovery
         self.refund_on_error = refund_on_error
         self._discovery = build_discovery_document(gate.merchant_id, gate.discovery_resources(),

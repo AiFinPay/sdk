@@ -22,6 +22,7 @@ from .core import (
     Route,
     SimpleRequest,
 )
+from .identity import VERSION
 from .discovery import LLMS_TXT_PATH, build_discovery_document, discovery_link_header, is_html_content_type
 from .path import InspectedPath, inspect_path, spelled_as_path
 from .operator_policy import OPERATOR_ACTIONS, OPERATOR_DEFAULT, decide_operator, normalize_operator_policy
@@ -43,7 +44,7 @@ from .unproven import (
 from .verify import Verifier
 from .wsgi import AifpGateWSGI
 
-__version__ = "0.11.0"
+__version__ = VERSION
 
 __all__ = [
     "AI_AGENT_UA_MARKERS", "AI_AGENT_UA_TABLE", "AifpGateMiddleware", "AifpGateWSGI", "DETAIL_QUOTA_EXHAUSTED", "DETAIL_RECEIPT_EXPIRED",
