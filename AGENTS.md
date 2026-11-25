@@ -50,7 +50,7 @@ Monorepo of independent packages. Each package owns its own `AGENTS.md`; respect
 - `mcp/` — `@aifinpay/mcp` (MCP server). Depends on the **published** `@aifinpay/agent` from npm, _not_ `../node`.
 - `wallet/` — `@aifinpay/wallet` (light wallet + CLI). Keystore: `~/.aifinpay/agent.json`.
 - `gate/` — `@aifinpay/gate` (merchant AIFP-1 paywall, optional Express peer dep).
-- `analytics/` — `@aifinpay/analytics` (opt-in SDK telemetry, off by default; zero runtime deps). Consumers wire `emit()` in their own changes.
+- `analytics/` — `@aifinpay/analytics` (SDK telemetry, on unless `AIFINPAY_TELEMETRY=off`; zero runtime deps). Consumers wire `emit()` in their own changes.
 - `mcp-http/` — transport shim for `https://mcp.aifinpay.io/mcp`.
 - `deployments/` — `@aifinpay/deployments` (canonical registry grabber).
 - `python/` — `aifinpay-agent` (Python SDK).

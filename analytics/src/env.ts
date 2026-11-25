@@ -1,24 +1,50 @@
 /**
- * The opt-in contract. Telemetry is OFF unless the user sets AIFINPAY_TELEMETRY.
+ * The consent contract. Telemetry is ON unless turned off.
  *
- *   off        (default) nothing is sent and nothing is written to disk.
- *   on         runtime events are sent; the install id is persisted.
+ *   on         (default when AIFINPAY_TELEMETRY is unset or empty) runtime
+ *              events are sent; the install id is persisted.
  *   read-only  runtime events are sent, but nothing is ever written to disk:
  *              an existing install id is reused, otherwise a per-process id.
  *   install    only the one-shot `agent_sdk_install_completed` event from the
  *              postinstall script. Runtime `emit()` stays silent — this level
  *              must not leak into `on`.
+ *   off        `off`, `0`, `false`, `no`, or any unrecognised value.
  *
- * Anything unrecognised means off: a typo must never turn telemetry on.
+ * DO_NOT_TRACK=1|true and a CI environment also mean off, unless the value is
+ * explicitly `on` or `read-only`.
  */
 export type TelemetryMode = "off" | "on" | "read-only" | "install";
 
 export const MODES: readonly TelemetryMode[] = ["off", "on", "read-only", "install"];
 export const DEFAULT_TELEMETRY_URL = "https://api.aifinpay.io/v1/agent";
 
-export function modeFromEnv(env: NodeJS.ProcessEnv = process.env): TelemetryMode {
+export interface ResolvedMode {
+  mode: TelemetryMode;
+  /** True when the mode is `on` only because nothing turned it off. */
+  byDefault: boolean;
+}
+
+export function resolveMode(env: NodeJS.ProcessEnv = process.env): ResolvedMode {
   const raw = (env.AIFINPAY_TELEMETRY ?? "").trim().toLowerCase();
-  return (MODES as readonly string[]).includes(raw) ? (raw as TelemetryMode) : "off";
+  if (raw === "on" || raw === "read-only") return { mode: raw, byDefault: false };
+  if (doNotTrack(env) || inCi(env)) return { mode: "off", byDefault: false };
+  if (raw === "install") return { mode: "install", byDefault: false };
+  if (raw === "") return { mode: "on", byDefault: true };
+  return { mode: "off", byDefault: false };
+}
+
+export function modeFromEnv(env: NodeJS.ProcessEnv = process.env): TelemetryMode {
+  return resolveMode(env).mode;
+}
+
+function doNotTrack(env: NodeJS.ProcessEnv): boolean {
+  const value = (env.DO_NOT_TRACK ?? "").trim().toLowerCase();
+  return value === "1" || value === "true";
+}
+
+function inCi(env: NodeJS.ProcessEnv): boolean {
+  const value = (env.CI ?? "").trim().toLowerCase();
+  return value !== "" && value !== "false" && value !== "0";
 }
 
 /** HTTPS only, except loopback for local development. An unusable override

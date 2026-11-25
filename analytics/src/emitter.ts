@@ -6,8 +6,8 @@
  * No timers are created, so an idle process exits exactly as it would without
  * this package.
  */
-import { modeFromEnv, runtimeEnabled, urlFromEnv, validTelemetryUrl, MODES, type TelemetryMode } from "./env.js";
-import { resolveInstallId } from "./identity.js";
+import { resolveMode, runtimeEnabled, urlFromEnv, validTelemetryUrl, MODES, type TelemetryMode } from "./env.js";
+import { loadInstallId } from "./identity.js";
 import { sanitizePayload } from "./sanitize.js";
 import { isKnownEvent } from "./schema.js";
 import { sendBatch, type WireEvent } from "./transport.js";
@@ -39,21 +39,27 @@ export const MAX_EVENT_BYTES = 4096;
 /** The gateway's JSON body limit is 100 KB; 64 large events would exceed it. */
 export const MAX_BATCH_BYTES = 90_000;
 const INSTALL_EVENT = "agent_sdk_install_completed";
+const DEFAULT_ON_NOTICE =
+  "AiFinPay sends usage events with a random install id: no wallet addresses, URLs or amounts. Turn off: AIFINPAY_TELEMETRY=off";
 
 let config: TelemetryConfig | null = null;
 let queue: Array<{ event: WireEvent; schemaVersion: number; bytes: number }> = [];
 let scheduled = false;
 let inflight: Promise<void> = Promise.resolve();
 let installId: string | null = null;
+let onByDefault = false;
 
 function current(): TelemetryConfig {
-  config ??= {
+  if (config) return config;
+  const resolved = resolveMode();
+  onByDefault = resolved.byDefault;
+  config = {
     url: urlFromEnv(),
     schemaVersion: AIFINPAY_TELEMETRY_SCHEMA_VERSION,
     timeoutMs: 1500,
     maxRetries: 1,
     queueSize: 256,
-    mode: modeFromEnv(),
+    mode: resolved.mode,
   };
   return config;
 }
@@ -67,6 +73,7 @@ export function configure(next: Partial<TelemetryConfig>): void {
   merged.maxRetries = clampInt(merged.maxRetries, 0, 1, base.maxRetries);
   merged.queueSize = clampInt(merged.queueSize, 1, 256, base.queueSize);
   merged.schemaVersion = clampInt(merged.schemaVersion, 1, Number.MAX_SAFE_INTEGER, base.schemaVersion);
+  if (next.mode !== undefined) onByDefault = false;
   if (merged.mode !== base.mode) installId = null;
   config = merged;
 }
@@ -130,7 +137,7 @@ async function flush(): Promise<void> {
     }
     const events = queue.splice(0, take).map((item) => item.event);
     try {
-      installId ??= resolveInstallId({ persist: cfg.mode !== "read-only" });
+      installId ??= resolveId(cfg.mode);
       await sendBatch(
         { schema_version: version, install_id: installId, mode: cfg.mode, events },
         { url: cfg.url, timeoutMs: cfg.timeoutMs, maxRetries: cfg.maxRetries }
@@ -139,6 +146,19 @@ async function flush(): Promise<void> {
       // dropped; see sendBatch for the retry policy
     }
   }
+}
+
+function resolveId(mode: TelemetryMode): string {
+  const { id, created } = loadInstallId({ persist: mode !== "read-only" });
+  // Told once per install: only the run that wrote the id file prints it, never to stdout.
+  if (created && onByDefault && mode === "on") {
+    try {
+      process.stderr.write(DEFAULT_ON_NOTICE + "\n");
+    } catch {
+      // a closed stderr must not cost the batch
+    }
+  }
+  return id;
 }
 
 /** Flush what is queued and wait for in-flight sends. Call before process exit. */
