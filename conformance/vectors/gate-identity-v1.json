@@ -1,0 +1,429 @@
+{
+ "schema": 1,
+ "header": "AIFP-Gate",
+ "user_agent": "aifinpay-gate-<pkg>/<ver>",
+ "max_bytes": 256,
+ "value_pattern": "^[a-z0-9._-]{1,32}$",
+ "pkgs": [
+  "node",
+  "py",
+  "drupal",
+  "wordpress",
+  "cloudflare",
+  "kit"
+ ],
+ "modes": [
+  "shadow",
+  "enforce"
+ ],
+ "charges": [
+  "agents",
+  "unproven",
+  "everyone",
+  "custom"
+ ],
+ "format": [
+  {
+   "name": "node",
+   "input": {
+    "pkg": "node",
+    "ver": "0.15.0",
+    "platform": "express",
+    "mode": "shadow",
+    "charge": "agents"
+   },
+   "user_agent": "aifinpay-gate-node/0.15.0",
+   "header": "pkg=node; ver=0.15.0; platform=express; mode=shadow; charge=agents"
+  },
+  {
+   "name": "py",
+   "input": {
+    "pkg": "py",
+    "ver": "0.11.0",
+    "platform": "asgi",
+    "mode": "enforce",
+    "charge": "everyone"
+   },
+   "user_agent": "aifinpay-gate-py/0.11.0",
+   "header": "pkg=py; ver=0.11.0; platform=asgi; mode=enforce; charge=everyone"
+  },
+  {
+   "name": "wordpress_custom",
+   "input": {
+    "pkg": "wordpress",
+    "ver": "0.2.0",
+    "platform": "wp6.7",
+    "mode": "enforce",
+    "charge": "custom"
+   },
+   "user_agent": "aifinpay-gate-wordpress/0.2.0",
+   "header": "pkg=wordpress; ver=0.2.0; platform=wp6.7; mode=enforce; charge=custom"
+  },
+  {
+   "name": "build_metadata_dropped",
+   "input": {
+    "pkg": "node",
+    "ver": "1.2.0+build.5",
+    "platform": "express",
+    "mode": "enforce",
+    "charge": "unproven"
+   },
+   "user_agent": "aifinpay-gate-node/1.2.0",
+   "header": "pkg=node; ver=1.2.0; platform=express; mode=enforce; charge=unproven"
+  },
+  {
+   "name": "ver_lowercased",
+   "input": {
+    "pkg": "node",
+    "ver": "0.16.0-RC.1",
+    "platform": "fastify",
+    "mode": "shadow",
+    "charge": "agents"
+   },
+   "user_agent": "aifinpay-gate-node/0.16.0-rc.1",
+   "header": "pkg=node; ver=0.16.0-rc.1; platform=fastify; mode=shadow; charge=agents"
+  },
+  {
+   "name": "platform_missing",
+   "input": {
+    "pkg": "drupal",
+    "ver": "1.0.0",
+    "platform": null,
+    "mode": "shadow",
+    "charge": "agents"
+   },
+   "user_agent": "aifinpay-gate-drupal/1.0.0",
+   "header": "pkg=drupal; ver=1.0.0; platform=unknown; mode=shadow; charge=agents"
+  },
+  {
+   "name": "platform_outside_pattern",
+   "input": {
+    "pkg": "drupal",
+    "ver": "1.0.0",
+    "platform": "Drupal 11",
+    "mode": "shadow",
+    "charge": "agents"
+   },
+   "user_agent": "aifinpay-gate-drupal/1.0.0",
+   "header": "pkg=drupal; ver=1.0.0; platform=unknown; mode=shadow; charge=agents"
+  },
+  {
+   "name": "platform_too_long",
+   "input": {
+    "pkg": "cloudflare",
+    "ver": "1.0.0",
+    "platform": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "mode": "enforce",
+    "charge": "agents"
+   },
+   "user_agent": "aifinpay-gate-cloudflare/1.0.0",
+   "header": "pkg=cloudflare; ver=1.0.0; platform=unknown; mode=enforce; charge=agents"
+  },
+  {
+   "name": "ver_empty",
+   "input": {
+    "pkg": "kit",
+    "ver": "",
+    "platform": "kit",
+    "mode": "shadow",
+    "charge": "agents"
+   },
+   "user_agent": "aifinpay-gate-kit/unknown",
+   "header": "pkg=kit; ver=unknown; platform=kit; mode=shadow; charge=agents"
+  }
+ ],
+ "parse": [
+  {
+   "name": "canonical",
+   "header": "pkg=node; ver=0.15.0; platform=express; mode=shadow; charge=agents",
+   "gate": {
+    "pkg": "node",
+    "ver": "0.15.0",
+    "platform": "express",
+    "mode": "shadow",
+    "charge": "agents"
+   }
+  },
+  {
+   "name": "no_spaces",
+   "header": "pkg=py;ver=0.11.0;platform=asgi;mode=enforce;charge=everyone",
+   "gate": {
+    "pkg": "py",
+    "ver": "0.11.0",
+    "platform": "asgi",
+    "mode": "enforce",
+    "charge": "everyone"
+   }
+  },
+  {
+   "name": "tabs_and_trailing",
+   "header": "\tpkg=cloudflare ;\t ver=1.0.0;platform=workers;  mode=enforce; charge=unproven;",
+   "gate": {
+    "pkg": "cloudflare",
+    "ver": "1.0.0",
+    "platform": "workers",
+    "mode": "enforce",
+    "charge": "unproven"
+   }
+  },
+  {
+   "name": "any_order",
+   "header": "charge=custom; mode=enforce; platform=wp6.7; ver=0.2.0; pkg=wordpress",
+   "gate": {
+    "pkg": "wordpress",
+    "ver": "0.2.0",
+    "platform": "wp6.7",
+    "mode": "enforce",
+    "charge": "custom"
+   }
+  },
+  {
+   "name": "unknown_keys",
+   "header": "pkg=drupal; ver=1.2.0; platform=drupal11; mode=enforce; charge=unproven; region=eu; note=\"a b, c\"; x=1=2",
+   "gate": {
+    "pkg": "drupal",
+    "ver": "1.2.0",
+    "platform": "drupal11",
+    "mode": "enforce",
+    "charge": "unproven"
+   }
+  },
+  {
+   "name": "pkg_and_ver_only",
+   "header": "pkg=kit; ver=0.3.1",
+   "gate": {
+    "pkg": "kit",
+    "ver": "0.3.1",
+    "platform": null,
+    "mode": null,
+    "charge": null
+   }
+  },
+  {
+   "name": "unknown_mode",
+   "header": "pkg=node; ver=0.15.0; platform=express; mode=observe; charge=agents",
+   "gate": {
+    "pkg": "node",
+    "ver": "0.15.0",
+    "platform": "express",
+    "mode": null,
+    "charge": "agents"
+   }
+  },
+  {
+   "name": "unknown_charge",
+   "header": "pkg=node; ver=0.15.0; platform=express; mode=enforce; charge=verified",
+   "gate": {
+    "pkg": "node",
+    "ver": "0.15.0",
+    "platform": "express",
+    "mode": "enforce",
+    "charge": null
+   }
+  },
+  {
+   "name": "prerelease",
+   "header": "pkg=node; ver=0.16.0-rc.1; platform=fastify; mode=shadow; charge=agents",
+   "gate": {
+    "pkg": "node",
+    "ver": "0.16.0-rc.1",
+    "platform": "fastify",
+    "mode": "shadow",
+    "charge": "agents"
+   }
+  },
+  {
+   "name": "value_32",
+   "header": "pkg=node; ver=0.15.0; platform=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "gate": {
+    "pkg": "node",
+    "ver": "0.15.0",
+    "platform": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "mode": null,
+    "charge": null
+   }
+  },
+  {
+   "name": "exactly_256_bytes",
+   "header": "pkg=node; ver=0.15.0; platform=express; mode=shadow; charge=agents; pad=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "gate": {
+    "pkg": "node",
+    "ver": "0.15.0",
+    "platform": "express",
+    "mode": "shadow",
+    "charge": "agents"
+   }
+  },
+  {
+   "name": "empty",
+   "header": "",
+   "gate": null
+  },
+  {
+   "name": "over_256_bytes",
+   "header": "pkg=node; ver=0.15.0; platform=express; mode=shadow; charge=agents; pad=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "gate": null
+  },
+  {
+   "name": "over_256_bytes_multibyte",
+   "header": "pkg=node; ver=0.15.0; platform=express; mode=shadow; charge=agents; pad=éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+   "gate": null
+  },
+  {
+   "name": "no_pkg",
+   "header": "ver=0.15.0; platform=express; mode=shadow; charge=agents",
+   "gate": null
+  },
+  {
+   "name": "no_ver",
+   "header": "pkg=node; platform=express; mode=shadow; charge=agents",
+   "gate": null
+  },
+  {
+   "name": "unknown_pkg",
+   "header": "pkg=nginx; ver=1.0.0",
+   "gate": null
+  },
+  {
+   "name": "uppercase_value",
+   "header": "pkg=Node; ver=0.15.0",
+   "gate": null
+  },
+  {
+   "name": "uppercase_key",
+   "header": "PKG=node; ver=0.15.0",
+   "gate": null
+  },
+  {
+   "name": "key_with_space",
+   "header": "pkg = node; ver=0.15.0",
+   "gate": null
+  },
+  {
+   "name": "empty_key",
+   "header": "=node; ver=0.15.0",
+   "gate": null
+  },
+  {
+   "name": "duplicate_key",
+   "header": "pkg=node; pkg=py; ver=0.15.0",
+   "gate": null
+  },
+  {
+   "name": "part_without_equals",
+   "header": "pkg=node; ver=0.15.0; shadow",
+   "gate": null
+  },
+  {
+   "name": "value_with_space",
+   "header": "pkg=node; ver=0.15.0 beta",
+   "gate": null
+  },
+  {
+   "name": "value_33",
+   "header": "pkg=node; ver=0.15.0; platform=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "gate": null
+  },
+  {
+   "name": "empty_value",
+   "header": "pkg=node; ver=0.15.0; platform=",
+   "gate": null
+  },
+  {
+   "name": "quoted_value",
+   "header": "pkg=node; ver=\"0.15.0\"",
+   "gate": null
+  },
+  {
+   "name": "value_with_equals",
+   "header": "pkg=node; ver=1=2",
+   "gate": null
+  },
+  {
+   "name": "build_metadata",
+   "header": "pkg=node; ver=0.15.0+build.5",
+   "gate": null
+  },
+  {
+   "name": "non_ascii_value",
+   "header": "pkg=node; ver=0.15.0; platform=експрес",
+   "gate": null
+  },
+  {
+   "name": "two_lines_joined",
+   "header": "pkg=node; ver=0.15.0, pkg=py; ver=0.1.0",
+   "gate": null
+  },
+  {
+   "name": "only_separators",
+   "header": ";;;",
+   "gate": null
+  }
+ ],
+ "user_agents": [
+  {
+   "name": "plain",
+   "user_agent": "aifinpay-gate-node/0.15.0",
+   "gate": {
+    "pkg": "node",
+    "ver": "0.15.0"
+   }
+  },
+  {
+   "name": "platform_tokens_after_space",
+   "user_agent": "aifinpay-gate-wordpress/0.2.0 WordPress/6.7; https://example.com",
+   "gate": {
+    "pkg": "wordpress",
+    "ver": "0.2.0"
+   }
+  },
+  {
+   "name": "prerelease",
+   "user_agent": "aifinpay-gate-cloudflare/1.0.0-rc.1",
+   "gate": {
+    "pkg": "cloudflare",
+    "ver": "1.0.0-rc.1"
+   }
+  },
+  {
+   "name": "not_at_start",
+   "user_agent": "Mozilla/5.0 aifinpay-gate-node/0.15.0",
+   "gate": null
+  },
+  {
+   "name": "unknown_pkg",
+   "user_agent": "aifinpay-gate-nginx/1.0.0",
+   "gate": null
+  },
+  {
+   "name": "no_ver",
+   "user_agent": "aifinpay-gate-node/",
+   "gate": null
+  },
+  {
+   "name": "build_metadata",
+   "user_agent": "aifinpay-gate-node/0.15.0+build",
+   "gate": null
+  },
+  {
+   "name": "no_space_after",
+   "user_agent": "aifinpay-gate-node/0.15.0;x",
+   "gate": null
+  },
+  {
+   "name": "uppercase",
+   "user_agent": "AIFINPAY-GATE-NODE/0.15.0",
+   "gate": null
+  },
+  {
+   "name": "agent_not_gate",
+   "user_agent": "aifinpay-agent-node/2.14.0",
+   "gate": null
+  },
+  {
+   "name": "empty",
+   "user_agent": "",
+   "gate": null
+  }
+ ]
+}

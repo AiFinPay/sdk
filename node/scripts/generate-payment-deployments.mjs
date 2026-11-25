@@ -11,6 +11,7 @@ const evmOutput = path.join(nodeRoot, "src/generated/v14Deployments.generated.ts
 const solanaOutput = path.join(nodeRoot, "src/generated/solanaV14Deployments.generated.ts");
 const aptosOutput = path.join(nodeRoot, "src/generated/aptosV14Deployments.generated.ts");
 const nearOutput = path.join(nodeRoot, "src/generated/nearV14Deployments.generated.ts");
+const tronOutput = path.join(nodeRoot, "src/generated/tronV14Deployments.generated.ts");
 // The Python SDK reads the same pins; generated here so one check covers both.
 const pythonOutput = path.resolve(nodeRoot, "../python/aifinpay/_v14_deployments.py");
 const pythonSolanaOutput = path.resolve(nodeRoot, "../python/aifinpay/_solana_v14_deployments.py");
@@ -41,6 +42,7 @@ const evmRegistryPath = path.join(deploymentsRoot, "registry/splitter/evm/v1.4/d
 const solanaRegistryPath = path.join(deploymentsRoot, "registry/splitter/solana/deployments.json");
 const aptosRegistryPath = path.join(deploymentsRoot, "registry/splitter/aptos/deployments.json");
 const nearRegistryPath = path.join(deploymentsRoot, "registry/splitter/near/deployments.json");
+const tronRegistryPath = path.join(deploymentsRoot, "registry/splitter/tron/v1.4/deployments.json");
 
 // @aifinpay/deployments 2.x dropped `status`/`disabledReason` (its ADR 0007):
 // `settlementEnabled` is the only flag. The SDK still checks status=enabled at
@@ -62,6 +64,7 @@ const evmRegistry = JSON.parse(fs.readFileSync(evmRegistryPath, "utf8"));
 const solanaRegistry = JSON.parse(fs.readFileSync(solanaRegistryPath, "utf8"));
 const aptosRegistry = JSON.parse(fs.readFileSync(aptosRegistryPath, "utf8"));
 const nearRegistry = JSON.parse(fs.readFileSync(nearRegistryPath, "utf8"));
+const tronRegistry = JSON.parse(fs.readFileSync(tronRegistryPath, "utf8"));
 // SDK network names are lowercase (resolvers lowercase their input, and the
 // backend slug is "arctestnet"); the registry spells the testnet "arcTestnet".
 const sdkEvmDeployments = evmRegistry.deployments
@@ -452,6 +455,93 @@ export const ${constant}_V14_DEPLOYMENTS: Readonly<Record<${name}Network, ${name
 `;
 }
 
+const TRON_ADDRESS = /^T[1-9A-HJ-NP-Za-km-z]{33}$/;
+const TRON_ROLES = ["splitter", "tokenList", "profiles", "admin", "signer", "pauser", "treasury"];
+
+// Tron is metadata only: the SDK has no Tron executor, so nothing here selects
+// or authorizes a payment route.
+function validateTronRegistry(registry) {
+  if (
+    registry.ecosystem !== "tron" ||
+    registry.protocolVersion !== "v1.4" ||
+    !Array.isArray(registry.deployments) ||
+    registry.deployments.length === 0
+  ) fail("invalid tron v1.4 registry");
+  const source = registry.source;
+  if (source?.repo !== "AiFinPay/tron-contract" || !/^[0-9a-f]{40}$/.test(source.commit ?? "")) {
+    fail("tron registry has missing immutable provenance");
+  }
+  const keys = new Set();
+  for (const deployment of registry.deployments) {
+    const key = `tron:${deployment.environment}:${deployment.network}:v1.4`;
+    if (!/^tron[A-Z][A-Za-z]*$/.test(deployment.network ?? "")) fail(`${key} has unsupported network`);
+    if (keys.has(deployment.network)) fail(`duplicate deployment ${key}`);
+    keys.add(deployment.network);
+    if (typeof deployment.testnet !== "boolean" || deployment.environment !== (deployment.testnet ? "dev" : "prod")) {
+      fail(`${key} has inconsistent environment/testnet`);
+    }
+    if (typeof deployment.settlementEnabled !== "boolean") fail(`${key} has no boolean settlementEnabled`);
+    if (deployment.splitterVersion !== "1.4") fail(`${key} has unexpected splitterVersion`);
+    if (!Number.isSafeInteger(deployment.chainId) || deployment.chainId <= 0) fail(`${key} has invalid chainId`);
+    if (!/^0x[0-9a-f]{64}$/.test(deployment.runtimeCodeHash ?? "")) fail(`${key} has invalid runtimeCodeHash`);
+    if (TRON_ROLES.some((role) => !TRON_ADDRESS.test(deployment.contracts?.[role] ?? ""))) {
+      fail(`${key} has invalid contract addresses`);
+    }
+    if (!Array.isArray(deployment.assets) || deployment.assets.some((asset) =>
+      typeof asset.symbol !== "string" || !asset.symbol.trim() || !TRON_ADDRESS.test(asset.address ?? ""))) {
+      fail(`${key} has invalid assets`);
+    }
+    const prefix = `https://github.com/${source.repo}/blob/${source.commit}/`;
+    if (typeof deployment.sourceArtifact !== "string" ||
+      !deployment.sourceArtifact.startsWith(prefix) ||
+      deployment.sourceArtifact.includes("latest") ||
+      !deployment.sourceArtifact.endsWith(".json")) {
+      fail(`${key} source artifact is not immutable`);
+    }
+  }
+}
+
+function renderTronRegistry(registry) {
+  const table = Object.fromEntries(registry.deployments.map((deployment) => [
+    deployment.network,
+    {
+      network: deployment.network,
+      chainId: deployment.chainId,
+      environment: deployment.environment,
+      testnet: deployment.testnet,
+      splitterVersion: "1.4",
+      settlementEnabled: deployment.settlementEnabled,
+      runtimeCodeHash: deployment.runtimeCodeHash,
+      contracts: Object.fromEntries(TRON_ROLES.map((role) => [role, deployment.contracts[role]])),
+      assets: deployment.assets.map(({ symbol, name, address }) => ({ symbol, ...(name ? { name } : {}), address })),
+      sourceArtifact: deployment.sourceArtifact,
+    },
+  ]));
+  return `// DO NOT EDIT. Generated by scripts/generate-payment-deployments.mjs from @aifinpay/deployments.
+
+import type { SdkEnvironment } from "../deploymentResolver.js";
+
+/** Packaged Tron deployment metadata. The SDK has no Tron executor: this is
+ *  not a payment route, authorization or runtime verification. */
+export interface TronV14Deployment {
+  network: string;
+  chainId: number;
+  environment: SdkEnvironment;
+  testnet: boolean;
+  splitterVersion: "1.4";
+  settlementEnabled: boolean;
+  runtimeCodeHash: \`0x\${string}\`;
+  contracts: Readonly<Record<${TRON_ROLES.map((role) => `"${role}"`).join(" | ")}, string>>;
+  assets: readonly { symbol: string; name?: string; address: string }[];
+  sourceArtifact: string;
+}
+
+export const TRON_V14_DEPLOYMENTS_SOURCE = ${json(registry.source)} as const;
+
+export const TRON_V14_DEPLOYMENTS: Readonly<Record<string, TronV14Deployment>> = ${json(table)};
+`;
+}
+
 function writeOrCheck(outputPath, content) {
   if (checkOnly) {
     if (!fs.existsSync(outputPath) || fs.readFileSync(outputPath, "utf8") !== content) {
@@ -466,10 +556,12 @@ validateEvm(sdkEvmDeployments);
 validateSolana(solanaDeployments);
 validateAccountRegistry(aptosRegistry, "aptos");
 validateAccountRegistry(nearRegistry, "near");
+validateTronRegistry(tronRegistry);
 writeOrCheck(evmOutput, renderEvm());
 writeOrCheck(solanaOutput, renderSolana());
 writeOrCheck(aptosOutput, renderAccountRegistry(aptosRegistry, "aptos"));
 writeOrCheck(nearOutput, renderAccountRegistry(nearRegistry, "near"));
+writeOrCheck(tronOutput, renderTronRegistry(tronRegistry));
 writeOrCheck(pythonOutput, renderPython());
 writeOrCheck(
   pythonSolanaOutput,

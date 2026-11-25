@@ -1,5 +1,6 @@
 import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sign, verify } from "node:crypto";
 import { aifinpayApiUrl } from "./apiUrl.js";
+import { SDK_USER_AGENT } from "./version.js";
 
 /**
  * Networks supported in Agent Passport.
@@ -178,6 +179,7 @@ async function jsonRequest(url: string, init?: RequestInit, fetchImpl: typeof fe
       accept: "application/json",
       ...(init?.body ? { "content-type": "application/json" } : {}),
       ...(init?.headers || {}),
+      "user-agent": SDK_USER_AGENT,
     },
   });
   let body: unknown;

@@ -15,6 +15,7 @@ inputs to verification, not evidence of current runtime or backend availability.
 | Casper | [deployments.json](casper/deployments.json) | [Contract schema](casper/README.md) |
 | Aptos | [deployments.json](aptos/deployments.json) · [multisig-deployments.json](aptos/multisig-deployments.json) | [Payment and multisig snapshots](aptos/README.md) |
 | NEAR | [deployments.json](near/deployments.json) | [Account/WASM and council snapshots](near/README.md) |
+| Tron v1.4 | [deployments.json](tron/v1.4/deployments.json) | [Splitter snapshots and field mapping](tron/README.md) |
 
 Read the selected record for chain/network identity, addresses or program IDs,
 runtime hashes, governance, assets, policy fields and settlement flags. Read
@@ -57,6 +58,7 @@ or backend verification.
 - [Payment deployment JSON Schema](../../src/reference/payment-deployments.schema.json)
 - [EVM ABI bundles](../abi/evm/)
 - [Aptos splitter ABI bundles](../abi/aptos/splitter/)
+- [Tron ABI artifacts](../abi/tron/)
 - [Solana IDL copies](../idl/solana/splitter-v14/)
 - [Casper contract schema](../idl/casper/aifinpay-casper-schema.json)
 - [Artifact loading implementation](../../src/artifacts.ts)

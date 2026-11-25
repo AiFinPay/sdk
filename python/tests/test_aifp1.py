@@ -835,3 +835,48 @@ def test_recovery_resubmits_with_the_framework(pinned):
     h.server.seen.clear()
     a.submit_payment(h.server, PAYER, e.value.recovery, framework="cursor")
     assert [(m, u, f) for m, u, _, f in h.server.seen if u == f"{API}/v1/pay"] == [("POST", f"{API}/v1/pay", "cursor")]
+
+
+# ── User-Agent names the SDK version to the merchant and to our API ──
+
+
+class UserAgentRecorder(Server):
+    """The same fake, noting the User-Agent each request sent."""
+
+    def __init__(self, dep):
+        super().__init__(dep)
+        self.seen = []
+
+    def get(self, url, headers=None, **kw):
+        self.seen.append((url, (headers or {}).get("User-Agent")))
+        return super().get(url, headers=headers, **kw)
+
+    def post(self, url, json=None, headers=None, **kw):
+        self.seen.append((url, (headers or {}).get("User-Agent")))
+        return super().post(url, json=json, headers=headers, **kw)
+
+
+def test_user_agent_rides_on_merchant_quote_pay_and_jwks_but_not_price_feeds(pinned):
+    import aifinpay
+
+    h = Harness(pinned)
+    h.server = UserAgentRecorder(pinned)
+    assert h.fetch().status_code == 200
+    ours = f"aifinpay-agent-py/{aifinpay.__version__}"
+    for target in (f"{API}/v1/quote", f"{API}/v1/pay", f"{API}/.well-known/jwks.json"):
+        assert [ua for u, ua in h.server.seen if u == target] == [ours], target
+    assert [ua for u, ua in h.server.seen if u.startswith(SHOP)] == [ours, ours]
+    assert all(ua is None for u, ua in h.server.seen if not u.startswith((SHOP, API))), h.server.seen
+
+
+def test_recovery_resubmits_with_the_user_agent(pinned):
+    import aifinpay
+
+    h = Harness(pinned)
+    h.server = UserAgentRecorder(pinned)
+    h.server.pay_statuses = [500]
+    with pytest.raises(a.Aifp1PayError) as e:
+        h.fetch()
+    h.server.seen.clear()
+    a.submit_payment(h.server, PAYER, e.value.recovery)
+    assert [ua for u, ua in h.server.seen if u == f"{API}/v1/pay"] == [f"aifinpay-agent-py/{aifinpay.__version__}"]

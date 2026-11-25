@@ -1,5 +1,64 @@
 # Changelog
 
+## 2.20.0 — names its version to AiFinPay and to the merchant
+
+- Depends on `@aifinpay/agent` 2.18.0 (exact). Requests to the AiFinPay API
+  and to the merchant carry
+  `User-Agent: aifinpay-mcp/<version> aifinpay-agent-node/<SDK version>`;
+  chain RPC, price feeds and other hosts get no User-Agent from this server.
+  Every request still passes the same `safe-fetch.ts` checks.
+- `payable_fetch` also reports a receipt cache hit or miss and an AIFP-1 402
+  received (`outcome`: `direct` or `gateway`), from the SDK's flow events, and a
+  refused quote or payment carries its `http_status` in `aifp1_pay_failed`. No
+  new fields; no tool answer changes.
+- 2.19.0 was not published; its changes ship in this release.
+
+## 2.19.0 — pays with what the wallet holds, in the owner's order
+
+- With nothing set, `payable_fetch` may pay in the pay chain's pinned
+  stablecoins (read from `@aifinpay/agent`) and then its native coin: on
+  Polygon USDC, USDC.e, POL. Per payment it reads the URL's 402, keeps the
+  options the merchant settles on (`settlement_chains`), reads the wallet's
+  balances (cached 60 s) and pays with the first option that covers the price
+  plus that chain's gas cap. The owner's USD caps apply as before; a native
+  option still needs the independent price.
+- `AIFINPAY_PAY_OPTIONS` (`chain:ASSET`, comma-separated) sets the order and
+  the only options allowed. An option on a chain other than the pay chain or
+  Polygon is refused, because it has no gas cap. `AIFINPAY_PAY_ASSET` alone
+  keeps exactly one option, as before; setting both is refused.
+- The option last paid with and the balances read are kept in the payment
+  state file (never the keystore) and tried first while they still cover the
+  price; the new read decides.
+- The answer names `paid_with`. When nothing can pay, nothing is quoted and the
+  message lists each option's balance, the gas cap and what the merchant
+  accepts.
+- `payment_setup_status` lists `pay_options` with balances, and counts a
+  stablecoin that covers the smallest batch, with the gas cap in hand, as
+  ready.
+- A paid request with more than one allowed option makes one extra GET to read the price first.
+- Telemetry names the chain and asset actually chosen, and a purchase that stops
+  because no allowed option is affordable is reported as `aifp1_pay_failed` with
+  `stage: "funds"`.
+
+## 2.18.1 — bundles skill 2.13.0
+
+- The bundled payer guide is `@aifinpay/skill` 2.13.0: no release target or
+  dated baseline, every command installs the latest release. 2.18.0 was not
+  published.
+
+## 2.18.0 — usage telemetry through `@aifinpay/analytics`
+
+- Depends on `@aifinpay/analytics` 0.2.0 (exact). Telemetry is on unless
+  `AIFINPAY_TELEMETRY=off`, `DO_NOT_TRACK=1` or `CI` turns it off; the first
+  run prints one line to stderr, never to stdout.
+- The server reports the wallet load at start, the first tool call, and in
+  `payable_fetch` a quote obtained, an owner limit reached (`stage`:
+  `per_payment`, `daily`, `gas`, `site`), a payment made, the stage a payment
+  failed at, and recovery of an earlier payment. One wrapper,
+  `src/telemetry.ts`, keeps only the allowed fields; no URL, address, exact
+  amount, merchant name or receipt is sent. No tool answer or description
+  changes.
+
 ## 2.17.2 — agent_quota shows what is really left on self-metered sites
 
 - A site running its own gate (WordPress, Drupal, `@aifinpay/gate`) counts use

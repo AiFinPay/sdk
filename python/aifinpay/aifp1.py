@@ -658,7 +658,12 @@ def verify_paid_receipt(
         or "crit" in header
     ):
         reject()
-    r = session.get(issuer.rstrip("/") + "/.well-known/jwks.json", timeout=15, allow_redirects=False)
+    r = session.get(
+        issuer.rstrip("/") + "/.well-known/jwks.json",
+        headers={"User-Agent": _user_agent()},
+        timeout=15,
+        allow_redirects=False,
+    )
     if not r.ok:
         reject()
     keys = [
@@ -807,6 +812,7 @@ def submit_payment(
             r = session.post(
                 f"{api_base}/v1/pay",
                 headers={
+                    "User-Agent": _user_agent(),
                     "Idempotency-Key": idem,
                     **({"AIFP-Agent-Id": agent_id} if agent_id else {}),
                     **({"AIFP-Agent-Framework": framework} if framework else {}),
@@ -1759,7 +1765,8 @@ def aifp1_fetch(
         quote = json.loads(admission["quote_json"])
     else:
         quote_url = f"{api_base.rstrip('/')}/v1/quote"
-        quote_headers = {**({"content-type": "application/json"} if admission else {}),
+        quote_headers = {"User-Agent": _user_agent(),
+                         **({"content-type": "application/json"} if admission else {}),
                          **({"AIFP-Agent-Framework": framework} if framework else {}),
                          **_reporting_headers(reporting_token, quote_url, api_base.rstrip('/'))}
         if admission:

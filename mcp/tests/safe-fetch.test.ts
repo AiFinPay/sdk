@@ -196,7 +196,8 @@ describe("redirect request boundaries", () => {
     const request = new Request(input, init);
     for (const key of secretHeaders) expect(request.headers.has(key), key).toBe(false);
     expect(request.headers.get("accept")).toBe("application/json");
-    expect(request.credentials).toBe("omit");
+    // Bun's Request does not implement `credentials` (always "include").
+    if (!process.versions.bun) expect(request.credentials).toBe("omit");
   });
 
   it("preserves Request method, headers and body across a same-origin 307", async () => {

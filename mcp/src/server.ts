@@ -7,7 +7,7 @@ import {
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { readFileSync } from "node:fs";
-import type { McpConfig } from "./config.js";
+import { payOptions, type McpConfig } from "./config.js";
 import { loadWalletIdentity } from "./identity.js";
 import { agentHistoryTool, runAgentHistory } from "./tools/agent-history.js";
 import { devPaymentQuoteTool, runDevPaymentQuote } from "./tools/dev-payment-quote.js";
@@ -34,6 +34,7 @@ import {
 import { deploymentInfoTool, runDeploymentInfo } from "./tools/supported-chains.js";
 import { payChain } from "./pay-chains.js";
 import { clientFrameworkLine, frameworkForClient } from "./client-framework.js";
+import { errorClass, MCP_TOKEN, MCP_USER_AGENT, MCP_VERSION, track } from "./telemetry.js";
 
 // Every backend/public request made by this server goes through safeFetch.
 // Public deployments never lift private-network protection; local development
@@ -44,6 +45,27 @@ const safeFetch = makeSafeFetch({
   // for those names — see safe-fetch.ts for why this is not a proxy switch.
   trustedHosts: loadConfigFromEnv().trustedHosts,
 });
+
+/** Names this server in User-Agent: before the SDK's token, or whole on our own API requests; others untouched. */
+function namedFetch(fetchImpl: typeof fetch, apiOrigins: string[]): typeof fetch {
+  return (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+    const agent = headers.get("user-agent");
+    const named = agent
+      ? agent.includes("aifinpay-agent-node/") && !agent.includes("aifinpay-mcp/")
+        ? `${MCP_TOKEN} ${agent}`
+        : undefined
+      : URL.canParse(url) && apiOrigins.includes(new URL(url).origin)
+        ? MCP_USER_AGENT
+        : undefined;
+    if (named === undefined) return fetchImpl(input, init);
+    headers.set("user-agent", named);
+    return fetchImpl(input, { ...init, headers });
+  };
+}
+
+let invoked = false;
 
 const RELOAD_ENV_NOTE =
   "Payments are off: AIFINPAY_PAYMENTS_ENABLED=0 (or a programmatic config without payments). Env is read only when this server starts; agent_reload re-reads the keystore and nothing else. If the owner has changed it since, have the client restart the aifinpay MCP server (restart the client, or disable and re-enable the server), then call payment_setup_status.";
@@ -62,6 +84,10 @@ export async function createServer(config: McpConfig = {}) {
   const log = config.logFn ?? defaultLog;
   assertInjectedWalletChain(config);
 
+  const apiOrigins = ["https://api.aifinpay.io"];
+  if (URL.canParse(config.baseUrl ?? "https://aifinpay.io"))
+    apiOrigins.push(new URL(config.baseUrl ?? "https://aifinpay.io").origin);
+  const fetchImpl = namedFetch(safeFetch, apiOrigins);
   let identitySource = "ephemeral";
   async function configuredAgent() {
     const identity = loadWalletIdentity(config);
@@ -71,7 +97,7 @@ export async function createServer(config: McpConfig = {}) {
     const rpc =
       config.rpcUrl && config.payChain !== "solana" ? { [config.payChain ?? "polygon"]: config.rpcUrl } : undefined;
     const options = {
-      fetchImpl: safeFetch,
+      fetchImpl,
       baseUrl: config.baseUrl,
       timeoutMs: config.timeoutMs,
       ...(identity.derivationIndex === undefined ? {} : { derivationIndex: identity.derivationIndex }),
@@ -84,11 +110,19 @@ export async function createServer(config: McpConfig = {}) {
       : await AiFinPayAgent.fromSolanaSecret(identity.secretB58!, options);
     return { loaded, source: identity.source };
   }
-  const configured = await configuredAgent();
+  let configured: Awaited<ReturnType<typeof configuredAgent>>;
+  try {
+    configured = await configuredAgent();
+  } catch (error) {
+    const decrypt = /decrypt keystore|Encrypted keystore requires/.test((error as Error)?.message ?? "");
+    track(decrypt ? "wallet_decrypt_failed" : "wallet_load_failed", { error_class: errorClass(error) });
+    throw error;
+  }
+  if (configured) track("wallet_load_succeeded");
   let agent =
     configured?.loaded ??
     (await AiFinPayAgent.new({
-      fetchImpl: safeFetch,
+      fetchImpl,
       baseUrl: config.baseUrl,
       timeoutMs: config.timeoutMs,
     }));
@@ -192,6 +226,13 @@ export async function createServer(config: McpConfig = {}) {
     // The client named itself at initialize; unknown clients send no framework.
     const framework = frameworkForClient(server.getClientVersion()?.name);
     const ctx = { agent, config, log, paymentState, framework, walletSource: identitySource };
+    if (!invoked) {
+      invoked = true;
+      track("agent_sdk_first_invocation", {
+        mcp_version: MCP_VERSION,
+        persistent_wallet: identitySource !== "ephemeral",
+      });
+    }
     switch (name) {
       case "agent_reload":
         try {
@@ -308,6 +349,16 @@ function assertInjectedWalletChain(config: McpConfig): void {
   ) {
     throw new Error("The injected EVM wallet client must support on-chain transaction submission");
   }
+  let options: { chain: string }[] = [];
+  try {
+    options = payOptions(config);
+  } catch {
+    // validatePaymentConfig names the refused setting.
+  }
+  if (options.some((o) => o.chain !== selected.name))
+    throw new Error(
+      `The injected EVM wallet client signs on ${selected.name} only; list only ${selected.name} in AIFINPAY_PAY_OPTIONS`
+    );
   const expectedChainId = PAYMENT_CHAINS[selected.name].chainId;
   if (!wallet.chain || wallet.chain.id !== expectedChainId) {
     throw new Error(`The injected EVM wallet client must be configured for ${selected.name} (${expectedChainId})`);

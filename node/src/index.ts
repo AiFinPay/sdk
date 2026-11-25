@@ -160,6 +160,8 @@ export { APTOS_V14_DEPLOYMENTS, APTOS_V14_DEPLOYMENTS_SOURCE } from "./generated
 export type { AptosV14Deployment, AptosNetwork } from "./generated/aptosV14Deployments.generated.js";
 export { NEAR_V14_DEPLOYMENTS, NEAR_V14_DEPLOYMENTS_SOURCE } from "./generated/nearV14Deployments.generated.js";
 export type { NearV14Deployment, NearNetwork } from "./generated/nearV14Deployments.generated.js";
+export { TRON_V14_DEPLOYMENTS, TRON_V14_DEPLOYMENTS_SOURCE } from "./generated/tronV14Deployments.generated.js";
+export type { TronV14Deployment } from "./generated/tronV14Deployments.generated.js";
 
 export { AiFinPayAgent, SPLITTER_DEPLOYMENTS, paymentIdFor } from "./unifiedAgent.js";
 export type {
@@ -210,6 +212,7 @@ export type {
   Aifp1CachedReceipt,
   Aifp1MerchantPinStore,
   Aifp1FetchOptions,
+  Aifp1FlowEvent,
   Aifp1V14Chain,
   Aifp1Deps,
   QuoteSummary,
@@ -236,6 +239,8 @@ export {
   USDC_BRIDGED,
 } from "./crossChain.js";
 export type { BridgeQuote, BridgeReceipt, BridgeQuoteOptions, EvmChainName } from "./crossChain.js";
+
+export { SDK_VERSION, SDK_USER_AGENT } from "./version.js";
 
 // ── Legacy chain-aware public API (back-compat only) ─────────────────────
 export { Agent, AGENT_FRAMEWORKS } from "./agent.js";

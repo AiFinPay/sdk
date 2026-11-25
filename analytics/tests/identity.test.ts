@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync,
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { identityPath, resolveInstallId } from "../src/identity.js";
+import { identityPath, loadInstallId, resolveInstallId } from "../src/identity.js";
 
 let home: string;
 beforeEach(() => {
@@ -11,7 +11,20 @@ beforeEach(() => {
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
 describe("install_id", () => {
-  it("is created on first opt-in with 600/700 permissions", () => {
+  it("reports created only for the call that wrote the file", () => {
+    const first = loadInstallId({ persist: true, home });
+    expect(first.created).toBe(true);
+    expect(loadInstallId({ persist: true, home })).toEqual({ id: first.id, created: false });
+  });
+
+  it("reports not created when the file cannot be written", () => {
+    writeFileSync(join(home, ".aifinpay"), "not a directory");
+    const result = loadInstallId({ persist: true, home });
+    expect(result.created).toBe(false);
+    expect(result.id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("is created on the first run with 600/700 permissions", () => {
     const id = resolveInstallId({ persist: true, home });
     const path = identityPath(home);
     expect(readFileSync(path, "utf8").trim()).toBe(id);

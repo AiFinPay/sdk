@@ -398,6 +398,26 @@ sent; the SDK never guesses. A host that learns its client after constructing
 the agent passes it per call: `fetchPaid(url, init, { framework })` or
 `recoverPaidPayment(recovery, { framework })`.
 
+### Version and flow events
+
+AIFP-1 requests (merchant, `/v1/quote`, `/v1/pay`, the issuer's keys), the
+low-level `Agent` and history, quota and passport lookups name the SDK:
+`User-Agent: aifinpay-agent-node/<version>` (`SDK_USER_AGENT`). On the merchant request a caller's own `User-Agent` is kept
+and the SDK's is appended after a space.
+
+`onFlowEvent` reports how a `fetchPaid` call went, synchronously; a throw from
+it is ignored. Events carry no URL, address, merchant, quote, receipt or amount:
+
+```ts
+await agent.fetchPaid(url, {}, { onFlowEvent: (e) => console.log(e) });
+// { type: "receipt_cache", hit: false }
+// { type: "challenge_received", direct: false }
+// { type: "quote_refused" | "pay_refused", status: 400, reason?: "AIFP-400" }
+```
+
+`reason` is the server's `error` code, only when it is a short lowercase code
+or `AIFP-<3 digits>`.
+
 ### Payment history
 
 ```ts

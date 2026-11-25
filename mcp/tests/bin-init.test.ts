@@ -25,6 +25,7 @@ import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { payableNetwork } from "./offline-pay-network.js";
 import { createServer } from "../src/server.js";
 import { DEFAULT_DAILY_USD, DEFAULT_MAX_GAS_POL, DEFAULT_MAX_USD, loadConfigFromEnv } from "../src/config.js";
 
@@ -175,7 +176,10 @@ describe("aifinpay-mcp init", () => {
     expect(JSON.stringify(blocks).includes(secret)).toBe(false);
   });
 
-  it.each([false, true])(
+  // The publish barrier patches node:fs from a preload. Bun neither re-binds named
+  // ESM imports after syncBuiltinESMExports() nor lets plugins override builtins,
+  // so the barrier cannot engage there; Node (CI) covers this race.
+  it.skipIf(Boolean(process.versions.bun)).each([false, true])(
     "concurrent init preserves one wallet (encrypted=%s)",
     async (encrypted) => {
       const barrier = join(home, "init-barrier.mjs");
@@ -605,6 +609,8 @@ async function serverWith(
     logFn: () => {},
   });
   const purchase = vi.spyOn(active.agent, "fetchPaid").mockRejectedValue(new Error("stub: no network"));
+  // The 402 and the balances payable_fetch reads before choosing what to pay with: 10 POL, no stablecoin.
+  vi.spyOn(active.agent.inner, "fetchImpl").mockImplementation(payableNetwork({ url, balances: { "polygon:POL": 10n ** 19n } }));
   const client = new Client({ name: "init-output-test", version: "1" });
   const [left, right] = InMemoryTransport.createLinkedPair();
   await active.server.connect(right);

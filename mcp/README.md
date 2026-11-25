@@ -148,10 +148,36 @@ price; check the current Polygon gas price and raise the cap when it is higher.
 The fee actually charged is usually a fraction of the cap, but the wallet must
 hold the batch price plus the worst case before it signs.
 
-To pay in USDC instead of native POL, the owner also sets
-`"AIFINPAY_PAY_ASSET": "USDC"`. The wallet then needs USDC for the batch and
-POL for gas: an exact-amount token approval plus the settlement, both within
-`AIFINPAY_MAX_GAS_POL` together. Unset or `"POL"` keeps native POL.
+### What it pays with
+
+`payable_fetch` pays with what the wallet holds. With nothing set it tries the
+pay chain's stablecoins first, then its native coin: on Polygon USDC, USDC.e,
+then POL. The stablecoin list comes from `@aifinpay/agent`.
+
+For each payment it keeps the options the merchant accepts, reads the wallet's
+balances and uses the first option that covers the price plus the gas cap.
+A stablecoin payment still needs POL for gas: a token approval plus the
+settlement, both within `AIFINPAY_MAX_GAS_POL`. The answer says what it paid
+with in `paid_with`. If nothing covers the price, nothing is quoted, and the
+answer lists each balance and what the merchant accepts.
+
+`payment_setup_status` lists the options in order, with their balances.
+
+The owner can set the order with `AIFINPAY_PAY_OPTIONS`, a comma-separated
+list of `chain:ASSET`:
+
+```json
+{
+  "AIFINPAY_PAY_OPTIONS": "polygon:POL,polygon:USDC"
+}
+```
+
+The agent never pays with an option the owner did not list. A chain other than
+Polygon needs its gas cap: set `AIFINPAY_PAY_CHAIN` to it and
+`AIFINPAY_MAX_GAS` in its coin. Polygon keeps `AIFINPAY_MAX_GAS_POL`.
+
+`AIFINPAY_PAY_ASSET` alone still means one asset only, as before, for example
+`"AIFINPAY_PAY_ASSET": "USDC"`. Set it or `AIFINPAY_PAY_OPTIONS`, not both.
 
 ### Paying on another chain
 
@@ -159,8 +185,8 @@ POL for gas: an exact-amount token approval plus the settlement, both within
 `polygon` by default, or an exact supported name in the capability list below.
 Only the owner sets it, and a merchant is paid on a chain
 only if its quote is for that chain; a quote for any other chain is refused,
-never followed. On Base the batch is paid in ETH (or `AIFINPAY_PAY_ASSET:
-"USDC"`) and gas is ETH, so the cap is `AIFINPAY_MAX_GAS`, in ETH:
+never followed. On Base the batch is paid in USDC or ETH, whichever the wallet
+holds, and gas is ETH, so the cap is `AIFINPAY_MAX_GAS`, in ETH:
 
 ```json
 {
@@ -228,6 +254,38 @@ guesses. Nothing in the payment, limits or receipts depends on it. At
 initialize the server logs one line to stderr with the name it received, for
 example `[aifinpay-mcp] client "codex-mcp-client" → framework codex`, so a
 client missing from this table can be reported with its exact name.
+
+## Telemetry (on unless turned off)
+
+The server reports where a paid fetch stops, through
+[`@aifinpay/analytics`](https://github.com/AiFinPay/sdk/blob/main/analytics/README.md):
+the first tool call and the wallet load at start, and in `payable_fetch` a
+quote obtained, an owner limit reached, a payment made, the stage a payment
+failed at, and the recovery of an earlier payment.
+It also reports whether a held receipt covered the request and whether the
+merchant answered with an AIFP-1 402, as the SDK's `onFlowEvent` reports them.
+
+Requests to the AiFinPay API and to the merchant name this server and the SDK
+in `User-Agent`: `aifinpay-mcp/<version> aifinpay-agent-node/<SDK version>`,
+the versions in this package's `package.json` and its installed
+`@aifinpay/agent`. Chain RPC and price feeds get none from this server.
+
+Each event carries only these fields: `tool`, `stage`, `outcome`,
+`error_class` (the error's class name), `http_status`, `network`, `asset`,
+`usd_bucket` (`<0.1`, `<1`, `<5`, `>=5`), `ms`, `mcp_version`,
+`persistent_wallet` and `linked`, with a random install id. Never a URL, an
+address, an exact amount, a merchant name, a receipt or a key. Telemetry never
+changes a tool's answer and never writes to stdout.
+
+The first run prints one line to stderr:
+
+```
+AiFinPay sends usage events with a random install id: no wallet addresses, URLs or amounts. Turn off: AIFINPAY_TELEMETRY=off
+```
+
+Three ways to turn it off: `AIFINPAY_TELEMETRY=off`, `DO_NOT_TRACK=1`, or a
+`CI` variable (unless `AIFINPAY_TELEMETRY=on`). Nothing is sent at install
+time.
 
 ## Link the agent to its owner's dashboard
 

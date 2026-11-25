@@ -68,6 +68,7 @@ function fixture() {
       maxAmountUsd: 0.2,
       dailyAmountUsd: 0.3,
       maxGasPol: "0.05",
+      payAsset: "POL",
       walletHome: home,
       gatewayOrigins: [origin],
       gatewayPathMode: "direct",
@@ -165,6 +166,7 @@ describe("reviewed AIFP-1 payable_fetch", () => {
           "set-cookie": "session=private",
           "aifp-receipt": "private",
           "aifp-quota-remaining": "199",
+          "content-type": "text/plain;charset=UTF-8",
         },
       })
     );
