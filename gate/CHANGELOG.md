@@ -1,6 +1,6 @@
 # Changelog
 
-## @aifinpay/gate 0.14.0 — AiFinPay sees how much of a receipt is used
+## @aifinpay/gate 0.14.0 — receipt use, gate identity and traffic summaries
 
 - `createGateReporter` now also sends receipt use: after every paid `serve` it
   holds the receipt id (never the token) and the units left, the lowest per
@@ -15,6 +15,24 @@
 - The paid `serve` event carries `remaining`; a shadow or exempt serve does not.
   `reporter.stats.uses` reports `queued`, `delivered`, `dropped`, `lastError`.
 - Vectors: `conformance/vectors/receipt-use-v1.json`, SPEC section "Receipt use".
+- Every request with the merchant secret (registry poll, gate events, receipt
+  use, reporting v2, traffic) carries `User-Agent: aifinpay-gate-node/<version>`
+  and `AIFP-Gate: pkg=node; ver=…; platform=…; mode=…; charge=…`. `platform` is
+  `express` under `aifpGate` and `node` for `createGate`; `charge` is `agents`,
+  `unproven`, `everyone` or `custom`. Exports `GATE_VERSION`.
+- Five-minute traffic summaries to `POST /v1/merchants/:id/gate-traffic`
+  whenever a reporter is wired to the gate: every decision counted by class and
+  outcome, readers and unregistered paths included, assets served free left
+  out; operator and first path segment for agents; country from `countryHeader`
+  (default `cf-ipcountry`, `null` for none) and network only from
+  `networkHeader`, never for readers. A separate sender: at most three windows
+  held, retried with the same id and bytes on 408, 429, 5xx or no answer, a 6 h
+  pause on 404 and 24 h on any other refusal; events and receipt use never
+  share its state. Counting is synchronous and in memory, sending happens off
+  the request. `traffic: false` turns it off; `reporter.flushTraffic()` and
+  `reporter.stats.traffic` are new.
+- Vectors: `conformance/vectors/gate-identity-v1.json` and
+  `gate-traffic-v1.json`, SPEC sections "Gate identity" and "Traffic summary".
 
 ## @aifinpay/gate 0.13.0 — the 402 says what the page is
 

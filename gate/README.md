@@ -742,3 +742,60 @@ again; a network error, timeout, 408, 429 or 5xx keeps it for the next attempt
 (at most 5). Gate events are untouched either way, and no outcome reaches a
 request. `reporter.stats.uses` has `queued`, `delivered`, `dropped` and
 `lastError`. `conformance/vectors/receipt-use-v1.json` holds the exact bodies.
+
+## What the gate tells AiFinPay
+
+Every request the gate makes with your merchant secret names the gate. That is
+the resource registry poll, gate events, receipt use, reporting v2 and traffic
+summaries. Two headers carry it:
+
+```text
+User-Agent: aifinpay-gate-node/<version>
+AIFP-Gate: pkg=node; ver=<version>; platform=express; mode=enforce; charge=agents
+```
+
+`platform` is `express` under `aifpGate` and `node` for a bare `createGate`.
+`charge` is `agents` for `knownAiAgent`, `unproven` for `unprovenPays`,
+`everyone` without `shouldCharge`, and `custom` for your own rule. A registry
+poll made before any gate is built carries only the User-Agent.
+
+What each request contains:
+
+| Request | Contains |
+|---|---|
+| Identity | Package, version, platform, mode and charge rule. |
+| Events | Challenges and admissions on registered patterns, with the operator and class. Never a reader's page view. |
+| Receipt use | Receipt id and the units left. |
+| Traffic | Counts per five minutes, described below. |
+
+Traffic summaries go out whenever a reporter is wired to the gate. Every
+request the gate decides is counted once, by class (`human`, `ai_crawler`, and
+so on) and outcome (`served`, `challenged`, `paid`, `blocked`, `error`). Readers
+are counted too, though they are never sent as events. A script, image or font
+served free is not counted. For agents the summary also counts the operator
+and the section: the first segment of the path, such as `/blog`. A language
+prefix like `/en` is skipped.
+
+Country comes from the `cf-ipcountry` header by default. Name another header
+with `countryHeader`, or pass `countryHeader: null` to send none. The caller's
+network comes only from a header you name with `networkHeader`, and it is never
+sent for readers. Both must be set by your own CDN: the gate never looks an
+address up.
+
+The summary is counted in memory and sent outside the request, at most once
+per five minutes. It has its own state. A 404 from an API without the route
+pauses it for 6 hours, any other refusal for 24 hours; events and receipt use
+carry on. `await reporter.flushTraffic()` closes the current window and sends
+it, and `close()` does the same. `reporter.stats.traffic` shows what is held,
+sent and dropped.
+
+What never leaves your site: IP addresses, full paths and query strings,
+User-Agents, headers, cookies, receipts and agent ids.
+
+Turn traffic summaries off with `traffic: false` on the gate:
+
+```ts
+aifpGate({ merchantId, registry, onEvent: reporter.onEvent, traffic: false });
+```
+
+The identity headers are always sent.
