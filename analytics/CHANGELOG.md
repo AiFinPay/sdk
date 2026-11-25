@@ -1,5 +1,10 @@
 # Changelog
 
+## @aifinpay/analytics 0.1.1 — unreleased
+
+- Default destination `https://api.aifinpay.io/v1/agent`, the host that serves
+  the telemetry route. The earlier default named a host that does not exist.
+
 ## @aifinpay/analytics 0.1.0 — unreleased
 
 - New package: opt-in SDK telemetry, off by default. `emit`, `configure`,

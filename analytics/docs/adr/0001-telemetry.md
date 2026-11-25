@@ -16,7 +16,7 @@ One standalone, zero-dependency package owns the contract. Consumers only call
 `emit(name, payload)`.
 
 1. **Transport.** Self-hosted `POST` to `AIFINPAY_TELEMETRY_URL`, default
-   `https://telemetry.aifinpay.io/v1/agent`. HTTPS only (loopback HTTP for
+   `https://api.aifinpay.io/v1/agent`. HTTPS only (loopback HTTP for
    development); an unusable override disables sending. Timeout 1.5 s, at most
    one retry (network error, timeout, 429, 5xx only), redirects refused.
    Bounded queue of 256, drop on overflow, batches of at most 64 events and
@@ -74,7 +74,7 @@ One standalone, zero-dependency package owns the contract. Consumers only call
 
 ## Open questions
 
-- Confirm the 30-day retention and that `telemetry.aifinpay.io` is the live
+- Confirm the 30-day retention and that `api.aifinpay.io` is the live
   hostname before any consumer ships with it.
 - When `mcp/` or `wallet/` gain their own postinstall scripts, they should
   call this package's script rather than emit their own install event.

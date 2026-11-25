@@ -18,7 +18,7 @@ schema — so there is one network surface to review. Consumer packages
 | `install`            | Only the one-shot `agent_sdk_install_completed` event from the postinstall script. Runtime events stay off.       |
 
 `AIFINPAY_TELEMETRY_URL` overrides the destination (default
-`https://telemetry.aifinpay.io/v1/agent`). It must be HTTPS, or HTTP on
+`https://api.aifinpay.io/v1/agent`). It must be HTTPS, or HTTP on
 loopback for local development. An unusable value disables sending — it never
 falls back to the default.
 
