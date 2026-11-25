@@ -262,6 +262,13 @@ The server reports where a paid fetch stops, through
 the first tool call and the wallet load at start, and in `payable_fetch` a
 quote obtained, an owner limit reached, a payment made, the stage a payment
 failed at, and the recovery of an earlier payment.
+It also reports whether a held receipt covered the request and whether the
+merchant answered with an AIFP-1 402, as the SDK's `onFlowEvent` reports them.
+
+Requests to the AiFinPay API and to the merchant name this server and the SDK
+in `User-Agent`: `aifinpay-mcp/<version> aifinpay-agent-node/<SDK version>`,
+the versions in this package's `package.json` and its installed
+`@aifinpay/agent`. Chain RPC and price feeds get none from this server.
 
 Each event carries only these fields: `tool`, `stage`, `outcome`,
 `error_class` (the error's class name), `http_status`, `network`, `asset`,

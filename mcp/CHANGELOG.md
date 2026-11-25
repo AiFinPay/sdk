@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.20.0 — names its version to AiFinPay and to the merchant
+
+- Depends on `@aifinpay/agent` 2.18.0 (exact). Requests to the AiFinPay API
+  and to the merchant carry
+  `User-Agent: aifinpay-mcp/<version> aifinpay-agent-node/<SDK version>`;
+  chain RPC, price feeds and other hosts get no User-Agent from this server.
+  Every request still passes the same `safe-fetch.ts` checks.
+- `payable_fetch` also reports a receipt cache hit or miss and an AIFP-1 402
+  received (`outcome`: `direct` or `gateway`), from the SDK's flow events, and a
+  refused quote or payment carries its `http_status` in `aifp1_pay_failed`. No
+  new fields; no tool answer changes.
+- 2.19.0 was not published; its changes ship in this release.
+
 ## 2.19.0 — pays with what the wallet holds, in the owner's order
 
 - With nothing set, `payable_fetch` may pay in the pay chain's pinned
