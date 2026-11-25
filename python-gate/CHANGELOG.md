@@ -1,4 +1,4 @@
-## 0.11.0 — AiFinPay sees how much of a receipt is used
+## 0.11.0 — receipt use, gate identity and traffic summaries
 
 - Port of `@aifinpay/gate` 0.14.0: `GateReporter` also sends receipt use. After
   every paid `serve` it holds the receipt id (never the token) and the units
@@ -10,6 +10,20 @@
   are unchanged and no outcome reaches a request. The paid `serve` event
   carries `remaining`; `reporter.stats["uses"]` reports the counts. Bodies byte
   for byte as Node (`conformance/vectors/receipt-use-v1.json`).
+- Port of the 0.14.0 gate identity: every request with the merchant secret
+  (gate events, receipt use, reporting v2, traffic) carries
+  `User-Agent: aifinpay-gate-py/<version>` and `AIFP-Gate: pkg=py; …`, with
+  `platform` `asgi`, `wsgi` or `python` for a bare `Gate`, and `charge`
+  `agents`, `unproven`, `everyone` or `custom`.
+- Five-minute traffic summaries to `POST /v1/merchants/:id/gate-traffic`
+  whenever a reporter is wired to the gate, the same bytes as Node: every
+  decision counted by class and outcome, readers and paths outside every route
+  included, assets served free left out; country from `country_header`
+  (default `cf-ipcountry`, `None` for none), network only from
+  `network_header` and never for readers. Sent by its own daemon thread with
+  its own held windows and pause (404: 6 h, other refusals: 24 h); events and
+  receipt use never share its state. `traffic=False` turns it off;
+  `reporter.flush_traffic()` and `reporter.stats["traffic"]` are new.
 
 ## 0.10.0 — the 402 says what the page is
 
