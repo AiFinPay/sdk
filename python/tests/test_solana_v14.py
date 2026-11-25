@@ -627,6 +627,23 @@ def test_public_high_level_proof_jwt_journal_and_restart_recovery(monkeypatch, t
         restart.recover_paid(str(journal), solana_network="devnet", environment="dev")
 
 
+def test_solana_quote_and_pay_carry_the_user_agent(monkeypatch, tmp_path):
+    import aifinpay
+
+    f, seen = Fixture(), []
+    approved(monkeypatch, f)
+    post = f.post
+
+    def record(url, headers=None, **kw):
+        seen.append((url, (headers or {}).get("User-Agent")))
+        return post(url, headers=headers, **kw)
+
+    monkeypatch.setattr(f, "post", record)
+    assert fetch(AiFinPayAgent.from_seed("42" * 32, solana_rpc=RPC), tmp_path).status_code == 200
+    ours = f"aifinpay-agent-py/{aifinpay.__version__}"
+    assert [ua for u, ua in seen if u.endswith(("/v1/quote", "/v1/pay"))] == [ours, ours]
+
+
 def test_unknown_broadcast_survives_expiry_and_cannot_be_rebought(monkeypatch, tmp_path):
     f = Fixture()
     approved(monkeypatch, f)
