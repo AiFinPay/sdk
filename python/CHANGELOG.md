@@ -1,3 +1,10 @@
+## 2.13.1 — our API sees which SDK version calls it
+
+- `aifp1_fetch` sends `User-Agent: aifinpay-agent-py/<version>` on `/v1/quote`
+  (EVM and Solana), on every `/v1/pay` including recovery, and on the issuer's
+  `jwks.json`, as it already did to the merchant. Price feeds and chain RPC are
+  unchanged.
+
 ## 2.13.0 — the paying wallet signs every EVM quote
 
 - Every EVM `/v1/quote` from `aifp1_fetch` carries a `quote_authorization`

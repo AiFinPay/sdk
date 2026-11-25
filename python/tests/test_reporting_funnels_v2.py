@@ -28,7 +28,7 @@ def test_quote_only_optional_header_preserves_one_payment_and_reuse(pinned):
     assert h.fetch(reporting_token="S" * 43).status_code == 200
     assert h.server.quotes == 1 and len(h.server.pays) == 1 and len(h.chain.sent) == 1
     quotes = [(u, kw) for u, kw in calls if u == API + "/v1/quote"]
-    assert len(quotes) == 1 and quotes[0][1]["headers"] == {"AIFP-Reporting-Token": CAP}
+    assert len(quotes) == 1 and quotes[0][1]["headers"] == {"User-Agent": c._user_agent(), "AIFP-Reporting-Token": CAP}
     for u, kw in calls:
         if u != API + "/v1/quote":
             assert "AIFP-Reporting-Token" not in kw.get("headers", {})
