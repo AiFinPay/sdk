@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.daochild/aifinpay",
   "title": "AiFinPay",
-  "description": "Payment infrastructure for AI agents: wallet, passport, owner-enabled Polygon and Base payments.",
-  "version": "2.2.2",
+  "description": "Payment infrastructure for AI agents: wallet, passport, AIFP-1 payments within owner limits.",
+  "version": "2.17.3",
   "websiteUrl": "https://aifinpay.io",
   "repository": {
     "url": "https://github.com/AiFinPay/sdk",
@@ -12,15 +12,15 @@
   },
   "icons": [
     {
-      "src": "https://aifinpay.io/favicon.png",
-      "mimeType": "image/png"
+      "src": "https://avatars.githubusercontent.com/u/273628874?s=256&v=4",
+      "mimeType": "image/jpeg"
     }
   ],
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@aifinpay/mcp",
-      "version": "2.2.2",
+      "version": "2.17.3",
       "transport": {
         "type": "stdio"
       },
@@ -55,7 +55,7 @@
         },
         {
           "name": "AIFINPAY_PAYMENTS_ENABLED",
-          "description": "Payments (payable_fetch, AIFP-1 v1.4 on Polygon or Base) are on unless this is 0. Only a persistent wallet signs, within the built-in ceiling of $5 per payment and $20 per 24 hours; an unfunded wallet spends nothing.",
+          "description": "Payments (payable_fetch, AIFP-1 v1.4 on the owner's pay chain) are on unless this is 0. Only a persistent wallet signs, within the built-in ceiling of $5 per payment and $20 per 24 hours; an unfunded wallet spends nothing.",
           "format": "string",
           "choices": ["0", "1"],
           "isRequired": false
@@ -80,13 +80,13 @@
         },
         {
           "name": "AIFINPAY_PAY_CHAIN",
-          "description": "Payment chain: polygon (default) or base.",
+          "description": "Payment chain, polygon by default. Other supported networks only by explicit owner selection; a quote for any other chain is refused.",
           "format": "string",
           "isRequired": false
         },
         {
           "name": "AIFINPAY_MAX_GAS",
-          "description": "Gas cap per payment in the chain's native currency (POL or ETH). Required with payments unless AIFINPAY_MAX_GAS_POL is set on Polygon.",
+          "description": "Gas cap per payment in the pay chain's native currency. Required with payments unless AIFINPAY_MAX_GAS_POL is set on Polygon.",
           "format": "string",
           "isRequired": false
         },
@@ -98,7 +98,7 @@
         },
         {
           "name": "AIFINPAY_MAX_GAS_POL",
-          "description": "Gas cap per payment in POL, e.g. 0.3. Polygon only; on Base use AIFINPAY_MAX_GAS.",
+          "description": "Gas cap per payment in POL, e.g. 0.3. Polygon only; on other chains use AIFINPAY_MAX_GAS.",
           "format": "string",
           "isRequired": false
         },
