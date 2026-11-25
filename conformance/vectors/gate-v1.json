@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "reference": "@aifinpay/gate 0.14.0",
+ "reference": "@aifinpay/gate 0.14.1",
  "fixtures": {
   "merchant_id": "mrch_0123456789abcdef",
   "other_merchant_id": "mrch_fedcba9876543210",
@@ -8113,6 +8113,343 @@
    "fault": {
     "traffic": 503
    }
+  },
+  {
+   "id": "traffic.edge_counted",
+   "group": "traffic",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A request an edge gate counted is answered, metered and reported the same, and left out of the summary",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome",
+      "headers": {
+       "AIFP-Edge-Counted": "1"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot",
+      "headers": {
+       "AIFP-Edge-Counted": "1"
+      }
+     },
+     "expect": {
+      "status": 402,
+      "origin": false,
+      "body": {
+       "golden": "challenge.standard",
+       "order": true
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot",
+      "headers": {
+       "AIFP-Edge-Counted": " 1 "
+      }
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer",
+      "headers": {
+       "AIFP-Edge-Counted": "1"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "2"
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {
+       "aifp-quota-remaining": "1"
+      }
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot",
+      "headers": {
+       "AIFP-Edge-Counted": "0"
+      }
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot",
+      "headers": {
+       "AIFP-Edge-Counted": "true"
+      }
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot",
+      "headers": {
+       "AIFP-Edge-Counted": ""
+      }
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot",
+      "headers": {
+       "AIFP-Edge-Counted": [
+        "1",
+        "1"
+       ]
+      }
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot",
+      "headers": {
+       "AIFP-Edge-Counted": "1, 1"
+      }
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "traffic": {
+    "mode": "enforce",
+    "charge": "agents",
+    "classes": [
+     [
+      "ai_crawler",
+      "challenged",
+      5
+     ],
+     [
+      "aifp_agent",
+      "paid",
+      1
+     ],
+     [
+      "human",
+      "served",
+      1
+     ]
+    ],
+    "operators": [
+     [
+      "aifinpay",
+      "aifp_agent",
+      "paid",
+      1
+     ],
+     [
+      "openai",
+      "ai_crawler",
+      "challenged",
+      5
+     ]
+    ]
+   },
+   "needs": [
+    "traffic",
+    "events"
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   },
+   "events": [
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false
+    },
+    {
+     "kind": "serve",
+     "resource": "/paid/*",
+     "operator": "aifinpay",
+     "ua_class": "aifp_agent",
+     "verified": true
+    },
+    {
+     "kind": "serve",
+     "resource": "/paid/*",
+     "operator": "aifinpay",
+     "ua_class": "aifp_agent",
+     "verified": true
+    }
+   ]
+  },
+  {
+   "id": "traffic.edge_counted_only",
+   "group": "traffic",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A window with only requests an edge gate counted is not sent, and their events are",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome",
+      "headers": {
+       "AIFP-Edge-Counted": "1"
+      }
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot",
+      "headers": {
+       "AIFP-Edge-Counted": "1"
+      }
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "traffic": null,
+   "needs": [
+    "traffic",
+    "events"
+   ],
+   "events": [
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false
+    }
+   ]
   }
  ]
 }

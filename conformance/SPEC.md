@@ -115,6 +115,9 @@ What is counted:
 | Network | The autonomous system number the platform resolved, as `AS<n>`, n from 1 to 4294967295. None: `AS0`. Never for `human`. |
 | Source | Country and network only where the platform already has them: an edge's request metadata, or a header the site's own CDN sets and the site named. A gate never looks an address up, and the address never leaves the request. A gate that has neither sends neither table. |
 | Caps | Per window, by total count, ties by name: 30 sections, 20 countries, 50 networks, the rest added into `_other`. `/`, `ZZ` and `AS0` are values like any other; `_other` is outside the count. A number above 10^9 is sent as 10^9. A body over 600 rows drops whole tables from the end (`networks`, `countries`, `sections`, `operators`) until it fits. |
+| Counted once | A request that carries `AIFP-Edge-Counted: 1` was counted by an edge gate of the same site. A gate does not count it. Nothing else about the request changes: it is priced, admitted, metered, reported as an event and answered exactly as without the header. An edge gate sets the header only on requests it counted, or made itself, and removes any copy a client sent. The value is exactly `1` after the usual trimming of spaces and tabs; any other value, or the field more than once, is ignored and the request is counted. Vectors: `edge_counted`. |
+
+Why a plain header. It changes a count and nothing a client can profit from. A client that reaches the origin directly and sends it is still priced and refused the same; it only leaves the origin's summary. A site that locks its origin to its edge, which strict charging already requires, closes that too.
 
 The request:
 

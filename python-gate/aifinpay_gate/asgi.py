@@ -16,6 +16,9 @@ from typing import Any, Dict, Optional
 
 from .core import CDN_CACHE_HEADERS, Gate, GateResult
 from .discovery import DISCOVERY_PATH, build_discovery_document, discovery_link_header, is_html_content_type
+from .traffic import HEADER_EDGE_COUNTED
+
+_EDGE_COUNTED = HEADER_EDGE_COUNTED.lower()
 
 
 class _AsgiRequest:
@@ -33,7 +36,11 @@ class _AsgiRequest:
         self._headers: Dict[str, str] = {}
         for k, v in scope.get("headers") or []:
             name = k.decode("latin-1").lower()
-            self._headers.setdefault(name, v.decode("latin-1"))
+            if name == _EDGE_COUNTED and name in self._headers:
+                # A repeated field must read as repeated, as Node and WSGI servers join it.
+                self._headers[name] += ", " + v.decode("latin-1")
+            else:
+                self._headers.setdefault(name, v.decode("latin-1"))
 
     def header(self, name: str) -> Optional[str]:
         return self._headers.get(name.lower())

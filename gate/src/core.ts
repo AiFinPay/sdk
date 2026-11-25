@@ -38,7 +38,7 @@ import type { ResourceRegistry } from "./registry.js";
 import type { GateReporterV2, ReportingContext } from "./reporter.js";
 import type { DiscoveryLinkSetting } from "./discovery-link.js";
 import { chargeOf, GATE_VERSION, linkedSlot, type GateInfo } from "./identity.js";
-import type { TrafficOutcome, TrafficSender } from "./traffic.js";
+import { edgeCounted, HEADER_EDGE_COUNTED, type TrafficOutcome, type TrafficSender } from "./traffic.js";
 import type { PageAbout } from "./about.js";
 
 export interface GateOptions {
@@ -299,6 +299,7 @@ export function createGateOn(options: GateOptions, platform: string): (req: Gate
   const tally = (req: GateRequest, who: AgentIdentity | undefined, outcome: TrafficOutcome) => {
     if (!senders.length) return;
     try {
+      if (edgeCounted(req.header(HEADER_EDGE_COUNTED))) return;
       const caller = who ?? classifyAgent(req);
       const record = {
         target: String(req.path ?? "/"),
