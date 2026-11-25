@@ -1,7 +1,7 @@
 name: aifinpay
 displayName: AiFinPay
-description: Payment infrastructure for AI agents. A persistent non-custodial agent wallet, Agent Passport resolution, route discovery and non-signing settlement invoices; within a built-in $5 / $20 ceiling and the owner's dashboard Controls, payable_fetch buys prepaid access to AIFP-1 merchants on Polygon or Base, in POL/ETH or a pinned stablecoin.
-version: 2.5.0
+description: Payment infrastructure for AI agents. A persistent non-custodial agent wallet, Agent Passport resolution, route discovery and non-signing settlement invoices; within a built-in $5 / $20 ceiling and the owner's dashboard Controls, payable_fetch buys prepaid access to AIFP-1 merchants on the owner's pay chain (Polygon by default), in its native currency or a pinned stablecoin.
+version: 2.17.3
 license: MIT
 homepage: https://aifinpay.io
 repository: https://github.com/AiFinPay/sdk
@@ -9,7 +9,7 @@ documentation: https://aifinpay.io/docs
 author: CoinSecurities (SECCO)
 contact: hello@aifinpay.io
 
-icon: https://aifinpay.io/favicon.png
+icon: https://avatars.githubusercontent.com/u/273628874?s=256&v=4
 
 categories:
   - payments
@@ -87,15 +87,15 @@ configSchema:
     AIFINPAY_PAY_CHAIN:
       type: string
       title: Payment chain
-      description: '"polygon" (default) or "base". Set by the owner; a quote for any other chain is refused.'
+      description: '"polygon" (default) or another supported network the owner selects explicitly; a quote for any other chain is refused.'
     AIFINPAY_MAX_GAS:
       type: string
       title: Gas cap (native)
-      description: Gas cap per payment in the payment chain's native currency, for example "0.3" POL on Polygon or "0.0002" ETH on Base. Required when payments are enabled (or AIFINPAY_MAX_GAS_POL on Polygon).
+      description: Gas cap per payment in the payment chain's native currency, for example "0.3" POL on Polygon. Required when payments are enabled (or AIFINPAY_MAX_GAS_POL on Polygon).
     AIFINPAY_MAX_GAS_POL:
       type: string
       title: Gas cap (POL, Polygon only)
-      description: The gas cap under its original name, in POL. Accepted on Polygon; refused on Base rather than read as ETH.
+      description: The gas cap under its original name, in POL. Accepted on Polygon only; refused on other chains rather than read in their native currency.
     AIFINPAY_PAY_ASSET:
       type: string
       title: Payment asset
@@ -138,12 +138,14 @@ tools:
     description: Reload the configured local wallet files after init or a file update, without starting a new conversation. Returns public addresses only.
   - name: agent_claim_self
     description: Link the agent to its owner's AiFinPay dashboard with a one-time URL from dash.aifinpay.io. Signs only an AiFinPay claim challenge for the agent's own address and, after an EVM claim, a summary of its payment settings for the owner's dashboard (never keys or file paths); moves no funds.
+  - name: payment_setup_status
+    description: Read-only checklist for paying with payable_fetch — wallet, whether payments are on, each limit and its source, the pay-chain balance, the owner's dashboard Controls and exactly one next step. Moves nothing and signs no payment.
   - name: payable_fetch
-    description: Registered only when the owner enables payments. Fetches a GET resource from an owner-approved AIFP-1 merchant, buys a prepaid batch through verified Polygon v1.4 within the owner's limits, and reuses its receipt. scope "merchant" buys one batch for the whole site.
+    description: Always listed; until a persistent wallet exists it signs nothing and returns the payment_setup_status checklist. Fetches a GET resource from an AiFinPay merchant, paying its AIFP-1 402 through a backend-signed quote with a prepaid batch over verified v1.4 on the owner's pay chain (Polygon by default), within the built-in $5 / $20 ceiling and the owner's limits, and reuses its receipt. scope "merchant" buys one batch for the whole site.
   - name: agent_quota
     description: How many prepaid requests this agent has left, per service. Lists active quota batches (merchant, resource, used, remaining, expiry). Read-only.
   - name: agent_history
-    description: Read an agent's payment history by EVM address, public passport identifier, or both. Transactions are indexed AiFinPay Polygon settlements.
+    description: Read an agent's payment history by EVM address, public passport identifier, or both. Defaults to the configured payment chain; arbitrary wallet transfers are excluded.
   - name: agent_passport_resolve
     description: Resolve an AiFinPay Agent Passport by @username, permanent AIFP number, or immutable agent id. Returns verified public wallet bindings only.
   - name: settlement_routes
@@ -155,7 +157,7 @@ tools:
   - name: settlement_casper
     description: Build and validate a non-signing Casper settlement invoice. This tool never moves funds.
   - name: deployment_info
-    description: AiFinPay deployment details across EVM, Solana and Casper — addresses, stablecoins, program IDs and settlement status. Read-only.
+    description: AiFinPay deployment registry metadata across EVM, Solana, Aptos, NEAR, Tron and Casper — addresses, stablecoins, program IDs and settlement status. A listed network is not necessarily payable. Read-only.
 
 live_evidence:
   - chain: polygon
