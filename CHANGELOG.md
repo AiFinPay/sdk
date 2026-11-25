@@ -6,6 +6,13 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## Agent 2.18.0 — the SDK names its version
+
+- `@aifinpay/agent` sends `User-Agent: aifinpay-agent-node/<version>` on AIFP-1,
+  history, quota and passport requests, appended to a caller's own on the merchant request,
+  and adds `onFlowEvent` to the AIFP-1 fetch options. Python and MCP are not
+  part of this change.
+
 ## MCP 2.19.0 — pays with what the wallet holds
 
 - `payable_fetch` pays in the pay chain's stablecoins or its native coin,

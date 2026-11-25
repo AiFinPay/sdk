@@ -42,7 +42,9 @@ import {
   readResource,
   aifp1Fetch,
   type Aifp1Deps,
+  type Aifp1FlowEvent,
 } from "../src/aifp1.js";
+import { SDK_USER_AGENT, SDK_VERSION } from "../src/version.js";
 
 const GATEWAY = "https://gateway.aifinpay.io";
 const API = "https://api.aifinpay.io";
@@ -2228,3 +2230,222 @@ describe("reading a gate's answers as the gate does", () => {
   });
 });
 
+// ── Client version and flow events ────────────────────────────────────────
+
+function recordHeaders(server: MockServer): Array<{ url: string; userAgent: string | null }> {
+  const seen: Array<{ url: string; userAgent: string | null }> = [];
+  const base = server.fetch;
+  server.fetch = (async (input, init) => {
+    seen.push({ url: String(input), userAgent: new Headers(init?.headers).get("User-Agent") });
+    return base(input, init);
+  }) as typeof fetch;
+  return seen;
+}
+
+describe("aifp1: the SDK names its version", () => {
+  it("sends its User-Agent to the merchant, /v1/quote and /v1/pay", async () => {
+    const server = mockServer();
+    const seen = recordHeaders(server);
+    const { agent } = await agentFor(server);
+    await agent.fetchPaid(`${GATEWAY}/acme/articles/2026/a`);
+    expect(seen.map((r) => new URL(r.url).pathname)).toEqual([
+      "/acme/articles/2026/a",
+      "/v1/quote",
+      "/v1/pay",
+      "/acme/articles/2026/a",
+    ]);
+    expect(seen.every((r) => r.userAgent === SDK_USER_AGENT)).toBe(true);
+    expect(SDK_USER_AGENT).toBe(`aifinpay-agent-node/${SDK_VERSION}`);
+  });
+
+  it("keeps a caller's User-Agent and appends its own once, on the paid retry too", async () => {
+    const server = mockServer();
+    const seen = recordHeaders(server);
+    const { agent } = await agentFor(server);
+    await agent.fetchPaid(`${GATEWAY}/acme/articles/2026/a`, { headers: { "User-Agent": "host-app/1.2" } });
+    await agent.fetchPaid(`${GATEWAY}/acme/articles/2026/b`, {
+      headers: new Headers({ "user-agent": `host-app/1.2 ${SDK_USER_AGENT}` }),
+    });
+    const merchant = seen.filter((r) => r.url.startsWith(GATEWAY)).map((r) => r.userAgent);
+    expect(merchant).toEqual(Array(3).fill(`host-app/1.2 ${SDK_USER_AGENT}`));
+    const api = seen.filter((r) => r.url.startsWith(API)).map((r) => r.userAgent);
+    expect(api).toEqual([SDK_USER_AGENT, SDK_USER_AGENT]);
+  });
+});
+
+describe("aifp1: onFlowEvent", () => {
+  it("reports a cache miss, the challenge and, next time, a cache hit", async () => {
+    const server = mockServer();
+    const { agent } = await agentFor(server);
+    const events: Aifp1FlowEvent[] = [];
+    const onFlowEvent = (e: Aifp1FlowEvent) => events.push(e);
+    await agent.fetchPaid(`${GATEWAY}/acme/articles/2026/a`, {}, { onFlowEvent });
+    expect(events).toEqual([
+      { type: "receipt_cache", hit: false },
+      { type: "challenge_received", direct: false },
+    ]);
+    events.length = 0;
+    await agent.fetchPaid(`${GATEWAY}/acme/articles/2026/b`, {}, { onFlowEvent });
+    expect(events).toEqual([{ type: "receipt_cache", hit: true }]);
+  });
+
+  it("reports the cache after the merchant probe on a direct origin", async () => {
+    const server = mockServer();
+    const directOrigin = "https://raters.example";
+    const base = server.fetch;
+    server.fetch = (async (input, init) => {
+      const url = new URL(String(input));
+      return base(url.origin === directOrigin ? `${GATEWAY}/acme${url.pathname}` : input, init);
+    }) as typeof fetch;
+    const { agent } = await agentFor(server);
+    const events: Aifp1FlowEvent[] = [];
+    const options = {
+      gatewayOrigins: [directOrigin],
+      resourcePathMode: "direct" as const,
+      onFlowEvent: (e: Aifp1FlowEvent) => events.push(e),
+    };
+    await agent.fetchPaid(`${directOrigin}/api/agent/genres`, {}, options);
+    await agent.fetchPaid(`${directOrigin}/api/agent/genres`, {}, options);
+    expect(events).toEqual([
+      { type: "receipt_cache", hit: false },
+      { type: "challenge_received", direct: true },
+      { type: "receipt_cache", hit: true },
+    ]);
+  });
+
+  it("reports each refused quote with a safe reason", async () => {
+    const server = mockServer();
+    const { agent } = await agentFor(server);
+    const events: Aifp1FlowEvent[] = [];
+    await expect(
+      agent.fetchPaid(`${GATEWAY}/acme/articles/2026/a`, {}, { units: 10, onFlowEvent: (e) => events.push(e) })
+    ).rejects.toBeInstanceOf(Aifp1QuoteError);
+    expect(events).toEqual([
+      { type: "receipt_cache", hit: false },
+      { type: "challenge_received", direct: false },
+      { type: "quote_refused", status: 400, reason: "AIFP-400" },
+    ]);
+  });
+
+  it.each([
+    ["an address", "0x" + "ab".repeat(20)],
+    ["too long", "a".repeat(49)],
+    ["not a string", 403],
+    ["a sentence", "merchant mrch_acme refused"],
+  ])("leaves out a refusal error that is %s", async (_kind, error) => {
+    const server = mockServer();
+    const base = server.fetch;
+    server.fetch = (async (input, init) =>
+      String(input).endsWith("/v1/quote") ? json({ error }, 403) : base(input, init)) as typeof fetch;
+    const { agent } = await agentFor(server);
+    const events: Aifp1FlowEvent[] = [];
+    await expect(
+      agent.fetchPaid(`${GATEWAY}/acme/articles/2026/a`, {}, { onFlowEvent: (e) => events.push(e) })
+    ).rejects.toBeInstanceOf(Aifp1QuoteError);
+    expect(events.at(-1)).toEqual({ type: "quote_refused", status: 403 });
+  });
+
+  it("reports a refused payment once, and not the confirmation it retries", async () => {
+    const server = mockServer();
+    server.payNotConfirmedTimes = 1;
+    const { agent } = await agentFor(server);
+    const events: Aifp1FlowEvent[] = [];
+    const res = await agent.fetchPaid(
+      `${GATEWAY}/acme/articles/2026/a`,
+      {},
+      { settlementConfirmMs: 5_000, onFlowEvent: (e) => events.push(e) }
+    );
+    expect(res!.status).toBe(200);
+    expect(events.map((e) => e.type)).toEqual(["receipt_cache", "challenge_received"]);
+
+    const refusing = mockServer();
+    const base = refusing.fetch;
+    refusing.fetch = (async (input, init) =>
+      String(input).endsWith("/v1/pay") ? json({ error: "quote_expired" }, 409) : base(input, init)) as typeof fetch;
+    const { agent: refused } = await agentFor(refusing);
+    events.length = 0;
+    await expect(
+      refused.fetchPaid(`${GATEWAY}/acme/articles/2026/a`, {}, { onFlowEvent: (e) => events.push(e) })
+    ).rejects.toBeInstanceOf(Aifp1PayError);
+    expect(events.filter((e) => e.type === "pay_refused")).toEqual([
+      { type: "pay_refused", status: 409, reason: "quote_expired" },
+    ]);
+  }, 20_000);
+
+  it("an async hook that rejects leaves no unhandled rejection", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const { agent } = await agentFor(mockServer());
+      const res = await agent.fetchPaid(
+        `${GATEWAY}/acme/articles/2026/a`,
+        {},
+        { onFlowEvent: (async () => Promise.reject(new Error("hook failed"))) as unknown as () => void }
+      );
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(res!.status).toBe(200);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  }, 20_000);
+
+  it("a hook that throws changes nothing in a paid flow", async () => {
+    const run = async (onFlowEvent?: (e: Aifp1FlowEvent) => void) => {
+      const server = mockServer();
+      const { agent, settlements } = await agentFor(server);
+      const res = await agent.fetchPaid(`${GATEWAY}/acme/articles/2026/a`, {}, { onFlowEvent });
+      return {
+        status: res!.status,
+        body: await res!.text(),
+        settlements,
+        quotes: server.quotes,
+        pays: server.pays,
+        hits: server.gatewayHits,
+        held: agent.aifp1Receipts.list().map(({ expiresAt: _e, ...r }) => r),
+      };
+    };
+    let calls = 0;
+    const thrown = await run(() => {
+      calls++;
+      throw new Error("hook failed");
+    });
+    expect(calls).toBe(2);
+    expect(thrown).toEqual(await run());
+  });
+
+  it("no event names the payer, merchant, host, path or quote", async () => {
+    const events: Aifp1FlowEvent[] = [];
+    const onFlowEvent = (e: Aifp1FlowEvent) => events.push(e);
+    const refusing = mockServer();
+    const base = refusing.fetch;
+    refusing.fetch = (async (input, init) =>
+      String(input).endsWith("/v1/quote")
+        ? json({ error: "AIFP-403", merchant_id: "mrch_acme" }, 403)
+        : base(input, init)) as typeof fetch;
+    const { agent: refused } = await agentFor(refusing);
+    await expect(refused.fetchPaid(`${GATEWAY}/acme/articles/2026/a`, {}, { onFlowEvent })).rejects.toThrow();
+    const server = mockServer();
+    const { agent } = await agentFor(server);
+    await agent.fetchPaid(`${GATEWAY}/acme/articles/2026/a`, {}, { onFlowEvent });
+    expect(events.map((e) => e.type)).toEqual([
+      "receipt_cache",
+      "challenge_received",
+      "quote_refused",
+      "receipt_cache",
+      "challenge_received",
+    ]);
+    const text = JSON.stringify(events).toLowerCase();
+    for (const secret of [
+      agent.evmAddress.toLowerCase(),
+      agent.evmAddress.slice(2, 12).toLowerCase(),
+      "mrch_acme",
+      "gateway.aifinpay.io",
+      "acme",
+      "articles",
+      "qt_",
+    ])
+      expect(text).not.toContain(secret);
+  });
+});
