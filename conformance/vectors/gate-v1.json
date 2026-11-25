@@ -7647,6 +7647,472 @@
      }
     }
    ]
+  },
+  {
+   "id": "identity.header",
+   "group": "identity",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "Every request to AiFinPay names the gate, its mode and who pays",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "identity": true,
+   "needs": [
+    "identity"
+   ]
+  },
+  {
+   "id": "identity.shadow",
+   "group": "identity",
+   "level": "must",
+   "profile": "content-shadow",
+   "title": "A shadow site says it is in shadow",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "identity": true,
+   "needs": [
+    "identity"
+   ]
+  },
+  {
+   "id": "traffic.window",
+   "group": "traffic",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A window counts readers and agents by class, operator and section",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "traffic": {
+    "mode": "enforce",
+    "charge": "agents",
+    "classes": [
+     [
+      "ai_crawler",
+      "challenged",
+      1
+     ],
+     [
+      "human",
+      "served",
+      1
+     ]
+    ],
+    "operators": [
+     [
+      "openai",
+      "ai_crawler",
+      "challenged",
+      1
+     ]
+    ],
+    "sections": [
+     [
+      "/paid",
+      "ai_crawler",
+      1
+     ]
+    ]
+   },
+   "needs": [
+    "traffic"
+   ]
+  },
+  {
+   "id": "traffic.shadow",
+   "group": "traffic",
+   "level": "must",
+   "profile": "content-shadow",
+   "title": "Shadow reports the decision it would have made",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "traffic": {
+    "mode": "shadow",
+    "charge": "agents",
+    "classes": [
+     [
+      "ai_crawler",
+      "challenged",
+      1
+     ]
+    ]
+   },
+   "needs": [
+    "traffic"
+   ]
+  },
+  {
+   "id": "traffic.paid",
+   "group": "traffic",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A paid admission is counted as paid",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "sdk",
+      "receipt": "r",
+      "agent": "payer"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "traffic": {
+    "mode": "enforce",
+    "charge": "agents",
+    "classes": [
+     [
+      "aifp_agent",
+      "paid",
+      1
+     ]
+    ],
+    "operators": [
+     [
+      "aifinpay",
+      "aifp_agent",
+      "paid",
+      1
+     ]
+    ]
+   },
+   "needs": [
+    "traffic"
+   ],
+   "receipts": {
+    "r": {
+     "claims": {}
+    }
+   }
+  },
+  {
+   "id": "traffic.blocked",
+   "group": "traffic",
+   "level": "parity",
+   "profile": "policy-enforce",
+   "title": "A blocked operator is counted as blocked",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "claudebot"
+     },
+     "expect": {
+      "status": 403,
+      "origin": false
+     }
+    }
+   ],
+   "traffic": {
+    "mode": "enforce",
+    "charge": "agents",
+    "classes": [
+     [
+      "ai_crawler",
+      "blocked",
+      1
+     ]
+    ]
+   },
+   "needs": [
+    "traffic"
+   ]
+  },
+  {
+   "id": "traffic.asset",
+   "group": "traffic",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A page's script served free is not a visitor",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/free/app.js",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "traffic": {
+    "mode": "enforce",
+    "charge": "agents",
+    "classes": [
+     [
+      "human",
+      "served",
+      1
+     ]
+    ]
+   },
+   "needs": [
+    "traffic"
+   ]
+  },
+  {
+   "id": "traffic.resend",
+   "group": "traffic",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A window the API could not take is sent again with the same id",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    }
+   ],
+   "traffic": {
+    "mode": "enforce",
+    "charge": "agents",
+    "classes": [
+     [
+      "ai_crawler",
+      "challenged",
+      1
+     ]
+    ]
+   },
+   "needs": [
+    "traffic"
+   ],
+   "fault": {
+    "traffic": 503,
+    "traffic_times": 1
+   }
+  },
+  {
+   "id": "traffic.old_api",
+   "group": "traffic",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "An API without the traffic route costs no response and no event",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "traffic": null,
+   "needs": [
+    "traffic",
+    "events"
+   ],
+   "events": [
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false
+    }
+   ],
+   "fault": {
+    "traffic": 404
+   }
+  },
+  {
+   "id": "traffic.refused",
+   "group": "traffic",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A refused window costs no response and no event",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "traffic": null,
+   "needs": [
+    "traffic",
+    "events"
+   ],
+   "events": [
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false
+    }
+   ],
+   "fault": {
+    "traffic": 400
+   }
+  },
+  {
+   "id": "traffic.down",
+   "group": "traffic",
+   "level": "must",
+   "profile": "content-enforce",
+   "title": "A traffic outage costs no response and no event",
+   "steps": [
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "gptbot"
+     },
+     "expect": {
+      "status": 402,
+      "origin": false
+     }
+    },
+    {
+     "request": {
+      "method": "GET",
+      "path": "/paid/a",
+      "ua": "chrome"
+     },
+     "expect": {
+      "status": 200,
+      "origin": true,
+      "headers": {}
+     }
+    }
+   ],
+   "traffic": null,
+   "needs": [
+    "traffic",
+    "events"
+   ],
+   "events": [
+    {
+     "kind": "402",
+     "resource": "/paid/*",
+     "operator": "openai",
+     "ua_class": "ai_crawler",
+     "verified": false
+    }
+   ],
+   "fault": {
+    "traffic": 503
+   }
   }
  ]
 }

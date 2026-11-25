@@ -17,7 +17,7 @@ node run.mjs --subject=subjects/gate-node.mjs --ratchet
 ```
 
 ```bash
-node --test tests/runner.test.mjs
+npm test
 ```
 
 The runner starts a private stand-in for the AiFinPay API (JWKS, public merchant record, resource registry, an ingest with the real one's rules), a test origin that resolves path spellings the way a forgiving server does, and a private `redis-server` when the subject wants one. It signs each receipt with a synthetic key, sends real HTTP, and records `pass`, `fail` or `na` with the reason. Read the counts, not the exit code: exit is non-zero on a `must` failure.
@@ -37,9 +37,11 @@ A subject is a module exporting `{ id, label, capabilities, supports(profile), s
 | `pre_cache` | | the decision runs before any cache, so a reader's copy may be cacheable |
 | `real_cache` | | `cache.real_*`: a real cache sits in the chain |
 | `about` | | `about.*` that need the 402's `about` object: the subject passes the profile's `about` map to the gate's function, `"throw"` throwing |
+| `identity` | | `identity.*`: every request the gate makes with the merchant secret carries `AIFP-Gate` and the gate User-Agent |
+| `traffic` | `flushTraffic()`: close the open window and run one sender tick | `traffic.*` |
 
 `--ratchet` compares against `known-differences.json`: a new failure or a fixed one fails the run. Adding a line there is a decision, and its reason says whose. A reason starting `flaky:` tolerates both.
 
 ## Change the vectors
 
-Edit `scripts/gen-vectors.mjs` and regenerate. It also writes `vectors/reader-proof-v1.json`, the reader cookie computed with plain HMAC, and `vectors/about-v1.json`, the page description rules with the expected text written out; the Node and Python gate unit tests read both directly. Golden bodies come from the built `../gate`, so a change to the 402 shows up as a stale file in CI. A body change is a contract change: it needs its own proposal, and every port follows.
+Edit `scripts/gen-vectors.mjs` and regenerate. It also writes `vectors/reader-proof-v1.json`, the reader cookie computed with plain HMAC, `vectors/about-v1.json`, the page description rules with the expected text written out, `vectors/gate-identity-v1.json`, the `AIFP-Gate` header and gate User-Agent, and `vectors/gate-traffic-v1.json`, the traffic summary a gate builds and the API takes; the last two are checked against `lib/traffic.mjs` as they are written. The Node and Python gate unit tests read the reader-proof and about files directly. Golden bodies come from the built `../gate`, so a change to the 402 shows up as a stale file in CI. A body change is a contract change: it needs its own proposal, and every port follows.

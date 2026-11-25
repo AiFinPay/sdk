@@ -68,6 +68,80 @@ An adapter owns everything platform-shaped and decides nothing.
 | Unset | No function: the 402 is byte for byte the reference 402 without it. |
 | Scope | Information only. The quote request the 402 describes, the receipt, the meter and the events do not depend on it. Shadow sends no 402, so it does not ask. |
 
+## Gate identity
+
+`vectors/gate-identity-v1.json` holds it: what a gate sends (`format`) and what the API reads (`parse`, `user_agents`). A port that does not send it yet reports the cases that need the `identity` capability as not applicable.
+
+| Rule | |
+|---|---|
+| Where | Every request a gate makes to AiFinPay with the merchant secret: the resource registry, events, receipt use, traffic. It may send both headers on its other requests too. |
+| `User-Agent` | `aifinpay-gate-<pkg>/<ver>`. A platform that adds product tokens of its own puts them after a space. |
+| `AIFP-Gate` | `pkg=<pkg>; ver=<ver>; platform=<platform>; mode=<mode>; charge=<charge>`: all five, in that order, `; ` between them. |
+| `pkg` | `node`, `py`, `drupal`, `wordpress`, `cloudflare` or `kit`. |
+| `ver` | The package's own version, ASCII letters lowercased, build metadata (`+` and what follows) dropped. |
+| `platform` | What the gate is mounted on, in the adapter's own word (`express`, `asgi`, `drupal11`, `workers`). |
+| `mode` | `shadow` or `enforce`, as configured when the request is made. |
+| `charge` | `agents`, `unproven`, `everyone`, or `custom` when the site supplies its own rule. |
+| Values | Each matches `^[a-z0-9._-]{1,32}$`. A `ver` or `platform` that does not is sent as `unknown`. |
+| Reading | Only on a request whose merchant secret the API accepted; the last value per merchant is kept. Absent or longer than 256 bytes: ignored. Split at `;`, spaces and tabs around a part dropped, an empty part skipped. A part is `key=value` at its first `=`; a part without one spoils the header. A key outside the five is skipped, its value unread. A known key twice, a known value outside the pattern, no `pkg`, no `ver`, or a `pkg` outside the list spoils the header. A `mode` or `charge` outside its list is read as absent and the rest is kept; `platform`, `mode` and `charge` may be absent. |
+| Spoiled | Ignored whole, as if it was not sent. Then, and when it is absent, `User-Agent` is read instead: `aifinpay-gate-<pkg>/<ver>` at its start, followed by a space or the end, gives `pkg` and `ver` under the same rules. The request is answered exactly as it would be without the header: it never causes a 400. |
+
+Why headers and not event fields. A gate-events batch with a key the ingest does not know is refused whole, and one refused batch stops a reporter, so a new field would cost a site its events on an API one release behind. A header an API has never heard of is ignored. A new gate works against an old API and an old gate against a new one, and the identity also rides the requests that have no body to put a field in.
+
+## Traffic summary
+
+`vectors/gate-traffic-v1.json` holds it: the path to section table, what a gate builds from what it saw (`build`), what the API takes and refuses (`accept`, `reject`, `duplicates`), and what the sender does with each answer (`sender`). A port that does not send it yet reports the cases that need the `traffic` capability as not applicable.
+
+What is counted:
+
+| Rule | |
+|---|---|
+| Counted | Every request that reaches the gate's decision, once, by `ua_class` and outcome. A request served without a charge whose last path segment ends in `.` and an extension of `asset_extensions` is not counted: a page's images and scripts are not visitors. |
+| Outcome | The decision, whatever the mode. `served`: passed without paying (a reader, an exemption, an `allow` rule, an unprotected path). `challenged`: a 402. `paid`: a receipt admitted. `blocked`: a 403. `error`: the gate's own 503. Shadow serves all of them and still reports the decision; `mode` says which it was. An origin error is not an outcome. |
+| Sample | A gate may count one request in `sample` (1 to 1000, chosen at random, fixed for a window) and multiplies every number by it before sending. |
+| Section | For every class but `human`. From the request target: cut at the first `?` or `#`, the first non-empty segment taken, ASCII letters lowercased. A language prefix (a code of `language_prefixes`, optionally followed by `-` or `_` and two to four letters) is skipped once: the next non-empty segment is taken, and with none the section is `/`. No segment at all: `/`. A segment that matches `^[a-z0-9][a-z0-9_-]{0,31}$` and has at most four digits: `/<segment>`. Anything else: `_other`. Nothing is percent-decoded and no dot segment is resolved, so an encoded or odd spelling is `_other`. |
+| Country | Two ASCII letters as the platform resolved them, uppercased. Unresolved, `XX` or anything else: `ZZ`. |
+| Network | The autonomous system number the platform resolved, as `AS<n>`, n from 1 to 4294967295. None: `AS0`. Never for `human`. |
+| Source | Country and network only where the platform already has them: an edge's request metadata, or a header the site's own CDN sets and the site named. A gate never looks an address up, and the address never leaves the request. A gate that has neither sends neither table. |
+| Caps | Per window, by total count, ties by name: 30 sections, 20 countries, 50 networks, the rest added into `_other`. `/`, `ZZ` and `AS0` are values like any other; `_other` is outside the count. A number above 10^9 is sent as 10^9. A body over 600 rows drops whole tables from the end (`networks`, `countries`, `sections`, `operators`) until it fits. |
+
+The request:
+
+| Rule | |
+|---|---|
+| Send | `POST /v1/merchants/{merchant_id}/gate-traffic`, `AIFP-Merchant-Secret` as for events, compact JSON, at most 64 KB and 600 rows over all tables. |
+| Body | Keys in this order: `v` (1), `id` (a UUID, new for each window), `from`, `to` (UTC, `YYYY-MM-DDTHH:MM:SSZ`), `mode`, `charge` (as in `AIFP-Gate`), `sample`, `classes`, then `operators`, `sections`, `countries`, `networks`, each left out when it has no rows. |
+| Rows | `classes`: `[ua_class, outcome, n]`. `operators`: `[operator, ua_class, outcome, n]`. `sections`: `[section, ua_class, n]`. `countries`: `[country, ua_class, n]`. `networks`: `[network, ua_class, n]`. `operators`, `sections` and `networks` never carry `human`. One row per key, no row with n = 0, rows ordered by their text cells left to right, each compared by code unit. |
+| Window | Opens at the first counted request and closes 300 s later: `to` is `from` + 300 s, or earlier on shutdown. A window with nothing counted is not sent. Every process or isolate sends its own windows; the API adds them up. |
+| Never | A path beyond the section, a User-Agent, an address, a header, a token, an agent id. |
+
+What the API answers:
+
+| Rule | |
+|---|---|
+| Refused | 400 `AIFP-400`: not a JSON object; `v` not 1; `id` not a UUID; `from` or `to` not a UTC timestamp, `to` not after `from`, the two more than an hour apart, `to` older than 24 hours or more than 5 minutes ahead; `mode` or `charge` not text in the value pattern of `AIFP-Gate`; `sample` not an integer from 1 to 1000; `classes` missing; a table that is not an array; more than 600 rows. A body over 64 KB: 413. |
+| Soft | A top-level key the API does not know is ignored. A `mode` or `charge` in the pattern but outside its list is kept as unknown. A row the API cannot use is skipped and counted, and the rest of the window stands: not an array of the right length, a value outside its list or pattern, `human` where it may not be, n not an integer from 0 to 10^9, a 31st section, a 21st country, a 51st network. Softer than the events ingest on purpose: a newer gate must not lose a window to an older API over one value. |
+| Accepted | `200 {"accepted":true,"duplicate":false,"rows":N,"skipped":M}`. An `id` this merchant already sent: `200 {"accepted":true,"duplicate":true,"rows":0,"skipped":0}` and nothing is counted twice. The same key twice in one table is added up. The tables are not checked against each other. |
+
+The sender:
+
+| Rule | |
+|---|---|
+| State | Its own: the closed windows it holds, at most three, and a pause. Nothing is shared with the event reporter or the receipt-use sender, and no answer here changes them, a response or the meter. |
+| Tick | When a window closes: every 300 s, or on a platform without timers on the first request after. In order: the window that just closed is held, or thrown away during a pause; with more than three held the oldest goes; a held window whose `to` is more than an hour old goes; then, outside a pause, the held windows are sent oldest first, one request each, stopping at the first that is not accepted. |
+| 2xx | The window is done. |
+| 404 | An API without the route. Everything held is dropped and nothing is sent for 6 hours. |
+| 3xx, other 4xx | Everything held is dropped and nothing is sent for 24 hours. 408 and 429 are the next row. |
+| 408, 429, 5xx, no answer | The window stays held and is tried again at the next tick with the same `id` and the same bytes. Windows are never merged. |
+| After a pause | The first window that closes at or after its end is sent. |
+| Never | In the request path, in a loop, or with a timeout over 10 s. A restart loses what is held. |
+
+Why separate tables and not every combination. A row per class, section, country and network grows with their product and, at one or two requests a row, describes single visits: who, from where, reading what. Five small tables stay bounded whatever the size of the site, and a row of one cannot be joined to a row of another, so a window cannot be turned back into visits.
+
+Why one segment. The first segment of a path names a part of the site (`/blog`, `/docs`). The second is where titles, user names and identifiers begin. One segment answers what bots read and keeps the values few enough to cap.
+
+Why no network for readers. An autonomous system says whose machines a crawler runs on, which is the question for a bot. For a person it is their provider or employer, and next to a country and a five-minute window it narrows to few people. Readers are counted by class and country only.
+
 ## Who is not a gate
 
 `@aifinpay/agent`, `aifinpay-agent` and `@aifinpay/mcp` pay. They read the 402 (`challenge.payable`) and hold receipts; they decide nothing about access.

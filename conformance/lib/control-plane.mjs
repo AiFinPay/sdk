@@ -3,9 +3,8 @@ import { readFileSync } from "node:fs";
 import { createServer as createHttp } from "node:http";
 import { createServer as createHttps } from "node:https";
 import { join } from "node:path";
+import { parseGateHeader, parseGateUserAgent, UTC, UUID, validateTraffic } from "./traffic.mjs";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 const RESOURCE = /^\/(?!\/)[A-Za-z0-9_./:*{}-]{0,511}$/;
 const KEY_SETS = ["at,id,kind,resource", "at,id,kind,operator,resource,ua_class,verified", "at,exempt,id,kind,operator,resource,ua_class,verified"];
 
@@ -35,13 +34,18 @@ function selfSignedCert(dir) {
 /** Stands in for api.aifinpay.io: JWKS, the public merchant record, the resource registry and the gate-events ingest. */
 export async function startControlPlane({ fixtures, operators, uaClasses, jwk, dir }) {
   const state = {
-    faults: { jwks: false, record: false, ingest: 0 },
+    faults: { jwks: false, record: false, ingest: 0, traffic: 0, trafficTimes: 0 },
     profile: null,
     siteUrl: "http://127.0.0.1/",
     events: [],
     violations: [],
+    gateSeen: [],
+    traffic: [],
+    trafficAttempts: [],
+    trafficViolations: [],
     requests: 0,
   };
+  const trafficSeen = new Set();
   const merchant = fixtures.merchant_id;
   const record = () => ({
     merchant_id: merchant,
@@ -62,6 +66,7 @@ export async function startControlPlane({ fixtures, operators, uaClasses, jwk, d
     for await (const chunk of req) raw += chunk;
     const url = req.url.split("?")[0];
     const authed = req.headers["aifp-merchant-secret"] === fixtures.merchant_secret;
+    if (authed) state.gateSeen.push({ url, gate: parseGateHeader(req.headers["aifp-gate"]), ua: parseGateUserAgent(req.headers["user-agent"]) });
     if (url === "/.well-known/jwks.json") return state.faults.jwks ? json(503, {}) : json(200, { keys: [jwk] });
     if (url === `/v1/merchants/${merchant}` && req.method === "GET") return state.faults.record ? json(503, {}) : json(200, record());
     if (url === `/v1/merchants/${merchant}/resources` && req.method === "GET") {
@@ -93,6 +98,25 @@ export async function startControlPlane({ fixtures, operators, uaClasses, jwk, d
       const fresh = body.events.filter((e) => !state.events.some((seen) => seen.id === e.id));
       state.events.push(...fresh);
       return json(200, { accepted: fresh.length, duplicates: body.events.length - fresh.length });
+    }
+    if (url === `/v1/merchants/${merchant}/gate-traffic` && req.method === "POST") {
+      let id = null;
+      try { id = JSON.parse(raw)?.id ?? null; } catch { /* recorded as null */ }
+      state.trafficAttempts.push({ id });
+      if (state.faults.traffic) {
+        const status = state.faults.traffic;
+        if (state.faults.trafficTimes > 0 && --state.faults.trafficTimes === 0) state.faults.traffic = 0;
+        return json(status, {});
+      }
+      if (!authed) return json(403, {});
+      const result = validateTraffic(raw, { now: Date.now(), operators, uaClasses, seen: trafficSeen });
+      if (result.status !== 200) {
+        state.trafficViolations.push(`${result.status} ${result.detail}`);
+        return json(result.status, { error: `AIFP-${result.status}`, detail: result.detail });
+      }
+      if (!result.duplicate) state.traffic.push(result.body);
+      for (const [table, index] of result.skipped_rows) state.trafficViolations.push(`skipped ${table}[${index}]: ${JSON.stringify(result.body[table][index])}`);
+      return json(200, { accepted: true, duplicate: result.duplicate, rows: result.rows, skipped: result.skipped });
     }
     return json(404, { error: "not_found" });
   };
