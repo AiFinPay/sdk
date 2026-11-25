@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/analytics",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Opt-in, zero-dependency SDK telemetry for AiFinPay packages \u2014 off by default, sanitized, fire-and-forget.",
   "type": "module",
   "main": "dist/index.js",

@@ -28,7 +28,7 @@ describe("opt-in contract", () => {
 describe("destination", () => {
   it("defaults to the AiFinPay gateway", () => {
     expect(urlFromEnv({})).toBe(DEFAULT_TELEMETRY_URL);
-    expect(DEFAULT_TELEMETRY_URL).toBe("https://telemetry.aifinpay.io/v1/agent");
+    expect(DEFAULT_TELEMETRY_URL).toBe("https://api.aifinpay.io/v1/agent");
   });
 
   it("honours an https override and loopback http", () => {

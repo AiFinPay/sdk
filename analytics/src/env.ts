@@ -14,7 +14,7 @@
 export type TelemetryMode = "off" | "on" | "read-only" | "install";
 
 export const MODES: readonly TelemetryMode[] = ["off", "on", "read-only", "install"];
-export const DEFAULT_TELEMETRY_URL = "https://telemetry.aifinpay.io/v1/agent";
+export const DEFAULT_TELEMETRY_URL = "https://api.aifinpay.io/v1/agent";
 
 export function modeFromEnv(env: NodeJS.ProcessEnv = process.env): TelemetryMode {
   const raw = (env.AIFINPAY_TELEMETRY ?? "").trim().toLowerCase();
