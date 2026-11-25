@@ -28,6 +28,7 @@ from .pricing import weight_for_tier
 from .reporter import GateReporter, GateReporterV2, _context, _utc_now
 from .scope import pattern_covers, scope_covers
 from .stores import MemoryStore
+from .traffic import HEADER_EDGE_COUNTED, edge_counted
 from .verify import DEFAULT_ISSUER, DEFAULT_JWKS_URI, Verifier
 
 DETAIL_QUOTA_EXHAUSTED = "quota exhausted — prepay the next batch"
@@ -478,6 +479,8 @@ class Gate:
         if not self._traffic:
             return
         try:
+            if edge_counted(req.header(HEADER_EDGE_COUNTED)):
+                return
             caller = who or classify_agent(req)
             extra = {}
             if self.country_header:

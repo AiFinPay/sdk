@@ -54,6 +54,13 @@ export function counted(target: string, outcome: TrafficOutcome): boolean {
   return !ASSET_EXTENSIONS.some((ext) => last.endsWith(`.${ext}`));
 }
 
+export const HEADER_EDGE_COUNTED = "AIFP-Edge-Counted";
+
+/** An edge gate of the same site already counted this request: exactly `1`, one value. */
+export function edgeCounted(value: string | undefined | null): boolean {
+  return typeof value === "string" && value.replace(/^[ \t]+|[ \t]+$/g, "") === "1";
+}
+
 export function countryOf(value: unknown): string {
   return typeof value === "string" && /^[A-Za-z]{2}$/.test(value) && value.toUpperCase() !== "XX"
     ? value.toUpperCase()

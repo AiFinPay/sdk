@@ -6,6 +6,15 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## Self-hosted gates: a request the edge counted is counted once — gate 0.14.1, Python gate 0.11.1
+
+- With an edge gate in front of a gate package on the same site, both sent
+  traffic summaries and every request was counted twice, the edge's own probes
+  as visitors. `@aifinpay/gate` and `aifinpay-gate` now leave a request carrying
+  `AIFP-Edge-Counted: 1` out of their summary and change nothing else about it.
+  SPEC "Traffic summary", vectors `edge_counted`; the Node and Python
+  conformance subjects run the new `traffic` cases.
+
 ## Self-hosted gates: receipt use, identity and traffic — gate 0.14.0, Python gate 0.11.0
 
 - `@aifinpay/gate` and `aifinpay-gate` report how much of each receipt they

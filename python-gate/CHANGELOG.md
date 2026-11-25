@@ -1,3 +1,11 @@
+## 0.11.1 — a request the edge counted is not counted again
+
+- Port of `@aifinpay/gate` 0.14.1: a request carrying `AIFP-Edge-Counted: 1` is
+  left out of the traffic summary, and only out of it; pricing, admission,
+  metering, events and the answer are unchanged. Only one value of exactly `1`
+  counts. The ASGI adapter now reads this field, sent more than once, as
+  repeated rather than taking its first value.
+
 ## 0.11.0 — receipt use, gate identity and traffic summaries
 
 - Port of `@aifinpay/gate` 0.14.0: `GateReporter` also sends receipt use. After

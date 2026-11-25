@@ -19348,5 +19348,456 @@
     ]
    }
   ]
+ },
+ "edge_counted": {
+  "header": "AIFP-Edge-Counted",
+  "values": [
+   {
+    "name": "one",
+    "lines": [
+     "1"
+    ],
+    "edge_counted": true
+   },
+   {
+    "name": "one_padded",
+    "lines": [
+     " 1 "
+    ],
+    "edge_counted": true
+   },
+   {
+    "name": "one_tab",
+    "lines": [
+     "\t1"
+    ],
+    "edge_counted": true
+   },
+   {
+    "name": "absent",
+    "lines": [],
+    "edge_counted": false
+   },
+   {
+    "name": "zero",
+    "lines": [
+     "0"
+    ],
+    "edge_counted": false
+   },
+   {
+    "name": "true",
+    "lines": [
+     "true"
+    ],
+    "edge_counted": false
+   },
+   {
+    "name": "empty",
+    "lines": [
+     ""
+    ],
+    "edge_counted": false
+   },
+   {
+    "name": "two_lines",
+    "lines": [
+     "1",
+     "1"
+    ],
+    "edge_counted": false
+   },
+   {
+    "name": "joined",
+    "lines": [
+     "1, 1"
+    ],
+    "edge_counted": false
+   },
+   {
+    "name": "one_comma",
+    "lines": [
+     "1,"
+    ],
+    "edge_counted": false
+   },
+   {
+    "name": "leading_zero",
+    "lines": [
+     "01"
+    ],
+    "edge_counted": false
+   },
+   {
+    "name": "decimal",
+    "lines": [
+     "1.0"
+    ],
+    "edge_counted": false
+   },
+   {
+    "name": "yes",
+    "lines": [
+     "yes"
+    ],
+    "edge_counted": false
+   },
+   {
+    "name": "one_then_empty",
+    "lines": [
+     "1",
+     ""
+    ],
+    "edge_counted": false
+   }
+  ],
+  "build": [
+   {
+    "name": "unmarked",
+    "window": {
+     "id": "7b0c6f0e-3d0a-4c58-9a51-0f2d6c1b9e77",
+     "from": "2026-11-25T10:00:00Z",
+     "to": "2026-11-25T10:05:00Z",
+     "mode": "enforce",
+     "charge": "agents",
+     "sample": 1
+    },
+    "platform": {
+     "country": true,
+     "network": true
+    },
+    "requests": [
+     {
+      "target": "/blog/a",
+      "ua_class": "human",
+      "operator": "unknown",
+      "outcome": "served",
+      "country": "US",
+      "network": null,
+      "n": 2
+     },
+     {
+      "target": "/blog/a",
+      "ua_class": "ai_crawler",
+      "operator": "openai",
+      "outcome": "challenged",
+      "country": "US",
+      "network": 8075,
+      "n": 3
+     },
+     {
+      "target": "/api/v1/x",
+      "ua_class": "aifp_agent",
+      "operator": "aifinpay",
+      "outcome": "paid",
+      "country": "DE",
+      "network": 16509,
+      "n": 1
+     }
+    ],
+    "body": "{\"v\":1,\"id\":\"7b0c6f0e-3d0a-4c58-9a51-0f2d6c1b9e77\",\"from\":\"2026-11-25T10:00:00Z\",\"to\":\"2026-11-25T10:05:00Z\",\"mode\":\"enforce\",\"charge\":\"agents\",\"sample\":1,\"classes\":[[\"ai_crawler\",\"challenged\",3],[\"aifp_agent\",\"paid\",1],[\"human\",\"served\",2]],\"operators\":[[\"aifinpay\",\"aifp_agent\",\"paid\",1],[\"openai\",\"ai_crawler\",\"challenged\",3]],\"sections\":[[\"/api\",\"aifp_agent\",1],[\"/blog\",\"ai_crawler\",3]],\"countries\":[[\"DE\",\"aifp_agent\",1],[\"US\",\"ai_crawler\",3],[\"US\",\"human\",2]],\"networks\":[[\"AS16509\",\"aifp_agent\",1],[\"AS8075\",\"ai_crawler\",3]]}"
+   },
+   {
+    "name": "marked_only",
+    "window": {
+     "id": "7b0c6f0e-3d0a-4c58-9a51-0f2d6c1b9e77",
+     "from": "2026-11-25T10:00:00Z",
+     "to": "2026-11-25T10:05:00Z",
+     "mode": "enforce",
+     "charge": "agents",
+     "sample": 1
+    },
+    "platform": {
+     "country": true,
+     "network": true
+    },
+    "requests": [
+     {
+      "target": "/blog/a",
+      "ua_class": "human",
+      "operator": "unknown",
+      "outcome": "served",
+      "country": "US",
+      "network": null,
+      "n": 2,
+      "edge_counted": [
+       "1"
+      ]
+     },
+     {
+      "target": "/blog/a",
+      "ua_class": "ai_crawler",
+      "operator": "openai",
+      "outcome": "challenged",
+      "country": "US",
+      "network": 8075,
+      "n": 3,
+      "edge_counted": [
+       "1"
+      ]
+     },
+     {
+      "target": "/api/v1/x",
+      "ua_class": "aifp_agent",
+      "operator": "aifinpay",
+      "outcome": "paid",
+      "country": "DE",
+      "network": 16509,
+      "n": 1,
+      "edge_counted": [
+       " 1 "
+      ]
+     }
+    ],
+    "body": null
+   },
+   {
+    "name": "other_values",
+    "window": {
+     "id": "7b0c6f0e-3d0a-4c58-9a51-0f2d6c1b9e77",
+     "from": "2026-11-25T10:00:00Z",
+     "to": "2026-11-25T10:05:00Z",
+     "mode": "enforce",
+     "charge": "agents",
+     "sample": 1
+    },
+    "platform": {
+     "country": true,
+     "network": true
+    },
+    "requests": [
+     {
+      "target": "/blog/a",
+      "ua_class": "ai_crawler",
+      "operator": "openai",
+      "outcome": "challenged",
+      "country": "US",
+      "network": 8075,
+      "n": 3,
+      "edge_counted": []
+     },
+     {
+      "target": "/blog/a",
+      "ua_class": "ai_crawler",
+      "operator": "openai",
+      "outcome": "challenged",
+      "country": "US",
+      "network": 8075,
+      "n": 3,
+      "edge_counted": [
+       "0"
+      ]
+     },
+     {
+      "target": "/blog/a",
+      "ua_class": "ai_crawler",
+      "operator": "openai",
+      "outcome": "challenged",
+      "country": "US",
+      "network": 8075,
+      "n": 3,
+      "edge_counted": [
+       "true"
+      ]
+     },
+     {
+      "target": "/blog/a",
+      "ua_class": "ai_crawler",
+      "operator": "openai",
+      "outcome": "challenged",
+      "country": "US",
+      "network": 8075,
+      "n": 3,
+      "edge_counted": [
+       ""
+      ]
+     },
+     {
+      "target": "/blog/a",
+      "ua_class": "ai_crawler",
+      "operator": "openai",
+      "outcome": "challenged",
+      "country": "US",
+      "network": 8075,
+      "n": 3,
+      "edge_counted": [
+       "1",
+       "1"
+      ]
+     },
+     {
+      "target": "/blog/a",
+      "ua_class": "ai_crawler",
+      "operator": "openai",
+      "outcome": "challenged",
+      "country": "US",
+      "network": 8075,
+      "n": 3,
+      "edge_counted": [
+       "1, 1"
+      ]
+     },
+     {
+      "target": "/blog/a",
+      "ua_class": "ai_crawler",
+      "operator": "openai",
+      "outcome": "challenged",
+      "country": "US",
+      "network": 8075,
+      "n": 3,
+      "edge_counted": [
+       "1,"
+      ]
+     },
+     {
+      "target": "/blog/a",
+      "ua_class": "ai_crawler",
+      "operator": "openai",
+      "outcome": "challenged",
+      "country": "US",
+      "network": 8075,
+      "n": 3,
+      "edge_counted": [
+       "01"
+      ]
+     },
+     {
+      "target": "/blog/a",
+      "ua_class": "ai_crawler",
+      "operator": "openai",
+      "outcome": "challenged",
+      "country": "US",
+      "network": 8075,
+      "n": 3,
+      "edge_counted": [
+       "1.0"
+      ]
+     },
+     {
+      "target": "/blog/a",
+      "ua_class": "ai_crawler",
+      "operator": "openai",
+      "outcome": "challenged",
+      "country": "US",
+      "network": 8075,
+      "n": 3,
+      "edge_counted": [
+       "yes"
+      ]
+     },
+     {
+      "target": "/blog/a",
+      "ua_class": "ai_crawler",
+      "operator": "openai",
+      "outcome": "challenged",
+      "country": "US",
+      "network": 8075,
+      "n": 3,
+      "edge_counted": [
+       "1",
+       ""
+      ]
+     }
+    ],
+    "body": "{\"v\":1,\"id\":\"7b0c6f0e-3d0a-4c58-9a51-0f2d6c1b9e77\",\"from\":\"2026-11-25T10:00:00Z\",\"to\":\"2026-11-25T10:05:00Z\",\"mode\":\"enforce\",\"charge\":\"agents\",\"sample\":1,\"classes\":[[\"ai_crawler\",\"challenged\",33]],\"operators\":[[\"openai\",\"ai_crawler\",\"challenged\",33]],\"sections\":[[\"/blog\",\"ai_crawler\",33]],\"countries\":[[\"US\",\"ai_crawler\",33]],\"networks\":[[\"AS8075\",\"ai_crawler\",33]]}"
+   },
+   {
+    "name": "mixed",
+    "window": {
+     "id": "7b0c6f0e-3d0a-4c58-9a51-0f2d6c1b9e77",
+     "from": "2026-11-25T10:00:00Z",
+     "to": "2026-11-25T10:05:00Z",
+     "mode": "enforce",
+     "charge": "agents",
+     "sample": 1
+    },
+    "platform": {
+     "country": true,
+     "network": true
+    },
+    "requests": [
+     {
+      "target": "/blog/a",
+      "ua_class": "human",
+      "operator": "unknown",
+      "outcome": "served",
+      "country": "US",
+      "network": null,
+      "n": 2
+     },
+     {
+      "target": "/blog/a",
+      "ua_class": "human",
+      "operator": "unknown",
+      "outcome": "served",
+      "country": "US",
+      "network": null,
+      "n": 2,
+      "edge_counted": [
+       "1"
+      ]
+     },
+     {
+      "target": "/blog/a",
+      "ua_class": "ai_crawler",
+      "operator": "openai",
+      "outcome": "challenged",
+      "country": "US",
+      "network": 8075,
+      "n": 3,
+      "edge_counted": [
+       "1"
+      ]
+     },
+     {
+      "target": "/blog/a",
+      "ua_class": "ai_crawler",
+      "operator": "openai",
+      "outcome": "challenged",
+      "country": "US",
+      "network": 8075,
+      "n": 3,
+      "edge_counted": [
+       "0"
+      ]
+     },
+     {
+      "target": "/blog/a",
+      "ua_class": "ai_crawler",
+      "operator": "openai",
+      "outcome": "challenged",
+      "country": "US",
+      "network": 8075,
+      "n": 3,
+      "edge_counted": [
+       "1",
+       "1"
+      ]
+     },
+     {
+      "target": "/api/v1/x",
+      "ua_class": "aifp_agent",
+      "operator": "aifinpay",
+      "outcome": "paid",
+      "country": "DE",
+      "network": 16509,
+      "n": 1,
+      "edge_counted": [
+       "1"
+      ]
+     },
+     {
+      "target": "/api/v1/x",
+      "ua_class": "aifp_agent",
+      "operator": "aifinpay",
+      "outcome": "paid",
+      "country": "DE",
+      "network": 16509,
+      "n": 1
+     }
+    ],
+    "body": "{\"v\":1,\"id\":\"7b0c6f0e-3d0a-4c58-9a51-0f2d6c1b9e77\",\"from\":\"2026-11-25T10:00:00Z\",\"to\":\"2026-11-25T10:05:00Z\",\"mode\":\"enforce\",\"charge\":\"agents\",\"sample\":1,\"classes\":[[\"ai_crawler\",\"challenged\",6],[\"aifp_agent\",\"paid\",1],[\"human\",\"served\",2]],\"operators\":[[\"aifinpay\",\"aifp_agent\",\"paid\",1],[\"openai\",\"ai_crawler\",\"challenged\",6]],\"sections\":[[\"/api\",\"aifp_agent\",1],[\"/blog\",\"ai_crawler\",6]],\"countries\":[[\"DE\",\"aifp_agent\",1],[\"US\",\"ai_crawler\",6],[\"US\",\"human\",2]],\"networks\":[[\"AS16509\",\"aifp_agent\",1],[\"AS8075\",\"ai_crawler\",6]]}"
+   }
+  ]
  }
 }

@@ -21,6 +21,7 @@ import {
   counted,
   countryOf,
   createTrafficSender,
+  edgeCounted,
   networkOf,
   sectionOf,
   TrafficTally,
@@ -247,6 +248,16 @@ describe("traffic summary rules", () => {
       expect(tally.body(v.window), v.name).toBe(v.body);
     }
   });
+
+  it("an edge-counted request as the vectors say, its field lines joined as Node joins them", () => {
+    const joined = (lines: string[] | undefined) => (lines?.length ? lines.join(", ") : undefined);
+    for (const v of traffic.edge_counted.values) expect(edgeCounted(joined(v.lines)), v.name).toBe(v.edge_counted);
+    for (const v of traffic.edge_counted.build) {
+      const tally = new TrafficTally();
+      for (const r of v.requests) if (!edgeCounted(joined(r.edge_counted))) tally.add(r, r.n ?? 1);
+      expect(tally.body(v.window), v.name).toBe(v.body);
+    }
+  });
 });
 
 describe("traffic from the gate", () => {
@@ -370,6 +381,53 @@ describe("traffic from the gate", () => {
       ["aifp_agent", "paid", 1],
     ]);
     expect(w.mode).toBe("shadow");
+  });
+
+  it("an edge-counted request is answered and reported as without the header, and left out of the summary", async () => {
+    const iss = await issuer();
+    const token = await iss.sign({ aud: merchantId, unit_quota: 5, receipt_id: "rcpt_00000000000000c7", resource: "/blog" });
+    const run = async (extra: Record<string, string>) => {
+      const calls = stubApi();
+      const reporter = newReporter();
+      const gate = contentGate(reporter, { jwks: iss.jwks, store: new MemoryStore() });
+      const answers = [];
+      for (const headers of [{ "User-Agent": BROWSER }, { "User-Agent": GPTBOT }, { "AIFP-Receipt": token }, { "AIFP-Receipt": token }]) {
+        answers.push(JSON.stringify(await gate(req("/blog/a", { ...headers, ...extra }))));
+      }
+      await reporter.flush();
+      await reporter.flushTraffic();
+      const events = calls
+        .filter((c) => c.url.endsWith("/gate-events"))
+        .flatMap((c) => JSON.parse(c.body).events)
+        .map(({ id: _id, at: _at, ...e }: Record<string, unknown>) => e);
+      return { answers, events, windows: windows(calls) };
+    };
+    const marked = await run({ "AIFP-Edge-Counted": "1" });
+    const plain = await run({});
+    expect(marked.answers).toEqual(plain.answers);
+    expect(JSON.parse(marked.answers[1]).status).toBe(402);
+    expect(marked.events).toEqual(plain.events);
+    expect(marked.events.map((e: { kind: string }) => e.kind)).toEqual(["402", "serve", "serve"]);
+    expect(marked.windows).toEqual([]);
+    expect(plain.windows[0].classes).toEqual([
+      ["ai_crawler", "challenged", 1],
+      ["aifp_agent", "paid", 2],
+      ["human", "served", 1],
+    ]);
+  });
+
+  it("only one value of exactly 1 leaves a request out of the summary", async () => {
+    const calls = stubApi();
+    const reporter = newReporter();
+    const gate = contentGate(reporter);
+    const left = ["1", " 1 ", "\t1"];
+    const kept = ["0", "true", "", "1, 1", "1,", "01", "yes"];
+    for (const value of [...left, ...kept]) {
+      expect((await gate(req("/blog/a", { "User-Agent": GPTBOT, "aifp-edge-counted": value }))).status).toBe(402);
+    }
+    await gate(req("/blog/a", { "User-Agent": GPTBOT }));
+    await reporter.flushTraffic();
+    expect(windows(calls)[0].classes).toEqual([["ai_crawler", "challenged", kept.length + 1]]);
   });
 
   it("traffic: false sends nothing", async () => {

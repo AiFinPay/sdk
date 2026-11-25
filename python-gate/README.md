@@ -327,7 +327,9 @@ Traffic summaries go out whenever a reporter is wired to the gate. Every
 request the gate sees is counted once, by class (`human`, `ai_crawler`, and so
 on) and outcome (`served`, `challenged`, `paid`, `blocked`, `error`). A path
 outside every route counts as served. Readers are counted too, though they are
-never sent as events. A script, image or font served free is not counted. For
+never sent as events. A script, image or font served free is not counted. A request carrying
+`AIFP-Edge-Counted: 1` was already counted by the site's edge gate and is left
+out of this summary, and only out of it. For
 agents the summary also counts the operator and the section: the first segment
 of the path, such as `/blog`. A language prefix like `/en` is skipped.
 

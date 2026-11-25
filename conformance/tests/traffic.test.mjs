@@ -45,6 +45,8 @@ test("the traffic vectors agree with the lib", () => {
     assert.deepEqual(got, v.answers, v.name);
   }
   for (const v of traffic.sender.scenarios) assert.deepEqual(T.senderRun(v.steps), v.expect, v.name);
+  for (const v of traffic.edge_counted.values) assert.equal(T.edgeCounted(v.lines), v.edge_counted, v.name);
+  for (const v of traffic.edge_counted.build) assert.equal(T.buildTraffic(v.window, v.platform, v.requests), v.body, v.name);
 });
 
 test("two build bodies written out by hand equal the lib", () => {
@@ -74,7 +76,7 @@ function trafficGate(ctx, breakage) {
   const { profile } = ctx;
   const shadow = profile.mode === "shadow";
   const id = T.formatGate({ pkg: "kit", ver: "0.0.1", platform: "node", mode: breakage.enforceFromShadow ? "enforce" : profile.mode, charge: profile.charge });
-  const fresh = () => ({ events: [], eventsStopped: false, open: null, held: [], pausedUntil: 0 });
+  const fresh = () => ({ events: [], eventsStopped: false, open: null, held: [], pausedUntil: 0, used: new Map() });
   let state = fresh();
   const post = async (route, body) => {
     const headers = { "content-type": "application/json", "aifp-merchant-secret": ctx.secret, "user-agent": id.user_agent, ...(breakage.noGateHeader ? {} : { "aifp-gate": id.header }) };
@@ -140,6 +142,8 @@ function trafficGate(ctx, breakage) {
     const target = req.url;
     const path = target.split("?")[0];
     const [uaClass, operator] = classify(req);
+    const edgeLines = req.rawHeaders.filter((_, i, all) => i % 2 === 1 && all[i - 1].toLowerCase() === "aifp-edge-counted");
+    const edge = breakage.anyEdgeValue ? edgeLines.some((line) => line.trim()) : T.edgeCounted(edgeLines);
     const rule = (profile.operator_rules ?? []).find((r) => r.operator === operator && uaClass !== "human");
     let outcome = "served";
     if (isProtected(path) && !(uaClass === "human" && profile.charge === "agents")) {
@@ -154,13 +158,19 @@ function trafficGate(ctx, breakage) {
         outcome = claims?.aud === fixtures.merchant_id ? "paid" : "blocked";
       } else outcome = "challenged";
     }
-    if (isProtected(path) && (outcome === "challenged" || outcome === "paid")) {
+    if (isProtected(path) && (outcome === "challenged" || outcome === "paid") && !(breakage.edgeSkipsEvent && edge)) {
       state.events.push({ id: randomUUID(), at: new Date().toISOString(), kind: outcome === "paid" ? "serve" : "402", resource: "/paid/*", operator, ua_class: uaClass, verified: outcome === "paid" });
     }
-    count(target, uaClass, operator, breakage.shadowServed && shadow && outcome === "challenged" ? "served" : outcome);
+    if (!edge || breakage.ignoreEdge) count(target, uaClass, operator, breakage.shadowServed && shadow && outcome === "challenged" ? "served" : outcome);
+    let left = {};
+    if (outcome === "paid") {
+      const token = String(req.headers["aifp-receipt"]);
+      state.used.set(token, (state.used.get(token) ?? 0) + 1);
+      left = { "aifp-quota-remaining": String(3 - state.used.get(token)) };
+    }
     if (shadow || outcome === "served" || outcome === "paid") {
       const status = { challenged: "402", blocked: "403" }[outcome];
-      res.writeHead(200, { "x-origin-hit": "1", "cache-control": "no-store", ...(shadow ? { "aifp-mode": "shadow", ...(status ? { "aifp-shadow-status": status } : {}) } : {}) });
+      res.writeHead(200, { "x-origin-hit": "1", "cache-control": "no-store", ...left, ...(shadow ? { "aifp-mode": "shadow", ...(status ? { "aifp-shadow-status": status } : {}) } : {}) });
       return res.end(fixtures.marker);
     }
     if (outcome === "challenged") {
@@ -198,7 +208,7 @@ const red = (report) => report.results.filter((r) => r.status !== "pass").map((r
 test("an honest gate passes every identity and traffic case", async () => {
   const report = await runSubject(trafficSubject(), { only: ONLY });
   assert.deepEqual(report.results.filter((r) => r.status !== "pass").map((r) => [r.id, r.errors]), []);
-  assert.equal(report.results.length, 11);
+  assert.equal(report.results.length, 13);
 });
 
 for (const [breakage, named, alsoRed = []] of [
@@ -206,13 +216,16 @@ for (const [breakage, named, alsoRed = []] of [
   [{ noGateHeader: true }, "identity.header", ["identity.shadow"]],
   [{ enforceFromShadow: true }, "identity.shadow"],
   // traffic.asset has a reader too, so a human section row turns it red as well.
-  [{ humanSections: true }, "traffic.window", ["traffic.asset"]],
+  [{ humanSections: true }, "traffic.window", ["traffic.asset", "traffic.edge_counted"]],
   [{ shadowServed: true }, "traffic.shadow"],
   [{ countAssets: true }, "traffic.asset"],
   [{ newIdOnRetry: true }, "traffic.resend"],
   [{ eventsStopAfter404: true }, "traffic.old_api"],
   // No case compares countries: only the skipped row gives it away, in every window that is accepted.
-  [{ lowercaseCountry: true }, "traffic.window", ["traffic.asset", "traffic.blocked", "traffic.paid", "traffic.resend", "traffic.shadow"]],
+  [{ lowercaseCountry: true }, "traffic.window", ["traffic.asset", "traffic.blocked", "traffic.edge_counted", "traffic.paid", "traffic.resend", "traffic.shadow"]],
+  [{ ignoreEdge: true }, "traffic.edge_counted", ["traffic.edge_counted_only"]],
+  [{ anyEdgeValue: true }, "traffic.edge_counted"],
+  [{ edgeSkipsEvent: true }, "traffic.edge_counted", ["traffic.edge_counted_only"]],
 ]) {
   test(`a gate with ${Object.keys(breakage)[0]} fails ${named}`, async () => {
     const report = await runSubject(trafficSubject(breakage), { only: ONLY });
@@ -222,6 +235,6 @@ for (const [breakage, named, alsoRed = []] of [
 
 test("a subject without the capabilities records every identity and traffic case as not applicable", async () => {
   const report = await runSubject(trafficSubject({}, ["events"]), { only: ONLY });
-  assert.equal(report.results.length, 11);
+  assert.equal(report.results.length, 13);
   for (const r of report.results) assert.deepEqual([r.status, r.reason], ["na", `needs ${r.id.split(".")[0]}`], r.id);
 });
