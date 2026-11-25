@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { GATE_OPERATORS, UA_CLASSES, type AgentIdentity, type GateOperator, type UaClass } from "./agents.js";
 import type { GateEvent } from "./types.js";
+import { identityHeaders, shareSlot, type GateSlot } from "./identity.js";
+import { createTrafficSender, type TrafficStats } from "./traffic.js";
 import type {
   Ack,
   HealthAck,
@@ -68,13 +70,19 @@ export interface GateReporterStats {
   lastError: GateReporterError | null;
   stopped: boolean;
   closed: boolean;
+  /** Receipt use sent to /receipt-use, counted in receipts; independent of the events above. */
+  uses: { queued: number; delivered: number; dropped: number; lastError: GateReporterError | null };
+  /** Traffic summaries sent to /gate-traffic; their own state, never shared with the above. */
+  traffic: TrafficStats;
 }
 
 export interface GateReporter {
   /** Synchronous enqueue only; pass directly to the gate's onEvent hook. */
   onEvent(event: GateEvent): void;
-  /** Attempt every currently queued event once; transient failures stay queued. */
+  /** Attempt every currently queued event and held receipt use once; transient failures stay queued. */
   flush(): Promise<GateReporterStats>;
+  /** Close the open traffic window and send what is held, once. */
+  flushTraffic(): Promise<TrafficStats>;
   /** Stop accepting events, flush once, then drop unsent events and stop timers. */
   close(): Promise<GateReporterStats>;
   readonly stats: GateReporterStats;
@@ -122,6 +130,9 @@ const extended = (event: WireEvent) => event.operator !== undefined || event.exe
 
 const MAX_QUEUE = 1000;
 const MAX_BATCH = 50;
+const MAX_USES = 1000;
+const USE_BATCH = 100;
+const RECEIPT_ID = /^rcpt_[0-9a-f]{16}$/;
 const MAX_AGE = 15 * 60_000;
 const MAX_ATTEMPTS = 5;
 const TIMEOUT = 3000;
@@ -168,8 +179,16 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
     throw new Error("createGateReporter: apiBase must be an HTTPS origin");
   }
   const endpoint = `${base.origin}/v1/merchants/${encodeURIComponent(options.merchantId)}/gate-events`;
+  const useEndpoint = `${base.origin}/v1/merchants/${encodeURIComponent(options.merchantId)}/receipt-use`;
   // Keep secrets in the closure, never in reporter.stats or diagnostic errors.
   const secret = options.merchantSecret;
+  const slot: GateSlot = { info: null, traffic: null };
+  const traffic = createTrafficSender({
+    endpoint: `${base.origin}/v1/merchants/${encodeURIComponent(options.merchantId)}/gate-traffic`,
+    secret,
+    headers: () => identityHeaders(slot),
+  });
+  slot.traffic = traffic;
   let queue: Pending[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
   let active: Promise<void> | undefined;
@@ -186,6 +205,14 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
   let dropped = 0;
   let retries = 0;
   let lastError: GateReporterError | null = null;
+  // Lowest remaining per receipt id; never the receipt token.
+  const uses = new Map<string, number>();
+  let usesTimer: ReturnType<typeof setTimeout> | undefined;
+  let usesActive: Promise<void> | undefined;
+  let usesFailures = 0;
+  let usesDelivered = 0;
+  let usesDropped = 0;
+  let usesLastError: GateReporterError | null = null;
   const stats = (): GateReporterStats => ({
     queued: queue.length,
     delivered,
@@ -194,6 +221,8 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
     lastError,
     stopped,
     closed,
+    uses: { queued: uses.size, delivered: usesDelivered, dropped: usesDropped, lastError: usesLastError },
+    traffic: traffic.stats,
   });
   const clearTimer = () => {
     if (timer) clearTimeout(timer);
@@ -247,7 +276,7 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
       try {
         const response = await fetch(endpoint, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "AIFP-Merchant-Secret": secret },
+          headers: { ...identityHeaders(slot), "Content-Type": "application/json", "AIFP-Merchant-Secret": secret },
           body: JSON.stringify({ events: batch.map((entry) => entry.event) }),
           signal: controller.signal,
           redirect: "manual",
@@ -363,6 +392,137 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
     }
   };
 
+  const clearUsesTimer = () => {
+    if (usesTimer) clearTimeout(usesTimer);
+    usesTimer = undefined;
+  };
+  const scheduleUses = () => {
+    if (usesTimer || usesActive || closed || !uses.size) return;
+    usesTimer = setTimeout(
+      () => {
+        usesTimer = undefined;
+        void sendUses();
+      },
+      usesFailures ? Math.min(30_000, DELAY * 2 ** usesFailures) : DELAY
+    );
+    usesTimer.unref?.();
+  };
+  const recordUse = (receiptId: unknown, remaining: unknown) => {
+    if (typeof receiptId !== "string" || !RECEIPT_ID.test(receiptId)) return;
+    if (!Number.isSafeInteger(remaining) || (remaining as number) < 0) return;
+    if (closed) {
+      usesDropped++;
+      return;
+    }
+    const held = uses.get(receiptId);
+    if (held === undefined && uses.size >= MAX_USES) {
+      usesDropped++;
+      usesLastError = "queue_full";
+      return;
+    }
+    if (held === undefined || (remaining as number) < held) uses.set(receiptId, remaining as number);
+    scheduleUses();
+  };
+  // null on 2xx with a matching count; `keep` marks a failure worth another flush.
+  const postUses = async (
+    items: { receipt_id: string; remaining: number }[]
+  ): Promise<{ error: GateReporterError; keep: boolean } | null> => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TIMEOUT);
+    try {
+      const response = await fetch(useEndpoint, {
+        method: "POST",
+        headers: { ...identityHeaders(slot), "Content-Type": "application/json", "AIFP-Merchant-Secret": secret },
+        body: JSON.stringify({ uses: items }),
+        signal: controller.signal,
+        redirect: "manual",
+      });
+      let failure: { error: GateReporterError; keep: boolean } | null = null;
+      if (response.status >= 300 && response.status < 400) failure = { error: "redirect", keep: false };
+      else if (response.status === 401 || response.status === 403) failure = { error: "auth", keep: false };
+      else if (response.status === 408 || response.status === 429 || response.status >= 500)
+        failure = { error: "server", keep: true };
+      else if (!response.ok) failure = { error: "rejected", keep: false };
+      else {
+        let body: { applied?: unknown; ignored?: unknown } | null = null;
+        const reader = response.body?.getReader();
+        const chunks: Uint8Array[] = [];
+        let size = 0;
+        try {
+          while (reader) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            size += value.byteLength;
+            if (size > 4096) {
+              await reader.cancel();
+              break;
+            }
+            chunks.push(value);
+          }
+          if (size <= 4096) body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        } catch {
+          body = null;
+        } finally {
+          reader?.releaseLock();
+        }
+        if (
+          !Number.isSafeInteger(body?.applied) ||
+          !Number.isSafeInteger(body?.ignored) ||
+          (body!.applied as number) < 0 ||
+          (body!.ignored as number) < 0 ||
+          (body!.applied as number) + (body!.ignored as number) !== items.length
+        )
+          failure = { error: "invalid_response", keep: true };
+        return failure;
+      }
+      await response.body?.cancel().catch(() => {});
+      return failure;
+    } catch {
+      return { error: controller.signal.aborted ? "timeout" : "network", keep: true };
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
+  // One pass over what is held, in batches of USE_BATCH ordered by receipt id.
+  const sendUses = (): Promise<void> => {
+    if (usesActive) return usesActive;
+    clearUsesTimer();
+    usesActive = (async () => {
+      const ids = [...uses.keys()].sort();
+      for (let i = 0; i < ids.length; i += USE_BATCH) {
+        const items = ids
+          .slice(i, i + USE_BATCH)
+          .filter((id) => uses.has(id))
+          .map((id) => ({ receipt_id: id, remaining: uses.get(id)! }));
+        if (!items.length) continue;
+        const failure = await postUses(items);
+        if (!failure) {
+          for (const item of items) if (uses.get(item.receipt_id) === item.remaining) uses.delete(item.receipt_id);
+          usesDelivered += items.length;
+          usesFailures = 0;
+          usesLastError = null;
+          continue;
+        }
+        usesLastError = failure.error;
+        if (failure.keep && ++usesFailures < MAX_ATTEMPTS) return;
+        // 404 from an older backend, any refusal, or retries used up: drop what is held, try again next flush.
+        usesDropped += uses.size;
+        uses.clear();
+        usesFailures = 0;
+        if (failure.keep) usesLastError = "retry_exhausted";
+        return;
+      }
+    })()
+      .catch(() => {
+        usesLastError = "network";
+      })
+      .finally(() => {
+        usesActive = undefined;
+        scheduleUses();
+      });
+    return usesActive;
+  };
+
   const flush = (): Promise<GateReporterStats> => {
     if (flushing) return flushing;
     clearTimer();
@@ -385,10 +545,11 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
     return flushing;
   };
 
-  return {
+  const reporter: GateReporter = {
     onEvent(event) {
       if (!event || typeof event !== "object") return;
       if (event.kind !== "402" && event.kind !== "serve") return;
+      if (event.kind === "serve" && event.remaining !== undefined) recordUse(event.receipt_id, event.remaining);
       // A raw path is private, and one refused batch would stop this reporter for good.
       if (event.unregistered) return;
       const identity = legacyOnly ? null : identityOf(event);
@@ -426,18 +587,26 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
       });
       schedule();
     },
-    flush,
+    flush: () => Promise.all([flush(), sendUses()]).then(stats),
+    flushTraffic: () => traffic.flush(),
     close() {
       if (closing) return closing;
       closed = true;
       clearTimer();
-      closing = flush().then(() => {
+      clearUsesTimer();
+      closing = Promise.all([flush(), sendUses(), traffic.close()]).then(() => {
         if (queue.length) {
           dropped += queue.length;
           queue = [];
           if (!stopped) lastError = "shutdown";
         }
+        if (uses.size) {
+          usesDropped += uses.size;
+          uses.clear();
+          usesLastError = "shutdown";
+        }
         clearTimer();
+        clearUsesTimer();
         return stats();
       });
       return closing;
@@ -446,6 +615,10 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
       return stats();
     },
   };
+  // The gate finds this reporter through the hook it is given.
+  shareSlot(reporter, slot);
+  shareSlot(reporter.onEvent, slot);
+  return reporter;
 }
 
 export interface GateReporterV2Options extends GateReporterOptions {
@@ -476,6 +649,8 @@ export interface GateReporterV2 {
   mintFlow(request: FlowRequest): Promise<FlowResponse | null>;
   /** Frozen sample/sequence is retained until ack or bounded exhaustion. */
   health(): Promise<boolean>;
+  /** Close the open traffic window and send what is held, once. */
+  flushTraffic(): Promise<TrafficStats>;
   close(): Promise<GateReporterV2Stats>;
   readonly stats: GateReporterV2Stats;
 }
@@ -615,6 +790,13 @@ export function createGateReporterV2(options: GateReporterV2Options): GateReport
     throw new Error("createGateReporterV2: HTTPS origin required");
   const prefix = `${base.origin}/v2/merchants/${options.merchantId}`;
   const secret = options.merchantSecret;
+  const slot: GateSlot = { info: null, traffic: null };
+  const traffic = createTrafficSender({
+    endpoint: `${base.origin}/v1/merchants/${options.merchantId}/gate-traffic`,
+    secret,
+    headers: () => identityHeaders(slot),
+  });
+  slot.traffic = traffic;
   const supported = [...options.supported];
   const producerId = randomUUID();
   type Entry = { event: ReportedEvent; facts: string; created: number; attempts: number; nextAt: number };
@@ -677,7 +859,7 @@ export function createGateReporterV2(options: GateReporterV2Options): GateReport
         const url = `${prefix}${path}`;
         const response = await fetch(url, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "AIFP-Merchant-Secret": secret },
+          headers: { ...identityHeaders(slot), "Content-Type": "application/json", "AIFP-Merchant-Secret": secret },
           body,
           redirect: "manual",
           signal: controller.signal,
@@ -932,7 +1114,7 @@ export function createGateReporterV2(options: GateReporterV2Options): GateReport
     void health();
   }, 60000);
   healthTimer.unref?.();
-  return {
+  const reporter: GateReporterV2 = {
     version: 2,
     record,
     observe(input) {
@@ -1028,6 +1210,7 @@ export function createGateReporterV2(options: GateReporterV2Options): GateReport
         return Promise.resolve(null);
       }
     },
+    flushTraffic: () => traffic.flush(),
     close() {
       if (closing) return closing;
       closed = true;
@@ -1035,7 +1218,7 @@ export function createGateReporterV2(options: GateReporterV2Options): GateReport
       clearInterval(healthTimer);
       closing = (async () => {
         await flush();
-        await Promise.all([healthActive, flowActive?.promise]);
+        await Promise.all([healthActive, flowActive?.promise, traffic.close()]);
         // A concurrent enqueue is impossible after closed; all remaining retries are abandoned.
         dropped += BigInt(queue.length);
         queue = [];
@@ -1049,4 +1232,6 @@ export function createGateReporterV2(options: GateReporterV2Options): GateReport
       return stats();
     },
   };
+  shareSlot(reporter, slot);
+  return reporter;
 }

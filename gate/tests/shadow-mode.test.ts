@@ -203,7 +203,11 @@ describe("shadow and enforce emit the same events until enforce would spend", ()
   it("same events, different responses", async () => {
     const enforce = await script("enforce");
     const shadow = await script("shadow");
-    expect(shadow.events.slice(0, 7)).toEqual(enforce.events.slice(0, 7));
+    // Only a spend carries `remaining`: enforce spent the batch, shadow spent nothing.
+    expect(enforce.events.slice(5, 7).map((e) => e.remaining)).toEqual([1, 0]);
+    expect(shadow.events.some((e) => "remaining" in e)).toBe(false);
+    const unspent = (events: GateEvent[]) => events.map(({ remaining: _remaining, ...e }) => e);
+    expect(shadow.events.slice(0, 7)).toEqual(unspent(enforce.events.slice(0, 7)));
     expect(shadow.events[9]).toEqual(enforce.events[9]);
     expect(shadow.events.map((e) => e.kind)).toEqual([
       "402",
@@ -248,7 +252,9 @@ describe("shadow and enforce emit the same events until enforce would spend", ()
 
   it("the reporter puts the same wire events on the same endpoint", async () => {
     const bodies: Array<{ events: Array<Record<string, unknown>> }> = [];
-    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+    const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
+      // The traffic summary on close has its own route and its own test.
+      if (url.endsWith("/gate-traffic")) return new Response("{}", { status: 200 });
       const body = JSON.parse(String(init.body));
       bodies.push(body);
       return new Response(JSON.stringify({ accepted: body.events.length, duplicates: 0 }), { status: 200 });
@@ -281,6 +287,7 @@ describe("shadow and enforce emit the same events until enforce would spend", ()
       { kind: "402", resource: "/api/search", operator: "openai", ua_class: "ai_crawler", verified: false },
     ]);
     for (const call of fetchMock.mock.calls) {
+      if (call[0].endsWith("/gate-traffic")) continue;
       expect(call[0]).toBe("https://api.aifinpay.io/v1/merchants/mrch_0123456789abcdef/gate-events");
     }
   });

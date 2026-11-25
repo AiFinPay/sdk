@@ -1,0 +1,924 @@
+{
+ "schema": 1,
+ "path": "/v1/merchants/{merchant_id}/receipt-use",
+ "auth_header": "AIFP-Merchant-Secret",
+ "max_batch": 100,
+ "order": "receipt_id ascending",
+ "vectors": [
+  {
+   "name": "valid_batch",
+   "spends": [
+    {
+     "receipt_id": "rcpt_0123456789abcdef",
+     "remaining": 34
+    },
+    {
+     "receipt_id": "rcpt_00000000000000a1",
+     "remaining": 0
+    }
+   ],
+   "bodies": [
+    "{\"uses\":[{\"receipt_id\":\"rcpt_00000000000000a1\",\"remaining\":0},{\"receipt_id\":\"rcpt_0123456789abcdef\",\"remaining\":34}]}"
+   ]
+  },
+  {
+   "name": "coalesce_lowest",
+   "spends": [
+    {
+     "receipt_id": "rcpt_0000000000000002",
+     "remaining": 34
+    },
+    {
+     "receipt_id": "rcpt_0000000000000002",
+     "remaining": 30
+    },
+    {
+     "receipt_id": "rcpt_0000000000000002",
+     "remaining": 32
+    },
+    {
+     "receipt_id": "rcpt_0000000000000001",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_0000000000000001",
+     "remaining": 5
+    }
+   ],
+   "bodies": [
+    "{\"uses\":[{\"receipt_id\":\"rcpt_0000000000000001\",\"remaining\":5},{\"receipt_id\":\"rcpt_0000000000000002\",\"remaining\":30}]}"
+   ]
+  },
+  {
+   "name": "split_over_100",
+   "spends": [
+    {
+     "receipt_id": "rcpt_00000000000000cd",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_00000000000000cc",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_00000000000000cb",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_00000000000000ca",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_00000000000000c9",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_00000000000000c8",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_00000000000000c7",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_00000000000000c6",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_00000000000000c5",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_00000000000000c4",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_00000000000000c3",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_00000000000000c2",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_00000000000000c1",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_00000000000000c0",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_00000000000000bf",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_00000000000000be",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_00000000000000bd",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_00000000000000bc",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_00000000000000bb",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_00000000000000ba",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_00000000000000b9",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_00000000000000b8",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_00000000000000b7",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_00000000000000b6",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_00000000000000b5",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_00000000000000b4",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_00000000000000b3",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_00000000000000b2",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_00000000000000b1",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_00000000000000b0",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_00000000000000af",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_00000000000000ae",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_00000000000000ad",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_00000000000000ac",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_00000000000000ab",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_00000000000000aa",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_00000000000000a9",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_00000000000000a8",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_00000000000000a7",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_00000000000000a6",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_00000000000000a5",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_00000000000000a4",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_00000000000000a3",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_00000000000000a2",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_00000000000000a1",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_00000000000000a0",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_000000000000009f",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_000000000000009e",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_000000000000009d",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_000000000000009c",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_000000000000009b",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_000000000000009a",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_0000000000000099",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_0000000000000098",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_0000000000000097",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_0000000000000096",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_0000000000000095",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_0000000000000094",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_0000000000000093",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_0000000000000092",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_0000000000000091",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_0000000000000090",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_000000000000008f",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_000000000000008e",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_000000000000008d",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_000000000000008c",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_000000000000008b",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_000000000000008a",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_0000000000000089",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_0000000000000088",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_0000000000000087",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_0000000000000086",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_0000000000000085",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_0000000000000084",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_0000000000000083",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_0000000000000082",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_0000000000000081",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_0000000000000080",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_000000000000007f",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_000000000000007e",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_000000000000007d",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_000000000000007c",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_000000000000007b",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_000000000000007a",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_0000000000000079",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_0000000000000078",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_0000000000000077",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_0000000000000076",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_0000000000000075",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_0000000000000074",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_0000000000000073",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_0000000000000072",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_0000000000000071",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_0000000000000070",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_000000000000006f",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_000000000000006e",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_000000000000006d",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_000000000000006c",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_000000000000006b",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_000000000000006a",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_0000000000000069",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_0000000000000068",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_0000000000000067",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_0000000000000066",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_0000000000000065",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_0000000000000064",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_0000000000000063",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_0000000000000062",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_0000000000000061",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_0000000000000060",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_000000000000005f",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_000000000000005e",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_000000000000005d",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_000000000000005c",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_000000000000005b",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_000000000000005a",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_0000000000000059",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_0000000000000058",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_0000000000000057",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_0000000000000056",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_0000000000000055",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_0000000000000054",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_0000000000000053",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_0000000000000052",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_0000000000000051",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_0000000000000050",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_000000000000004f",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_000000000000004e",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_000000000000004d",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_000000000000004c",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_000000000000004b",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_000000000000004a",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_0000000000000049",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_0000000000000048",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_0000000000000047",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_0000000000000046",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_0000000000000045",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_0000000000000044",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_0000000000000043",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_0000000000000042",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_0000000000000041",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_0000000000000040",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_000000000000003f",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_000000000000003e",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_000000000000003d",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_000000000000003c",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_000000000000003b",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_000000000000003a",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_0000000000000039",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_0000000000000038",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_0000000000000037",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_0000000000000036",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_0000000000000035",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_0000000000000034",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_0000000000000033",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_0000000000000032",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_0000000000000031",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_0000000000000030",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_000000000000002f",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_000000000000002e",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_000000000000002d",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_000000000000002c",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_000000000000002b",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_000000000000002a",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_0000000000000029",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_0000000000000028",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_0000000000000027",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_0000000000000026",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_0000000000000025",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_0000000000000024",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_0000000000000023",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_0000000000000022",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_0000000000000021",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_0000000000000020",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_000000000000001f",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_000000000000001e",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_000000000000001d",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_000000000000001c",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_000000000000001b",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_000000000000001a",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_0000000000000019",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_0000000000000018",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_0000000000000017",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_0000000000000016",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_0000000000000015",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_0000000000000014",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_0000000000000013",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_0000000000000012",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_0000000000000011",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_0000000000000010",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_000000000000000f",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_000000000000000e",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_000000000000000d",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_000000000000000c",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_000000000000000b",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_000000000000000a",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_0000000000000009",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_0000000000000008",
+     "remaining": 1
+    },
+    {
+     "receipt_id": "rcpt_0000000000000007",
+     "remaining": 2
+    },
+    {
+     "receipt_id": "rcpt_0000000000000006",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_0000000000000005",
+     "remaining": 4
+    },
+    {
+     "receipt_id": "rcpt_0000000000000004",
+     "remaining": 5
+    },
+    {
+     "receipt_id": "rcpt_0000000000000003",
+     "remaining": 6
+    },
+    {
+     "receipt_id": "rcpt_0000000000000002",
+     "remaining": 0
+    },
+    {
+     "receipt_id": "rcpt_0000000000000001",
+     "remaining": 1
+    }
+   ],
+   "bodies": [
+    "{\"uses\":[{\"receipt_id\":\"rcpt_0000000000000001\",\"remaining\":1},{\"receipt_id\":\"rcpt_0000000000000002\",\"remaining\":0},{\"receipt_id\":\"rcpt_0000000000000003\",\"remaining\":6},{\"receipt_id\":\"rcpt_0000000000000004\",\"remaining\":5},{\"receipt_id\":\"rcpt_0000000000000005\",\"remaining\":4},{\"receipt_id\":\"rcpt_0000000000000006\",\"remaining\":3},{\"receipt_id\":\"rcpt_0000000000000007\",\"remaining\":2},{\"receipt_id\":\"rcpt_0000000000000008\",\"remaining\":1},{\"receipt_id\":\"rcpt_0000000000000009\",\"remaining\":0},{\"receipt_id\":\"rcpt_000000000000000a\",\"remaining\":6},{\"receipt_id\":\"rcpt_000000000000000b\",\"remaining\":5},{\"receipt_id\":\"rcpt_000000000000000c\",\"remaining\":4},{\"receipt_id\":\"rcpt_000000000000000d\",\"remaining\":3},{\"receipt_id\":\"rcpt_000000000000000e\",\"remaining\":2},{\"receipt_id\":\"rcpt_000000000000000f\",\"remaining\":1},{\"receipt_id\":\"rcpt_0000000000000010\",\"remaining\":0},{\"receipt_id\":\"rcpt_0000000000000011\",\"remaining\":6},{\"receipt_id\":\"rcpt_0000000000000012\",\"remaining\":5},{\"receipt_id\":\"rcpt_0000000000000013\",\"remaining\":4},{\"receipt_id\":\"rcpt_0000000000000014\",\"remaining\":3},{\"receipt_id\":\"rcpt_0000000000000015\",\"remaining\":2},{\"receipt_id\":\"rcpt_0000000000000016\",\"remaining\":1},{\"receipt_id\":\"rcpt_0000000000000017\",\"remaining\":0},{\"receipt_id\":\"rcpt_0000000000000018\",\"remaining\":6},{\"receipt_id\":\"rcpt_0000000000000019\",\"remaining\":5},{\"receipt_id\":\"rcpt_000000000000001a\",\"remaining\":4},{\"receipt_id\":\"rcpt_000000000000001b\",\"remaining\":3},{\"receipt_id\":\"rcpt_000000000000001c\",\"remaining\":2},{\"receipt_id\":\"rcpt_000000000000001d\",\"remaining\":1},{\"receipt_id\":\"rcpt_000000000000001e\",\"remaining\":0},{\"receipt_id\":\"rcpt_000000000000001f\",\"remaining\":6},{\"receipt_id\":\"rcpt_0000000000000020\",\"remaining\":5},{\"receipt_id\":\"rcpt_0000000000000021\",\"remaining\":4},{\"receipt_id\":\"rcpt_0000000000000022\",\"remaining\":3},{\"receipt_id\":\"rcpt_0000000000000023\",\"remaining\":2},{\"receipt_id\":\"rcpt_0000000000000024\",\"remaining\":1},{\"receipt_id\":\"rcpt_0000000000000025\",\"remaining\":0},{\"receipt_id\":\"rcpt_0000000000000026\",\"remaining\":6},{\"receipt_id\":\"rcpt_0000000000000027\",\"remaining\":5},{\"receipt_id\":\"rcpt_0000000000000028\",\"remaining\":4},{\"receipt_id\":\"rcpt_0000000000000029\",\"remaining\":3},{\"receipt_id\":\"rcpt_000000000000002a\",\"remaining\":2},{\"receipt_id\":\"rcpt_000000000000002b\",\"remaining\":1},{\"receipt_id\":\"rcpt_000000000000002c\",\"remaining\":0},{\"receipt_id\":\"rcpt_000000000000002d\",\"remaining\":6},{\"receipt_id\":\"rcpt_000000000000002e\",\"remaining\":5},{\"receipt_id\":\"rcpt_000000000000002f\",\"remaining\":4},{\"receipt_id\":\"rcpt_0000000000000030\",\"remaining\":3},{\"receipt_id\":\"rcpt_0000000000000031\",\"remaining\":2},{\"receipt_id\":\"rcpt_0000000000000032\",\"remaining\":1},{\"receipt_id\":\"rcpt_0000000000000033\",\"remaining\":0},{\"receipt_id\":\"rcpt_0000000000000034\",\"remaining\":6},{\"receipt_id\":\"rcpt_0000000000000035\",\"remaining\":5},{\"receipt_id\":\"rcpt_0000000000000036\",\"remaining\":4},{\"receipt_id\":\"rcpt_0000000000000037\",\"remaining\":3},{\"receipt_id\":\"rcpt_0000000000000038\",\"remaining\":2},{\"receipt_id\":\"rcpt_0000000000000039\",\"remaining\":1},{\"receipt_id\":\"rcpt_000000000000003a\",\"remaining\":0},{\"receipt_id\":\"rcpt_000000000000003b\",\"remaining\":6},{\"receipt_id\":\"rcpt_000000000000003c\",\"remaining\":5},{\"receipt_id\":\"rcpt_000000000000003d\",\"remaining\":4},{\"receipt_id\":\"rcpt_000000000000003e\",\"remaining\":3},{\"receipt_id\":\"rcpt_000000000000003f\",\"remaining\":2},{\"receipt_id\":\"rcpt_0000000000000040\",\"remaining\":1},{\"receipt_id\":\"rcpt_0000000000000041\",\"remaining\":0},{\"receipt_id\":\"rcpt_0000000000000042\",\"remaining\":6},{\"receipt_id\":\"rcpt_0000000000000043\",\"remaining\":5},{\"receipt_id\":\"rcpt_0000000000000044\",\"remaining\":4},{\"receipt_id\":\"rcpt_0000000000000045\",\"remaining\":3},{\"receipt_id\":\"rcpt_0000000000000046\",\"remaining\":2},{\"receipt_id\":\"rcpt_0000000000000047\",\"remaining\":1},{\"receipt_id\":\"rcpt_0000000000000048\",\"remaining\":0},{\"receipt_id\":\"rcpt_0000000000000049\",\"remaining\":6},{\"receipt_id\":\"rcpt_000000000000004a\",\"remaining\":5},{\"receipt_id\":\"rcpt_000000000000004b\",\"remaining\":4},{\"receipt_id\":\"rcpt_000000000000004c\",\"remaining\":3},{\"receipt_id\":\"rcpt_000000000000004d\",\"remaining\":2},{\"receipt_id\":\"rcpt_000000000000004e\",\"remaining\":1},{\"receipt_id\":\"rcpt_000000000000004f\",\"remaining\":0},{\"receipt_id\":\"rcpt_0000000000000050\",\"remaining\":6},{\"receipt_id\":\"rcpt_0000000000000051\",\"remaining\":5},{\"receipt_id\":\"rcpt_0000000000000052\",\"remaining\":4},{\"receipt_id\":\"rcpt_0000000000000053\",\"remaining\":3},{\"receipt_id\":\"rcpt_0000000000000054\",\"remaining\":2},{\"receipt_id\":\"rcpt_0000000000000055\",\"remaining\":1},{\"receipt_id\":\"rcpt_0000000000000056\",\"remaining\":0},{\"receipt_id\":\"rcpt_0000000000000057\",\"remaining\":6},{\"receipt_id\":\"rcpt_0000000000000058\",\"remaining\":5},{\"receipt_id\":\"rcpt_0000000000000059\",\"remaining\":4},{\"receipt_id\":\"rcpt_000000000000005a\",\"remaining\":3},{\"receipt_id\":\"rcpt_000000000000005b\",\"remaining\":2},{\"receipt_id\":\"rcpt_000000000000005c\",\"remaining\":1},{\"receipt_id\":\"rcpt_000000000000005d\",\"remaining\":0},{\"receipt_id\":\"rcpt_000000000000005e\",\"remaining\":6},{\"receipt_id\":\"rcpt_000000000000005f\",\"remaining\":5},{\"receipt_id\":\"rcpt_0000000000000060\",\"remaining\":4},{\"receipt_id\":\"rcpt_0000000000000061\",\"remaining\":3},{\"receipt_id\":\"rcpt_0000000000000062\",\"remaining\":2},{\"receipt_id\":\"rcpt_0000000000000063\",\"remaining\":1},{\"receipt_id\":\"rcpt_0000000000000064\",\"remaining\":0}]}",
+    "{\"uses\":[{\"receipt_id\":\"rcpt_0000000000000065\",\"remaining\":6},{\"receipt_id\":\"rcpt_0000000000000066\",\"remaining\":5},{\"receipt_id\":\"rcpt_0000000000000067\",\"remaining\":4},{\"receipt_id\":\"rcpt_0000000000000068\",\"remaining\":3},{\"receipt_id\":\"rcpt_0000000000000069\",\"remaining\":2},{\"receipt_id\":\"rcpt_000000000000006a\",\"remaining\":1},{\"receipt_id\":\"rcpt_000000000000006b\",\"remaining\":0},{\"receipt_id\":\"rcpt_000000000000006c\",\"remaining\":6},{\"receipt_id\":\"rcpt_000000000000006d\",\"remaining\":5},{\"receipt_id\":\"rcpt_000000000000006e\",\"remaining\":4},{\"receipt_id\":\"rcpt_000000000000006f\",\"remaining\":3},{\"receipt_id\":\"rcpt_0000000000000070\",\"remaining\":2},{\"receipt_id\":\"rcpt_0000000000000071\",\"remaining\":1},{\"receipt_id\":\"rcpt_0000000000000072\",\"remaining\":0},{\"receipt_id\":\"rcpt_0000000000000073\",\"remaining\":6},{\"receipt_id\":\"rcpt_0000000000000074\",\"remaining\":5},{\"receipt_id\":\"rcpt_0000000000000075\",\"remaining\":4},{\"receipt_id\":\"rcpt_0000000000000076\",\"remaining\":3},{\"receipt_id\":\"rcpt_0000000000000077\",\"remaining\":2},{\"receipt_id\":\"rcpt_0000000000000078\",\"remaining\":1},{\"receipt_id\":\"rcpt_0000000000000079\",\"remaining\":0},{\"receipt_id\":\"rcpt_000000000000007a\",\"remaining\":6},{\"receipt_id\":\"rcpt_000000000000007b\",\"remaining\":5},{\"receipt_id\":\"rcpt_000000000000007c\",\"remaining\":4},{\"receipt_id\":\"rcpt_000000000000007d\",\"remaining\":3},{\"receipt_id\":\"rcpt_000000000000007e\",\"remaining\":2},{\"receipt_id\":\"rcpt_000000000000007f\",\"remaining\":1},{\"receipt_id\":\"rcpt_0000000000000080\",\"remaining\":0},{\"receipt_id\":\"rcpt_0000000000000081\",\"remaining\":6},{\"receipt_id\":\"rcpt_0000000000000082\",\"remaining\":5},{\"receipt_id\":\"rcpt_0000000000000083\",\"remaining\":4},{\"receipt_id\":\"rcpt_0000000000000084\",\"remaining\":3},{\"receipt_id\":\"rcpt_0000000000000085\",\"remaining\":2},{\"receipt_id\":\"rcpt_0000000000000086\",\"remaining\":1},{\"receipt_id\":\"rcpt_0000000000000087\",\"remaining\":0},{\"receipt_id\":\"rcpt_0000000000000088\",\"remaining\":6},{\"receipt_id\":\"rcpt_0000000000000089\",\"remaining\":5},{\"receipt_id\":\"rcpt_000000000000008a\",\"remaining\":4},{\"receipt_id\":\"rcpt_000000000000008b\",\"remaining\":3},{\"receipt_id\":\"rcpt_000000000000008c\",\"remaining\":2},{\"receipt_id\":\"rcpt_000000000000008d\",\"remaining\":1},{\"receipt_id\":\"rcpt_000000000000008e\",\"remaining\":0},{\"receipt_id\":\"rcpt_000000000000008f\",\"remaining\":6},{\"receipt_id\":\"rcpt_0000000000000090\",\"remaining\":5},{\"receipt_id\":\"rcpt_0000000000000091\",\"remaining\":4},{\"receipt_id\":\"rcpt_0000000000000092\",\"remaining\":3},{\"receipt_id\":\"rcpt_0000000000000093\",\"remaining\":2},{\"receipt_id\":\"rcpt_0000000000000094\",\"remaining\":1},{\"receipt_id\":\"rcpt_0000000000000095\",\"remaining\":0},{\"receipt_id\":\"rcpt_0000000000000096\",\"remaining\":6},{\"receipt_id\":\"rcpt_0000000000000097\",\"remaining\":5},{\"receipt_id\":\"rcpt_0000000000000098\",\"remaining\":4},{\"receipt_id\":\"rcpt_0000000000000099\",\"remaining\":3},{\"receipt_id\":\"rcpt_000000000000009a\",\"remaining\":2},{\"receipt_id\":\"rcpt_000000000000009b\",\"remaining\":1},{\"receipt_id\":\"rcpt_000000000000009c\",\"remaining\":0},{\"receipt_id\":\"rcpt_000000000000009d\",\"remaining\":6},{\"receipt_id\":\"rcpt_000000000000009e\",\"remaining\":5},{\"receipt_id\":\"rcpt_000000000000009f\",\"remaining\":4},{\"receipt_id\":\"rcpt_00000000000000a0\",\"remaining\":3},{\"receipt_id\":\"rcpt_00000000000000a1\",\"remaining\":2},{\"receipt_id\":\"rcpt_00000000000000a2\",\"remaining\":1},{\"receipt_id\":\"rcpt_00000000000000a3\",\"remaining\":0},{\"receipt_id\":\"rcpt_00000000000000a4\",\"remaining\":6},{\"receipt_id\":\"rcpt_00000000000000a5\",\"remaining\":5},{\"receipt_id\":\"rcpt_00000000000000a6\",\"remaining\":4},{\"receipt_id\":\"rcpt_00000000000000a7\",\"remaining\":3},{\"receipt_id\":\"rcpt_00000000000000a8\",\"remaining\":2},{\"receipt_id\":\"rcpt_00000000000000a9\",\"remaining\":1},{\"receipt_id\":\"rcpt_00000000000000aa\",\"remaining\":0},{\"receipt_id\":\"rcpt_00000000000000ab\",\"remaining\":6},{\"receipt_id\":\"rcpt_00000000000000ac\",\"remaining\":5},{\"receipt_id\":\"rcpt_00000000000000ad\",\"remaining\":4},{\"receipt_id\":\"rcpt_00000000000000ae\",\"remaining\":3},{\"receipt_id\":\"rcpt_00000000000000af\",\"remaining\":2},{\"receipt_id\":\"rcpt_00000000000000b0\",\"remaining\":1},{\"receipt_id\":\"rcpt_00000000000000b1\",\"remaining\":0},{\"receipt_id\":\"rcpt_00000000000000b2\",\"remaining\":6},{\"receipt_id\":\"rcpt_00000000000000b3\",\"remaining\":5},{\"receipt_id\":\"rcpt_00000000000000b4\",\"remaining\":4},{\"receipt_id\":\"rcpt_00000000000000b5\",\"remaining\":3},{\"receipt_id\":\"rcpt_00000000000000b6\",\"remaining\":2},{\"receipt_id\":\"rcpt_00000000000000b7\",\"remaining\":1},{\"receipt_id\":\"rcpt_00000000000000b8\",\"remaining\":0},{\"receipt_id\":\"rcpt_00000000000000b9\",\"remaining\":6},{\"receipt_id\":\"rcpt_00000000000000ba\",\"remaining\":5},{\"receipt_id\":\"rcpt_00000000000000bb\",\"remaining\":4},{\"receipt_id\":\"rcpt_00000000000000bc\",\"remaining\":3},{\"receipt_id\":\"rcpt_00000000000000bd\",\"remaining\":2},{\"receipt_id\":\"rcpt_00000000000000be\",\"remaining\":1},{\"receipt_id\":\"rcpt_00000000000000bf\",\"remaining\":0},{\"receipt_id\":\"rcpt_00000000000000c0\",\"remaining\":6},{\"receipt_id\":\"rcpt_00000000000000c1\",\"remaining\":5},{\"receipt_id\":\"rcpt_00000000000000c2\",\"remaining\":4},{\"receipt_id\":\"rcpt_00000000000000c3\",\"remaining\":3},{\"receipt_id\":\"rcpt_00000000000000c4\",\"remaining\":2},{\"receipt_id\":\"rcpt_00000000000000c5\",\"remaining\":1},{\"receipt_id\":\"rcpt_00000000000000c6\",\"remaining\":0},{\"receipt_id\":\"rcpt_00000000000000c7\",\"remaining\":6},{\"receipt_id\":\"rcpt_00000000000000c8\",\"remaining\":5}]}",
+    "{\"uses\":[{\"receipt_id\":\"rcpt_00000000000000c9\",\"remaining\":4},{\"receipt_id\":\"rcpt_00000000000000ca\",\"remaining\":3},{\"receipt_id\":\"rcpt_00000000000000cb\",\"remaining\":2},{\"receipt_id\":\"rcpt_00000000000000cc\",\"remaining\":1},{\"receipt_id\":\"rcpt_00000000000000cd\",\"remaining\":0}]}"
+   ]
+  },
+  {
+   "name": "invalid_skipped",
+   "spends": [
+    {
+     "receipt_id": "eyJhbGciOiJFZERTQSJ9.eyJyZWNlaXB0X2lkIjoicmNwdF8xIn0.c2ln",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_0123456789ABCDEF",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_0123",
+     "remaining": 3
+    },
+    {
+     "receipt_id": "rcpt_0000000000000009",
+     "remaining": -1
+    },
+    {
+     "receipt_id": "rcpt_0000000000000009",
+     "remaining": 1.5
+    },
+    {
+     "receipt_id": "rcpt_0000000000000009",
+     "remaining": "4"
+    },
+    {
+     "receipt_id": "rcpt_0000000000000008",
+     "remaining": 7
+    }
+   ],
+   "bodies": [
+    "{\"uses\":[{\"receipt_id\":\"rcpt_0000000000000008\",\"remaining\":7}]}"
+   ]
+  },
+  {
+   "name": "nothing_held",
+   "spends": [],
+   "bodies": []
+  }
+ ]
+}

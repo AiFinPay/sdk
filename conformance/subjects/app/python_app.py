@@ -137,8 +137,26 @@ native = Starlette(routes=[
 ])
 
 # A merchant's app routes natively; AIFP_ROUTING=lenient puts the gate in front of one that resolves spellings itself.
-asgi = AifpGateMiddleware(asgi_origin if env.get("AIFP_ROUTING") == "lenient" else native, gate=gate)
-wsgi = AifpGateWSGI(wsgi_origin, gate)
+gated_asgi = AifpGateMiddleware(asgi_origin if env.get("AIFP_ROUTING") == "lenient" else native, gate=gate)
+gated_wsgi = AifpGateWSGI(wsgi_origin, gate)
+
+
+# The runner's own traffic flush stays outside the gate, so it is never counted.
+async def asgi(scope, receive, send):
+    if scope.get("type") == "http" and scope["path"] == "/__conformance/flush-traffic":
+        reporter.flush_traffic()
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"{}"})
+        return
+    await gated_asgi(scope, receive, send)
+
+
+def wsgi(environ, start_response):
+    if environ["PATH_INFO"] == "/__conformance/flush-traffic":
+        reporter.flush_traffic()
+        start_response("200 OK", [])
+        return [b"{}"]
+    return gated_wsgi(environ, start_response)
 
 if __name__ == "__main__":
     port = int(env["PORT"])

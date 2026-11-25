@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
 
 from .agents import AI_AGENT_UA_MARKERS
+from .identity import tag_charge
 
 READER_COOKIE = "__aifp_human"
 READER_TTL_SECONDS = 2592000
@@ -209,7 +210,7 @@ def unproven_pays(reader_proof: ReaderProof, verify_search_bot: Optional[Callabl
             return True
         return not (category is not None and category in free)
 
-    return should_charge
+    return tag_charge(should_charge, "unproven")
 
 
 __all__: List[str] = [

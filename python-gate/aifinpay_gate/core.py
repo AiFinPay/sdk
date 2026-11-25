@@ -20,6 +20,7 @@ from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Pro
 
 from .agents import classify_agent
 from .challenge import DEFAULT_API_BASE, build_challenge
+from .identity import VERSION, charge_of
 from .license import license_headers, receipt_license
 from .operator_policy import decide_operator, normalize_operator_policy
 from .path import before_mark, inspect_path, spelled_as_path
@@ -179,6 +180,9 @@ class Gate:
         operator_policy: Any = None,
         about: Optional[Callable[[GateRequest], Optional[Dict[str, Any]]]] = None,
         now: Callable[[], float] = time.time,
+        traffic: bool = True,
+        country_header: Optional[str] = "cf-ipcountry",
+        network_header: Optional[str] = None,
     ):
         if not merchant_id:
             raise ValueError("Gate: merchant_id is required")
@@ -249,6 +253,23 @@ class Gate:
         self.about = about
         self._now = now
         self.verify = Verifier(issuer, merchant_id, clock_tolerance_s, jwks_uri, jwks, now=now)
+        # What the gate is mounted on; the ASGI and WSGI adapters set their own word.
+        self.platform = "python"
+        # Country from a header the site's CDN sets; network only from one the site names.
+        self.country_header = country_header or None
+        self.network_header = network_header or None
+        # Every reporter this gate feeds names it and, unless traffic=False, takes its traffic.
+        self._traffic = []
+        for owner in (legacy_reporter, reporting):
+            if isinstance(owner, GateReporter):
+                owner._gate = self
+                if traffic is not False and owner._traffic not in self._traffic:
+                    self._traffic.append(owner._traffic)
+
+    def identity(self) -> Dict[str, Any]:
+        """What ``AIFP-Gate`` says about this gate."""
+        return {"pkg": "py", "ver": VERSION, "platform": self.platform, "mode": self.mode,
+                "charge": charge_of(self.should_charge)}
 
     # ── routing ─────────────────────────────────────────────────────────────
 
@@ -438,7 +459,13 @@ class Gate:
 
     def decide(self, req: GateRequest) -> Optional[GateResult]:
         """``None`` means this gate does not cover the path (routes mode only)."""
-        result = self._decide(req)
+        seen: Dict[str, Any] = {}
+        try:
+            result = self._decide(req, seen)
+        except Exception:
+            self._tally(req, seen.get("who"), "error")
+            raise
+        self._tally(req, seen.get("who"), _outcome(result))
         # Every answer from a shadow gate says so — a served call as much as a
         # would-be refusal — so a site owner, and the AiFinPay site check, can
         # tell "gate installed, observing" from "no gate" on a 200.
@@ -446,7 +473,24 @@ class Gate:
             result.headers = {**result.headers, HEADER_MODE: "shadow"}
         return result
 
-    def _decide(self, req: GateRequest) -> Optional[GateResult]:
+    def _tally(self, req: GateRequest, who: Optional[Dict[str, Any]], outcome: str) -> None:
+        """In memory and synchronous: the sender posts on its own thread, outside this request."""
+        if not self._traffic:
+            return
+        try:
+            caller = who or classify_agent(req)
+            extra = {}
+            if self.country_header:
+                extra["country"] = req.header(self.country_header)
+            if self.network_header:
+                extra["network"] = req.header(self.network_header)
+            for sender in self._traffic:
+                sender.record(str(req.path or "/"), caller["ua_class"], caller["operator"], outcome, self.mode,
+                              charge_of(self.should_charge), **extra)
+        except Exception:  # noqa: BLE001 — counting never fails a request
+            pass
+
+    def _decide(self, req: GateRequest, seen: Dict[str, Any]) -> Optional[GateResult]:
         path, ambiguous = inspect_path(req.path, case_sensitive=self.case_sensitive)
         # An origin may read this path differently from the gate, so no price is
         # safe to quote. A reader still gets the page.
@@ -458,6 +502,7 @@ class Gate:
         # User-Agent, IP or headers. Upgraded to verified only once the receipt
         # checks out — a User-Agent or AIFP-Agent-Id header is a claim.
         who = classify_agent(req)
+        seen["who"] = who
         if self.routes is not None:
             route = self.route_for(path, getattr(req, "method", None))
             if route is None:
@@ -537,6 +582,7 @@ class Gate:
         # Signature, issuer and audience verified: an AIFP agent, proven. What
         # follows — a refusal, an exhausted batch, a serve — reports verified.
         who = {"operator": "aifinpay", "ua_class": "aifp_agent", "verified": True}
+        seen["who"] = who
         # A verified_only rule now has its answer. An allow here is served free
         # without spending the receipt: the merchant said this caller does not pay.
         if operator_pending:
@@ -658,8 +704,9 @@ class Gate:
             return self._challenge(resource, weight, tier, DETAIL_QUOTA_EXHAUSTED, who=who, agent=agent_header,
                                    req=req)
 
-        self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": sub, "receipt_id": receipt_id}, who)
         remaining = _int_if_whole(limit - used)
+        self._emit({"kind": "serve", "resource": resource, "weight": weight, "agent": sub, "receipt_id": receipt_id,
+                    "remaining": remaining}, who)
         return GateResult(True, 200, {HEADER_QUOTA_REMAINING: str(remaining), "Cache-Control": NO_STORE, **licensed}, aifp={
             "agent": sub, "receipt_id": receipt_id, "resource": resource, "weight": weight,
             "unit_quota": _int_if_whole(limit), "used": used, "remaining": remaining, "mode": "paid",
@@ -699,6 +746,23 @@ class Gate:
             decr(key, by)
         except Exception:  # noqa: BLE001
             pass
+
+
+_REFUSALS = {402: "challenged", 403: "blocked", 503: "error"}
+
+
+def _outcome(result: Optional[GateResult]) -> str:
+    """The decision, whatever the mode: shadow reports the refusal it served past."""
+    if result is None:
+        return "served"
+    if not result.ok:
+        return _REFUSALS.get(result.status, "blocked")
+    aifp = result.aifp or {}
+    if aifp.get("shadow"):
+        return _REFUSALS.get(aifp["shadow"].get("status"), "blocked")
+    if aifp.get("mode") == "paid" or (aifp.get("mode") == "shadow" and aifp.get("receipt_id")):
+        return "paid"
+    return "served"
 
 
 def _number(v: Any) -> float:

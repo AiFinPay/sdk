@@ -37,6 +37,8 @@ import { decideOperator, type OperatorDecision } from "./operator-policy.js";
 import type { ResourceRegistry } from "./registry.js";
 import type { GateReporterV2, ReportingContext } from "./reporter.js";
 import type { DiscoveryLinkSetting } from "./discovery-link.js";
+import { chargeOf, GATE_VERSION, linkedSlot, type GateInfo } from "./identity.js";
+import type { TrafficOutcome, TrafficSender } from "./traffic.js";
 import type { PageAbout } from "./about.js";
 
 export interface GateOptions {
@@ -185,6 +187,12 @@ export interface GateOptions {
   discoveryLink?: DiscoveryLinkSetting;
   /** What the page is, added to the 402 as plain text; a throw or another shape leaves the 402 unchanged. */
   about?: (req: GateRequest) => PageAbout | null | undefined | Promise<PageAbout | null | undefined>;
+  /** Five-minute traffic summaries go to AiFinPay through the reporter; `false` sends none. */
+  traffic?: boolean;
+  /** Request header your CDN sets to the visitor's country. Default `cf-ipcountry`; `null` sends no countries. */
+  countryHeader?: string | null;
+  /** Request header your CDN sets to the caller's autonomous system number. No default; never sent for readers. */
+  networkHeader?: string | null;
 }
 
 const DEFAULT_ISSUER = "https://api.aifinpay.io";
@@ -217,6 +225,11 @@ export const CDN_CACHE_HEADERS = [
 ];
 
 export function createGate(options: GateOptions): (req: GateRequest) => Promise<GateResult> {
+  return createGateOn(options, "node");
+}
+
+/** `platform` is the adapter's own word, sent in `AIFP-Gate`. */
+export function createGateOn(options: GateOptions, platform: string): (req: GateRequest) => Promise<GateResult> {
   const merchantId = options.merchantId;
   if (!merchantId) throw new Error("createGate: merchantId is required");
   if (options.reporting && (options.reporting.version !== 2 || options.reporting.reporter.version !== 2)) {
@@ -271,6 +284,38 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     jwks: options.jwks,
   });
 
+  // Every client that carries this merchant's secret names this gate; reporters also take its traffic.
+  const info: GateInfo = { pkg: "node", ver: GATE_VERSION, platform, mode, charge: chargeOf(options.shouldCharge) };
+  const senders: TrafficSender[] = [];
+  for (const owner of [options.registry, options.onEvent, options.reporting?.reporter]) {
+    const slot = linkedSlot(owner);
+    if (!slot) continue;
+    slot.info = info;
+    if (slot.traffic && options.traffic !== false && !senders.includes(slot.traffic)) senders.push(slot.traffic);
+  }
+  const countryHeader = options.countryHeader === undefined ? "cf-ipcountry" : options.countryHeader;
+  const networkHeader = options.networkHeader ?? null;
+  // In memory and synchronous: the sender posts on its own schedule, outside this request.
+  const tally = (req: GateRequest, who: AgentIdentity | undefined, outcome: TrafficOutcome) => {
+    if (!senders.length) return;
+    try {
+      const caller = who ?? classifyAgent(req);
+      const record = {
+        target: String(req.path ?? "/"),
+        ua_class: caller.ua_class,
+        operator: caller.operator,
+        outcome,
+        ...(countryHeader ? { country: req.header(countryHeader) ?? null } : {}),
+        ...(networkHeader ? { network: req.header(networkHeader) ?? null } : {}),
+        mode,
+        charge: info.charge,
+      };
+      for (const sender of senders) sender.record(record);
+    } catch {
+      /* counting never fails a request */
+    }
+  };
+
   const emit = (e: GateEvent) => {
     // A partner's metrics call must not be able to fail a paid request.
     try {
@@ -306,7 +351,11 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     }
   };
 
-  const decide = async function gate(req: GateRequest, resolved?: (resource: string) => void): Promise<GateResult> {
+  const decide = async function gate(
+    req: GateRequest,
+    resolved: ((resource: string) => void) | undefined,
+    seen: { who?: AgentIdentity }
+  ): Promise<GateResult> {
     const { path, ambiguous } = inspectPath(req.path, { caseSensitive });
     // An unregistered path is quoted as the agent asked for it: its payer compares the 402 with its own URL.
     const asked = String(req.path ?? "/").split(/[?#]/, 1)[0] || "/";
@@ -316,6 +365,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // to verified only once the receipt checks out in step 4 — a User-Agent
     // or an AIFP-Agent-Id header is a claim, and scanners make that claim.
     let who: AgentIdentity = classifyAgent(req);
+    seen.who = who;
     // Set when `resource` is the raw request path: the ingest refuses it, and it is not ours to send.
     let unregistered = false;
     const note = (e: GateEvent) => emit({ ...e, ...who, ...(unregistered ? { unregistered: true } : {}) });
@@ -618,6 +668,7 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     // is reported as verified, because the identity question is settled even
     // when the spend is refused.
     who = { operator: "aifinpay", ua_class: "aifp_agent", verified: true };
+    seen.who = who;
     // A verified_only rule now has its answer. An `allow` here is served free
     // without spending the receipt: the merchant said this caller does not pay.
     if (operatorPending) {
@@ -792,7 +843,14 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
       return challenge(resource, weight, effectiveTier, DETAIL_QUOTA_EXHAUSTED);
     }
 
-    note({ kind: "serve", resource, weight, agent: payload.sub, receipt_id: payload.receipt_id });
+    note({
+      kind: "serve",
+      resource,
+      weight,
+      agent: payload.sub,
+      receipt_id: payload.receipt_id,
+      remaining: limit - used,
+    });
     const aifp: AifpContext = {
       agent: payload.sub ?? null,
       receipt_id: payload.receipt_id,
@@ -844,14 +902,23 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
   };
   return async (req) => {
     let registeredResource: string | undefined;
-    const decided = await decide(
-      req,
-      options.reporting
-        ? (resource) => {
-            registeredResource = resource;
-          }
-        : undefined
-    );
+    const seen: { who?: AgentIdentity } = {};
+    let decided: GateResult;
+    try {
+      decided = await decide(
+        req,
+        options.reporting
+          ? (resource) => {
+              registeredResource = resource;
+            }
+          : undefined,
+        seen
+      );
+    } catch (e) {
+      tally(req, seen.who, "error");
+      throw e;
+    }
+    tally(req, seen.who, outcomeOf(decided));
     // Every answer from a shadow gate says so — a served call as much as a
     // would-be refusal — so a site owner, and the AiFinPay site check, can
     // tell "gate installed, observing" from "no gate" on a 200.
@@ -872,6 +939,17 @@ export function createGate(options: GateOptions): (req: GateRequest) => Promise<
     }
     return result;
   };
+}
+
+const REFUSALS: Record<number, TrafficOutcome> = { 402: "challenged", 403: "blocked", 503: "error" };
+
+/** The decision, whatever the mode: shadow reports the refusal it served past. */
+function outcomeOf(result: GateResult): TrafficOutcome {
+  if (!result.ok) return REFUSALS[result.status] ?? "blocked";
+  const aifp = result.aifp;
+  if (aifp.shadow) return REFUSALS[aifp.shadow.status] ?? "blocked";
+  if (aifp.mode === "paid" || (aifp.mode === "shadow" && aifp.receipt_id)) return "paid";
+  return "served";
 }
 
 /** As the backend's payment-auth subject(): one account in the spelling each chain allows. */

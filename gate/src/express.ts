@@ -1,5 +1,5 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
-import { CDN_CACHE_HEADERS, createGate, NO_STORE, refundUnits, type GateOptions } from "./core.js";
+import { CDN_CACHE_HEADERS, createGateOn, NO_STORE, refundUnits, type GateOptions } from "./core.js";
 import { MemoryStore } from "./stores/memory.js";
 import type { AifpContext } from "./types.js";
 import { linkHtmlResponse } from "./discovery.js";
@@ -62,7 +62,7 @@ export function aifpGate(options: GateOptions): RequestHandler {
   // the same instance the meter used.
   const store = options.store ?? new MemoryStore({ warnIfDefaulted: true });
   const keyPrefix = options.keyPrefix ?? "aifp:";
-  const gate = createGate({ ...options, store });
+  const gate = createGateOn({ ...options, store }, "express");
   const link = discoveryLinkHeader(options.discoveryLink);
 
   return function aifpGateHandler(req: Request, res: Response, next: NextFunction): void {

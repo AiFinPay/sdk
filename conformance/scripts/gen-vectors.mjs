@@ -514,6 +514,46 @@ const aboutVectors = {
   ],
 };
 
+// Receipt use: expected bodies written out here, not taken from a gate, so every port is held to the same bytes.
+const useOut = resolve(here, "../vectors/receipt-use-v1.json");
+const USE_BATCH = 100;
+const rid = (n) => `rcpt_${n.toString(16).padStart(16, "0")}`;
+const S = (receipt_id, remaining) => ({ receipt_id, remaining });
+const useBodies = (spends) => {
+  const lowest = new Map();
+  for (const { receipt_id, remaining } of spends) {
+    if (!/^rcpt_[0-9a-f]{16}$/.test(receipt_id) || !Number.isSafeInteger(remaining) || remaining < 0) continue;
+    if (!lowest.has(receipt_id) || remaining < lowest.get(receipt_id)) lowest.set(receipt_id, remaining);
+  }
+  const uses = [...lowest.keys()].sort().map((id) => ({ receipt_id: id, remaining: lowest.get(id) }));
+  const bodies = [];
+  for (let i = 0; i < uses.length; i += USE_BATCH) bodies.push(JSON.stringify({ uses: uses.slice(i, i + USE_BATCH) }));
+  return bodies;
+};
+const U = (name, spends) => ({ name, spends, bodies: useBodies(spends) });
+const useVectors = {
+  schema: 1,
+  path: "/v1/merchants/{merchant_id}/receipt-use",
+  auth_header: "AIFP-Merchant-Secret",
+  max_batch: USE_BATCH,
+  order: "receipt_id ascending",
+  vectors: [
+    U("valid_batch", [S("rcpt_0123456789abcdef", 34), S("rcpt_00000000000000a1", 0)]),
+    U("coalesce_lowest", [S(rid(2), 34), S(rid(2), 30), S(rid(2), 32), S(rid(1), 5), S(rid(1), 5)]),
+    U("split_over_100", Array.from({ length: 205 }, (_, i) => S(rid(205 - i), i % 7))),
+    U("invalid_skipped", [
+      S("eyJhbGciOiJFZERTQSJ9.eyJyZWNlaXB0X2lkIjoicmNwdF8xIn0.c2ln", 3),
+      S("rcpt_0123456789ABCDEF", 3),
+      S("rcpt_0123", 3),
+      S(rid(9), -1),
+      S(rid(9), 1.5),
+      S(rid(9), "4"),
+      S(rid(8), 7),
+    ]),
+    U("nothing_held", []),
+  ],
+};
+
 // Gate identity and traffic: every expectation is written out here; the lib must agree or this throws.
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const agree = (name, got, want) => {
@@ -817,6 +857,7 @@ const outputs = [
   [out, JSON.stringify(vectors, null, 1) + "\n", `${cases.length} cases`],
   [readerOut, JSON.stringify(readerVectors, null, 1) + "\n", `${issue.length + verify.length} reader-proof vectors`],
   [aboutOut, JSON.stringify(aboutVectors, null, 1) + "\n", `${aboutVectors.vectors.length} about vectors`],
+  [useOut, JSON.stringify(useVectors, null, 1) + "\n", `${useVectors.vectors.length} receipt-use vectors`],
   [identityOut, JSON.stringify(identityVectors, null, 1) + "\n", `${format.length + parse.length + userAgents.length} identity vectors`],
   [trafficOut, JSON.stringify(trafficVectors, null, 1) + "\n", `${sections.length + countedVectors.length + countries.length + networks.length + build.length + accept.length + reject.length + duplicates.length + scenarios.length} traffic vectors`],
 ];

@@ -275,3 +275,82 @@ drops unsent events and tells the worker to stop. An already in-flight socket
 operation may finish later, but it cannot start another request. Neither method
 promises delivery. A reporter inherited across fork refuses to report and
 exposes `wrong_process`; construct a fresh reporter in each worker.
+
+### Receipt use
+
+The same reporter tells AiFinPay how much of each receipt your gate has spent,
+so the agent, the dashboard and AiFinPay's receipt record show what your
+counter shows. After every paid `serve` it holds the receipt id (never the
+receipt itself) and the units left, keeping only the lowest per receipt, and a
+second daemon thread posts them on the same schedule to
+`POST /v1/merchants/:id/receipt-use`:
+
+```json
+{ "uses": [{ "receipt_id": "rcpt_0123456789abcdef", "remaining": 34 }] }
+```
+
+Batches hold at most 100 receipts, ordered by id. This is accounting, not
+request reporting: it carries no reader data. A 404 (an API that predates the
+route), a refusal or a redirect drops what is held and the next spend tries
+again; a network error, timeout, 408, 429 or 5xx keeps it for the next attempt
+(at most 5). Gate events are untouched either way, and no outcome reaches a
+request. `reporter.stats["uses"]` has `queued`, `delivered`, `dropped` and
+`last_error`; `flush` and `close` cover it within the same deadline. The bodies
+are byte for byte `conformance/vectors/receipt-use-v1.json`.
+
+## What the gate tells AiFinPay
+
+Every request the gate makes with your merchant secret names the gate. That is
+gate events, receipt use, reporting v2 and traffic summaries. Two headers
+carry it:
+
+```text
+User-Agent: aifinpay-gate-py/<version>
+AIFP-Gate: pkg=py; ver=<version>; platform=asgi; mode=enforce; charge=agents
+```
+
+`platform` is `asgi` under `AifpGateMiddleware`, `wsgi` under `AifpGateWSGI`
+and `python` for a bare `Gate`. `charge` is `agents` for `known_ai_agent`,
+`unproven` for `unproven_pays`, `everyone` without `should_charge`, and
+`custom` for your own rule.
+
+What each request contains:
+
+| Request | Contains |
+|---|---|
+| Identity | Package, version, platform, mode and charge rule. |
+| Events | Challenges and admissions on registered routes, with the operator and class. Never a reader's page view. |
+| Receipt use | Receipt id and the units left. |
+| Traffic | Counts per five minutes, described below. |
+
+Traffic summaries go out whenever a reporter is wired to the gate. Every
+request the gate sees is counted once, by class (`human`, `ai_crawler`, and so
+on) and outcome (`served`, `challenged`, `paid`, `blocked`, `error`). A path
+outside every route counts as served. Readers are counted too, though they are
+never sent as events. A script, image or font served free is not counted. For
+agents the summary also counts the operator and the section: the first segment
+of the path, such as `/blog`. A language prefix like `/en` is skipped.
+
+Country comes from the `cf-ipcountry` header by default. Name another header
+with `country_header`, or pass `country_header=None` to send none. The caller's
+network comes only from a header you name with `network_header`, and it is
+never sent for readers. Both must be set by your own CDN: the gate never looks
+an address up.
+
+The summary is counted in memory and sent by its own daemon thread, at most
+once per five minutes. It has its own state. A 404 from an API without the
+route pauses it for 6 hours, any other refusal for 24 hours; events and receipt
+use carry on. `reporter.flush_traffic()` closes the current window and sends
+it, and `close()` does the same. `reporter.stats["traffic"]` shows what is
+held, sent and dropped.
+
+What never leaves your site: IP addresses, full paths and query strings,
+User-Agents, headers, cookies, receipts and agent ids.
+
+Turn traffic summaries off with `traffic=False` on the gate:
+
+```python
+gate = Gate("mrch_…", routes=[Route("/api/*")], on_event=reporter.on_event, traffic=False)
+```
+
+The identity headers are always sent.

@@ -19,6 +19,7 @@ await registry.start();
 const redis = respClient(Number(env.REDIS_PORT));
 const app = express();
 app.get("/__conformance/flush", async (_req, res) => { await reporter.flush(); res.json({ ok: true }); });
+app.get("/__conformance/flush-traffic", async (_req, res) => { await reporter.flushTraffic(); res.json({ ok: true }); });
 app.use(G.aifpDiscovery({
   merchantId: env.AIFP_MERCHANT_ID, apiBase: env.AIFP_API,
   resources: profile.resources.filter((r) => r.paywall !== false).map((r) => ({ resource: r.pattern, tier: r.tier, scope: "prefix" })),
