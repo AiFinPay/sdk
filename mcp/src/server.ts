@@ -34,6 +34,7 @@ import {
 import { deploymentInfoTool, runDeploymentInfo } from "./tools/supported-chains.js";
 import { payChain } from "./pay-chains.js";
 import { clientFrameworkLine, frameworkForClient } from "./client-framework.js";
+import { errorClass, MCP_VERSION, track } from "./telemetry.js";
 
 // Every backend/public request made by this server goes through safeFetch.
 // Public deployments never lift private-network protection; local development
@@ -44,6 +45,8 @@ const safeFetch = makeSafeFetch({
   // for those names — see safe-fetch.ts for why this is not a proxy switch.
   trustedHosts: loadConfigFromEnv().trustedHosts,
 });
+
+let invoked = false;
 
 const RELOAD_ENV_NOTE =
   "Payments are off: AIFINPAY_PAYMENTS_ENABLED=0 (or a programmatic config without payments). Env is read only when this server starts; agent_reload re-reads the keystore and nothing else. If the owner has changed it since, have the client restart the aifinpay MCP server (restart the client, or disable and re-enable the server), then call payment_setup_status.";
@@ -84,7 +87,15 @@ export async function createServer(config: McpConfig = {}) {
       : await AiFinPayAgent.fromSolanaSecret(identity.secretB58!, options);
     return { loaded, source: identity.source };
   }
-  const configured = await configuredAgent();
+  let configured: Awaited<ReturnType<typeof configuredAgent>>;
+  try {
+    configured = await configuredAgent();
+  } catch (error) {
+    const decrypt = /decrypt keystore|Encrypted keystore requires/.test((error as Error)?.message ?? "");
+    track(decrypt ? "wallet_decrypt_failed" : "wallet_load_failed", { error_class: errorClass(error) });
+    throw error;
+  }
+  if (configured) track("wallet_load_succeeded");
   let agent =
     configured?.loaded ??
     (await AiFinPayAgent.new({
@@ -192,6 +203,13 @@ export async function createServer(config: McpConfig = {}) {
     // The client named itself at initialize; unknown clients send no framework.
     const framework = frameworkForClient(server.getClientVersion()?.name);
     const ctx = { agent, config, log, paymentState, framework, walletSource: identitySource };
+    if (!invoked) {
+      invoked = true;
+      track("agent_sdk_first_invocation", {
+        mcp_version: MCP_VERSION,
+        persistent_wallet: identitySource !== "ephemeral",
+      });
+    }
     switch (name) {
       case "agent_reload":
         try {
