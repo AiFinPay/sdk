@@ -1,7 +1,7 @@
 {
   "name": "@aifinpay/analytics",
-  "version": "0.1.1",
-  "description": "Opt-in, zero-dependency SDK telemetry for AiFinPay packages \u2014 off by default, sanitized, fire-and-forget.",
+  "version": "0.2.0",
+  "description": "Zero-dependency SDK telemetry for AiFinPay packages \u2014 on unless turned off, sanitized, fire-and-forget.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -28,8 +28,7 @@
   "keywords": [
     "aifinpay",
     "telemetry",
-    "analytics",
-    "opt-in"
+    "analytics"
   ],
   "author": "CoinSecurities (SECCO) <contact@aifinpay.io>",
   "license": "MIT",

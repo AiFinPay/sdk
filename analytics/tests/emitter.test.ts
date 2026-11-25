@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,9 +9,14 @@ let home: string;
 let fetchMock: ReturnType<typeof vi.fn>;
 const savedHome = process.env.HOME;
 
+const NOTICE =
+  "AiFinPay sends usage events with a random install id: no wallet addresses, URLs or amounts. Turn off: AIFINPAY_TELEMETRY=off\n";
+
+// CI and DO_NOT_TRACK are cleared unless a test sets them, so the result does not depend on the runner.
 async function load(env: Record<string, string | undefined>): Promise<Analytics> {
   vi.resetModules();
-  for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value as string);
+  const all = { CI: undefined, DO_NOT_TRACK: undefined, ...env };
+  for (const [key, value] of Object.entries(all)) vi.stubEnv(key, value as string);
   return import("../src/index.js");
 }
 
@@ -26,6 +31,7 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   process.env.HOME = savedHome;
@@ -33,13 +39,67 @@ afterEach(() => {
 });
 
 describe("emitter", () => {
-  it("is silent by default: no network, no file", async () => {
+  it("is on by default: sends and stores the install id", async () => {
     const a = await load({ AIFINPAY_TELEMETRY: undefined });
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    expect(a.isEnabled()).toBe(true);
+    a.emit("unified_call_started", {});
+    await a.shutdown();
+    expect(sentBatches()[0].mode).toBe("on");
+    expect(existsSync(join(home, ".aifinpay", ".telemetry-id"))).toBe(true);
+  });
+
+  it.each([
+    ["AIFINPAY_TELEMETRY=off", { AIFINPAY_TELEMETRY: "off" }],
+    ["DO_NOT_TRACK=1", { DO_NOT_TRACK: "1" }],
+    ["CI=true", { CI: "true" }],
+  ])("is silent under %s: no network, no file", async (_label, env) => {
+    const a = await load(env);
     expect(a.isEnabled()).toBe(false);
     a.emit("unified_call_started", {});
     await a.shutdown();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(existsSync(join(home, ".aifinpay"))).toBe(false);
+  });
+
+  it("tells the reader once, on stderr, when a default-on run creates the id", async () => {
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const stdout = vi.spyOn(process.stdout, "write");
+    const first = await load({ AIFINPAY_TELEMETRY: undefined });
+    first.emit("unified_call_started", {});
+    first.emit("unified_call_succeeded", {});
+    await first.shutdown();
+    expect(stderr.mock.calls).toEqual([[NOTICE]]);
+    expect(stdout.mock.calls.some(([chunk]) => String(chunk).includes("AIFINPAY_TELEMETRY=off"))).toBe(false);
+
+    stderr.mockClear();
+    const second = await load({ AIFINPAY_TELEMETRY: undefined });
+    second.emit("unified_call_started", {});
+    await second.shutdown();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(stderr).not.toHaveBeenCalled();
+  });
+
+  it("prints nothing under an explicit on", async () => {
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const a = await load({ AIFINPAY_TELEMETRY: "on" });
+    a.emit("unified_call_started", {});
+    await a.shutdown();
+    expect(existsSync(join(home, ".aifinpay", ".telemetry-id"))).toBe(true);
+    expect(stderr).not.toHaveBeenCalled();
+  });
+
+  it("prints nothing and writes nothing when the id file cannot be written", async () => {
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    writeFileSync(join(home, ".aifinpay"), "not a directory");
+    for (let run = 0; run < 2; run++) {
+      const a = await load({ AIFINPAY_TELEMETRY: undefined });
+      a.emit("unified_call_started", {});
+      await a.shutdown();
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(stderr).not.toHaveBeenCalled();
+    expect(readFileSync(join(home, ".aifinpay"), "utf8")).toBe("not a directory");
   });
 
   it("is synchronous for the caller and sends on a later microtask", async () => {

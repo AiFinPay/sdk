@@ -1,6 +1,6 @@
 /**
- * The per-install id: a random UUID at ~/.aifinpay/.telemetry-id, created on
- * first opt-in and never derived from anything about the machine or user.
+ * The per-install id: a random UUID at ~/.aifinpay/.telemetry-id, created by
+ * the first run that sends and never derived from anything about the machine or user.
  * Deleting the file resets it. The id is never logged.
  *
  * File rules follow the keystore rules in the root AGENTS.md: directory 700,
@@ -26,23 +26,33 @@ function readId(path: string): string | null {
   }
 }
 
+export interface InstallId {
+  id: string;
+  /** True only when this call wrote the id file. */
+  created: boolean;
+}
+
 /**
  * `persist: false` (read-only mode) never touches the disk beyond one read.
  * A present but unreadable or malformed file is left alone — we do not
  * overwrite something we did not write — and this process gets an ephemeral id.
  */
-export function resolveInstallId({ persist, home }: { persist: boolean; home?: string }): string {
+export function loadInstallId({ persist, home }: { persist: boolean; home?: string }): InstallId {
   const path = identityPath(home);
   const existing = readId(path);
-  if (existing) return existing;
+  if (existing) return { id: existing, created: false };
   const fresh = randomUUID();
-  if (!persist) return fresh;
+  if (!persist) return { id: fresh, created: false };
   try {
     mkdirSync(join(path, ".."), { recursive: true, mode: 0o700 });
     writeFileSync(path, fresh + "\n", { mode: 0o600, flag: "wx" });
-    return fresh;
+    return { id: fresh, created: true };
   } catch {
     // Lost a creation race, or the file exists but is not ours to repair.
-    return readId(path) ?? fresh;
+    return { id: readId(path) ?? fresh, created: false };
   }
+}
+
+export function resolveInstallId(opts: { persist: boolean; home?: string }): string {
+  return loadInstallId(opts).id;
 }

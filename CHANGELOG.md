@@ -6,6 +6,12 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## Analytics 0.2.0 — telemetry on unless turned off (unreleased)
+
+- `@aifinpay/analytics` sends unless `AIFINPAY_TELEMETRY=off` (or `0`,
+  `false`, `no`), `DO_NOT_TRACK` or `CI` turns it off; explicit `on` wins. The
+  first run prints one line to stderr. No consumer emits events yet.
+
 ## MCP 2.17.2 — real remaining quota on self-metered sites
 
 - `agent_quota` shows what the site itself counted when AiFinPay's record is
