@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { GATE_OPERATORS, UA_CLASSES, type AgentIdentity, type GateOperator, type UaClass } from "./agents.js";
 import type { GateEvent } from "./types.js";
+import { identityHeaders, shareSlot, type GateSlot } from "./identity.js";
+import { createTrafficSender, type TrafficStats } from "./traffic.js";
 import type {
   Ack,
   HealthAck,
@@ -70,6 +72,8 @@ export interface GateReporterStats {
   closed: boolean;
   /** Receipt use sent to /receipt-use, counted in receipts; independent of the events above. */
   uses: { queued: number; delivered: number; dropped: number; lastError: GateReporterError | null };
+  /** Traffic summaries sent to /gate-traffic; their own state, never shared with the above. */
+  traffic: TrafficStats;
 }
 
 export interface GateReporter {
@@ -77,6 +81,8 @@ export interface GateReporter {
   onEvent(event: GateEvent): void;
   /** Attempt every currently queued event and held receipt use once; transient failures stay queued. */
   flush(): Promise<GateReporterStats>;
+  /** Close the open traffic window and send what is held, once. */
+  flushTraffic(): Promise<TrafficStats>;
   /** Stop accepting events, flush once, then drop unsent events and stop timers. */
   close(): Promise<GateReporterStats>;
   readonly stats: GateReporterStats;
@@ -176,6 +182,13 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
   const useEndpoint = `${base.origin}/v1/merchants/${encodeURIComponent(options.merchantId)}/receipt-use`;
   // Keep secrets in the closure, never in reporter.stats or diagnostic errors.
   const secret = options.merchantSecret;
+  const slot: GateSlot = { info: null, traffic: null };
+  const traffic = createTrafficSender({
+    endpoint: `${base.origin}/v1/merchants/${encodeURIComponent(options.merchantId)}/gate-traffic`,
+    secret,
+    headers: () => identityHeaders(slot),
+  });
+  slot.traffic = traffic;
   let queue: Pending[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
   let active: Promise<void> | undefined;
@@ -209,6 +222,7 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
     stopped,
     closed,
     uses: { queued: uses.size, delivered: usesDelivered, dropped: usesDropped, lastError: usesLastError },
+    traffic: traffic.stats,
   });
   const clearTimer = () => {
     if (timer) clearTimeout(timer);
@@ -262,7 +276,7 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
       try {
         const response = await fetch(endpoint, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "AIFP-Merchant-Secret": secret },
+          headers: { ...identityHeaders(slot), "Content-Type": "application/json", "AIFP-Merchant-Secret": secret },
           body: JSON.stringify({ events: batch.map((entry) => entry.event) }),
           signal: controller.signal,
           redirect: "manual",
@@ -418,7 +432,7 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
     try {
       const response = await fetch(useEndpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "AIFP-Merchant-Secret": secret },
+        headers: { ...identityHeaders(slot), "Content-Type": "application/json", "AIFP-Merchant-Secret": secret },
         body: JSON.stringify({ uses: items }),
         signal: controller.signal,
         redirect: "manual",
@@ -531,7 +545,7 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
     return flushing;
   };
 
-  return {
+  const reporter: GateReporter = {
     onEvent(event) {
       if (!event || typeof event !== "object") return;
       if (event.kind !== "402" && event.kind !== "serve") return;
@@ -574,12 +588,13 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
       schedule();
     },
     flush: () => Promise.all([flush(), sendUses()]).then(stats),
+    flushTraffic: () => traffic.flush(),
     close() {
       if (closing) return closing;
       closed = true;
       clearTimer();
       clearUsesTimer();
-      closing = Promise.all([flush(), sendUses()]).then(() => {
+      closing = Promise.all([flush(), sendUses(), traffic.close()]).then(() => {
         if (queue.length) {
           dropped += queue.length;
           queue = [];
@@ -600,6 +615,10 @@ export function createGateReporter(options: GateReporterOptions): GateReporter {
       return stats();
     },
   };
+  // The gate finds this reporter through the hook it is given.
+  shareSlot(reporter, slot);
+  shareSlot(reporter.onEvent, slot);
+  return reporter;
 }
 
 export interface GateReporterV2Options extends GateReporterOptions {
@@ -630,6 +649,8 @@ export interface GateReporterV2 {
   mintFlow(request: FlowRequest): Promise<FlowResponse | null>;
   /** Frozen sample/sequence is retained until ack or bounded exhaustion. */
   health(): Promise<boolean>;
+  /** Close the open traffic window and send what is held, once. */
+  flushTraffic(): Promise<TrafficStats>;
   close(): Promise<GateReporterV2Stats>;
   readonly stats: GateReporterV2Stats;
 }
@@ -769,6 +790,13 @@ export function createGateReporterV2(options: GateReporterV2Options): GateReport
     throw new Error("createGateReporterV2: HTTPS origin required");
   const prefix = `${base.origin}/v2/merchants/${options.merchantId}`;
   const secret = options.merchantSecret;
+  const slot: GateSlot = { info: null, traffic: null };
+  const traffic = createTrafficSender({
+    endpoint: `${base.origin}/v1/merchants/${options.merchantId}/gate-traffic`,
+    secret,
+    headers: () => identityHeaders(slot),
+  });
+  slot.traffic = traffic;
   const supported = [...options.supported];
   const producerId = randomUUID();
   type Entry = { event: ReportedEvent; facts: string; created: number; attempts: number; nextAt: number };
@@ -831,7 +859,7 @@ export function createGateReporterV2(options: GateReporterV2Options): GateReport
         const url = `${prefix}${path}`;
         const response = await fetch(url, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "AIFP-Merchant-Secret": secret },
+          headers: { ...identityHeaders(slot), "Content-Type": "application/json", "AIFP-Merchant-Secret": secret },
           body,
           redirect: "manual",
           signal: controller.signal,
@@ -1086,7 +1114,7 @@ export function createGateReporterV2(options: GateReporterV2Options): GateReport
     void health();
   }, 60000);
   healthTimer.unref?.();
-  return {
+  const reporter: GateReporterV2 = {
     version: 2,
     record,
     observe(input) {
@@ -1182,6 +1210,7 @@ export function createGateReporterV2(options: GateReporterV2Options): GateReport
         return Promise.resolve(null);
       }
     },
+    flushTraffic: () => traffic.flush(),
     close() {
       if (closing) return closing;
       closed = true;
@@ -1189,7 +1218,7 @@ export function createGateReporterV2(options: GateReporterV2Options): GateReport
       clearInterval(healthTimer);
       closing = (async () => {
         await flush();
-        await Promise.all([healthActive, flowActive?.promise]);
+        await Promise.all([healthActive, flowActive?.promise, traffic.close()]);
         // A concurrent enqueue is impossible after closed; all remaining retries are abandoned.
         dropped += BigInt(queue.length);
         queue = [];
@@ -1203,4 +1232,6 @@ export function createGateReporterV2(options: GateReporterV2Options): GateReport
       return stats();
     },
   };
+  shareSlot(reporter, slot);
+  return reporter;
 }

@@ -1,4 +1,5 @@
 // Unproven pays: only a reader with a signed cookie or a verified free bot reads without a receipt.
+import { tagCharge } from "./identity.js";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Resolver } from "node:dns/promises";
 import { isIP } from "node:net";
@@ -234,7 +235,7 @@ export function unprovenPays({
   freeBots = ["search", "preview", "monitoring"],
 }: UnprovenPaysOptions): (req: GateRequest) => Promise<boolean> {
   if (!readerProof || typeof readerProof.verify !== "function") throw new TypeError("unprovenPays needs a readerProof");
-  return async (req) => {
+  return tagCharge(async (req: GateRequest) => {
     if (req.header("AIFP-Receipt") || req.header("AIFP-Agent-Id")) return true;
     const userAgent = req.header("user-agent") ?? "";
     if (readerProof.verify(req.header("cookie"), userAgent)) return false;
@@ -245,5 +246,5 @@ export function unprovenPays({
     } catch {
       return true;
     }
-  };
+  }, "unproven");
 }

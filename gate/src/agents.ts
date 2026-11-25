@@ -26,6 +26,7 @@
  * eq "AI Crawler"` moves the decision to an edge that verifies bots
  * cryptographically, and the predicate becomes one header check.
  */
+import { tagCharge } from "./identity.js";
 import type { GateRequest } from "./types.js";
 
 /**
@@ -195,3 +196,4 @@ export function knownAiAgent(req: GateRequest): boolean {
   // plain "human" is charged, including no User-Agent at all.
   return classifyAgent(req).ua_class !== "human";
 }
+tagCharge(knownAiAgent, "agents");

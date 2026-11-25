@@ -10,7 +10,7 @@ export default {
   id: "gate-node",
   label: "@aifinpay/gate on Express",
   usesRedis: true,
-  capabilities: ["events", "restart", "fault:jwks", "fault:store", "fault:record", "about", "llms_txt_absent"],
+  capabilities: ["events", "restart", "fault:jwks", "fault:store", "fault:record", "about", "llms_txt_absent", "identity", "traffic"],
   version: () => JSON.parse(readFileSync(join(gateDir, "package.json"), "utf8")).version,
   async start(ctx) {
     const app = managed(process.execPath, [join(here, "app/express-app.mjs")], {
@@ -24,6 +24,7 @@ export default {
       baseUrl,
       apiBase: ctx.apiHttps,
       flushEvents: () => fetch(`${baseUrl}/__conformance/flush`).catch(() => {}),
+      flushTraffic: () => fetch(`${baseUrl}/__conformance/flush-traffic`).catch(() => {}),
       restart: () => app.restart(),
       breakStore: () => ctx.redis.stop(),
       healStore: () => ctx.redis.start(),

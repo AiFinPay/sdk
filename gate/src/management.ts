@@ -20,6 +20,7 @@
 // ──────────────────────────────────────────────────────────────────────────
 import { AifpAuthError, AifpConflictError, AifpGateError, AifpValidationError } from "./errors.js";
 import type { AifpResource, MerchantPublicView, MerchantStats, ResourceInput, SettlementRecord } from "./types.js";
+import { identityHeaders, slotOf } from "./identity.js";
 
 export interface AifpMerchantOptions {
   merchantId?: string;
@@ -234,6 +235,7 @@ export class AifpMerchant {
         res = await this.doFetch(url, {
           method,
           headers: {
+            ...identityHeaders(slotOf(this)),
             "AIFP-Merchant-Secret": secret,
             "Content-Type": "application/json",
             Accept: "application/json",

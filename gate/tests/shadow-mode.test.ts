@@ -252,7 +252,9 @@ describe("shadow and enforce emit the same events until enforce would spend", ()
 
   it("the reporter puts the same wire events on the same endpoint", async () => {
     const bodies: Array<{ events: Array<Record<string, unknown>> }> = [];
-    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+    const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
+      // The traffic summary on close has its own route and its own test.
+      if (url.endsWith("/gate-traffic")) return new Response("{}", { status: 200 });
       const body = JSON.parse(String(init.body));
       bodies.push(body);
       return new Response(JSON.stringify({ accepted: body.events.length, duplicates: 0 }), { status: 200 });
@@ -285,6 +287,7 @@ describe("shadow and enforce emit the same events until enforce would spend", ()
       { kind: "402", resource: "/api/search", operator: "openai", ua_class: "ai_crawler", verified: false },
     ]);
     for (const call of fetchMock.mock.calls) {
+      if (call[0].endsWith("/gate-traffic")) continue;
       expect(call[0]).toBe("https://api.aifinpay.io/v1/merchants/mrch_0123456789abcdef/gate-events");
     }
   });

@@ -128,6 +128,8 @@ export type {
 } from "./types.js";
 
 export { createGateReporter } from "./reporter.js";
+export { GATE_VERSION } from "./identity.js";
+export type { TrafficStats } from "./traffic.js";
 export type { GateReporter, GateReporterOptions, GateReporterStats, GateReporterError } from "./reporter.js";
 export { createGateReporterV2, validReportedEvent, validReportingContext } from "./reporter.js";
 export type {

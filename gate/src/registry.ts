@@ -1,6 +1,7 @@
 import { matchResource } from "./match.js";
 import type { AifpMerchant } from "./management.js";
 import { normalizeOperatorPolicy } from "./operator-policy.js";
+import { shareSlot, slotOf } from "./identity.js";
 import type { AifpResource, NetworkMode, OperatorPolicy, Tier } from "./types.js";
 
 export interface ResourceRegistryOptions {
@@ -50,6 +51,8 @@ export class ResourceRegistry {
 
   constructor(opts: ResourceRegistryOptions) {
     this.merchant = opts.merchant;
+    // A gate built on this registry names itself on the merchant's polls.
+    if (opts.merchant && typeof opts.merchant === "object") shareSlot(this, slotOf(opts.merchant));
     this.refreshMs = opts.refreshMs ?? 60_000;
     this.onError = opts.onError;
   }
