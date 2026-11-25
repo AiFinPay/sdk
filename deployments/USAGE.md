@@ -309,10 +309,10 @@ const allIdls = artifacts.getAllAptosIdls();
 const artifacts = ArtifactRegistry.load();
 
 // Get ABI by contract name
-const splitterAbi = artifacts.getTronAbi("B2BSplitter");
+const splitterAbi = artifacts.getTronAbi("B2BSplitterV14");
 
 // Get specific version
-const versionedAbi = artifacts.getTronAbi("B2BSplitter", "1.4");
+const versionedAbi = artifacts.getTronAbi("B2BSplitterV14", "1.4");
 
 // Get all Tron ABIs
 const allAbis = artifacts.getAllTronAbis();
@@ -540,14 +540,18 @@ registry/
 │   │   ├── v1.3/deployments.json  # Historical
 │   │   ├── v1.2/deployments.json  # Historical
 │   │   └── v1.1/deployments.json  # Historical
-│   └── solana/
-│       └── deployments.json       # Solana v1.4
+│   ├── solana/
+│   │   └── deployments.json       # Solana v1.4
+│   └── tron/
+│       └── v1.4/deployments.json  # Curated Tron v1.4 snapshots
 ├── abi/
 │   ├── evm/
 │   │   ├── B2BSplitterV14/
 │   │   └── TimelockWrapper/
 │   ├── near/
 │   └── tron/
+│       ├── B2BSplitterV14/
+│       └── TimelockWrapper/
 └── idl/
     ├── solana/splitter-v14/
     ├── casper/

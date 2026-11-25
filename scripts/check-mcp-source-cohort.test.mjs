@@ -427,3 +427,27 @@ test("canonical packed producer refuses untracked, ignored and mutated bytes wit
     rmSync(path, { recursive: true, force: true });
   }
 });
+
+test("MCP lock pins the published analytics package exactly", () => {
+  const root = fileURLToPath(new URL("../", import.meta.url));
+  const manifest = JSON.parse(readFileSync(join(root, "mcp/package.json")));
+  const lock = JSON.parse(readFileSync(join(root, "mcp/package-lock.json")));
+  const registryAnalytics = "0.2.0";
+  assert.equal(manifest.dependencies["@aifinpay/analytics"], registryAnalytics);
+  assert.equal(
+    lock.packages[""].dependencies["@aifinpay/analytics"],
+    registryAnalytics,
+  );
+  const { version, resolved, integrity, dependencies } =
+    lock.packages["node_modules/@aifinpay/analytics"];
+  assert.deepEqual(
+    { version, resolved, integrity, dependencies },
+    {
+      version: registryAnalytics,
+      resolved: `https://registry.npmjs.org/@aifinpay/analytics/-/analytics-${registryAnalytics}.tgz`,
+      integrity:
+        "sha512-ZMzNKM1Kd8oczB+MDIPkcFTUxFFKE9uPnBaHrsS4z3m86dbEE57J3nrppCxgC1n33DhF7NhaipvFDEBPNZ4NAg==",
+      dependencies: undefined,
+    },
+  );
+});

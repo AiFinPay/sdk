@@ -255,6 +255,31 @@ initialize the server logs one line to stderr with the name it received, for
 example `[aifinpay-mcp] client "codex-mcp-client" → framework codex`, so a
 client missing from this table can be reported with its exact name.
 
+## Telemetry (on unless turned off)
+
+The server reports where a paid fetch stops, through
+[`@aifinpay/analytics`](https://github.com/AiFinPay/sdk/blob/main/analytics/README.md):
+the first tool call and the wallet load at start, and in `payable_fetch` a
+quote obtained, an owner limit reached, a payment made, the stage a payment
+failed at, and the recovery of an earlier payment.
+
+Each event carries only these fields: `tool`, `stage`, `outcome`,
+`error_class` (the error's class name), `http_status`, `network`, `asset`,
+`usd_bucket` (`<0.1`, `<1`, `<5`, `>=5`), `ms`, `mcp_version`,
+`persistent_wallet` and `linked`, with a random install id. Never a URL, an
+address, an exact amount, a merchant name, a receipt or a key. Telemetry never
+changes a tool's answer and never writes to stdout.
+
+The first run prints one line to stderr:
+
+```
+AiFinPay sends usage events with a random install id: no wallet addresses, URLs or amounts. Turn off: AIFINPAY_TELEMETRY=off
+```
+
+Three ways to turn it off: `AIFINPAY_TELEMETRY=off`, `DO_NOT_TRACK=1`, or a
+`CI` variable (unless `AIFINPAY_TELEMETRY=on`). Nothing is sent at install
+time.
+
 ## Link the agent to its owner's dashboard
 
 The owner sees the agent's balance, payments and receipts at

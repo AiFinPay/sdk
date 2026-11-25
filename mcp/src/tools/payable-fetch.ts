@@ -17,6 +17,7 @@ import { PAY_CHAINS, payChain, type PayChain } from "../pay-chains.js";
 import { SMALLEST_BATCH_USD, paymentSetupStatus } from "./payment-setup-status.js";
 import { assertVerifiedMerchantSite, readMerchant, UnverifiedMerchantSiteError } from "../merchant-site.js";
 import { chooseOption, forgetBalances, formatUnits, readOptions, rpcFor, type OptionState } from "../pay-options.js";
+import { errorClass, track, usdBucket } from "../telemetry.js";
 
 // "prefix" is left out on purpose: it needs a resource to anchor to, and the
 // owner's two real requests are "this endpoint" and "this site".
@@ -80,12 +81,15 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
   let state: PaymentState | undefined;
   let chain: PayChain | undefined;
   let paying: { chain: PayChain; asset: string } | undefined;
+  // Where a paid fetch stopped, for telemetry only; unset outside a purchase.
+  let stage: string | undefined;
   try {
     const store = ctx.paymentState;
     // Not set up: say exactly what is missing instead of refusing in one line.
     // Nothing below runs, so nothing is quoted, signed or sent. The journal
     // exists only for the persistent wallet the server started with.
     if (!ctx.config.paymentsEnabled || !store || store.address !== ctx.agent.evmAddress.toLowerCase()) {
+      track("aifp1_pay_failed", { stage: "setup" });
       const status = await paymentSetupStatus(ctx, { readBalance: false });
       return errorResult(
         JSON.stringify({ error: "payable_fetch is not set up yet; nothing was signed or paid.", ...status }, null, 2)
@@ -98,6 +102,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
       chain = payChain(ctx.config.payChain);
       options = payOptions(ctx.config);
     } catch (error) {
+      track("aifp1_pay_failed", { stage: "setup", error_class: errorClass(error) });
       return errorResult((error as Error).message);
     }
     if (Object.keys(args).some((k) => !["url", "max_amount_usd", "scope", "expected_merchant_id"].includes(k)))
@@ -123,10 +128,12 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
     // paid at all, and the agent cannot add to it: a page asking to be paid is
     // not the owner asking to pay it. Name the origin so the owner can decide.
     const origins = ctx.config.gatewayOrigins ?? [url.origin];
-    if (!origins.includes(url.origin))
+    if (!origins.includes(url.origin)) {
+      track("budget_cap_exceeded", { stage: "site" });
       return errorResult(
         `${url.origin} is not an owner-approved site. Nothing was paid. The owner can add it to AIFINPAY_GATEWAY_ORIGINS and reconnect this server; the agent cannot approve a site itself.`
       );
+    }
     const pathMode = ctx.config.gatewayPathMode ?? (url.origin === HOSTED_GATEWAY_ORIGIN ? "gateway" : "direct");
     if (
       args.max_amount_usd !== undefined &&
@@ -230,6 +237,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
           }
           recovery = { ...pending.recovery, chain: pending.recovery.chain ?? rail } as Aifp1PaymentRecovery;
         }
+        track("aifp1_recovery_attempted");
         const paid = await ctx.agent
           .recoverPaidPayment(recovery, {
             paymentIssuer: configuredApi,
@@ -242,6 +250,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
               : {}),
           })
           .catch((error: unknown) => {
+            track("aifp1_recovery_failed", { error_class: errorClass(error) });
             if (reconcileFinalizedFailure(error)) return null;
             throw error;
           });
@@ -263,6 +272,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
         state.receipts = ctx.agent.aifp1Receipts.list();
         delete state.pending;
         store.save(state);
+        track("aifp1_recovery_succeeded");
       }
       const spent = store.spent24h(state);
       const priorReceiptIds = new Set(state.receipts.map((entry) => entry.receiptId));
@@ -270,14 +280,16 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
       // No owner allowlist: pay only the verified owner of the site being used
       // (see ../merchant-site.ts). With one, the owner already chose the sites.
       const confirmPayee = async (merchantId: string) => {
-        if (ctx.config.gatewayOrigins !== undefined) return;
-        await assertVerifiedMerchantSite({
-          fetchImpl: (input, init) => ctx.agent.inner.fetchImpl(input, init),
-          apiBase: (ctx.config.baseUrl ?? "https://api.aifinpay.io").replace(/\/+$/, ""),
-          merchantId,
-          url,
-          pathMode,
-        });
+        stage = "verify_site";
+        if (ctx.config.gatewayOrigins === undefined)
+          await assertVerifiedMerchantSite({
+            fetchImpl: (input, init) => ctx.agent.inner.fetchImpl(input, init),
+            apiBase: (ctx.config.baseUrl ?? "https://api.aifinpay.io").replace(/\/+$/, ""),
+            merchantId,
+            url,
+            pathMode,
+          });
+        stage = "settle";
       };
       const persistPrepared = (prepared: Aifp1PaymentRecovery, usd: number, serializedTransaction?: `0x${string}`) => {
         if (state!.pending) throw new Error("A payment is already pending");
@@ -286,8 +298,13 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
           usd <= 0 ||
           usd > maximum ||
           store.spent24h(state!) + usd > ctx.config.dailyAmountUsd!
-        )
+        ) {
+          if (Number.isFinite(usd) && usd > 0) {
+            track("budget_cap_exceeded", { stage: usd > maximum ? "per_payment" : "daily" });
+            stage = undefined;
+          }
           throw new Error("Owner spending limit reached");
+        }
         const site =
           pathMode === "direct" ? `direct:${JSON.stringify([url.origin, prepared.quote.merchant_id])}` : parsed.site;
         state!.pending = {
@@ -299,8 +316,18 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
         state!.spend.push({ at: Date.now(), usd, tx: prepared.txRef });
         // Durable atomic fsync completes before the SDK may broadcast.
         store.save(state!);
+        stage = "pay";
       };
       let paidWith: { chain: string; asset: string } | undefined;
+      stage = "quote";
+      const started = Date.now();
+      const quoted = (asset: string, amount: unknown) =>
+        track("aifp1_quote_obtained", {
+          network: paying?.chain.name,
+          asset,
+          usd_bucket: usdBucket(Number(amount)),
+          ms: Date.now() - started,
+        });
       try {
         // One option pays as before; with more, this URL's 402 is read first so the choice comes before any quote.
         let option: PayOption | undefined = options[0];
@@ -331,7 +358,11 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
                 : undefined;
               offered = await readOptions(ctx, options, { priceUsd, merchantChains });
               const chosen = chooseOption(offered, remembered);
-              if (!chosen) return errorResult(nothingPays(ctx, offered, priceUsd, merchantChains));
+              if (!chosen) {
+                track("aifp1_pay_failed", { stage: "funds" });
+                stage = undefined;
+                return errorResult(nothingPays(ctx, offered, priceUsd, merchantChains));
+              }
               option = chosen;
             }
           }
@@ -396,6 +427,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
                     asset: payAsset,
                     maxFeeLamports: feeCap,
                     onPrepared: async (prepared) => {
+                      quoted(prepared.asset, prepared.quote.amount);
                       if (
                         prepared.family !== "solana" ||
                         prepared.chain !== "solana" ||
@@ -433,6 +465,7 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
                     ...(stablePay ? { asset: payAsset } : {}),
                     maxGasWei: gasCap,
                     onPrepared: async (prepared) => {
+                      quoted(prepared.asset, prepared.quote.amount);
                       await confirmPayee(prepared.quote.merchant_id);
                       let usd: number;
                       if (stablePay) {
@@ -457,7 +490,10 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
                 }),
           }
         ));
-        if (response === null) return errorResult("Payment skipped: owner budget reached.");
+        if (response === null) {
+          track("budget_cap_exceeded", { stage: "per_payment" });
+          return errorResult("Payment skipped: owner budget reached.");
+        }
         const redact = (value: string): string => {
           for (const entry of ctx.agent.aifp1Receipts.list()) {
             if (entry.jwt) value = value.replaceAll(entry.jwt, "[redacted receipt]");
@@ -491,7 +527,10 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
           ],
         };
       } catch (error) {
-        if (reconcileFinalizedFailure(error)) return finalizedFailureResult();
+        if (reconcileFinalizedFailure(error)) {
+          track("aifp1_pay_failed", { stage: "pay", error_class: errorClass(error) });
+          return finalizedFailureResult();
+        }
         throw error;
       } finally {
         // Receipt caching precedes content retry in the SDK. Retain it even
@@ -506,12 +545,30 @@ export async function runPayableFetch(ctx: ToolContext, args: Record<string, unk
               entry.merchantId === state!.pending!.recovery.quote.merchant_id
           )
         ) {
+          const sent = state.pending as NonNullable<PaymentState["pending"]>;
+          track("aifp1_pay_succeeded", {
+            network: paying?.chain.name,
+            asset: sent.recovery.asset,
+            usd_bucket: usdBucket(sent.amountUsd),
+            ms: Date.now() - started,
+          });
+          stage = "retry";
           delete state.pending;
         }
         store.save(state);
       }
     });
   } catch (error) {
+    const settlement = error instanceof Error && error.name === "V14SettlementError";
+    if (settlement && (error as Error & { code?: string }).code === "V14_GAS_BUDGET_EXCEEDED")
+      track("budget_cap_exceeded", { stage: "gas" });
+    else if (stage || error instanceof PaymentStateError)
+      track("aifp1_pay_failed", {
+        stage: error instanceof PaymentStateError ? "setup" : settlement ? "settle" : stage,
+        error_class: errorClass(error),
+        http_status:
+          error instanceof Aifp1GatewayRetiredError ? 410 : (error as { status?: unknown } | undefined)?.status,
+      });
     if (error instanceof PaymentStateError) return errorResult(error.message);
     // Set before any payment step runs; the fallback only covers a throw from
     // inside validation itself, which returns above.

@@ -1,24 +1,34 @@
 # @aifinpay/analytics
 
-Opt-in telemetry for AiFinPay SDK packages. **Off by default.** Zero runtime
-dependencies: `node:fetch`, `node:fs` and `node:crypto` only.
+Telemetry for AiFinPay SDK packages. **On unless turned off** with
+`AIFINPAY_TELEMETRY=off`. Zero runtime dependencies: `node:fetch`, `node:fs`
+and `node:crypto` only.
 
-This package owns the whole telemetry contract — the opt-in environment
-variables, the install id, payload sanitization, transport and the event
+This package owns the whole telemetry contract — the environment
+variables that turn it off, the install id, payload sanitization, transport and the event
 schema — so there is one network surface to review. Consumer packages
 (`@aifinpay/agent`, `@aifinpay/mcp`, …) only call `emit()`.
 
-## Opting in
+## Turning it off
 
-| `AIFINPAY_TELEMETRY` | What happens                                                                                                      |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| unset / `off`        | Nothing is sent, nothing is written. Any unrecognised value also means off.                                       |
-| `on`                 | Runtime events are sent. A random install id is stored at `~/.aifinpay/.telemetry-id`.                            |
-| `read-only`          | Runtime events are sent, but nothing is written to disk: an existing install id is reused, else a per-process id. |
-| `install`            | Only the one-shot `agent_sdk_install_completed` event from the postinstall script. Runtime events stay off.       |
+| `AIFINPAY_TELEMETRY`                 | What happens                                                                                                      |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| unset or empty                       | Runtime events are sent. A random install id is stored at `~/.aifinpay/.telemetry-id`.                            |
+| `on`                                 | The same, and it wins over `DO_NOT_TRACK` and `CI`.                                                               |
+| `read-only`                          | Runtime events are sent, but nothing is written to disk: an existing install id is reused, else a per-process id. |
+| `off`, `0`, `false`, `no` (any case) | Nothing is sent, nothing is written.                                                                              |
+| `install`                            | Only the one-shot `agent_sdk_install_completed` event from the postinstall script. Runtime events stay off.       |
+| anything else                        | Off: a typo never turns sending on.                                                                               |
+
+Unless the value is `on` or `read-only`, `DO_NOT_TRACK=1` (or `true`) and a
+`CI` variable other than empty, `false` or `0` also turn it off. The first
+run that stores an install id without an explicit `on` prints one line to
+stderr, never to stdout; if the id file cannot be written, the run sends with
+a per-process id and prints nothing. Nothing is sent at install time unless
+`AIFINPAY_TELEMETRY=install`.
 
 `AIFINPAY_TELEMETRY_URL` overrides the destination (default
-`https://telemetry.aifinpay.io/v1/agent`). It must be HTTPS, or HTTP on
+`https://api.aifinpay.io/v1/agent`). It must be HTTPS, or HTTP on
 loopback for local development. An unusable value disables sending — it never
 falls back to the default.
 
@@ -68,12 +78,12 @@ await shutdown();
 
 ## Resetting the install id
 
-Delete `~/.aifinpay/.telemetry-id`. The next opted-in run creates a new random
+Delete `~/.aifinpay/.telemetry-id`. The next run that sends creates a new random
 id. The id is never derived from the machine or user and is never logged.
 
 ## Threat model (summary)
 
 The package sends only what consumers pass to `emit()`, after sanitization,
-only after explicit opt-in, only to an HTTPS destination. The postinstall
+only while it is not turned off, only to an HTTPS destination. The postinstall
 script loads nothing unless `AIFINPAY_TELEMETRY=install` and always exits 0.
 See [docs/adr/0001-telemetry.md](docs/adr/0001-telemetry.md).

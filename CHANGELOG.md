@@ -6,13 +6,25 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
-## MCP 2.18.0 — pays with what the wallet holds
+## MCP 2.19.0 — pays with what the wallet holds
 
 - `payable_fetch` pays in the pay chain's stablecoins or its native coin,
   whichever the wallet holds, in the owner's order (`AIFINPAY_PAY_OPTIONS`);
   `AIFINPAY_PAY_ASSET` alone keeps one asset. The answer names `paid_with`, and
   `payment_setup_status` lists the options. A paid request with more than one
   allowed option makes one extra GET to read the price first.
+## MCP 2.18.0 — usage telemetry
+
+- The MCP server sends usage events through `@aifinpay/analytics` 0.2.0: wallet
+  load, first tool call, and where a `payable_fetch` payment stops. On unless
+  `AIFINPAY_TELEMETRY=off`, `DO_NOT_TRACK=1` or `CI`; no URLs, addresses or
+  exact amounts.
+
+## Analytics 0.2.0 — telemetry on unless turned off (unreleased)
+
+- `@aifinpay/analytics` sends unless `AIFINPAY_TELEMETRY=off` (or `0`,
+  `false`, `no`), `DO_NOT_TRACK` or `CI` turns it off; explicit `on` wins. The
+  first run prints one line to stderr. No consumer emits events yet.
 
 ## MCP 2.17.2 — real remaining quota on self-metered sites
 
@@ -55,6 +67,16 @@ from the corresponding CI or payment artifacts.
   package, preserving per-network provenance, module/ABI digests and WASM pins.
 - Add explicit environment/version-bound inspection and enabled-record selection.
   Keep payment execution unsupported pending backend and verified executor support.
+
+## Deployments 2.2.0 — Tron registry snapshots
+
+- Package curated Tron B2BSplitter v1.4 deployment records in the shared
+  registry format with immutable upstream provenance, and add `tron` /
+  `tronDeployment` to the payment deployment schema.
+- Ship Tron ABI artifacts as `registry/abi/tron/<Contract>/<Contract>.json`,
+  matching the EVM layout, without Hardhat `.dbg.json` files.
+- Preserve upstream settlement metadata without adding SDK execution support or
+  changing the EVM/Solana grabber.
 
 ## Deployments 2.1.5 — NEAR ABI artifact access
 

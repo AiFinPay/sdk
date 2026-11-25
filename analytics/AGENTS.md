@@ -1,6 +1,6 @@
 # @aifinpay/analytics — agent guide
 
-Opt-in SDK telemetry: env contract, install id, payload sanitization, transport
+SDK telemetry, on unless turned off: env contract, install id, payload sanitization, transport
 and the event schema. Read `docs/adr/0001-telemetry.md` before changing behaviour.
 
 ## Scope
@@ -17,7 +17,9 @@ and the event schema. Read `docs/adr/0001-telemetry.md` before changing behaviou
 
 ## Rules
 
-- Default stays off. An unrecognised mode or unusable URL means no sending.
+- Unset means on; `off`/`0`/`false`/`no`, `DO_NOT_TRACK`, `CI` and any
+  unrecognised value mean off; explicit `on`/`read-only` wins. An unusable URL
+  means no sending. The default-on notice goes to stderr only, once per install.
 - Zero runtime dependencies. No third-party analytics SDKs.
 - Never weaken `src/sanitize.ts`; a new redaction gets a case in
   `tests/redteam.test.ts`. Never log the install id or a payload.

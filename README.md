@@ -26,7 +26,7 @@ or production readiness.
 | `@aifinpay/skill`                      | | `npm install @aifinpay/skill`  |
 | `@aifinpay/gate`                       |                                                                                                                                               | `npm install @aifinpay/gate`   |
 | `@aifinpay/wallet`                     |                                                                                                                                              | `npm install @aifinpay/wallet` |
-| `@aifinpay/analytics`                  |                                                                                                                                    | opt-in SDK telemetry          |
+| `@aifinpay/analytics`                  |                                                                                                                                    | SDK telemetry, on by default   |
 | `@aifinpay/deployments`                |                                                                                                                                            | deployment registry package    |
 
 ## Solana paid access
