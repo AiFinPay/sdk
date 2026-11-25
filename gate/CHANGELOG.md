@@ -1,5 +1,15 @@
 # Changelog
 
+## @aifinpay/gate 0.14.1 — a request the edge counted is not counted again
+
+- A request carrying `AIFP-Edge-Counted: 1` is left out of the traffic summary:
+  an edge gate of the same site (the Worker in front of a `--payment origin`
+  site) already counted it, and its own probes no longer show up as visitors.
+  Pricing, admission, metering, events and the answer are unchanged. Only one
+  value of exactly `1` counts; `0`, `true`, an empty value or the field twice is
+  counted as before. Vectors: `edge_counted` in
+  `conformance/vectors/gate-traffic-v1.json`, SPEC section "Traffic summary".
+
 ## @aifinpay/gate 0.14.0 — receipt use, gate identity and traffic summaries
 
 - `createGateReporter` now also sends receipt use: after every paid `serve` it

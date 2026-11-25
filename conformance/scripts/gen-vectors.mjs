@@ -403,6 +403,25 @@ const stillReported = { events: [ev("402", "openai", "ai_crawler", false)], need
 trafficCase("traffic.old_api", "must", "content-enforce", "An API without the traffic route costs no response and no event", quietTraffic, null, { ...stillReported, fault: { traffic: 404 } });
 trafficCase("traffic.refused", "must", "content-enforce", "A refused window costs no response and no event", quietTraffic, null, { ...stillReported, fault: { traffic: 400 } });
 trafficCase("traffic.down", "must", "content-enforce", "A traffic outage costs no response and no event", quietTraffic, null, { ...stillReported, fault: { traffic: 503 } });
+const EDGE = (value) => ({ headers: { [T.EDGE_COUNTED_HEADER]: value } });
+const edgeGet = (ua, value) => get(ua, PAID, EDGE(value));
+const crawler402 = ev("402", "openai", "ai_crawler", false);
+trafficCase("traffic.edge_counted", "must", "content-enforce", "A request an edge gate counted is answered, metered and reported the same, and left out of the summary", [
+  step(edgeGet("chrome", "1"), served()),
+  step(edgeGet("gptbot", "1"), { ...noOrigin(402), body: { golden: "challenge.standard", order: true } }),
+  step(edgeGet("gptbot", " 1 "), noOrigin(402)),
+  step(pay("r", PAID, EDGE("1")), quota(2)),
+  step(pay("r"), quota(1)),
+  step(get("chrome"), served()),
+  step(edgeGet("gptbot", "0"), noOrigin(402)),
+  step(edgeGet("gptbot", "true"), noOrigin(402)),
+  step(edgeGet("gptbot", ""), noOrigin(402)),
+  step(edgeGet("gptbot", ["1", "1"]), noOrigin(402)),
+  step(edgeGet("gptbot", "1, 1"), noOrigin(402)),
+], { ...ENFORCE, classes: [["ai_crawler", "challenged", 5], ["aifp_agent", "paid", 1], ["human", "served", 1]], operators: [["aifinpay", "aifp_agent", "paid", 1], ["openai", "ai_crawler", "challenged", 5]] },
+{ receipts: { r: R() }, events: [...Array(7).fill(crawler402), ev("serve", "aifinpay", "aifp_agent", true), ev("serve", "aifinpay", "aifp_agent", true)], needs: ["traffic", "events"] });
+trafficCase("traffic.edge_counted_only", "must", "content-enforce", "A window with only requests an edge gate counted is not sent, and their events are", [step(edgeGet("chrome", "1"), served()), step(edgeGet("gptbot", "1"), noOrigin(402))], null,
+  { events: [crawler402], needs: ["traffic", "events"] });
 
 const vectors = {
   schema: 1,
@@ -845,12 +864,39 @@ const scenarios = [
   scenario("idle", [[300, null, []], [[], []]]),
 ];
 for (const v of scenarios) agree(`traffic.sender.${v.name}`, T.senderRun(v.steps), v.expect);
+
+// Edge counted: each request carries the AIFP-Edge-Counted field lines it was sent with; [] or none is no header.
+const edgeValue = (name, lines, edge) => ({ name, lines, edge_counted: edge });
+const edgeValues = [
+  edgeValue("one", ["1"], true), edgeValue("one_padded", [" 1 "], true), edgeValue("one_tab", ["\t1"], true),
+  edgeValue("absent", [], false), edgeValue("zero", ["0"], false), edgeValue("true", ["true"], false), edgeValue("empty", [""], false),
+  edgeValue("two_lines", ["1", "1"], false), edgeValue("joined", ["1, 1"], false), edgeValue("one_comma", ["1,"], false), edgeValue("leading_zero", ["01"], false),
+  edgeValue("decimal", ["1.0"], false), edgeValue("yes", ["yes"], false), edgeValue("one_then_empty", ["1", ""], false),
+];
+for (const v of edgeValues) agree(`traffic.edge_counted.values.${v.name}`, T.edgeCounted(v.lines), v.edge_counted);
+const marked = (r, lines) => ({ ...r, edge_counted: lines });
+const EDGE_READER = rq("/blog/a", "human", "unknown", "served", "US", null, 2);
+const EDGE_CRAWLER = rq("/blog/a", "ai_crawler", "openai", "challenged", "US", 8075, 3);
+const EDGE_PAID = rq("/api/v1/x", "aifp_agent", "aifinpay", "paid", "DE", 16509, 1);
+const edgeInputs = [
+  ["unmarked", [EDGE_READER, EDGE_CRAWLER, EDGE_PAID]],
+  ["marked_only", [marked(EDGE_READER, ["1"]), marked(EDGE_CRAWLER, ["1"]), marked(EDGE_PAID, [" 1 "])]],
+  ["other_values", edgeValues.filter((v) => !v.edge_counted).map((v) => marked(EDGE_CRAWLER, v.lines))],
+  ["mixed", [EDGE_READER, marked(EDGE_READER, ["1"]), marked(EDGE_CRAWLER, ["1"]), marked(EDGE_CRAWLER, ["0"]), marked(EDGE_CRAWLER, ["1", "1"]), marked(EDGE_PAID, ["1"]), EDGE_PAID]],
+];
+const edgeBuild = edgeInputs.map(([name, requests]) => ({ name, window: WINDOW, platform: BOTH, requests, body: T.buildTraffic(WINDOW, BOTH, requests) }));
+if (edgeBuild.find((v) => v.name === "marked_only").body !== null) throw new Error("traffic.edge_counted.marked_only: expected no body");
+if (edgeBuild.find((v) => v.name === "other_values").body !== T.buildTraffic(WINDOW, BOTH, edgeValues.filter((v) => !v.edge_counted).map(() => EDGE_CRAWLER)))
+  throw new Error("traffic.edge_counted.other_values: every other value must be counted");
+if (edgeBuild.find((v) => v.name === "mixed").body !== T.buildTraffic(WINDOW, BOTH, [EDGE_READER, marked(EDGE_CRAWLER, ["0"]), marked(EDGE_CRAWLER, ["1", "1"]), EDGE_PAID]))
+  throw new Error("traffic.edge_counted.mixed: only the marked requests may be left out");
 const trafficVectors = {
   schema: 1, path: "/v1/merchants/{merchant_id}/gate-traffic", auth_header: "AIFP-Merchant-Secret", max_bytes: T.MAX_BYTES, max_rows: T.MAX_ROWS, window_seconds: 300,
   outcomes: T.OUTCOMES, ua_classes: G.UA_CLASSES, operators: G.GATE_OPERATORS, language_prefixes: T.LANGUAGE_PREFIXES, asset_extensions: T.ASSET_EXTENSIONS, caps: T.CAPS,
   section_pattern: T.SECTION_PATTERN.source, section_max_digits: T.SECTION_MAX_DIGITS, now: NOW,
   sections, counted: countedVectors, countries, networks, build, accept, reject, duplicates,
   sender: { hold: T.SENDER.hold, stale_seconds: T.SENDER.stale, pause_seconds: { 404: T.SENDER.pause404, other: T.SENDER.pauseOther }, scenarios },
+  edge_counted: { header: T.EDGE_COUNTED_HEADER, values: edgeValues, build: edgeBuild },
 };
 
 const outputs = [
@@ -859,7 +905,7 @@ const outputs = [
   [aboutOut, JSON.stringify(aboutVectors, null, 1) + "\n", `${aboutVectors.vectors.length} about vectors`],
   [useOut, JSON.stringify(useVectors, null, 1) + "\n", `${useVectors.vectors.length} receipt-use vectors`],
   [identityOut, JSON.stringify(identityVectors, null, 1) + "\n", `${format.length + parse.length + userAgents.length} identity vectors`],
-  [trafficOut, JSON.stringify(trafficVectors, null, 1) + "\n", `${sections.length + countedVectors.length + countries.length + networks.length + build.length + accept.length + reject.length + duplicates.length + scenarios.length} traffic vectors`],
+  [trafficOut, JSON.stringify(trafficVectors, null, 1) + "\n", `${sections.length + countedVectors.length + countries.length + networks.length + build.length + accept.length + reject.length + duplicates.length + scenarios.length + edgeValues.length + edgeBuild.length} traffic vectors`],
 ];
 if (process.argv.includes("--check")) {
   for (const [file, text, what] of outputs) {

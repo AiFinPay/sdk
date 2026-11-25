@@ -10,8 +10,9 @@ from aifinpay_gate import (AifpGateMiddleware, AifpGateWSGI, Gate, GateReporter,
                            ReaderProof, Route, SimpleRequest, known_ai_agent, unproven_pays)
 from aifinpay_gate.identity import VERSION, charge_of, gate_headers
 from aifinpay_gate.reporter import _utc_now
-from aifinpay_gate.traffic import (ABSENT, TrafficSender, TrafficTally, _utc, counted, country_of, network_of,
-                                   section_of)
+from aifinpay_gate.asgi import _AsgiRequest
+from aifinpay_gate.traffic import (ABSENT, TrafficSender, TrafficTally, _utc, counted, country_of, edge_counted,
+                                   network_of, section_of)
 
 from test_gate import KEY, NOW, jwk, token
 
@@ -187,6 +188,25 @@ def test_builds_every_vector_body_byte_for_byte(vector):
     assert tally.body(vector["window"]) == vector["body"]
 
 
+def _joined(lines):
+    """Field lines as one value, the way WSGI servers and the ASGI adapter join them."""
+    return ", ".join(lines) if lines else None
+
+
+def test_an_edge_counted_request_as_the_vectors_say():
+    for v in TRAFFIC["edge_counted"]["values"]:
+        assert edge_counted(_joined(v["lines"])) is v["edge_counted"], v["name"]
+
+
+@pytest.mark.parametrize("vector", TRAFFIC["edge_counted"]["build"], ids=[v["name"] for v in TRAFFIC["edge_counted"]["build"]])
+def test_builds_every_edge_counted_body_byte_for_byte(vector):
+    tally = TrafficTally()
+    for r in vector["requests"]:
+        if not edge_counted(_joined(r.get("edge_counted"))):
+            tally.add(r["target"], r["ua_class"], r["operator"], r["outcome"], r["country"], r["network"], r.get("n", 1))
+    assert tally.body(vector["window"]) == vector["body"]
+
+
 # ── traffic from the gate ───────────────────────────────────────────────────
 
 def content_gate(reporter, **kw):
@@ -264,6 +284,56 @@ def test_shadow_reports_the_decision_and_a_paid_admission_is_paid():
     [w] = reporter._opener.windows()
     assert w["classes"] == [["ai_crawler", "challenged", 1], ["aifp_agent", "paid", 1]]
     assert w["mode"] == "shadow"
+
+
+def test_an_edge_counted_request_is_answered_and_reported_the_same_and_left_out_of_the_summary():
+    receipt = token(aud=MERCHANT, unit_quota=5, receipt_id="rcpt_00000000000000c7")
+
+    def run(extra):
+        reporter = new_reporter()
+        gate = Gate(MERCHANT, resource="/paid", store=MemoryStore(), jwks={"keys": [jwk(KEY)]}, now=lambda: NOW,
+                    should_charge=known_ai_agent, on_event=reporter.on_event)
+        answers = [json.dumps(gate.decide(SimpleRequest("/paid", {**h, **extra})).as_dict(), sort_keys=True)
+                   for h in ({"User-Agent": BROWSER}, {"User-Agent": GPTBOT}, {"AIFP-Receipt": receipt},
+                             {"AIFP-Receipt": receipt})]
+        reporter.flush(timeout=2)
+        reporter.flush_traffic()
+        events = [{k: v for k, v in e.items() if k not in ("id", "at")}
+                  for r in reporter._opener.to("/gate-events") for e in json.loads(r.data)["events"]]
+        return answers, events, reporter._opener.windows()
+
+    marked, plain = run({"AIFP-Edge-Counted": "1"}), run({})
+    assert marked[0] == plain[0]
+    assert json.loads(marked[0][1])["status"] == 402
+    assert marked[1] == plain[1]
+    assert [e["kind"] for e in marked[1]] == ["402", "serve", "serve"]
+    assert marked[2] == []
+    assert plain[2][0]["classes"] == [["ai_crawler", "challenged", 1], ["aifp_agent", "paid", 2], ["human", "served", 1]]
+
+
+def test_only_one_value_of_exactly_1_leaves_a_request_out_of_the_summary():
+    reporter = new_reporter()
+    gate = content_gate(reporter)
+    left, kept = ["1", " 1 ", "\t1"], ["0", "true", "", "1, 1", "1,", "01", "yes"]
+    for value in left + kept:
+        assert gate.decide(get("/blog/a", GPTBOT, **{"aifp-edge-counted": value})).status == 402
+    gate.decide(get("/blog/a", GPTBOT))
+    reporter.flush_traffic()
+    assert reporter._opener.windows()[0]["classes"] == [["ai_crawler", "challenged", len(kept) + 1]]
+
+
+def test_the_asgi_adapter_reads_a_repeated_edge_counted_field_as_repeated():
+    def scope(*values):
+        return {"type": "http", "path": "/blog/a", "headers": [(b"user-agent", GPTBOT.encode())] + [
+            (b"aifp-edge-counted", v.encode()) for v in values]}
+    assert _AsgiRequest(scope("1")).header("AIFP-Edge-Counted") == "1"
+    assert _AsgiRequest(scope("1", "1")).header("AIFP-Edge-Counted") == "1, 1"
+    reporter = new_reporter()
+    gate = content_gate(reporter)
+    gate.decide(_AsgiRequest(scope("1")))
+    gate.decide(_AsgiRequest(scope("1", "1")))
+    reporter.flush_traffic()
+    assert reporter._opener.windows()[0]["classes"] == [["ai_crawler", "challenged", 1]]
 
 
 def test_traffic_false_sends_nothing():

@@ -54,6 +54,14 @@ def counted(target, outcome):
     return not any(last.endswith("." + ext) for ext in ASSET_EXTENSIONS)
 
 
+HEADER_EDGE_COUNTED = "AIFP-Edge-Counted"
+
+
+def edge_counted(value):
+    """An edge gate of the same site already counted this request: exactly ``1``, one value."""
+    return isinstance(value, str) and value.strip(" \t") == "1"
+
+
 def country_of(value):
     if isinstance(value, str) and re.fullmatch(r"[A-Za-z]{2}", value) and value.upper() != "XX":
         return value.upper()

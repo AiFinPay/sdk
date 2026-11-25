@@ -17,6 +17,7 @@ export const SECTION_MAX_DIGITS = 4;
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 export const SENDER = { hold: 3, stale: 3600, pause404: 21600, pauseOther: 86400 };
+export const EDGE_COUNTED_HEADER = "AIFP-Edge-Counted";
 
 const KEYS = ["pkg", "ver", "platform", "mode", "charge"];
 const TABLES = ["classes", "operators", "sections", "countries", "networks"];
@@ -89,6 +90,11 @@ export function counted(target, outcome) {
   return !ASSET_EXTENSIONS.some((ext) => last.endsWith(`.${ext}`));
 }
 
+// The field lines a request carried for AIFP-Edge-Counted; exactly one, `1` after HTTP trimming, means an edge gate counted it.
+export function edgeCounted(lines) {
+  return Array.isArray(lines) && lines.length === 1 && typeof lines[0] === "string" && lines[0].replace(/^[ \t]+|[ \t]+$/g, "") === "1";
+}
+
 export function countryOf(value) {
   return typeof value === "string" && /^[A-Za-z]{2}$/.test(value) && value.toUpperCase() !== "XX" ? value.toUpperCase() : "ZZ";
 }
@@ -127,7 +133,7 @@ export function buildTraffic(window, platform, requests) {
     tables[name].set(key, (tables[name].get(key) ?? 0) + n);
   };
   for (const r of requests) {
-    if (!counted(r.target, r.outcome)) continue;
+    if (!counted(r.target, r.outcome) || edgeCounted(r.edge_counted)) continue;
     const n = (r.n ?? 1) * window.sample;
     const agent = r.ua_class !== "human";
     add("classes", [r.ua_class, r.outcome], n);

@@ -3,7 +3,7 @@
 import re
 
 # This package's version; a test keeps it equal to pyproject.toml.
-VERSION = "0.11.0"
+VERSION = "0.11.1"
 
 _VALUE = re.compile(r"[a-z0-9._-]{1,32}")
 
