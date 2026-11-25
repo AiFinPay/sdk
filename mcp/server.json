@@ -3,7 +3,7 @@
   "name": "io.github.daochild/aifinpay",
   "title": "AiFinPay",
   "description": "Payment infrastructure for AI agents: wallet, passport, owner-enabled Polygon and Base payments.",
-  "version": "2.2.2",
+  "version": "2.20.0",
   "websiteUrl": "https://aifinpay.io",
   "repository": {
     "url": "https://github.com/AiFinPay/sdk",
@@ -20,7 +20,7 @@
     {
       "registryType": "npm",
       "identifier": "@aifinpay/mcp",
-      "version": "2.2.2",
+      "version": "2.20.0",
       "transport": {
         "type": "stdio"
       },
