@@ -1,6 +1,6 @@
 # @aifinpay/wallet
 
-Derive an AiFinPay agent wallet — Solana, EVM, NEAR and Aptos addresses from
+Derive an AiFinPay agent wallet — Solana, EVM, NEAR, Aptos and Tron addresses from
 one seed — with four tiny crypto dependencies and nothing else.
 
 ```
@@ -14,6 +14,7 @@ Your agent's addresses — the EVM one is the same on every EVM chain:
 
   EVM     0x…
   Solana  …
+  Tron    T…
 ```
 
 With `--plain` the first line reads `Created ~/.aifinpay/agent.json (mode 600).`
@@ -146,9 +147,11 @@ w.evmAddress; // 0x… (same on every EVM chain)
 w.solanaAddress; // base58
 w.nearAddress; // hex Ed25519 public key
 w.aptosAddress; // 0x… authentication key
+w.tronAddress; // T… base58check
 w.keys.seedHex; // 32-byte seed — THE thing to back up
 w.keys.evmPrivateKey; // for building your own transactions
 w.keys.solanaSecretKeyB58; // tweetnacl 64-byte secret, base58
+w.keys.tronPrivateKeyHex; // Tron secp256k1 key, hex
 
 deriveWallet(w.keys.seedHex); // same seed → same wallet, deterministic
 ```
@@ -167,7 +170,7 @@ and legacy key recovery continue to work. No keystore migration is required.
 `SHA-256("aifinpay:solana:v1\0" || seed)`. `legacy-solana` derives it from the
 raw seed for unindexed wallets. Indexed wallets derive each chain key from its
 own domain, index and recovery seed in either mode, matching
-`@aifinpay/agent` and `@aifinpay/mcp`. EVM, NEAR and Aptos are the same in
+`@aifinpay/agent` and `@aifinpay/mcp`. EVM, NEAR, Aptos and Tron are the same in
 both modes, as is the deprecated Casper material.
 
 ```ts

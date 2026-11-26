@@ -2,7 +2,7 @@
  * Lightweight AiFinPay wallet derivation — addresses + key material only.
  *
  * No chain client is imported here. One 32-byte AiFinPay seed deterministically
- * derives EVM, Solana, NEAR and Aptos addresses. Deprecated Casper material
+ * derives EVM, Solana, NEAR, Aptos and Tron addresses. Deprecated Casper material
  * is retained solely for backwards compatibility.
  */
 
@@ -23,6 +23,7 @@ export enum DerivationDomain {
   SOLANA = "aifinpay:solana:v1\0",
   NEAR = "aifinpay:near:v1\0",
   APTOS = "aifinpay:aptos:v1\0",
+  TRON = "aifinpay:tron:v1\0",
   /** @deprecated Casper is no longer supported; retained for legacy derivation compatibility. */
   CASPER = "aifinpay:casper:v1\0",
 }
@@ -71,6 +72,18 @@ function toChecksum(addr20: Uint8Array): `0x${string}` {
   return out as `0x${string}`;
 }
 
+function tronAddressFromKey(privateKey: Uint8Array): string {
+  // Tron: 0x41 || keccak256(uncompressed pubkey)[-20:], base58check (double SHA-256).
+  const payload = new Uint8Array(21);
+  payload[0] = 0x41;
+  payload.set(keccak_256(secp256k1.getPublicKey(privateKey, false).slice(1)).slice(-20), 1);
+  const checksum = sha256(sha256(payload)).slice(0, 4);
+  const full = new Uint8Array(25);
+  full.set(payload, 0);
+  full.set(checksum, 21);
+  return b58.encode(full);
+}
+
 function aptosAuthKey(publicKey: Uint8Array): `0x${string}` {
   // Aptos single-key Ed25519 authentication key = sha3-256(pubkey || scheme=0).
   const material = new Uint8Array(publicKey.length + 1);
@@ -88,6 +101,8 @@ export interface DerivedWallet {
   nearAddress: string;
   /** Aptos authentication-key account address. */
   aptosAddress: `0x${string}`;
+  /** Tron base58check address (T…). */
+  tronAddress: string;
   /** @deprecated Casper is no longer supported; retained for legacy address compatibility. */
   casperAddress: string;
   /** @deprecated Casper is no longer supported; retained for legacy public-key compatibility. */
@@ -106,6 +121,8 @@ export interface DerivedWallet {
     /** Domain-separated Ed25519 seeds for non-EVM local signers. */
     nearSecretSeedHex: string;
     aptosSecretSeedHex: string;
+    /** Tron secp256k1 private key (hex, no 0x prefix). */
+    tronPrivateKeyHex: string;
     /** @deprecated Casper is no longer supported; retained for legacy key recovery. */
     casperSecretSeedHex: string;
   };
@@ -119,6 +136,7 @@ export type DerivationMode = "standard" | "legacy-solana";
  *   EVM    = secp256k1(SHA-256("aifinpay:evm:v1\\0" || seed))
  *   NEAR   = Ed25519(SHA-256("aifinpay:near:v1\\0" || seed))
  *   Aptos  = Ed25519(SHA-256("aifinpay:aptos:v1\\0" || seed)), auth-key address
+ *   Tron   = secp256k1(SHA-256("aifinpay:tron:v1\\0" || seed)), base58check address
  *   Casper (deprecated) = Ed25519(SHA-256("aifinpay:casper:v1\\0" || seed))
  *
  * This seed wallet is not BIP-39/BIP-44. Existing EVM/Solana/Casper addresses
@@ -163,6 +181,12 @@ export function deriveWallet(seedHex: string, options?: { mode?: DerivationMode;
   const aptosKp = nacl.sign.keyPair.fromSeed(aptosSeed);
   const aptosAddress = aptosAuthKey(aptosKp.publicKey);
 
+  const tronPriv =
+    options?.index === undefined
+      ? domainSeed(DerivationDomain.TRON, seed)
+      : indexedDomainSeed(DerivationDomain.TRON, seed, options.index);
+  const tronAddress = tronAddressFromKey(tronPriv);
+
   const casperSeed =
     options?.index === undefined
       ? domainSeed(DerivationDomain.CASPER, seed)
@@ -181,6 +205,7 @@ export function deriveWallet(seedHex: string, options?: { mode?: DerivationMode;
     evmAddress,
     nearAddress,
     aptosAddress,
+    tronAddress,
     casperAddress,
     casperPublicKey,
     derivationMode: mode,
@@ -191,6 +216,7 @@ export function deriveWallet(seedHex: string, options?: { mode?: DerivationMode;
       evmPrivateKey: `0x${hex(evmPriv)}` as `0x${string}`,
       nearSecretSeedHex: hex(nearSeed),
       aptosSecretSeedHex: hex(aptosSeed),
+      tronPrivateKeyHex: hex(tronPriv),
       casperSecretSeedHex: hex(casperSeed),
     },
   };

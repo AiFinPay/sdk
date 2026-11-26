@@ -142,7 +142,8 @@ function print(w: DerivedWallet, created: boolean, isEncrypted: boolean = false)
     `Your agent's addresses${w.derivationIndex === undefined ? "" : ` (index ${w.derivationIndex})`} — ` +
       `the EVM one is the same on every EVM chain:\n\n` +
       `  EVM     ${w.evmAddress}\n` +
-      `  Solana  ${w.solanaAddress}\n\n` +
+      `  Solana  ${w.solanaAddress}\n` +
+      `  Tron    ${w.tronAddress}\n\n` +
       (w.derivationMode === "legacy-solana" || w.derivationIndex !== undefined
         ? `The keystore is the one @aifinpay/mcp reads, so \`npx @aifinpay/mcp\`\n` + `uses it with no config.\n\n`
         : `Do not fund this wallet for use with @aifinpay/mcp: standard mode derives a\n` +

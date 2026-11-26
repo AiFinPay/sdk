@@ -15,6 +15,8 @@
  * and index, while unindexed wallets retain the existing secret-key path.
  * This light package CREATES a wallet anywhere; the full SDK is needed only
  * when you actually PAY.
+ * Tron is derived from its own `aifinpay:tron:v1\0` domain; the full SDK does
+ * not derive or sign for Tron.
  * Deprecated Casper fields remain available for legacy compatibility only.
  */
 export {

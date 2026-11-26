@@ -6,6 +6,13 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## Wallet: Tron address — wallet 1.6.0
+
+- `@aifinpay/wallet` derives a Tron address and key from the agent seed under
+  its own `aifinpay:tron:v1\0` domain and prints it in `new`/`show`. Existing
+  addresses and keystores are unchanged. `@aifinpay/agent`, MCP and the Python
+  SDK do not derive Tron keys.
+
 ## Self-hosted gates: AiFinPay decides who pays — gate 0.15.0
 
 - `@aifinpay/gate` adds `hostedDetect`, a `shouldCharge` backed by AiFinPay's

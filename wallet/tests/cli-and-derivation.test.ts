@@ -587,3 +587,44 @@ describe("the library", () => {
     }
   });
 });
+
+// ── Tron ─────────────────────────────────────────────────────────────────────
+//
+// Vectors cross-checked with viem's privateKeyToAddress (an implementation
+// independent of this package's @noble code) plus base58check of 0x41 || addr20.
+describe("Tron derivation", () => {
+  const TRON = {
+    ["11".repeat(32)]: {
+      address: "TBvo3dxmhyr7UCguobJXT46BquV6EWT9Ex",
+      key: "3c4ab52301f8874522488f51317a4689af98ba9a4f3efd0336df80d9d72a0884",
+    },
+    ["ab".repeat(32)]: {
+      address: "TDyVi6ZzDCZBPgTxVgFgAZRZdzb9s67qas",
+      key: "0efa02c5898e6fb0fdfeee78b34e5c19240b7cd9f5d1609c40d4be6b9b2228ce",
+    },
+  } as Record<string, { address: string; key: string }>;
+
+  for (const [seed, tron] of Object.entries(TRON)) {
+    it(`derives the pinned Tron address and key in both modes, for seed ${seed.slice(0, 4)}…`, () => {
+      expect(DerivationDomain.TRON).toBe("aifinpay:tron:v1\0");
+      for (const mode of ["standard", "legacy-solana"] as const) {
+        const w = deriveWallet(seed, { mode });
+        expect([w.tronAddress, w.keys.tronPrivateKeyHex]).toEqual([tron.address, tron.key]);
+      }
+    });
+  }
+
+  it("leaves the existing EVM, Solana and Casper addresses unchanged", () => {
+    const w = deriveWallet("11".repeat(32), { mode: "legacy-solana" });
+    expect({ solana: w.solanaAddress, evm: w.evmAddress, casper: w.casperAddress }).toEqual(SDK["11".repeat(32)]);
+  });
+
+  it("derives a distinct Tron key per index and from the EVM key", () => {
+    const seed = "11".repeat(32);
+    const base = deriveWallet(seed);
+    const child = deriveWallet(seed, { index: 1 });
+    expect(child.tronAddress).not.toBe(base.tronAddress);
+    expect(deriveWallet(seed, { index: 1 }).tronAddress).toBe(child.tronAddress);
+    expect(base.keys.tronPrivateKeyHex).not.toBe(base.keys.evmPrivateKey.slice(2));
+  });
+});

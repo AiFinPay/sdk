@@ -14,17 +14,19 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SEEDS = ["11".repeat(32), "ab".repeat(32), "0f".repeat(32), "00".repeat(31) + "01"];
 
 describe("derivation", () => {
-  it("re-derives the same five-family wallet from its own seed", () => {
+  it("re-derives the same six-family wallet from its own seed", () => {
     const w = deriveWallet("ab".repeat(32));
     expect(deriveWallet(w.keys.seedHex)).toEqual(w);
   });
 
-  it("derives valid public identifiers for EVM, Solana, NEAR, Aptos and Casper", () => {
+  it("derives valid public identifiers for EVM, Solana, NEAR, Aptos, Tron and Casper", () => {
     const w = deriveWallet("42".repeat(32));
     expect(w.evmAddress).toMatch(/^0x[0-9a-fA-F]{40}$/);
     expect(w.solanaAddress).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
     expect(w.nearAddress).toMatch(/^[0-9a-f]{64}$/);
     expect(w.aptosAddress).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(w.tronAddress).toMatch(/^T[1-9A-HJ-NP-Za-km-z]{33}$/);
+    expect(w.keys.tronPrivateKeyHex).toMatch(/^[0-9a-f]{64}$/);
     expect(w.casperAddress).toMatch(/^account-hash-[0-9a-f]{64}$/);
     expect(w.casperPublicKey).toMatch(/^01[0-9a-f]{64}$/);
     expect(w.keys.nearSecretSeedHex).toMatch(/^[0-9a-f]{64}$/);

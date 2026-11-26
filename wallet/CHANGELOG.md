@@ -1,5 +1,16 @@
 # @aifinpay/wallet — changelog
 
+## 1.6.0 — Tron address
+
+- Derive a Tron address from the same seed:
+  `secp256k1(SHA-256("aifinpay:tron:v1\0" || seed))`, encoded as base58check
+  of `0x41 || keccak256(pubkey)[-20:]`. Indexed wallets append the index after
+  the domain separator, as for the other chains. New fields: `tronAddress`,
+  `keys.tronPrivateKeyHex`, `DerivationDomain.TRON`. `new` and `show` print the
+  Tron address. Existing addresses and the keystore format are unchanged.
+- The full SDK and MCP do not derive Tron keys; this package only creates the
+  address and key material.
+
 ## 1.5.1 — documentation refresh
 
 - Remove a historical issue-reference snapshot from the README; describe the
