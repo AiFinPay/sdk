@@ -1,7 +1,7 @@
 name: aifinpay
 displayName: AiFinPay
 description: Payment infrastructure for AI agents. A persistent non-custodial agent wallet, Agent Passport resolution, route discovery and non-signing settlement invoices; within a built-in $5 / $20 ceiling and the owner's dashboard Controls, payable_fetch buys prepaid access to AIFP-1 merchants on the owner's pay chain (Polygon by default), in its native currency or a pinned stablecoin.
-version: 2.17.3
+version: 2.20.1
 license: MIT
 homepage: https://aifinpay.io
 repository: https://github.com/AiFinPay/sdk

@@ -236,8 +236,8 @@ if (arg === "init") {
 
   if (selected && selected.source !== "legacy-keystore") {
     const agent = selected.seedHash
-      ? await AiFinPayAgent.fromSeed(selected.seedHash, { derivationIndex: selected.derivationIndex })
-      : await AiFinPayAgent.fromSolanaSecret(selected.secretB58);
+      ? await AiFinPayAgent.fromSeed(selected.seedHash, { derivationIndex: selected.derivationIndex, telemetry: false })
+      : await AiFinPayAgent.fromSolanaSecret(selected.secretB58, { telemetry: false });
     emit(
       {
         keystore: null,
@@ -325,8 +325,8 @@ if (arg === "init") {
     }
   }
   const agent = selected?.seedHash
-    ? await AiFinPayAgent.fromSeed(selected.seedHash, { derivationIndex: selected.derivationIndex })
-    : await AiFinPayAgent.fromSolanaSecret(store.secretB58);
+    ? await AiFinPayAgent.fromSeed(selected.seedHash, { derivationIndex: selected.derivationIndex, telemetry: false })
+    : await AiFinPayAgent.fromSolanaSecret(store.secretB58, { telemetry: false });
   // The server cannot open an encrypted keystore without the passphrase, so a
   // config block without it does not start.
   const encrypted = freshlyCreated ? Boolean(PASSPHRASE) : Boolean(store.encrypted);

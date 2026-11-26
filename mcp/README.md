@@ -287,6 +287,10 @@ Three ways to turn it off: `AIFINPAY_TELEMETRY=off`, `DO_NOT_TRACK=1`, or a
 `CI` variable (unless `AIFINPAY_TELEMETRY=on`). Nothing is sent at install
 time.
 
+The SDK's own paid-call report (`/api/telemetry`, with the wallet address, the
+amount and the transaction) is never sent from this server: it builds every
+agent with `telemetry: false`, whatever the environment says.
+
 ## Link the agent to its owner's dashboard
 
 The owner sees the agent's balance, payments and receipts at
