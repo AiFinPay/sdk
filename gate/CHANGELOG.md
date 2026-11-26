@@ -8,11 +8,25 @@
   package. The call carries the client address, the User-Agent, the path
   without its query and the headers in `DETECT_HEADERS`; never a cookie, an
   Authorization header or a receipt.
-- It fails free: a network error, a non-200, a body that is not an answer or a
-  reply slower than `timeoutMs` (default 150 ms) serves the request free and is
-  not cached. An answer is reused per address and User-Agent for the
-  `cache_ttl_s` the service sends. A request carrying `AIFP-Receipt` or
-  `AIFP-Agent-Id` is charged without a call. Reported as `charge=custom`.
+- On failure it falls back to a local rule (this replaces "failure is free"):
+  a network error, a non-200 (a 429 included), a body that is not an answer or
+  a reply slower than `timeoutMs` (default 150 ms) is decided by the new
+  `fallback` option, default `knownAiAgent`, so a crawler that names itself
+  pays while the service is down and a browser still reads free. The fallback's
+  answer is not cached; a throwing fallback serves free. `fallback: () => false`
+  restores the old behaviour. After `pauseAfterFailures` (5) failures in a row
+  the service is not called for `pauseMs` (30 s). A request carrying
+  `AIFP-Receipt` or `AIFP-Agent-Id` is charged without a call. Reported as
+  `charge=custom`.
+- An answer is reused for the `cache_ttl_s` the service sends, per address,
+  User-Agent and a SHA-256 digest of the forwarded headers (Web Bot Auth
+  headers by presence, `AIFP-Edge-Signal` by `vb`, `cat` and `score`), so a
+  signed agent or a scripted client no longer inherits a browser's answer, or
+  a browser a scripted client's.
+- The call carries the request method (`GateRequest.method`, a new optional
+  field `aifpGate` fills), so a Web Bot Auth signature over `@method` verifies.
+- A loopback, private, link-local or unspecified client address (IPv4, IPv6,
+  IPv4-mapped) is never sent: the fallback decides and nothing is cached.
 - `DETECT_HEADERS` includes `AIFP-Edge-Signal`: the signal a merchant's
   Cloudflare Worker ([`examples/cloudflare-edge-signal`](../examples/cloudflare-edge-signal))
   signs from Cloudflare's verified-bot flag, category and bot score. The gate
@@ -23,7 +37,9 @@
   User-Agent, and AiFinPay can verify which operator it is.
 - `aifpGate` warns once when `unprovenPays` or `hostedDetect` runs behind
   Express `trust proxy: true`: `req.ip` then comes from X-Forwarded-For, which
-  the client writes.
+  the client writes. It also warns once when `trust proxy` is not set and a
+  request arrives with `X-Forwarded-For` or `CF-Connecting-IP`: `req.ip` is
+  then the proxy's address for every visitor.
 
 ## @aifinpay/gate 0.14.1 — a request the edge counted is not counted again
 

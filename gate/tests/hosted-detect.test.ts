@@ -190,3 +190,202 @@ describe("hostedDetect inside the gate", () => {
     expect((await gate(visitor())).ok).toBe(true);
   });
 });
+
+describe("hostedDetect — the cache key covers what the service reads", () => {
+  const BROWSER = {
+    accept: "text/html",
+    "sec-ch-ua": '"Chromium";v="131"',
+    "sec-fetch-mode": "navigate",
+    "sec-fetch-dest": "document",
+  };
+  const SIGNED = (sig: string, created: number) => ({
+    "Signature-Agent": '"https://chatgpt.com"',
+    "Signature-Input": `sig1=("@authority" "signature-agent");created=${created};keyid="k";tag="web-bot-auth"`,
+    Signature: `sig1=:${sig}:`,
+  });
+
+  it("a signed request after a free answer for the same address and User-Agent asks again", async () => {
+    const { calls, fetch } = service((body) => json({ charge: "signature-agent" in body.headers, cache_ttl_s: 60 }));
+    const detect = hostedDetect({ merchantId: MERCHANT_ID, merchantSecret: SECRET, fetch });
+    expect(await detect(visitor())).toBe(false);
+    expect(await detect(visitor(SIGNED("AAAA", 1)))).toBe(true);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("a browser after a scripted client with the same address and User-Agent asks again", async () => {
+    const { calls, fetch } = service((body) => json({ charge: !body.headers["sec-fetch-mode"], cache_ttl_s: 60 }));
+    const detect = hostedDetect({ merchantId: MERCHANT_ID, merchantSecret: SECRET, fetch });
+    expect(await detect(visitor())).toBe(true);
+    expect(await detect(visitor(BROWSER))).toBe(false);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("requests alike in everything the key covers hit the cache; signature values do not count", async () => {
+    const { calls, fetch } = service(() => json({ charge: true, cache_ttl_s: 60 }));
+    const detect = hostedDetect({ merchantId: MERCHANT_ID, merchantSecret: SECRET, fetch });
+    await detect(visitor({ ...BROWSER, ...SIGNED("AAAA", 1) }));
+    await detect(visitor({ ...BROWSER, ...SIGNED("BBBB", 2) }));
+    expect(calls).toHaveLength(1);
+  });
+
+  it("an edge signal differing only in ts and sig hits the cache; a different score does not", async () => {
+    const { calls, fetch } = service(() => json({ charge: false, cache_ttl_s: 60 }));
+    const detect = hostedDetect({ merchantId: MERCHANT_ID, merchantSecret: SECRET, fetch });
+    const signal = (ts: number, score: number, sig: string) =>
+      `v=1;ts=${ts};vb=0;cat=;score=${score};sig=${sig.repeat(43)}`;
+    await detect(visitor({ "AIFP-Edge-Signal": signal(1760000000, 95, "a") }));
+    await detect(visitor({ "AIFP-Edge-Signal": signal(1760000060, 95, "b") }));
+    expect(calls).toHaveLength(1);
+    await detect(visitor({ "AIFP-Edge-Signal": signal(1760000120, 3, "c") }));
+    expect(calls).toHaveLength(2);
+  });
+});
+
+describe("hostedDetect — on failure, the local rule", () => {
+  const GPTBOT = { "user-agent": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.2" };
+  const down = () => service(() => json({ error: "AIFP-503" }, 503));
+
+  it("by default a named crawler pays and a browser reads free", async () => {
+    const { fetch } = down();
+    const detect = hostedDetect({ merchantId: MERCHANT_ID, merchantSecret: SECRET, fetch });
+    expect(await detect(visitor(GPTBOT))).toBe(true);
+    expect(await detect(visitor())).toBe(false);
+  });
+
+  it("fallback: () => false serves both free; a throwing fallback serves free", async () => {
+    const { fetch } = down();
+    const free = hostedDetect({ merchantId: MERCHANT_ID, merchantSecret: SECRET, fetch, fallback: () => false });
+    expect(await free(visitor(GPTBOT))).toBe(false);
+    expect(await free(visitor())).toBe(false);
+    const throwing = hostedDetect({
+      merchantId: MERCHANT_ID,
+      merchantSecret: SECRET,
+      fetch,
+      fallback: () => {
+        throw new Error("boom");
+      },
+    });
+    expect(await throwing(visitor(GPTBOT))).toBe(false);
+  });
+
+  it("a fallback answer is not cached", async () => {
+    let up = false;
+    const { calls, fetch } = service(() => (up ? json({ charge: false, cache_ttl_s: 60 }) : json({}, 503)));
+    const detect = hostedDetect({ merchantId: MERCHANT_ID, merchantSecret: SECRET, fetch });
+    expect(await detect(visitor(GPTBOT))).toBe(true);
+    up = true;
+    expect(await detect(visitor(GPTBOT))).toBe(false);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("after 5 failures no call for 30 s, and the 6th request does not wait", async () => {
+    let t = 1_000_000;
+    const calls: number[] = [];
+    const fetch = ((_url: string, init: RequestInit) => {
+      calls.push(t);
+      return new Promise((_, reject) => init.signal?.addEventListener("abort", () => reject(init.signal?.reason)));
+    }) as typeof globalThis.fetch;
+    const detect = hostedDetect({
+      merchantId: MERCHANT_ID,
+      merchantSecret: SECRET,
+      fetch,
+      timeoutMs: 30,
+      now: () => t,
+    });
+    for (let i = 0; i < 5; i++) await detect(visitor(GPTBOT));
+    expect(calls).toHaveLength(5);
+    const started = Date.now();
+    expect(await detect(visitor(GPTBOT))).toBe(true);
+    expect(Date.now() - started).toBeLessThan(25);
+    t += 29_999;
+    await detect(visitor());
+    expect(calls).toHaveLength(5);
+  });
+
+  it("after the pause one success resumes; one failure then does not pause again", async () => {
+    let t = 1_000_000;
+    let up = false;
+    const { calls, fetch } = service((body) =>
+      up ? json({ charge: body.ua.includes("GPTBot"), cache_ttl_s: 0 }) : json({}, 429)
+    );
+    const detect = hostedDetect({ merchantId: MERCHANT_ID, merchantSecret: SECRET, fetch, now: () => t });
+    for (let i = 0; i < 5; i++) await detect(visitor());
+    await detect(visitor());
+    expect(calls).toHaveLength(5);
+    t += 30_000;
+    up = true;
+    expect(await detect(visitor())).toBe(false);
+    expect(calls).toHaveLength(6);
+    up = false;
+    await detect(visitor());
+    up = true;
+    expect(await detect(visitor(GPTBOT))).toBe(true);
+    expect(calls).toHaveLength(8);
+  });
+
+  it("the first call after the pause decides: a failure pauses again", async () => {
+    let t = 1_000_000;
+    const { calls, fetch } = down();
+    const detect = hostedDetect({ merchantId: MERCHANT_ID, merchantSecret: SECRET, fetch, now: () => t });
+    for (let i = 0; i < 5; i++) await detect(visitor());
+    t += 30_000;
+    await detect(visitor());
+    await detect(visitor());
+    expect(calls).toHaveLength(6);
+  });
+
+  it("pauseAfterFailures and pauseMs change both numbers", async () => {
+    let t = 1_000_000;
+    const { calls, fetch } = down();
+    const detect = hostedDetect({
+      merchantId: MERCHANT_ID,
+      merchantSecret: SECRET,
+      fetch,
+      now: () => t,
+      pauseAfterFailures: 2,
+      pauseMs: 1_000,
+    });
+    for (let i = 0; i < 3; i++) await detect(visitor());
+    expect(calls).toHaveLength(2);
+    t += 1_000;
+    await detect(visitor());
+    expect(calls).toHaveLength(3);
+  });
+});
+
+describe("hostedDetect — the request method", () => {
+  it("is sent upper-case, and left out when the request has none", async () => {
+    const { calls, fetch } = service(() => json({ charge: false, cache_ttl_s: 0 }));
+    const detect = hostedDetect({ merchantId: MERCHANT_ID, merchantSecret: SECRET, fetch });
+    await detect({ ...visitor(), method: "post" } as GateRequest);
+    await detect(visitor());
+    expect(calls[0].body.method).toBe("POST");
+    expect("method" in calls[1].body).toBe(false);
+  });
+});
+
+describe("hostedDetect — an address that cannot be a visitor's", () => {
+  it("loopback, private, unique-local and IPv4-mapped private use the local rule without a call", async () => {
+    const { calls, fetch } = service(() => json({ charge: false, cache_ttl_s: 60 }));
+    const detect = hostedDetect({ merchantId: MERCHANT_ID, merchantSecret: SECRET, fetch });
+    const gptbot = { "user-agent": "GPTBot/1.2" };
+    for (const ip of [
+      "127.0.0.1",
+      "10.1.2.3",
+      "192.168.1.5",
+      "fd12:3456::1",
+      "::ffff:172.16.0.9",
+      "::1",
+      "fe80::1",
+      "0.0.0.0",
+    ]) {
+      expect(await detect(visitor(gptbot, ip)), ip).toBe(true);
+      expect(await detect(visitor({}, ip)), ip).toBe(false);
+    }
+    expect(calls).toHaveLength(0);
+    await detect(visitor({}, "203.0.113.7"));
+    await detect(visitor({}, "2001:db8::7"));
+    await detect(visitor({}, "::ffff:203.0.113.8"));
+    expect(calls).toHaveLength(3);
+  });
+});

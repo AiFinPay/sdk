@@ -180,6 +180,8 @@ export interface GateRequest {
   header(name: string): string | undefined;
   /** The client's address; only `unprovenPays` reads it. Behind a proxy, pass the real client's, not the proxy's. */
   ip?: string;
+  /** The HTTP method; `hostedDetect` sends it. */
+  method?: string;
 }
 
 export type GateEventKind = "402" | "serve" | "403" | "meter_error" | "pricing_unavailable";
