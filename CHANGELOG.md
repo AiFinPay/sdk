@@ -6,6 +6,14 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## Telemetry opt-out reaches the SDK report — agent 2.18.1, MCP 2.20.1
+
+- `@aifinpay/agent` turns off its paid-call report to `/api/telemetry` on
+  `AIFINPAY_TELEMETRY=off|0|false|no` or `DO_NOT_TRACK=1` when the `telemetry`
+  option is unset, and its README names the fields it sends.
+- `@aifinpay/mcp` builds every agent with `telemetry: false`, so the MCP never
+  sends that report. Python has no such report and is unchanged.
+
 ## Self-hosted gates: AiFinPay decides who pays — gate 0.15.0
 
 - `@aifinpay/gate` adds `hostedDetect`, a `shouldCharge` backed by AiFinPay's

@@ -100,6 +100,7 @@ export async function createServer(config: McpConfig = {}) {
       fetchImpl,
       baseUrl: config.baseUrl,
       timeoutMs: config.timeoutMs,
+      telemetry: false,
       ...(identity.derivationIndex === undefined ? {} : { derivationIndex: identity.derivationIndex }),
       ...(config.payChain === "solana" && config.rpcUrl ? { solanaRpc: config.rpcUrl } : {}),
       ...(config.evmWalletClient ? { evmWalletClient: config.evmWalletClient } : {}),
@@ -125,6 +126,7 @@ export async function createServer(config: McpConfig = {}) {
       fetchImpl,
       baseUrl: config.baseUrl,
       timeoutMs: config.timeoutMs,
+      telemetry: false,
     }));
   identitySource = configured?.source ?? "ephemeral";
   if (!configured)

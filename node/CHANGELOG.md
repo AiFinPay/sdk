@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.18.1 — the paid-call report listens to the opt-out switches
+
+- With the `telemetry` option unset, `AIFINPAY_TELEMETRY=off` (also `0`,
+  `false`, `no`, any case) or `DO_NOT_TRACK=1` turns off the report to
+  `/api/telemetry`, the same switches `@aifinpay/analytics` reads;
+  `AIFINPAY_TELEMETRY=on` keeps it on. An explicit `telemetry: true` or `false`
+  wins over the environment. The payload is unchanged.
+- The README names what the report sends, where, and how to turn it off.
+
 ## 2.18.0 — the SDK names its version
 
 - AIFP-1 requests (merchant, `/v1/quote`, `/v1/pay`, the issuer's keys), the

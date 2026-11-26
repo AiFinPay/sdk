@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.20.1 — never sends the SDK's paid-call report
+
+- Every agent this server and `init` build passes `telemetry: false`, so
+  `@aifinpay/agent` never posts its `/api/telemetry` report (wallet address,
+  amount, transaction) from the MCP, with or without `AIFINPAY_TELEMETRY`. The
+  MCP's own usage events are unchanged. Still depends on `@aifinpay/agent`
+  2.18.0.
+- `server.json` and `smithery.yaml` carry 2.20.1.
+
 ## 2.20.0 — names its version to AiFinPay and to the merchant
 
 - Depends on `@aifinpay/agent` 2.18.0 (exact). Requests to the AiFinPay API
