@@ -32,8 +32,12 @@ export const DETECT_HEADERS = [
   "sec-fetch-site",
   "sec-fetch-user",
   "upgrade-insecure-requests",
+  // Web Bot Auth (RFC 9421): an agent that signs its requests. Host is the
+  // @authority the signature covers.
+  "signature",
   "signature-agent",
   "signature-input",
+  "host",
   "via",
   "from",
   // Signed by the merchant's Cloudflare Worker (examples/cloudflare-edge-signal);

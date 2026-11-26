@@ -70,6 +70,22 @@ describe("hostedDetect — what the gate sends", () => {
     expect(calls[0].body.headers["aifp-edge-signal"]).toBe(signal);
   });
 
+  it("forwards a Web Bot Auth signature with the Host it covers", async () => {
+    const { calls, fetch } = service(() => json({ charge: true, cache_ttl_s: 60 }));
+    const detect = hostedDetect({ merchantId: MERCHANT_ID, merchantSecret: SECRET, fetch });
+    const signed = {
+      Host: "news.example",
+      "Signature-Agent": '"https://chatgpt.com"',
+      "Signature-Input": 'sig1=("@authority" "signature-agent");created=1;keyid="k";tag="web-bot-auth"',
+      Signature: "sig1=:AAAA:",
+    };
+    await detect(visitor(signed));
+    const sent = calls[0].body.headers;
+    expect([sent.host, sent["signature-agent"], sent["signature-input"], sent.signature]).toEqual(
+      Object.values(signed)
+    );
+  });
+
   it("a request speaking AIFP is charged without a call, so its receipt is metered", async () => {
     const { calls, fetch } = service(() => json({ charge: false, cache_ttl_s: 60 }));
     const detect = hostedDetect({ merchantId: MERCHANT_ID, merchantSecret: SECRET, fetch });

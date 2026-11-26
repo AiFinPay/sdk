@@ -17,6 +17,10 @@
   Cloudflare Worker ([`examples/cloudflare-edge-signal`](../examples/cloudflare-edge-signal))
   signs from Cloudflare's verified-bot flag, category and bot score. The gate
   forwards it untouched; AiFinPay verifies it with the merchant's edge secret.
+- `DETECT_HEADERS` also carries `Signature`, `Signature-Agent`,
+  `Signature-Input` and `Host`, so an agent that signs its requests (Web Bot
+  Auth, RFC 9421 — ChatGPT agent and others) pays even with a browser
+  User-Agent, and AiFinPay can verify which operator it is.
 - `aifpGate` warns once when `unprovenPays` or `hostedDetect` runs behind
   Express `trust proxy: true`: `req.ip` then comes from X-Forwarded-For, which
   the client writes.
