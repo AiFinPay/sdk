@@ -1,5 +1,5 @@
-// @aifinpay/wallet must preserve the legacy EVM/Solana/Casper addresses the
-// full agent already uses, while deriving deterministic NEAR/Aptos additions.
+// @aifinpay/wallet must preserve the legacy EVM/Solana addresses the full
+// agent already uses, while deriving deterministic NEAR/Aptos/Tron additions.
 // It must also stay free of the heavy transaction stack (AIFINP-117).
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -10,13 +10,17 @@ import { inspect } from "node:util";
 import { createCipheriv, createDecipheriv, scryptSync, randomBytes, randomFillSync } from "node:crypto";
 import { deriveWallet, newWallet, walletFromSolanaSecret, type DerivationMode } from "../src";
 import { sha3_256 } from "@noble/hashes/sha3";
+import { secp256k1 } from "@noble/curves/secp256k1";
+import nacl from "tweetnacl";
+import bs58 from "bs58";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SEEDS = ["11".repeat(32), "ab".repeat(32), "0f".repeat(32), "00".repeat(31) + "01"];
 
 describe("key material protection", () => {
   const SEED = "ab".repeat(32);
-  const CHAINS = ["evm", "solana", "near", "aptos", "tron", "casper"] as const;
+  const CHAINS = ["evm", "solana", "near", "aptos", "tron"] as const;
+  const toHex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 
   it("keeps every secret out of JSON, inspect, spread and structuredClone", () => {
     const w = deriveWallet(SEED, { index: 3 });
@@ -32,31 +36,23 @@ describe("key material protection", () => {
       for (const secret of secrets) expect(view).not.toContain(secret);
     }
     expect(views[0]).toContain(w.evm.address);
-    expect(Object.keys(w)).not.toContain("keys");
   });
 
   it("pairs each chain's address and public key with its own private key", () => {
     const w = deriveWallet(SEED);
-    const legacy = w.keys;
     expect(w.exportSeed()).toBe(SEED);
-    expect(w.evm.exportPrivateKey()).toBe(legacy.evmPrivateKey);
-    expect(w.solana.exportPrivateKey()).toBe(legacy.solanaSecretKeyB58);
-    expect(w.near.exportPrivateKey()).toBe(legacy.nearSecretSeedHex);
-    expect(w.aptos.exportPrivateKey()).toBe(legacy.aptosSecretSeedHex);
-    expect(w.tron.exportPrivateKey()).toBe(legacy.tronPrivateKeyHex);
-    expect(w.casper.exportPrivateKey()).toBe(legacy.casperSecretSeedHex);
     for (const c of CHAINS) expect(w[c].chain).toBe(c);
-    expect([w.evm.address, w.solana.address, w.near.address, w.aptos.address, w.tron.address]).toEqual([
-      w.evmAddress,
-      w.solanaAddress,
-      w.nearAddress,
-      w.aptosAddress,
-      w.tronAddress,
-    ]);
+    const evmKey = w.evm.exportPrivateKey();
+    expect(evmKey).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(toHex(secp256k1.getPublicKey(evmKey.slice(2), true))).toBe(w.evm.publicKey);
+    expect(toHex(secp256k1.getPublicKey(w.tron.exportPrivateKey(), true))).toBe(w.tron.publicKey);
+    expect(bs58.encode(bs58.decode(w.solana.exportPrivateKey()).slice(32))).toBe(w.solana.address);
+    for (const c of ["near", "aptos"] as const) {
+      const pub = nacl.sign.keyPair.fromSeed(Buffer.from(w[c].exportPrivateKey(), "hex")).publicKey;
+      expect(toHex(pub)).toBe(w[c].publicKey);
+    }
     expect(w.near.publicKey).toBe(w.near.address);
-    expect(w.casperPublicKey).toBe(`01${w.casper.publicKey}`);
-    expect(w.evm.publicKey).toMatch(/^0[23][0-9a-f]{64}$/);
-    expect(w.tron.publicKey).toMatch(/^0[23][0-9a-f]{64}$/);
+    expect(new Set(CHAINS.map((c) => w[c].exportPrivateKey())).size).toBe(CHAINS.length);
   });
 
   it("dispose wipes the seed, revokes every export and leaves public data readable", () => {
@@ -67,7 +63,6 @@ describe("key material protection", () => {
     expect(w.disposed).toBe(true);
     expect(() => w.exportSeed()).toThrow(/disposed/);
     for (const c of CHAINS) expect(() => w[c].exportPrivateKey()).toThrow(/disposed/);
-    expect(() => w.keys).toThrow(/disposed/);
     expect(w.evm.address).toBe(address);
     expect(() => w.dispose()).not.toThrow();
   });
@@ -85,48 +80,45 @@ describe("key material protection", () => {
 });
 
 describe("derivation", () => {
-  it("re-derives the same six-family wallet from its own seed", () => {
+  it("re-derives the same five-chain wallet from its own seed", () => {
     const w = deriveWallet("ab".repeat(32));
-    expect(deriveWallet(w.keys.seedHex)).toEqual(w);
+    expect(deriveWallet(w.exportSeed())).toEqual(w);
   });
 
-  it("derives valid public identifiers for EVM, Solana, NEAR, Aptos, Tron and Casper", () => {
+  it("derives valid public identifiers for EVM, Solana, NEAR, Aptos and Tron", () => {
     const w = deriveWallet("42".repeat(32));
-    expect(w.evmAddress).toMatch(/^0x[0-9a-fA-F]{40}$/);
-    expect(w.solanaAddress).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
-    expect(w.nearAddress).toMatch(/^[0-9a-f]{64}$/);
-    expect(w.aptosAddress).toMatch(/^0x[0-9a-f]{64}$/);
-    expect(w.tronAddress).toMatch(/^T[1-9A-HJ-NP-Za-km-z]{33}$/);
-    expect(w.keys.tronPrivateKeyHex).toMatch(/^[0-9a-f]{64}$/);
-    expect(w.casperAddress).toMatch(/^account-hash-[0-9a-f]{64}$/);
-    expect(w.casperPublicKey).toMatch(/^01[0-9a-f]{64}$/);
-    expect(w.keys.nearSecretSeedHex).toMatch(/^[0-9a-f]{64}$/);
-    expect(w.keys.aptosSecretSeedHex).toMatch(/^[0-9a-f]{64}$/);
-    expect(w.keys.casperSecretSeedHex).toMatch(/^[0-9a-f]{64}$/);
+    expect(w.evm.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    expect(w.solana.address).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
+    expect(w.near.address).toMatch(/^[0-9a-f]{64}$/);
+    expect(w.aptos.address).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(w.tron.address).toMatch(/^T[1-9A-HJ-NP-Za-km-z]{33}$/);
+    expect(w.tron.exportPrivateKey()).toMatch(/^[0-9a-f]{64}$/);
+    expect(w.near.exportPrivateKey()).toMatch(/^[0-9a-f]{64}$/);
+    expect(w.aptos.exportPrivateKey()).toMatch(/^[0-9a-f]{64}$/);
     expect(w.derivationMode).toBe("standard");
   });
 
   it("newWallet returns a recoverable seed", async () => {
     const w = await newWallet();
-    expect(w.keys.seedHex).toMatch(/^[0-9a-f]{64}$/);
-    expect(deriveWallet(w.keys.seedHex)).toEqual(w);
+    expect(w.exportSeed()).toMatch(/^[0-9a-f]{64}$/);
+    expect(deriveWallet(w.exportSeed())).toEqual(w);
   });
 
   it("walletFromSolanaSecret recovers the same complete wallet the keystore stores", () => {
     const w = deriveWallet("cd".repeat(32), { mode: "legacy-solana" });
-    expect(walletFromSolanaSecret(w.keys.solanaSecretKeyB58, { mode: "legacy-solana" })).toEqual(w);
+    expect(walletFromSolanaSecret(w.solana.exportPrivateKey(), { mode: "legacy-solana" })).toEqual(w);
   });
 
   it("rejects a malformed seed and a too-short secret", () => {
     expect(() => deriveWallet("nope")).toThrow();
-    expect(() => walletFromSolanaSecret("1")).toThrow();
+    expect(() => walletFromSolanaSecret("1", { mode: "legacy-solana" })).toThrow("need 64 bytes");
   });
 
   it("legacy-solana mode derives Solana address from raw seed", () => {
     const w = deriveWallet("cd".repeat(32), { mode: "legacy-solana" });
     expect(w.derivationMode).toBe("legacy-solana");
-    const recovered = walletFromSolanaSecret(w.keys.solanaSecretKeyB58, { mode: "legacy-solana" });
-    expect(recovered.solanaAddress).toBe(w.solanaAddress);
+    const recovered = walletFromSolanaSecret(w.solana.exportPrivateKey(), { mode: "legacy-solana" });
+    expect(recovered.solana.address).toBe(w.solana.address);
   });
 });
 
@@ -137,7 +129,7 @@ const full: {
   fromSeed: (
     s: string,
     options?: { derivationIndex?: number }
-  ) => Promise<{ solanaAddress: string; evmAddress: string; casperAddress: string }>;
+  ) => Promise<{ solanaAddress: string; evmAddress: string }>;
 } | null = await import("@aifinpay/agent").then(
   (mod) => mod.AiFinPayAgent as never,
   () => null
@@ -148,18 +140,16 @@ describe("backwards-compatible with @aifinpay/agent", () => {
     it.skipIf(!full)(`seed ${seed.slice(0, 6)}… preserves legacy funded addresses`, async () => {
       const agent = await full!.fromSeed(seed);
       const w = deriveWallet(seed, { mode: "legacy-solana" });
-      expect(w.solanaAddress).toBe(agent.solanaAddress);
-      expect(w.evmAddress).toBe(agent.evmAddress);
-      expect(w.casperAddress).toBe(agent.casperAddress);
+      expect(w.solana.address).toBe(agent.solanaAddress);
+      expect(w.evm.address).toBe(agent.evmAddress);
     });
 
     it.skipIf(!full)(`indexed seed ${seed.slice(0, 6)}… matches the full SDK`, async () => {
       const index = 0;
       const agent = await full!.fromSeed(seed, { derivationIndex: index });
       const wallet = deriveWallet(seed, { index });
-      expect(wallet.solanaAddress).toBe(agent.solanaAddress);
-      expect(wallet.evmAddress).toBe(agent.evmAddress);
-      expect(wallet.casperAddress).toBe(agent.casperAddress);
+      expect(wallet.solana.address).toBe(agent.solanaAddress);
+      expect(wallet.evm.address).toBe(agent.evmAddress);
     });
   }
 });
@@ -215,8 +205,8 @@ describe("the CLI writes an mcp-compatible keystore", () => {
   it("stores secretB58 that walletFromSolanaSecret round-trips", () => {
     const w = deriveWallet("77".repeat(32), { mode: "legacy-solana" });
     const store = {
-      secretB58: w.keys.solanaSecretKeyB58,
-      seedHex: w.keys.seedHex,
+      secretB58: w.solana.exportPrivateKey(),
+      seedHex: w.exportSeed(),
       derivationMode: "legacy-solana" as DerivationMode,
     };
     expect(walletFromSolanaSecret(store.secretB58, { mode: "legacy-solana" })).toEqual(w);
@@ -247,7 +237,7 @@ describe("encrypted keystore", () => {
   it("encrypts and decrypts a secret correctly", () => {
     const w = deriveWallet("99".repeat(32), { mode: "legacy-solana" });
     const passphrase = "test-passphrase-123";
-    const encrypted = encrypt(w.keys.solanaSecretKeyB58, passphrase);
+    const encrypted = encrypt(w.solana.exportPrivateKey(), passphrase);
     const key = scryptSync(passphrase, Buffer.from(encrypted.salt, "base64"), 32, {
       N: 1 << 15,
       r: 8,
@@ -259,13 +249,13 @@ describe("encrypted keystore", () => {
     const decrypted = Buffer.concat([decipher.update(Buffer.from(encrypted.ct, "base64")), decipher.final()]).toString(
       "utf8"
     );
-    expect(decrypted).toBe(w.keys.solanaSecretKeyB58);
+    expect(decrypted).toBe(w.solana.exportPrivateKey());
     expect(walletFromSolanaSecret(decrypted, { mode: "legacy-solana" })).toEqual(w);
   });
 
   it("rejects wrong passphrase", () => {
     const w = deriveWallet("88".repeat(32));
-    const encrypted = encrypt(w.keys.solanaSecretKeyB58, "correct-pass");
+    const encrypted = encrypt(w.solana.exportPrivateKey(), "correct-pass");
     const wrongKey = scryptSync("wrong-pass", Buffer.from(encrypted.salt, "base64"), 32, {
       N: 1 << 15,
       r: 8,
@@ -496,13 +486,13 @@ describe("encrypted keystore keeps key material encrypted", () => {
     expect(exported).toMatch(/^[0-9a-f]{64}$/);
     const w = deriveWallet(exported);
     const showOutput = logs.join("");
-    expect(showOutput).toContain(w.evmAddress);
-    expect(showOutput).toContain(w.solanaAddress);
+    expect(showOutput).toContain(w.evm.address);
+    expect(showOutput).toContain(w.solana.address);
   });
 
   it("still reads pre-1.1.1 encrypted keystores with plaintext seedHex", async () => {
     const w = deriveWallet("ab".repeat(32));
-    const enc = encryptBlock(w.keys.solanaSecretKeyB58, PASSPHRASE);
+    const enc = encryptBlock(w.solana.exportPrivateKey(), PASSPHRASE);
     writeFileSync(
       join(tmpDir, "agent.json"),
       JSON.stringify(
@@ -511,7 +501,7 @@ describe("encrypted keystore keeps key material encrypted", () => {
           ...enc,
           created: new Date().toISOString(),
           derivationMode: "standard",
-          seedHex: w.keys.seedHex,
+          seedHex: w.exportSeed(),
         },
         null,
         2
@@ -523,12 +513,12 @@ describe("encrypted keystore keeps key material encrypted", () => {
     await cli.run!("show", ["node", "wallet"]);
     await cli.run!("export", ["node", "wallet"]);
     restore();
-    expect(logs.join("")).toContain(w.evmAddress);
+    expect(logs.join("")).toContain(w.evm.address);
     expect(
       logs
         .filter((l) => /^[0-9a-f]{64}\n$/.test(l))
         .join("")
         .trim()
-    ).toBe(w.keys.seedHex);
+    ).toBe(w.exportSeed());
   });
 });

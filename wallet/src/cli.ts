@@ -20,7 +20,6 @@ import { join, dirname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { createCipheriv, createDecipheriv, scryptSync, randomBytes, randomFillSync } from "node:crypto";
-import bs58 from "bs58";
 import {
   MAX_DERIVATION_INDEX,
   newWallet,
@@ -345,7 +344,7 @@ function loadLegacyEncrypted(store: EncryptedKeystore, passphrase: string, index
     process.stderr.write(`[warn] ${KEYSTORE} stores the seed unencrypted — recreate it with \`wallet new\`.\n`);
     return w;
   }
-  if (mode === "legacy-solana") return walletFromSolanaSecret(secretB58, { mode });
+  if (mode === "legacy-solana") return walletFromSolanaSecret(secretB58, { mode: "legacy-solana" });
   throw new Error("seedHex required for standard derivation mode in encrypted keystore");
 }
 
@@ -362,7 +361,7 @@ function loadWalletFromStore(store: KeystoreFile, indexOverride?: number): Deriv
       return walletFromSeed(seedHex, { mode, index });
     }
     if (mode === "legacy-solana") {
-      return walletFromSolanaSecret(store.secretB58, { mode });
+      return walletFromSolanaSecret(store.secretB58, { mode: "legacy-solana" });
     }
     if (!seedHex) {
       throw new Error("seedHex required for standard derivation mode");
@@ -539,7 +538,7 @@ export const run = async (cmdArg?: string, argv?: string[], options?: { mode?: D
       seedHex = storedSeed(s);
     } else {
       // Bare MCP keystore: the stored Solana key's first 32 bytes are the seed.
-      seedHex = Buffer.from(bs58.decode(s.secretB58).slice(0, 32)).toString("hex");
+      seedHex = walletFromSolanaSecret(s.secretB58, { mode: "legacy-solana" }).exportSeed();
     }
     if (!seedHex) {
       process.stderr.write("no stored seed — may need to regenerate from secret.\n");

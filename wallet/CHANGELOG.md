@@ -1,5 +1,24 @@
 # @aifinpay/wallet — changelog
 
+## 2.0.0 — deprecated API removed
+
+Breaking. Addresses, derivation and the keystore format are unchanged.
+
+- Removed the flat `evmAddress`, `solanaAddress`, `nearAddress`,
+  `aptosAddress` and `tronAddress` fields: use `w.<chain>.address`.
+- Removed the `keys` getter and the `WalletKeys` type: use `exportSeed()` and
+  `w.<chain>.exportPrivateKey()` (same encodings).
+- Removed Casper: `w.casper`, `casperAddress`, `casperPublicKey`,
+  `DerivationDomain.CASPER` and `"casper"` in `ChainName`. Recover a Casper
+  key with `@aifinpay/wallet@1` and the same seed.
+- Removed the unused `LEGACY_SOLANA_DERIVATION` constant. The
+  `legacy-solana` derivation mode is unchanged.
+- `walletFromSolanaSecret` requires `{ mode: "legacy-solana" }` (it never
+  supported anything else; the old default always threw), accepts only a
+  64-byte tweetnacl secret key, and refuses one whose public-key half does not
+  match its seed. `export` from a bare MCP keystore goes through the same
+  check instead of slicing the secret unchecked.
+
 ## 1.8.0 — per-chain accounts
 
 - One `ChainAccount` per chain on `DerivedWallet`: `evm`, `solana`, `near`,

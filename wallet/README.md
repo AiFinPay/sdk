@@ -169,17 +169,28 @@ w.dispose(); // zero the in-memory seed; every export then throws
 
 Only the root seed is held. Each chain's key is derived when you export it and
 its byte buffer is zeroed afterwards; exported strings cannot be wiped, so keep
-them short-lived. The flat `evmAddress`/`solanaAddress`/… fields and the `keys`
-getter (every key at once) still work but are deprecated; `keys` is
-non-enumerable, so it never serialises.
+them short-lived.
 
-### Deprecated Casper compatibility
+### Upgrading from 1.x
 
-Casper is no longer supported and is not printed by `new` or `show`.
-`DerivationDomain.CASPER`, `w.casper`, `casperAddress` and `casperPublicKey`
-remain available with `@deprecated` annotations.
-Their values and derivation are unchanged in both modes, so existing consumers
-and legacy key recovery continue to work. No keystore migration is required.
+2.0.0 removes the API deprecated in 1.x:
+
+| 1.x                                                                                                          | 2.0.0                                                                         |
+| ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `w.evmAddress`, `w.solanaAddress`, `w.nearAddress`, `w.aptosAddress`, `w.tronAddress`                        | `w.evm.address`, `w.solana.address`, …                                        |
+| `w.keys.seedHex`                                                                                             | `w.exportSeed()`                                                              |
+| `w.keys.evmPrivateKey`, `solanaSecretKeyB58`, `nearSecretSeedHex`, `aptosSecretSeedHex`, `tronPrivateKeyHex` | `w.evm.exportPrivateKey()`, `w.solana.exportPrivateKey()`, … (same encodings) |
+| `LEGACY_SOLANA_DERIVATION`                                                                                   | — (unused constant)                                                           |
+| Casper: `w.casper`, `casperAddress`, `casperPublicKey`, `DerivationDomain.CASPER`                            | removed                                                                       |
+
+`walletFromSolanaSecret(secret, { mode: "legacy-solana" })` now requires the
+mode, accepts only a 64-byte secret key and refuses one whose public-key half
+does not match its seed.
+
+Addresses, derivation and the keystore format are unchanged, so existing
+keystores open as before. To recover a key for funds left on a Casper address,
+use `@aifinpay/wallet@1` with the same seed; its derivation was
+`Ed25519(SHA-256("aifinpay:casper:v1\0" || seed))`.
 
 ### Derivation modes
 
@@ -188,7 +199,7 @@ and legacy key recovery continue to work. No keystore migration is required.
 raw seed for unindexed wallets. Indexed wallets derive each chain key from its
 own domain, index and recovery seed in either mode, matching
 `@aifinpay/agent` and `@aifinpay/mcp`. EVM, NEAR, Aptos and Tron are the same in
-both modes, as is the deprecated Casper material.
+both modes.
 
 ```ts
 import { newWallet, walletFromSeed } from "@aifinpay/wallet";

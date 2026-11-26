@@ -17,7 +17,6 @@
  * when you actually PAY.
  * Tron is derived from its own `aifinpay:tron:v1\0` domain; the full SDK does
  * not derive or sign for Tron.
- * Deprecated Casper fields remain available for legacy compatibility only.
  */
 export {
   deriveWallet,
@@ -25,8 +24,7 @@ export {
   walletFromSolanaSecret,
   walletFromSeed,
   DerivationDomain,
-  LEGACY_SOLANA_DERIVATION,
   MAX_DERIVATION_INDEX,
 } from "./derive.js";
-export type { DerivedWallet, ChainAccount, ChainName, DerivationMode, WalletKeys } from "./derive.js";
+export type { DerivedWallet, ChainAccount, ChainName, DerivationMode } from "./derive.js";
 export { run as createWalletCLI } from "./cli.js";

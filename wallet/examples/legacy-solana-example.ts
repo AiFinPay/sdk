@@ -11,24 +11,24 @@ async function example() {
   // Example 1: Create wallet with standard derivation (recommended)
   const standardWallet = await newWallet({ mode: "standard" });
   console.log("Standard wallet:");
-  console.log("  EVM:", standardWallet.evmAddress);
-  console.log("  Solana:", standardWallet.solanaAddress);
+  console.log("  EVM:", standardWallet.evm.address);
+  console.log("  Solana:", standardWallet.solana.address);
   console.log("  Mode:", standardWallet.derivationMode);
 
   // Example 2: Create wallet with legacy Solana derivation (not recommended)
   // Use this only for compatibility with existing wallets
   const legacyWallet = await newWallet({ mode: "legacy-solana" });
   console.log("\nLegacy Solana wallet:");
-  console.log("  EVM:", legacyWallet.evmAddress);
-  console.log("  Solana:", legacyWallet.solanaAddress);
+  console.log("  EVM:", legacyWallet.evm.address);
+  console.log("  Solana:", legacyWallet.solana.address);
   console.log("  Mode:", legacyWallet.derivationMode);
 
   // Example 3: Recover wallet from existing seed
   const seedHex = legacyWallet.exportSeed();
   const recovered = deriveWallet(seedHex, { mode: "legacy-solana" });
   console.log("\nRecovered wallet from seed:");
-  console.log("  EVM:", recovered.evmAddress);
-  console.log("  Solana:", recovered.solanaAddress);
+  console.log("  EVM:", recovered.evm.address);
+  console.log("  Solana:", recovered.solana.address);
   console.log("  Mode:", recovered.derivationMode);
 
   // Example 4: Use CLI function programmatically with --legacy-solana

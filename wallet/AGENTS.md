@@ -1,6 +1,6 @@
 # @aifinpay/wallet — agent guide
 
-Light agent wallet (Solana + EVM + NEAR + Aptos + Tron) with 4 tiny crypto deps — no viem, no @solana/web3.js. Casper is deprecated: preserve its derivation and API fields for legacy compatibility, but do not advertise it or print it in the CLI. Keystore: `~/.aifinpay/agent.json` (mode 600), shared with `@aifinpay/mcp`.
+Light agent wallet (Solana + EVM + NEAR + Aptos + Tron) with 4 tiny crypto deps — no viem, no @solana/web3.js. Casper was removed in 2.0.0; do not reintroduce it. Keystore: `~/.aifinpay/agent.json` (mode 600), shared with `@aifinpay/mcp`.
 
 ## Scope
 
@@ -75,5 +75,6 @@ await createWalletCLI("new", ["node", "wallet", "--legacy-solana"]);
 - Derivation is NOT BIP-39 — never claim standard-wallet recovery works.
 - Keep deps tiny (`@noble/*`, `bs58`, `tweetnacl`); do not add viem/web3.js. `AIFINPAY_HOME` override must keep working.
 - Keystore perms stay 600 (dir 700); new key handling needs a test in `tests/`.
+- Key material stays in `DerivedWallet`'s `#seed` and leaves only through `exportSeed()` / `<chain>.exportPrivateKey()`; never add an enumerable or serialisable key field.
 - Encrypted keystores require `AIFINPAY_WALLET_PASSPHRASE` in node/ and MCP.
 - Legacy Solana derivation (`--legacy-solana`) should only be used for compatibility with existing wallets.
