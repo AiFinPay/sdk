@@ -1,6 +1,6 @@
 /**
  * Example: Creating wallets with @aifinpay/wallet
- * 
+ *
  * This example shows how to use the library programmatically
  * with different derivation modes including --legacy-solana.
  */
@@ -24,7 +24,7 @@ async function example() {
   console.log("  Mode:", legacyWallet.derivationMode);
 
   // Example 3: Recover wallet from existing seed
-  const seedHex = legacyWallet.keys.seedHex;
+  const seedHex = legacyWallet.exportKeys().seedHex;
   const recovered = deriveWallet(seedHex, { mode: "legacy-solana" });
   console.log("\nRecovered wallet from seed:");
   console.log("  EVM:", recovered.evmAddress);

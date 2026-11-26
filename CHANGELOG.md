@@ -6,6 +6,13 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## Wallet: keys behind a private field — wallet 1.7.0
+
+- `@aifinpay/wallet` `DerivedWallet` holds its seed in a `#private` field and
+  exposes keys only through `exportKeys()` (`keys` is a deprecated getter), so
+  logging or serialising a wallet shows addresses only. `dispose()` zeroes the
+  seed. Addresses and keystores are unchanged.
+
 ## Wallet: Tron address — wallet 1.6.0
 
 - `@aifinpay/wallet` derives a Tron address and key from the agent seed under

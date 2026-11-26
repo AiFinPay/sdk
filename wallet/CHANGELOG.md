@@ -1,5 +1,17 @@
 # @aifinpay/wallet — changelog
 
+## 1.7.0 — key material behind a private field
+
+- `DerivedWallet` is now a class. Addresses stay plain readonly fields; the
+  recovery seed is an ECMAScript `#private` field, so `JSON.stringify`,
+  `util.inspect`, object spread and `structuredClone` no longer expose keys.
+- New `exportKeys()` returns the key material (new `WalletKeys` type). `keys`
+  remains as a deprecated non-enumerable getter that calls it.
+- Only the root seed is held; per-chain keys are derived on export and their
+  buffers zeroed. `dispose()` / `Symbol.dispose` zero the seed; exports then
+  throw.
+- Addresses, derivation and the keystore format are unchanged.
+
 ## 1.6.0 — Tron address
 
 - Derive a Tron address from the same seed:

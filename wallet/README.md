@@ -148,19 +148,33 @@ w.solanaAddress; // base58
 w.nearAddress; // hex Ed25519 public key
 w.aptosAddress; // 0x… authentication key
 w.tronAddress; // T… base58check
-w.keys.seedHex; // 32-byte seed — THE thing to back up
-w.keys.evmPrivateKey; // for building your own transactions
-w.keys.solanaSecretKeyB58; // tweetnacl 64-byte secret, base58
-w.keys.tronPrivateKeyHex; // Tron secp256k1 key, hex
 
-deriveWallet(w.keys.seedHex); // same seed → same wallet, deterministic
+// Key material lives in a private field: JSON.stringify(w), console.log(w)
+// and {...w} show addresses only. Export explicitly when you must sign.
+const keys = w.exportKeys();
+keys.seedHex; // 32-byte seed — THE thing to back up
+keys.evmPrivateKey; // for building your own transactions
+keys.solanaSecretKeyB58; // tweetnacl 64-byte secret, base58
+keys.tronPrivateKeyHex; // Tron secp256k1 key, hex
+
+deriveWallet(keys.seedHex); // same seed → same wallet, deterministic
+
+w.dispose(); // zero the in-memory seed; exportKeys() then throws
+{
+  using tmp = deriveWallet(keys.seedHex); // disposed at end of scope
+}
 ```
+
+`w.keys` still works but is deprecated: it is a non-enumerable getter that
+calls `exportKeys()`. Only the root seed is held; per-chain keys are derived on
+export and their byte buffers are zeroed afterwards. Exported strings cannot be
+wiped, so keep them short-lived.
 
 ### Deprecated Casper compatibility
 
 Casper is no longer supported and is not printed by `new` or `show`.
 `DerivationDomain.CASPER`, `casperAddress`, `casperPublicKey` and
-`keys.casperSecretSeedHex` remain available with `@deprecated` annotations.
+`exportKeys().casperSecretSeedHex` remain available with `@deprecated` annotations.
 Their values and derivation are unchanged in both modes, so existing consumers
 and legacy key recovery continue to work. No keystore migration is required.
 

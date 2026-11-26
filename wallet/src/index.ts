@@ -28,5 +28,5 @@ export {
   LEGACY_SOLANA_DERIVATION,
   MAX_DERIVATION_INDEX,
 } from "./derive.js";
-export type { DerivedWallet, DerivationMode } from "./derive.js";
+export type { DerivedWallet, DerivationMode, WalletKeys } from "./derive.js";
 export { run as createWalletCLI } from "./cli.js";

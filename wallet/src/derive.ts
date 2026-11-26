@@ -41,25 +41,23 @@ const fromHex = (s: string): Uint8Array => {
   return out;
 };
 
-function domainSeed(domain: string, seed: Uint8Array): Uint8Array {
-  const d = new TextEncoder().encode(domain);
-  const buf = new Uint8Array(d.length + seed.length);
-  buf.set(d, 0);
-  buf.set(seed, d.length);
-  return sha256(buf);
-}
-
 export const MAX_DERIVATION_INDEX = 0xffffffff;
 
-function indexedDomainSeed(domain: string, seed: Uint8Array, index: number): Uint8Array {
+function assertIndex(index: number): void {
   if (!Number.isInteger(index) || index < 0 || index > MAX_DERIVATION_INDEX) {
     throw new Error(`derivation index must be an integer from 0 to ${MAX_DERIVATION_INDEX}`);
   }
-  const prefix = new TextEncoder().encode(`${domain}${index}`);
+}
+
+/** SHA-256(domain || [decimal index] || seed). Omitting index keeps the original v1 derivation. */
+function chainSeed(domain: DerivationDomain, seed: Uint8Array, index?: number): Uint8Array {
+  const prefix = new TextEncoder().encode(index === undefined ? domain : `${domain}${index}`);
   const material = new Uint8Array(prefix.length + seed.length);
   material.set(prefix);
   material.set(seed, prefix.length);
-  return sha256(material);
+  const out = sha256(material);
+  material.fill(0);
+  return out;
 }
 
 function toChecksum(addr20: Uint8Array): `0x${string}` {
@@ -92,45 +90,65 @@ function aptosAuthKey(publicKey: Uint8Array): `0x${string}` {
   return `0x${hex(sha3_256(material))}` as `0x${string}`;
 }
 
-export interface DerivedWallet {
-  /** Solana base58 public key. */
-  solanaAddress: string;
-  /** EVM EIP-55 address. Identical across all AiFinPay EVM networks. */
-  evmAddress: `0x${string}`;
-  /** NEAR implicit account (hex Ed25519 public key). */
-  nearAddress: string;
-  /** Aptos authentication-key account address. */
-  aptosAddress: `0x${string}`;
-  /** Tron base58check address (T…). */
-  tronAddress: string;
-  /** @deprecated Casper is no longer supported; retained for legacy address compatibility. */
-  casperAddress: string;
-  /** @deprecated Casper is no longer supported; retained for legacy public-key compatibility. */
-  casperPublicKey: string;
-  /** Derivation mode used for this wallet. */
-  derivationMode: DerivationMode;
-  /** Optional child wallet index derived from keys.seedHex. */
-  derivationIndex?: number;
-  keys: {
-    /** 32-byte recovery seed; pair with derivationIndex when this is an indexed wallet. */
-    seedHex: string;
-    /** Solana 64-byte tweetnacl secret key. */
-    solanaSecretKeyB58: string;
-    /** EVM secp256k1 private key. */
-    evmPrivateKey: `0x${string}`;
-    /** Domain-separated Ed25519 seeds for non-EVM local signers. */
-    nearSecretSeedHex: string;
-    aptosSecretSeedHex: string;
-    /** Tron secp256k1 private key (hex, no 0x prefix). */
-    tronPrivateKeyHex: string;
-    /** @deprecated Casper is no longer supported; retained for legacy key recovery. */
-    casperSecretSeedHex: string;
-  };
+/** Raw key material. Strings cannot be wiped from memory: export only when you must sign. */
+export interface WalletKeys {
+  /** 32-byte recovery seed; pair with derivationIndex when this is an indexed wallet. */
+  seedHex: string;
+  /** Solana 64-byte tweetnacl secret key. */
+  solanaSecretKeyB58: string;
+  /** EVM secp256k1 private key. */
+  evmPrivateKey: `0x${string}`;
+  /** Domain-separated Ed25519 seeds for non-EVM local signers. */
+  nearSecretSeedHex: string;
+  aptosSecretSeedHex: string;
+  /** Tron secp256k1 private key (hex, no 0x prefix). */
+  tronPrivateKeyHex: string;
+  /** @deprecated Casper is no longer supported; retained for legacy key recovery. */
+  casperSecretSeedHex: string;
 }
 
 export type DerivationMode = "standard" | "legacy-solana";
 
+/** Per-chain secrets derived from the root seed. Callers must wipe() them. */
+function deriveSecrets(seed: Uint8Array, mode: DerivationMode, index?: number) {
+  let solSeed: Uint8Array;
+  if (index !== undefined) solSeed = chainSeed(DerivationDomain.SOLANA, seed, index);
+  else if (mode === "legacy-solana") solSeed = seed.slice();
+  else solSeed = chainSeed(DerivationDomain.SOLANA, seed);
+  const secrets = {
+    solana: nacl.sign.keyPair.fromSeed(solSeed),
+    evm: chainSeed(DerivationDomain.EVM, seed, index),
+    near: chainSeed(DerivationDomain.NEAR, seed, index),
+    aptos: chainSeed(DerivationDomain.APTOS, seed, index),
+    tron: chainSeed(DerivationDomain.TRON, seed, index),
+    casper: chainSeed(DerivationDomain.CASPER, seed, index),
+    wipe(): void {
+      for (const b of [solSeed, this.solana.secretKey, this.evm, this.near, this.aptos, this.tron, this.casper])
+        b.fill(0);
+    },
+  };
+  return secrets;
+}
+
+function casperAccountHash(publicKey: Uint8Array): string {
+  const name = new TextEncoder().encode("ed25519");
+  const tagged = new Uint8Array(name.length + 1 + publicKey.length);
+  tagged.set(name, 0);
+  tagged[name.length] = 0;
+  tagged.set(publicKey, name.length + 1);
+  return "account-hash-" + hex(blake2b(tagged, { dkLen: 32 }));
+}
+
 /**
+ * An AiFinPay agent wallet: public addresses as plain fields, the recovery
+ * seed in an ECMAScript private field.
+ *
+ * Like ethers' `Wallet` or viem's local accounts, key material is never an
+ * own enumerable property, so `JSON.stringify`, `console.log`/`util.inspect`,
+ * object spread and `structuredClone` see addresses only. Only the root seed
+ * is held; per-chain keys are derived on `exportKeys()` and their buffers are
+ * wiped after use. `dispose()` (or `using`) zeroes the seed.
+ *
  * Derivation contract (v1, backwards-compatible for the original three):
  *   Solana = Ed25519(seed)
  *   EVM    = secp256k1(SHA-256("aifinpay:evm:v1\\0" || seed))
@@ -146,80 +164,108 @@ export type DerivationMode = "standard" | "legacy-solana";
  * NUL separator and then the recovery seed; omitting index preserves existing
  * derivation.
  */
-export function deriveWallet(seedHex: string, options?: { mode?: DerivationMode; index?: number }): DerivedWallet {
-  const seed = fromHex(seedHex);
-  const mode = options?.mode ?? "standard";
+export class DerivedWallet {
+  /** Solana base58 public key. */
+  readonly solanaAddress: string;
+  /** EVM EIP-55 address. Identical across all AiFinPay EVM networks. */
+  readonly evmAddress: `0x${string}`;
+  /** NEAR implicit account (hex Ed25519 public key). */
+  readonly nearAddress: string;
+  /** Aptos authentication-key account address. */
+  readonly aptosAddress: `0x${string}`;
+  /** Tron base58check address (T…). */
+  readonly tronAddress: string;
+  /** @deprecated Casper is no longer supported; retained for legacy address compatibility. */
+  readonly casperAddress: string;
+  /** @deprecated Casper is no longer supported; retained for legacy public-key compatibility. */
+  readonly casperPublicKey: string;
+  /** Derivation mode used for this wallet. */
+  readonly derivationMode: DerivationMode;
+  /** Optional child wallet index derived from the recovery seed. */
+  readonly derivationIndex?: number;
 
-  let sol: nacl.SignKeyPair;
-  if (options?.index !== undefined) {
-    sol = nacl.sign.keyPair.fromSeed(indexedDomainSeed(DerivationDomain.SOLANA, seed, options.index));
-  } else if (mode === "legacy-solana") {
-    sol = nacl.sign.keyPair.fromSeed(seed);
-  } else {
-    const solSeed = domainSeed(DerivationDomain.SOLANA, seed);
-    sol = nacl.sign.keyPair.fromSeed(solSeed);
+  #seed: Uint8Array | null;
+
+  /** Takes ownership of `seed`: the caller must not reuse or wipe it. */
+  private constructor(seed: Uint8Array, mode: DerivationMode, index?: number) {
+    if (seed.length !== 32) throw new Error("seed must be 32 bytes");
+    if (index !== undefined) assertIndex(index);
+    const s = deriveSecrets(seed, mode, index);
+    try {
+      this.solanaAddress = b58.encode(s.solana.publicKey);
+      this.evmAddress = toChecksum(keccak_256(secp256k1.getPublicKey(s.evm, false).slice(1)).slice(-20));
+      this.nearAddress = hex(nacl.sign.keyPair.fromSeed(s.near).publicKey);
+      this.aptosAddress = aptosAuthKey(nacl.sign.keyPair.fromSeed(s.aptos).publicKey);
+      this.tronAddress = tronAddressFromKey(s.tron);
+      const casperPub = nacl.sign.keyPair.fromSeed(s.casper).publicKey;
+      this.casperPublicKey = `01${hex(casperPub)}`;
+      this.casperAddress = casperAccountHash(casperPub);
+    } finally {
+      s.wipe();
+    }
+    this.derivationMode = mode;
+    if (index !== undefined) this.derivationIndex = index;
+    this.#seed = seed;
   }
 
-  const evmPriv =
-    options?.index === undefined
-      ? domainSeed(DerivationDomain.EVM, seed)
-      : indexedDomainSeed(DerivationDomain.EVM, seed, options.index);
-  const evmPub = secp256k1.getPublicKey(evmPriv, false).slice(1);
-  const evmAddress = toChecksum(keccak_256(evmPub).slice(-20));
+  /** @internal Factory for this module; the constructor stays private. */
+  static fromSeedBytes(seed: Uint8Array, mode: DerivationMode = "standard", index?: number): DerivedWallet {
+    return new DerivedWallet(seed, mode, index);
+  }
 
-  const nearSeed =
-    options?.index === undefined
-      ? domainSeed(DerivationDomain.NEAR, seed)
-      : indexedDomainSeed(DerivationDomain.NEAR, seed, options.index);
-  const nearKp = nacl.sign.keyPair.fromSeed(nearSeed);
-  const nearAddress = hex(nearKp.publicKey);
+  /** True after dispose(); exports then throw. */
+  get disposed(): boolean {
+    return this.#seed === null;
+  }
 
-  const aptosSeed =
-    options?.index === undefined
-      ? domainSeed(DerivationDomain.APTOS, seed)
-      : indexedDomainSeed(DerivationDomain.APTOS, seed, options.index);
-  const aptosKp = nacl.sign.keyPair.fromSeed(aptosSeed);
-  const aptosAddress = aptosAuthKey(aptosKp.publicKey);
+  /**
+   * Export raw key material. Returned strings live until garbage-collected and
+   * cannot be zeroed — call only to persist a keystore or hand keys to a signer.
+   */
+  exportKeys(): WalletKeys {
+    if (!this.#seed) throw new Error("wallet disposed: key material was wiped");
+    const s = deriveSecrets(this.#seed, this.derivationMode, this.derivationIndex);
+    try {
+      return {
+        seedHex: hex(this.#seed),
+        solanaSecretKeyB58: b58.encode(s.solana.secretKey),
+        evmPrivateKey: `0x${hex(s.evm)}`,
+        nearSecretSeedHex: hex(s.near),
+        aptosSecretSeedHex: hex(s.aptos),
+        tronPrivateKeyHex: hex(s.tron),
+        casperSecretSeedHex: hex(s.casper),
+      };
+    } finally {
+      s.wipe();
+    }
+  }
 
-  const tronPriv =
-    options?.index === undefined
-      ? domainSeed(DerivationDomain.TRON, seed)
-      : indexedDomainSeed(DerivationDomain.TRON, seed, options.index);
-  const tronAddress = tronAddressFromKey(tronPriv);
+  /**
+   * @deprecated Use `exportKeys()`. Kept as a non-enumerable getter so the
+   * keys no longer leak through serialisation or logging.
+   */
+  get keys(): WalletKeys {
+    return this.exportKeys();
+  }
 
-  const casperSeed =
-    options?.index === undefined
-      ? domainSeed(DerivationDomain.CASPER, seed)
-      : indexedDomainSeed(DerivationDomain.CASPER, seed, options.index);
-  const casperKp = nacl.sign.keyPair.fromSeed(casperSeed);
-  const casperPublicKey = `01${hex(casperKp.publicKey)}`;
-  const name = new TextEncoder().encode("ed25519");
-  const tagged = new Uint8Array(name.length + 1 + casperKp.publicKey.length);
-  tagged.set(name, 0);
-  tagged[name.length] = 0;
-  tagged.set(casperKp.publicKey, name.length + 1);
-  const casperAddress = "account-hash-" + hex(blake2b(tagged, { dkLen: 32 }));
+  /** Zero the in-memory seed. Already-exported strings are not affected. */
+  dispose(): void {
+    this.#seed?.fill(0);
+    this.#seed = null;
+  }
 
-  return {
-    solanaAddress: b58.encode(sol.publicKey),
-    evmAddress,
-    nearAddress,
-    aptosAddress,
-    tronAddress,
-    casperAddress,
-    casperPublicKey,
-    derivationMode: mode,
-    ...(options?.index === undefined ? {} : { derivationIndex: options.index }),
-    keys: {
-      seedHex: hex(seed),
-      solanaSecretKeyB58: b58.encode(sol.secretKey),
-      evmPrivateKey: `0x${hex(evmPriv)}` as `0x${string}`,
-      nearSecretSeedHex: hex(nearSeed),
-      aptosSecretSeedHex: hex(aptosSeed),
-      tronPrivateKeyHex: hex(tronPriv),
-      casperSecretSeedHex: hex(casperSeed),
-    },
-  };
+  [Symbol.dispose](): void {
+    this.dispose();
+  }
+
+  /** util.inspect with `getters: true` would otherwise call the deprecated `keys` getter. */
+  [Symbol.for("nodejs.util.inspect.custom")](): object {
+    return { ...this };
+  }
+}
+
+export function deriveWallet(seedHex: string, options?: { mode?: DerivationMode; index?: number }): DerivedWallet {
+  return DerivedWallet.fromSeedBytes(fromHex(seedHex), options?.mode, options?.index);
 }
 
 export async function newWallet(options?: { mode?: DerivationMode; index?: number }): Promise<DerivedWallet> {
@@ -229,7 +275,7 @@ export async function newWallet(options?: { mode?: DerivationMode; index?: numbe
   } else {
     randomFillSync(seed);
   }
-  return deriveWallet(hex(seed), options);
+  return DerivedWallet.fromSeedBytes(seed, options?.mode, options?.index);
 }
 
 /**
@@ -240,14 +286,17 @@ export async function newWallet(options?: { mode?: DerivationMode; index?: numbe
  */
 export function walletFromSolanaSecret(secretB58: string, options?: { mode?: DerivationMode }): DerivedWallet {
   const sk = b58.decode(secretB58);
-  if (sk.length < 32) throw new Error("not a Solana secret key (need at least 32 bytes)");
-  const mode = options?.mode ?? "standard";
-  if (mode === "legacy-solana") {
-    return deriveWallet(hex(sk.slice(0, 32)), { mode: "legacy-solana" });
+  try {
+    if (sk.length < 32) throw new Error("not a Solana secret key (need at least 32 bytes)");
+    if ((options?.mode ?? "standard") !== "legacy-solana") {
+      throw new Error(
+        "walletFromSolanaSecret only supports legacy-solana mode. For standard mode, use seedHex from keystore."
+      );
+    }
+    return DerivedWallet.fromSeedBytes(sk.slice(0, 32), "legacy-solana");
+  } finally {
+    sk.fill(0);
   }
-  throw new Error(
-    "walletFromSolanaSecret only supports legacy-solana mode. For standard mode, use seedHex from keystore."
-  );
 }
 
 /**

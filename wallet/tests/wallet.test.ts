@@ -6,12 +6,63 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { readFileSync, existsSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { inspect } from "node:util";
 import { createCipheriv, createDecipheriv, scryptSync, randomBytes, randomFillSync } from "node:crypto";
 import { deriveWallet, newWallet, walletFromSolanaSecret, type DerivationMode } from "../src";
 import { sha3_256 } from "@noble/hashes/sha3";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SEEDS = ["11".repeat(32), "ab".repeat(32), "0f".repeat(32), "00".repeat(31) + "01"];
+
+describe("key material protection", () => {
+  const SEED = "ab".repeat(32);
+
+  it("keeps every secret out of JSON, inspect, spread and structuredClone", () => {
+    const w = deriveWallet(SEED, { index: 3 });
+    const k = w.exportKeys();
+    const secrets = Object.values(k).map((v) => v.replace(/^0x/, ""));
+    for (const view of [
+      JSON.stringify(w),
+      inspect(w, { showHidden: true, getters: true }),
+      JSON.stringify({ ...w }),
+      JSON.stringify(structuredClone(w)),
+    ]) {
+      for (const secret of secrets) expect(view).not.toContain(secret);
+      expect(view).toContain(w.evmAddress);
+    }
+    expect(Object.keys(w)).not.toContain("keys");
+  });
+
+  it("exportKeys returns stable material and the deprecated keys getter matches it", () => {
+    const w = deriveWallet(SEED);
+    expect(w.exportKeys()).toEqual(w.exportKeys());
+    expect(w.keys).toEqual(w.exportKeys());
+    expect(w.exportKeys().seedHex).toBe(SEED);
+  });
+
+  it("dispose wipes the seed, blocks exports and leaves addresses readable", () => {
+    const w = deriveWallet(SEED);
+    const address = w.evmAddress;
+    expect(w.disposed).toBe(false);
+    w.dispose();
+    expect(w.disposed).toBe(true);
+    expect(() => w.exportKeys()).toThrow(/disposed/);
+    expect(() => w.keys).toThrow(/disposed/);
+    expect(w.evmAddress).toBe(address);
+    expect(() => w.dispose()).not.toThrow();
+  });
+
+  it("supports Symbol.dispose for `using` scopes", () => {
+    const w = deriveWallet(SEED);
+    w[Symbol.dispose]();
+    expect(w.disposed).toBe(true);
+  });
+
+  it("validates the index before deriving anything", () => {
+    expect(() => deriveWallet(SEED, { index: -1 })).toThrow(/derivation index/);
+    expect(() => deriveWallet(SEED, { index: 2 ** 32 })).toThrow(/derivation index/);
+  });
+});
 
 describe("derivation", () => {
   it("re-derives the same six-family wallet from its own seed", () => {

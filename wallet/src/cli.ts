@@ -255,6 +255,7 @@ secrets/
     writeFileSync(AIIGNORE_FILE, aiignoreContent, { mode: 0o644 });
   }
 
+  const keys = w.exportKeys();
   let content: string;
   if (useEncryption) {
     const envPass = process.env.AIFINPAY_WALLET_PASSPHRASE;
@@ -266,10 +267,10 @@ secrets/
       savePassphraseToEnv(passphrase, ENV_FILE);
       process.stdout.write(`Generated strong passphrase and saved to ${ENV_FILE}\n\n`);
     }
-    const encrypted = encryptSecret(w.keys.solanaSecretKeyB58, passphrase);
+    const encrypted = encryptSecret(keys.solanaSecretKeyB58, passphrase);
     // Preserve the recovery seed for standard and indexed wallets in its own
     // AES-GCM envelope; `ct` stays the Solana secret for existing MCP readers.
-    const seedBlock = encryptSecret(w.keys.seedHex, passphrase);
+    const seedBlock = encryptSecret(keys.seedHex, passphrase);
     const seedEnc: EncryptedSeed = { salt: seedBlock.salt, iv: seedBlock.iv, tag: seedBlock.tag, ct: seedBlock.ct };
     content =
       JSON.stringify(
@@ -287,8 +288,8 @@ secrets/
     content =
       JSON.stringify(
         {
-          secretB58: w.keys.solanaSecretKeyB58,
-          seedHex: w.keys.seedHex,
+          secretB58: keys.solanaSecretKeyB58,
+          seedHex: keys.seedHex,
           created: nowIso(),
           derivationMode: w.derivationMode,
           ...(w.derivationIndex === undefined ? {} : { derivationIndex: w.derivationIndex }),
@@ -337,7 +338,7 @@ function loadLegacyEncrypted(store: EncryptedKeystore, passphrase: string, index
   if (index !== undefined && !seedHex) throw new Error("seedHex required to recover an indexed wallet");
   if (seedHex) {
     const w = walletFromSeed(seedHex, { mode, index });
-    if (w.keys.solanaSecretKeyB58 !== secretB58) {
+    if (w.exportKeys().solanaSecretKeyB58 !== secretB58) {
       throw new Error("keystore seed does not match its key");
     }
     process.stderr.write(`[warn] ${KEYSTORE} stores the seed unencrypted — recreate it with \`wallet new\`.\n`);
@@ -531,7 +532,7 @@ export const run = async (cmdArg?: string, argv?: string[], options?: { mode?: D
       } else {
         // 1.1.0 format: seed in the clear — trusted only after it re-derives
         // the sealed Solana key.
-        seedHex = loadLegacyEncrypted(s, passphrase).keys.seedHex;
+        seedHex = loadLegacyEncrypted(s, passphrase).exportKeys().seedHex;
       }
     } else if (storedSeed(s)) {
       seedHex = storedSeed(s);
