@@ -323,6 +323,29 @@ live Seat PDA on-chain, and serves the resource. The retired v1 format
 - Nonces are consumed on use; replay-resistant.
 - Payments settle on public chains — the explicitly selected EVM network — and are visible on-chain.
 
+### Paid-call report (on unless turned off)
+
+`AiFinPayAgent` reports its calls to AiFinPay so the agent's owner can see the
+agent's paid calls in the dashboard. It sends one `POST ${baseUrl}/api/telemetry`
+(default base URL `https://aifinpay.io`) with a JSON body:
+
+- after a paid `fetchPaid`: `agent_id` (the agent's Solana address, `agent.id`),
+  `kind: "aifp1"`, `merchant` (the merchant id), `chain`, `cost` (the amount paid
+  in USD), `tx` (the transaction hash) and `ts` (a timestamp);
+- after a `call()` whose bridge answered without asking for payment: `agent_id`,
+  `kind: "call"`, `provider`, `chain`, `cost` (the call's `cost` option, else
+  the provider's listed price), `free: true` and `ts`.
+
+Nothing else is in the body. The request does not wait for an answer and its
+failure never changes the call. Three ways to turn it off:
+
+- `telemetry: false` in the agent options;
+- `AIFINPAY_TELEMETRY=off` (also `0`, `false` or `no`, any case);
+- `DO_NOT_TRACK=1` (unless `AIFINPAY_TELEMETRY=on`).
+
+`telemetry: true` sends it whatever the environment says. `@aifinpay/mcp` always
+passes `telemetry: false`.
+
 ## License
 
 MIT.

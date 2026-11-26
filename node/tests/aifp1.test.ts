@@ -16,7 +16,7 @@
 
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { verifyMessage, keccak256, stringToHex, encodeFunctionData } from "viem";
 import { AiFinPayAgent, BudgetCapExceededError } from "../src/unifiedAgent.js";
 import { MemorySpendLedger } from "../src/spendLedger.js";
@@ -2447,5 +2447,71 @@ describe("aifp1: onFlowEvent", () => {
       "qt_",
     ])
       expect(text).not.toContain(secret);
+  });
+});
+
+describe("aifp1: the paid-call report to /api/telemetry", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  async function reportsAfterPaying(env: Record<string, string | undefined>, opts: Record<string, unknown>) {
+    vi.stubEnv("AIFINPAY_TELEMETRY", undefined);
+    vi.stubEnv("DO_NOT_TRACK", undefined);
+    for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+    const server = mockServer();
+    const reports: Array<Record<string, unknown>> = [];
+    const base = server.fetch;
+    server.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (new URL(String(input)).pathname === "/api/telemetry") {
+        reports.push(JSON.parse(String(init?.body)));
+        return new Response(null, { status: 204 });
+      }
+      return base(input, init);
+    }) as typeof fetch;
+    const { agent, settlements } = await agentFor(server, opts);
+    const res = await agent.fetchPaid(`${GATEWAY}/acme/articles/2026/a`);
+    expect(res!.status).toBe(200);
+    expect(settlements).toHaveLength(1);
+    return { reports, agent };
+  }
+
+  it("is sent by default, with the fields the README names", async () => {
+    const { reports, agent } = await reportsAfterPaying({}, { telemetry: undefined });
+    expect(reports).toHaveLength(1);
+    expect(Object.keys(reports[0]!).sort()).toEqual(["agent_id", "chain", "cost", "kind", "merchant", "ts", "tx"]);
+    expect(reports[0]).toMatchObject({
+      agent_id: agent.id,
+      kind: "aifp1",
+      chain: "polygon",
+      tx: "0x" + "ab".repeat(32),
+    });
+  });
+
+  it("is not sent with telemetry: false", async () => {
+    expect((await reportsAfterPaying({}, { telemetry: false })).reports).toHaveLength(0);
+  });
+
+  it.each([
+    ["AIFINPAY_TELEMETRY", "off"],
+    ["AIFINPAY_TELEMETRY", "OFF"],
+    ["AIFINPAY_TELEMETRY", "0"],
+    ["AIFINPAY_TELEMETRY", "false"],
+    ["AIFINPAY_TELEMETRY", "No"],
+    ["DO_NOT_TRACK", "1"],
+  ])("is not sent with %s=%s", async (key, value) => {
+    expect((await reportsAfterPaying({ [key]: value }, { telemetry: undefined })).reports).toHaveLength(0);
+  });
+
+  it.each([
+    ["AIFINPAY_TELEMETRY", "off"],
+    ["DO_NOT_TRACK", "1"],
+  ])("is sent with telemetry: true even when %s=%s", async (key, value) => {
+    expect((await reportsAfterPaying({ [key]: value }, { telemetry: true })).reports).toHaveLength(1);
+  });
+
+  it.each([
+    ["AIFINPAY_TELEMETRY", "install"],
+    ["DO_NOT_TRACK", "0"],
+  ])("is still sent with the unrelated %s=%s", async (key, value) => {
+    expect((await reportsAfterPaying({ [key]: value }, { telemetry: undefined })).reports).toHaveLength(1);
   });
 });

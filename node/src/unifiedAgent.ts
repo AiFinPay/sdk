@@ -218,7 +218,8 @@ export interface AiFinPayAgentOptions extends AgentOptions {
   /** Inject a viem wallet client for EVM message and on-chain transaction signing. */
   evmWalletClient?: WalletClient;
   budgetCaps?: BudgetCaps;
-  telemetry?: boolean; // default true
+  /** Paid-call report to `${baseUrl}/api/telemetry`. Unset: on unless AIFINPAY_TELEMETRY=off|0|false|no or DO_NOT_TRACK=1. */
+  telemetry?: boolean;
   polygonRpc?: string; // default: https://polygon.drpc.org
   /**
    * Where the daily cap is remembered.
@@ -750,7 +751,7 @@ export class AiFinPayAgent {
     // the failure the option exists to prevent.
     if (opts.spendLedger) this.ledgerOverride = opts.spendLedger;
     this._aifp1Cache = new Aifp1ReceiptCache(opts.merchantPins ?? FileMerchantPinStore.default());
-    this.telemetry = opts.telemetry !== false;
+    this.telemetry = typeof opts.telemetry === "boolean" ? opts.telemetry : !telemetryOffByEnv(process.env);
     this.polygonRpc = opts.polygonRpc ?? opts.evmRpcUrls?.polygon ?? "https://polygon.drpc.org";
     this.solanaRpc = opts.solanaRpc ?? process.env.AIFINPAY_SOLANA_RPC ?? "https://api.mainnet-beta.solana.com";
     // Optional RPC overrides for non-Polygon EVM chains used in bridge flows.
@@ -2387,6 +2388,15 @@ export class AiFinPayAgent {
       })
       .catch(() => {});
   }
+}
+
+/** The same switches as @aifinpay/analytics: AIFINPAY_TELEMETRY=on|read-only wins over DO_NOT_TRACK. */
+function telemetryOffByEnv(env: NodeJS.ProcessEnv): boolean {
+  const value = (env.AIFINPAY_TELEMETRY ?? "").trim().toLowerCase();
+  if (value === "on" || value === "read-only") return false;
+  if (["off", "0", "false", "no"].includes(value)) return true;
+  const dnt = (env.DO_NOT_TRACK ?? "").trim().toLowerCase();
+  return dnt === "1" || dnt === "true";
 }
 
 /** Legacy bridge settlement has no reviewed mainnet route; keep this closed. */
