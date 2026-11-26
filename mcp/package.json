@@ -1,6 +1,6 @@
 {
   "name": "@aifinpay/mcp",
-  "version": "2.20.0",
+  "version": "2.20.1",
   "mcpName": "io.github.daochild/aifinpay",
   "description": "AiFinPay MCP: persistent local agent wallets, owner-configured EVM and Solana payment adapters, durable budgets and receipt recovery.",
   "type": "module",
@@ -77,7 +77,7 @@
   "bugs": "https://github.com/AiFinPay/sdk/issues",
   "dependencies": {
     "@aifinpay/agent": "2.18.0",
-    "@aifinpay/analytics": "0.2.0",
+    "@aifinpay/analytics": "0.2.1",
     "@aifinpay/skill": "^2.13.0",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "bs58": "^6.0.0",

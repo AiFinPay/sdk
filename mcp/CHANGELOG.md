@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.20.1 — analytics 0.2.1
+
+- Depends on `@aifinpay/analytics` 0.2.1 (exact): the telemetry install id
+  follows `HOME` at call time, so under Bun a redirected `HOME` no longer
+  reads or writes the real `~/.aifinpay`. Under Node nothing changes.
+
 ## 2.20.0 — names its version to AiFinPay and to the merchant
 
 - Depends on `@aifinpay/agent` 2.18.0 (exact). Requests to the AiFinPay API
