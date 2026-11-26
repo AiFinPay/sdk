@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.18.1 — the paid-call report listens to the opt-out switches
+## 3.0.1 — the paid-call report listens to the opt-out switches
 
 - With the `telemetry` option unset, `AIFINPAY_TELEMETRY=off` (also `0`,
   `false`, `no`, any case) or `DO_NOT_TRACK=1` turns off the report to
@@ -8,6 +8,18 @@
   `AIFINPAY_TELEMETRY=on` keeps it on. An explicit `telemetry: true` or `false`
   wins over the environment. The payload is unchanged.
 - The README names what the report sends, where, and how to turn it off.
+
+## 3.0.0 — wallet 2.0.0
+
+Breaking, through the re-exported wallet API only. Agent derivation,
+addresses and payments are unchanged.
+
+- `@aifinpay/agent` depends on `@aifinpay/wallet` 2.0.0, and the wallet API it
+  re-exports follows that release: use `w.<chain>.address`,
+  `w.<chain>.exportPrivateKey()` and `exportSeed()` instead of the flat
+  `*Address` fields and `keys`. `walletFromSolanaSecret`, `derivationMode`,
+  `DerivationMode`, `WalletKeys` and Casper derivation are no longer exported.
+- The agent's own `fromSolanaSecret` and Solana handling are unchanged.
 
 ## 2.18.0 — the SDK names its version
 

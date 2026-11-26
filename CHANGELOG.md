@@ -6,13 +6,62 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
-## Telemetry opt-out reaches the SDK report — agent 2.18.1, MCP 2.20.1
+## Telemetry opt-out reaches the SDK report — agent 3.0.1, MCP 2.20.1
 
 - `@aifinpay/agent` turns off its paid-call report to `/api/telemetry` on
   `AIFINPAY_TELEMETRY=off|0|false|no` or `DO_NOT_TRACK=1` when the `telemetry`
   option is unset, and its README names the fields it sends.
 - `@aifinpay/mcp` builds every agent with `telemetry: false`, so the MCP never
   sends that report. Python has no such report and is unchanged.
+
+## Analytics: install id follows HOME under Bun — analytics 0.2.1
+
+- `@aifinpay/analytics` finds `~/.aifinpay/.telemetry-id` from `HOME`
+  (`USERPROFILE` on Windows) at call time, as Node's `os.homedir()` does. Under
+  Bun a runtime `HOME` change was ignored, so redirected processes and the MCP
+  telemetry tests used the real `~/.aifinpay`.
+
+## Agent: wallet 2.0.0 — agent 3.0.0
+
+- Breaking: `@aifinpay/agent` moves its `@aifinpay/wallet` pin to 2.0.0, so the
+  re-exported wallet API loses the flat `*Address` fields, `keys`,
+  `walletFromSolanaSecret`, the derivation mode and Casper. Agent addresses
+  and payments are unchanged. `@aifinpay/mcp` and `mcp-http` keep the wallet
+  their published `@aifinpay/agent` resolves until they move to agent 3.
+
+## Wallet: deprecated API, Casper and legacy-solana removed — wallet 2.0.0
+
+- Breaking: `@aifinpay/wallet` drops the flat `*Address` fields, the `keys`
+  getter, `WalletKeys`, `LEGACY_SOLANA_DERIVATION` and all Casper derivation.
+  Use `w.<chain>.address`, `w.<chain>.exportPrivateKey()` and `exportSeed()`.
+  The legacy-solana derivation is gone too (`--legacy-solana`, `mode`,
+  `walletFromSolanaSecret`): unindexed legacy-solana and bare `mcp init`
+  keystores need `@aifinpay/wallet@1`. Standard and indexed addresses and the
+  keystore format are unchanged; indexed wallets remain the MCP-compatible
+  path. `@aifinpay/agent` still pins wallet 1.x; its re-export changes when
+  that pin moves.
+
+## Wallet: per-chain accounts — wallet 1.8.0
+
+- `@aifinpay/wallet` exposes one account per chain (`w.evm.address`,
+  `w.evm.exportPrivateKey()`, …) plus `exportSeed()`, so signing on one chain
+  no longer exports every key. The unpublished 1.7.0 `exportKeys()` is
+  removed; the flat address fields and `keys` are deprecated. Addresses and
+  keystores are unchanged.
+
+## Wallet: keys behind a private field — wallet 1.7.0
+
+- `@aifinpay/wallet` `DerivedWallet` holds its seed in a `#private` field and
+  exposes keys only through `exportKeys()` (`keys` is a deprecated getter), so
+  logging or serialising a wallet shows addresses only. `dispose()` zeroes the
+  seed. Addresses and keystores are unchanged.
+
+## Wallet: Tron address — wallet 1.6.0
+
+- `@aifinpay/wallet` derives a Tron address and key from the agent seed under
+  its own `aifinpay:tron:v1\0` domain and prints it in `new`/`show`. Existing
+  addresses and keystores are unchanged. `@aifinpay/agent`, MCP and the Python
+  SDK do not derive Tron keys.
 
 ## Self-hosted gates: AiFinPay decides who pays — gate 0.15.0
 

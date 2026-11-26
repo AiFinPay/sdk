@@ -12,7 +12,7 @@
 1. **Never overwrite existing keystore** — `new` refuses if `agent.json` exists
 2. **Always back up** — remind user to back up `~/.aifinpay/agent.json`
 3. **Use encryption by default** — `--plain` only for legacy compatibility
-4. **Standard derivation preferred** — `--legacy-solana` only for existing wallets
+4. **Use an index for MCP** — `new --index 0` gives the addresses `@aifinpay/mcp` runs
 
 ## Passphrase Rules
 
@@ -25,4 +25,4 @@
 
 1. **Auto-decrypt** — use `AIFINPAY_WALLET_PASSPHRASE` from environment
 2. **No interactive prompts in non-TTY** — fail with clear error message
-3. **Shared keystore** — `@aifinpay/mcp` reads the same `agent.json`
+3. **Shared keystore** — `@aifinpay/mcp` reads the same `agent.json`; it runs an indexed wallet at the addresses `show` prints

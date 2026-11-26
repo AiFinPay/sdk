@@ -1,5 +1,67 @@
 # @aifinpay/wallet — changelog
 
+## 2.0.0 — deprecated API and legacy-solana removed
+
+Breaking. Standard and indexed addresses and the keystore format are
+unchanged; legacy-solana wallets are no longer derived.
+
+- Removed the flat `evmAddress`, `solanaAddress`, `nearAddress`,
+  `aptosAddress` and `tronAddress` fields: use `w.<chain>.address`.
+- Removed the `keys` getter and the `WalletKeys` type: use `exportSeed()` and
+  `w.<chain>.exportPrivateKey()` (same encodings).
+- Removed Casper: `w.casper`, `casperAddress`, `casperPublicKey`,
+  `DerivationDomain.CASPER` and `"casper"` in `ChainName`. Recover a Casper
+  key with `@aifinpay/wallet@1` and the same seed.
+- Removed the unused `LEGACY_SOLANA_DERIVATION` constant.
+- Removed the legacy-solana derivation (raw seed as the Solana key):
+  `DerivationMode`, `derivationMode`, `walletFromSolanaSecret`, the
+  `--legacy-solana` flag and the bundled example. There is one Solana
+  derivation, `Ed25519(SHA-256("aifinpay:solana:v1\0" || seed))`. Passing
+  `--legacy-solana` or `{ mode: "legacy-solana" }` throws rather than
+  silently deriving another Solana address.
+- Unindexed 1.x legacy-solana keystores and bare `npx @aifinpay/mcp init`
+  keystores are refused by `show` and `export` with a pointer to
+  `@aifinpay/wallet@1`; `new` still never overwrites them. Indexed derivation
+  never depended on the mode, so `--index N` use of those keystores is exact.
+- New keystores no longer record `derivationMode`. The CLI now points MCP users
+  to `new --index 0`, whose addresses MCP and the full SDK share.
+
+## 1.8.0 — per-chain accounts
+
+- One `ChainAccount` per chain on `DerivedWallet`: `evm`, `solana`, `near`,
+  `aptos`, `tron` (and deprecated `casper`), each with `address`, `publicKey`
+  and `exportPrivateKey()`, which exports that chain's key only.
+  `exportSeed()` returns the recovery seed.
+- `exportKeys()` from 1.7.0 is removed: it exported every key to sign on one
+  chain. 1.7.0 was not published, so no released API breaks.
+- Deprecated, still working: the flat `*Address` fields and the
+  non-enumerable `keys` getter, now built from the per-chain exports.
+- `dispose()` revokes every account's export. Addresses, derivation and the
+  keystore format are unchanged.
+
+## 1.7.0 — key material behind a private field
+
+- `DerivedWallet` is now a class. Addresses stay plain readonly fields; the
+  recovery seed is an ECMAScript `#private` field, so `JSON.stringify`,
+  `util.inspect`, object spread and `structuredClone` no longer expose keys.
+- New `exportKeys()` returns the key material (new `WalletKeys` type). `keys`
+  remains as a deprecated non-enumerable getter that calls it.
+- Only the root seed is held; per-chain keys are derived on export and their
+  buffers zeroed. `dispose()` / `Symbol.dispose` zero the seed; exports then
+  throw.
+- Addresses, derivation and the keystore format are unchanged.
+
+## 1.6.0 — Tron address
+
+- Derive a Tron address from the same seed:
+  `secp256k1(SHA-256("aifinpay:tron:v1\0" || seed))`, encoded as base58check
+  of `0x41 || keccak256(pubkey)[-20:]`. Indexed wallets append the index after
+  the domain separator, as for the other chains. New fields: `tronAddress`,
+  `keys.tronPrivateKeyHex`, `DerivationDomain.TRON`. `new` and `show` print the
+  Tron address. Existing addresses and the keystore format are unchanged.
+- The full SDK and MCP do not derive Tron keys; this package only creates the
+  address and key material.
+
 ## 1.5.1 — documentation refresh
 
 - Remove a historical issue-reference snapshot from the README; describe the

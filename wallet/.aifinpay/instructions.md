@@ -29,11 +29,12 @@
 ```bash
 npx @aifinpay/wallet new                    # create encrypted keystore
 npx @aifinpay/wallet new --plain            # create unencrypted keystore (legacy)
-npx @aifinpay/wallet new --legacy-solana    # create with legacy Solana derivation
+npx @aifinpay/wallet new --index 0          # indexed wallet (MCP-compatible)
 npx @aifinpay/wallet show                   # print addresses
 npx @aifinpay/wallet export                 # print seed hex
 ```
 
 ## Integration
 
-The keystore is shared with `@aifinpay/mcp` — no additional config needed.
+The keystore is shared with `@aifinpay/mcp` — no additional config needed. Create it
+with `--index 0` (or any index) so MCP runs it at the same addresses `show` prints.

@@ -13,7 +13,16 @@ import { join } from "node:path";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-export function identityPath(home: string = homedir()): string {
+/**
+ * The variable Node's os.homedir() reads, read on every call: Bun's homedir()
+ * keeps the home it started with when HOME changes at runtime.
+ */
+function currentHome(): string {
+  const fromEnv = process.platform === "win32" ? process.env.USERPROFILE : process.env.HOME;
+  return fromEnv || homedir();
+}
+
+export function identityPath(home: string = currentHome()): string {
   return join(home, ".aifinpay", ".telemetry-id");
 }
 

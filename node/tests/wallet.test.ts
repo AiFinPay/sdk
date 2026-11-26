@@ -6,33 +6,24 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  createWalletCLI,
-  deriveWallet,
-  DerivationDomain,
-  MAX_DERIVATION_INDEX,
-  newWallet,
-  walletFromSeed,
-  walletFromSolanaSecret,
-} from "../src/wallet.js";
+import * as walletApi from "../src/wallet.js";
+import { createWalletCLI, deriveWallet, DerivationDomain, MAX_DERIVATION_INDEX, newWallet, walletFromSeed } from "../src/wallet.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 describe("the full standalone wallet API", () => {
-  it("derives EVM, Solana, NEAR, Aptos and Casper public identifiers", () => {
+  it("derives EVM, Solana, NEAR, Aptos and Tron public identifiers", () => {
     const w = deriveWallet("42".repeat(32));
-    expect(w.derivationMode).toBe("standard");
-    expect(w.evmAddress).toMatch(/^0x[0-9a-fA-F]{40}$/);
-    expect(w.solanaAddress).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
-    expect(w.nearAddress).toMatch(/^[0-9a-f]{64}$/);
-    expect(w.aptosAddress).toMatch(/^0x[0-9a-f]{64}$/);
-    expect(w.casperAddress).toMatch(/^account-hash-[0-9a-f]{64}$/);
-    expect(w.casperPublicKey).toMatch(/^01[0-9a-f]{64}$/);
+    expect(w.evm.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    expect(w.solana.address).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
+    expect(w.near.address).toMatch(/^[0-9a-f]{64}$/);
+    expect(w.aptos.address).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(w.tron.address).toMatch(/^T[1-9A-HJ-NP-Za-km-z]{33}$/);
   });
 
   it("re-derives the same complete wallet from its own returned seed", () => {
     const w = deriveWallet("ab".repeat(32));
-    expect(deriveWallet(w.keys.seedHex)).toEqual(w);
+    expect(deriveWallet(w.exportSeed())).toEqual(w);
   });
 
   it("rejects a malformed seed rather than deriving a wrong wallet", () => {
@@ -42,25 +33,31 @@ describe("the full standalone wallet API", () => {
 
   it("newWallet returns a recoverable seed", async () => {
     const w = await newWallet();
-    expect(w.derivationMode).toBe("standard");
-    expect(w.keys.seedHex).toMatch(/^[0-9a-f]{64}$/);
-    expect(deriveWallet(w.keys.seedHex)).toEqual(w);
+    expect(w.exportSeed()).toMatch(/^[0-9a-f]{64}$/);
+    expect(deriveWallet(w.exportSeed())).toEqual(w);
   });
 
   it("exports the standalone wallet recovery, domain and CLI APIs", () => {
     const seed = "ab".repeat(32);
-    const wallet = walletFromSeed(seed);
-    expect(wallet.derivationMode).toBe("standard");
+    expect(walletFromSeed(seed)).toEqual(deriveWallet(seed));
     expect(DerivationDomain.SOLANA).toBe("aifinpay:solana:v1\0");
     expect(MAX_DERIVATION_INDEX).toBe(0xffffffff);
-    expect(walletFromSolanaSecret).toBeTypeOf("function");
     expect(createWalletCLI).toBeTypeOf("function");
+  });
+
+  it("no longer re-exports the legacy-solana derivation or Casper", () => {
+    expect("walletFromSolanaSecret" in walletApi).toBe(false);
+    expect(() => deriveWallet("ab".repeat(32), { mode: "legacy-solana" } as never)).toThrow(/removed/);
+    const w = deriveWallet("ab".repeat(32)) as unknown as Record<string, unknown>;
+    for (const gone of ["casper", "evmAddress", "solanaAddress", "keys", "derivationMode"]) {
+      expect(w[gone]).toBeUndefined();
+    }
   });
 
   it("the EVM address is shared across EVM chains and checksummed", () => {
     const w = deriveWallet("cd".repeat(32));
-    expect(w.evmAddress).toMatch(/^0x[0-9a-fA-F]{40}$/);
-    expect(w.evmAddress).not.toBe(w.evmAddress.toLowerCase());
+    expect(w.evm.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    expect(w.evm.address).not.toBe(w.evm.address.toLowerCase());
   });
 });
 

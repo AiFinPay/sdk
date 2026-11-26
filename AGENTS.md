@@ -60,7 +60,7 @@ Monorepo of independent packages. Each package owns its own `AGENTS.md`; respect
 
 ## Commands
 
-- Node ≥22, Python 3.13. Install Node packages with `npm ci --no-audit --no-fund` in each package directory; never run `npm install` at root or in a package.
+- Node ≥22, Python 3.13. Install Node packages with `npm ci --no-audit --no-fund` in each package directory; never run `npm install` at root or in a package, except the lockfile sync after a version bump (see Version gate).
 - Each package is built/tested independently from its own directory:
   - `npm run build` then `npm test` in `node/`, `wallet/`, `mcp/`, `gate/`, `analytics/`, `deployments/`.
   - `python -m pip install -e . pytest` then `python -m pytest tests -q` in `python/`.
@@ -68,7 +68,7 @@ Monorepo of independent packages. Each package owns its own `AGENTS.md`; respect
 - `node/`: `npm run registry:sync` regenerates `src/generated/splitterRoutes.generated.ts` and the EVM/Solana/Aptos/NEAR deployment tables in `src/generated/` from `@aifinpay/deployments`. `npm run registry:check` verifies them in CI.
 - `deployments/`: run `npm run build` then `npm run registry:build` to refresh `registry/splitter/evm/v1.4/deployments.json` and `registry/splitter/solana/deployments.json` from upstream repos.
 - `mcp-against-source` flow: when changing `node/` in a way that affects `mcp/`, pack the agent (`cd node && npm pack --pack-destination /tmp`), install the tarball into `mcp/` (`npm install --no-save /tmp/aifinpay-agent-*.tgz`), then build and test `mcp/`. CI already runs this; verify locally when touching the Node/MCP boundary.
-- Version gate: changing published files without a version bump fails CI (`node scripts/check-version-bump.mjs`). Bump `package.json` (or `python/pyproject.toml`) and the package/root `CHANGELOG.md` together.
+- Version gate: changing published files without a version bump fails CI (`node scripts/check-version-bump.mjs`). Bump `package.json` (or `python/pyproject.toml`) and the package/root `CHANGELOG.md` together. After changing a Node package's `version`, run `npm i --package-lock-only --no-audit --no-fund` in that package directory and commit the updated `package-lock.json` in the same change, so its `version` fields match the manifest.
 
 ## Security rules
 
@@ -102,6 +102,7 @@ In the PR description, add a section **Linked surfaces** with one line per surfa
 ## Workflow conventions
 
 - No workspace build orchestrator (no Turbo/Nx/Just). CI runs each package independently.
+- No `CODEOWNERS` file. Do not add `.github/CODEOWNERS` (or `CODEOWNERS`/`docs/CODEOWNERS`) or propose review-ownership rules in it; review routing is not managed in this repo.
 - Per-package lockfiles are authoritative (`package-lock.json` in `node/`, `wallet/`, `mcp/`, `gate/`, `analytics/`, `deployments/`, `mcp-http/`). Root `pnpm-lock.yaml` only tracks `@daochild/agents-config`.
 - Root `opencode.json` loads this file plus shared agent config and skills; edit it only for agent/config changes, not for application code.
 - Default repo-local skills live in `.agents/skills/`; the canonical sibling `agent/skills/` is the published skill content, not the skills workshop.

@@ -227,7 +227,7 @@ Signed messages that are identical in both SDKs:
 
 Only Node signs EIP-3009.
 
-(`@aifinpay/wallet`'s default "standard" mode is a third derivation for Solana. That is a separate package, covered elsewhere.)
+(`@aifinpay/wallet` derives Solana from its own `aifinpay:solana:v1` domain, a third derivation. That is a separate package, covered elsewhere.)
 
 ## 12. Errors
 

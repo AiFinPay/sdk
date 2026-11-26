@@ -20,15 +20,7 @@ import { join, dirname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { createCipheriv, createDecipheriv, scryptSync, randomBytes, randomFillSync } from "node:crypto";
-import bs58 from "bs58";
-import {
-  MAX_DERIVATION_INDEX,
-  newWallet,
-  walletFromSolanaSecret,
-  walletFromSeed,
-  type DerivedWallet,
-  type DerivationMode,
-} from "./index.js";
+import { MAX_DERIVATION_INDEX, newWallet, walletFromSeed, type DerivedWallet } from "./index.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -65,7 +57,8 @@ type PlainKeystore = {
   secretB58: string;
   seedHex?: string;
   created?: string;
-  derivationMode?: DerivationMode;
+  /** Written by 1.x only; read to recognise legacy-solana keystores. */
+  derivationMode?: string;
   derivationIndex?: number;
 };
 
@@ -73,7 +66,7 @@ type KeystoreFile =
   | PlainKeystore
   | (EncryptedKeystore & {
       created?: string;
-      derivationMode?: DerivationMode;
+      derivationMode?: string;
       derivationIndex?: number;
     });
 
@@ -141,12 +134,13 @@ function print(w: DerivedWallet, created: boolean, isEncrypted: boolean = false)
   process.stdout.write(
     `Your agent's addresses${w.derivationIndex === undefined ? "" : ` (index ${w.derivationIndex})`} — ` +
       `the EVM one is the same on every EVM chain:\n\n` +
-      `  EVM     ${w.evmAddress}\n` +
-      `  Solana  ${w.solanaAddress}\n\n` +
-      (w.derivationMode === "legacy-solana" || w.derivationIndex !== undefined
+      `  EVM     ${w.evm.address}\n` +
+      `  Solana  ${w.solana.address}\n` +
+      `  Tron    ${w.tron.address}\n\n` +
+      (w.derivationIndex !== undefined
         ? `The keystore is the one @aifinpay/mcp reads, so \`npx @aifinpay/mcp\`\n` + `uses it with no config.\n\n`
-        : `Do not fund this wallet for use with @aifinpay/mcp: standard mode derives a\n` +
-          `different identity there. Create it with --legacy-solana instead.\n\n`) +
+        : `Do not fund this wallet for use with @aifinpay/mcp: MCP runs an unindexed\n` +
+          `keystore as a different identity. Create it with --index 0 instead.\n\n`) +
       `Back up ${KEYSTORE}. It is the only copy, and the derivation is not\n` +
       `BIP-39 — no standard wallet can recover it from a phrase.\n\n` +
       `The addresses hold nothing yet. Send POL to the EVM address to fund it.\n`
@@ -204,12 +198,7 @@ async function promptPassphrase(prompt: string): Promise<string> {
   });
 }
 
-async function create(
-  force: boolean,
-  useEncryption: boolean,
-  mode?: DerivationMode,
-  index?: number
-): Promise<DerivedWallet> {
+async function create(force: boolean, useEncryption: boolean, index?: number): Promise<DerivedWallet> {
   const { HOME, KEYSTORE, ENV_FILE, INSTRUCTIONS_FILE, RULES_FILE, AIIGNORE_FILE } = getPaths();
   // A file that exists but cannot be read may hold funds exactly as much as a
   // valid one: refuse to overwrite it rather than parse-then-clobber.
@@ -230,7 +219,7 @@ async function create(
     }
     return wallet;
   }
-  const w = await newWallet({ mode, index });
+  const w = await newWallet({ index });
   mkdirSync(HOME, { recursive: true, mode: 0o700 });
 
   const SRC_INSTRUCTIONS = join(__dirname, "..", ".aifinpay", "instructions.md");
@@ -254,6 +243,8 @@ secrets/
     writeFileSync(AIIGNORE_FILE, aiignoreContent, { mode: 0o644 });
   }
 
+  const seedHex = w.exportSeed();
+  const solanaSecretB58 = w.solana.exportPrivateKey();
   let content: string;
   if (useEncryption) {
     const envPass = process.env.AIFINPAY_WALLET_PASSPHRASE;
@@ -265,10 +256,10 @@ secrets/
       savePassphraseToEnv(passphrase, ENV_FILE);
       process.stdout.write(`Generated strong passphrase and saved to ${ENV_FILE}\n\n`);
     }
-    const encrypted = encryptSecret(w.keys.solanaSecretKeyB58, passphrase);
+    const encrypted = encryptSecret(solanaSecretB58, passphrase);
     // Preserve the recovery seed for standard and indexed wallets in its own
     // AES-GCM envelope; `ct` stays the Solana secret for existing MCP readers.
-    const seedBlock = encryptSecret(w.keys.seedHex, passphrase);
+    const seedBlock = encryptSecret(seedHex, passphrase);
     const seedEnc: EncryptedSeed = { salt: seedBlock.salt, iv: seedBlock.iv, tag: seedBlock.tag, ct: seedBlock.ct };
     content =
       JSON.stringify(
@@ -276,7 +267,6 @@ secrets/
           ...encrypted,
           seedEnc,
           created: nowIso(),
-          derivationMode: w.derivationMode,
           ...(w.derivationIndex === undefined ? {} : { derivationIndex: w.derivationIndex }),
         },
         null,
@@ -286,10 +276,9 @@ secrets/
     content =
       JSON.stringify(
         {
-          secretB58: w.keys.solanaSecretKeyB58,
-          seedHex: w.keys.seedHex,
+          secretB58: solanaSecretB58,
+          seedHex,
           created: nowIso(),
-          derivationMode: w.derivationMode,
           ...(w.derivationIndex === undefined ? {} : { derivationIndex: w.derivationIndex }),
         },
         null,
@@ -315,14 +304,28 @@ function parseIndexArg(args: string[], position: number): number {
   return index;
 }
 
-function storedMode(store: KeystoreFile): DerivationMode | undefined {
-  return "derivationMode" in store && (store.derivationMode === "legacy-solana" || store.derivationMode === "standard")
-    ? store.derivationMode
-    : undefined;
-}
-
 function storedSeed(store: KeystoreFile): string | undefined {
   return "seedHex" in store && typeof store.seedHex === "string" && store.seedHex ? store.seedHex : undefined;
+}
+
+/**
+ * 1.x legacy-solana keystores: marked `derivationMode: "legacy-solana"`, or a
+ * bare `mcp init` `{ secretB58 }` with no seed and no mode. Their unindexed
+ * Solana key was the raw seed, which 2.x does not derive. Indexed derivation
+ * never depended on that mode, so indexed use of them is still exact.
+ */
+function assertNotLegacySolana(store: KeystoreFile, index: number | undefined): void {
+  if (index !== undefined) return;
+  const legacy =
+    store.derivationMode === "legacy-solana" ||
+    ("secretB58" in store && !storedSeed(store) && store.derivationMode === undefined);
+  if (legacy) {
+    const { KEYSTORE } = getPaths();
+    throw new Error(
+      `${KEYSTORE} holds a legacy-solana wallet, which @aifinpay/wallet 2.x does not derive. ` +
+        "Open it with `npx @aifinpay/wallet@1`."
+    );
+  }
 }
 
 /** 1.1.0 encrypted keystore: Solana secret sealed, seed in the clear next to
@@ -332,39 +335,30 @@ function loadLegacyEncrypted(store: EncryptedKeystore, passphrase: string, index
   const { KEYSTORE } = getPaths();
   const secretB58 = decrypt(store, passphrase);
   const seedHex = storedSeed(store as KeystoreFile);
-  const mode = storedMode(store as KeystoreFile) ?? "standard";
-  if (index !== undefined && !seedHex) throw new Error("seedHex required to recover an indexed wallet");
-  if (seedHex) {
-    const w = walletFromSeed(seedHex, { mode, index });
-    if (w.keys.solanaSecretKeyB58 !== secretB58) {
-      throw new Error("keystore seed does not match its key");
-    }
-    process.stderr.write(`[warn] ${KEYSTORE} stores the seed unencrypted — recreate it with \`wallet new\`.\n`);
-    return w;
+  if (!seedHex) {
+    throw new Error(
+      index === undefined ? "seedHex required in encrypted keystore" : "seedHex required to recover an indexed wallet"
+    );
   }
-  if (mode === "legacy-solana") return walletFromSolanaSecret(secretB58, { mode });
-  throw new Error("seedHex required for standard derivation mode in encrypted keystore");
+  const w = walletFromSeed(seedHex, { index });
+  if (w.solana.exportPrivateKey() !== secretB58) {
+    throw new Error("keystore seed does not match its key");
+  }
+  process.stderr.write(`[warn] ${KEYSTORE} stores the seed unencrypted — recreate it with \`wallet new\`.\n`);
+  return w;
 }
 
 function loadWalletFromStore(store: KeystoreFile, indexOverride?: number): DerivedWallet {
   const index = indexOverride ?? store.derivationIndex;
+  assertNotLegacySolana(store, index);
   if ("secretB58" in store) {
     const seedHex = storedSeed(store);
-    // No derivationMode recorded: a keystore with a seed is standard (this
-    // CLI always wrote both); a bare { secretB58 } is `mcp init` output,
-    // whose Solana key IS the seed.
-    const mode: DerivationMode = storedMode(store) ?? (seedHex ? "standard" : "legacy-solana");
-    if (index !== undefined) {
-      if (!seedHex) throw new Error("seedHex required to recover an indexed wallet");
-      return walletFromSeed(seedHex, { mode, index });
-    }
-    if (mode === "legacy-solana") {
-      return walletFromSolanaSecret(store.secretB58, { mode });
-    }
     if (!seedHex) {
-      throw new Error("seedHex required for standard derivation mode");
+      throw new Error(
+        index === undefined ? "seedHex required in keystore" : "seedHex required to recover an indexed wallet"
+      );
     }
-    return walletFromSeed(seedHex, { mode });
+    return walletFromSeed(seedHex, { index });
   }
   if ("enc" in store) {
     const envPass = process.env.AIFINPAY_WALLET_PASSPHRASE;
@@ -374,10 +368,9 @@ function loadWalletFromStore(store: KeystoreFile, indexOverride?: number): Deriv
       );
     }
     const passphrase = validatePassphrase(envPass);
-    const mode = storedMode(store) ?? "standard";
     // New format (1.1.1+): the seed itself is encrypted — no plaintext key material.
     if ("seedEnc" in store && store.seedEnc) {
-      return walletFromSeed(decrypt(store.seedEnc, passphrase), { mode, index });
+      return walletFromSeed(decrypt(store.seedEnc, passphrase), { index });
     }
     return loadLegacyEncrypted(store, passphrase, index);
   }
@@ -472,7 +465,6 @@ function warnIfLoose() {
 const cmd = (process.argv[2] || "").toLowerCase();
 const hasPlainFlag = process.argv.includes("--plain");
 const isEncryptedByDefault = !hasPlainFlag;
-const hasLegacyFlag = process.argv.includes("--legacy-solana");
 // index.ts re-exports run from this module, so nothing below may act — print
 // or exit — unless this file is the process entry point.
 const isMain = !!(process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href);
@@ -482,26 +474,27 @@ if (isMain && (cmd === "-h" || cmd === "--help" || cmd === "help")) {
     `npx @aifinpay/wallet new                   create encrypted keystore (won't overwrite existing)\n` +
       `npx @aifinpay/wallet new --index N         derive child N from the chain domains\n` +
       `npx @aifinpay/wallet new --plain           create unencrypted legacy keystore\n` +
-      `npx @aifinpay/wallet new --legacy-solana   create wallet with legacy Solana derivation (not recommended)\n` +
       `npx @aifinpay/wallet show                  print addresses\n` +
       `npx @aifinpay/wallet show --index N        show child N without changing the keystore\n` +
       `npx @aifinpay/wallet export                print the seed to back up\n` +
       `\nLibrary usage:\n` +
       `  import { newWallet, createWalletCLI } from "@aifinpay/wallet";\n` +
-      `  await newWallet({ mode: "legacy-solana" });\n` +
-      `  await createWalletCLI("new", ["node", "wallet", "--legacy-solana"]);\n`
+      `  await newWallet({ index: 0 });\n` +
+      `  await createWalletCLI("new", ["node", "wallet", "--index", "0"]);\n`
   );
   process.exit(0);
 }
 
-export const run = async (cmdArg?: string, argv?: string[], options?: { mode?: DerivationMode; index?: number }) => {
+export const run = async (cmdArg?: string, argv?: string[], options?: { index?: number }) => {
   warnIfLoose();
   const localCmd = cmdArg ?? cmd;
-  const localPlain = (argv || process.argv).includes("--plain");
-  const localEncrypted = !localPlain;
-  const localLegacy = options?.mode === "legacy-solana" || (argv || process.argv).includes("--legacy-solana");
-  const derivationMode: DerivationMode = localLegacy ? "legacy-solana" : "standard";
   const args = argv || process.argv;
+  const localEncrypted = !args.includes("--plain");
+  if (args.includes("--legacy-solana") || (options as { mode?: unknown } | undefined)?.mode === "legacy-solana") {
+    throw new Error(
+      "--legacy-solana was removed in @aifinpay/wallet 2.0.0; use `npx @aifinpay/wallet@1` for legacy-solana wallets"
+    );
+  }
   const indexArg = args.findIndex((arg) => arg === "--index" || arg.startsWith("--index="));
   if (options?.index !== undefined && indexArg >= 0) {
     throw new Error("provide derivation index either as an option or a flag, not both");
@@ -517,6 +510,7 @@ export const run = async (cmdArg?: string, argv?: string[], options?: { mode?: D
       process.stderr.write("no wallet found — run `npx @aifinpay/wallet new` first.\n");
       process.exit(1);
     }
+    assertNotLegacySolana(s, s.derivationIndex);
     let seedHex: string | undefined;
     if ("enc" in s) {
       const envPass = process.env.AIFINPAY_WALLET_PASSPHRASE;
@@ -530,13 +524,10 @@ export const run = async (cmdArg?: string, argv?: string[], options?: { mode?: D
       } else {
         // 1.1.0 format: seed in the clear — trusted only after it re-derives
         // the sealed Solana key.
-        seedHex = loadLegacyEncrypted(s, passphrase).keys.seedHex;
+        seedHex = loadLegacyEncrypted(s, passphrase).exportSeed();
       }
-    } else if (storedSeed(s)) {
-      seedHex = storedSeed(s);
     } else {
-      // Bare MCP keystore: the stored Solana key's first 32 bytes are the seed.
-      seedHex = Buffer.from(bs58.decode(s.secretB58).slice(0, 32)).toString("hex");
+      seedHex = storedSeed(s);
     }
     if (!seedHex) {
       process.stderr.write("no stored seed — may need to regenerate from secret.\n");
@@ -565,7 +556,7 @@ export const run = async (cmdArg?: string, argv?: string[], options?: { mode?: D
   }
   const { KEYSTORE } = getPaths();
   const had = existsSync(KEYSTORE);
-  const w = await create(localCmd === "new", localEncrypted, derivationMode, index);
+  const w = await create(localCmd === "new", localEncrypted, index);
   print(w, !had, localEncrypted);
 };
 
