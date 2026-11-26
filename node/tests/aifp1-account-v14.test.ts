@@ -1126,8 +1126,8 @@ describe("AiFinPayAgent", () => {
         ...(derivationIndex === undefined ? {} : { derivationIndex }),
       });
       const wallet = deriveWallet(seedHex, derivationIndex === undefined ? {} : { index: derivationIndex });
-      expect(agent.aptosAddress).toBe(wallet.aptosAddress);
-      expect(agent.nearAddress).toBe(wallet.nearAddress);
+      expect(agent.aptosAddress).toBe(wallet.aptos.address);
+      expect(agent.nearAddress).toBe(wallet.near.address);
     }
   });
   it("wires signer, payer and RPC through fetchPaid", async () => {
@@ -1389,13 +1389,13 @@ describe("the durable purchase guard and identity", () => {
   });
   it("an agent without the recovery seed refuses account identities and payments", async () => {
     const wallet = deriveWallet("11".repeat(32));
-    const agent = await AiFinPayAgent.fromSolanaSecret(wallet.keys.solanaSecretKeyB58, { telemetry: false });
+    const agent = await AiFinPayAgent.fromSolanaSecret(wallet.solana.exportPrivateKey(), { telemetry: false });
     expect(() => agent.aptosAddress).toThrow(/recovery seed/);
     expect(() => agent.nearAddress).toThrow(/recovery seed/);
     const flow = setup(() => "");
     await expect(agent.fetchPaid(URL_PAID, {}, flow.paidOptions())).rejects.toThrow(/recovery seed/);
     const seeded = await AiFinPayAgent.fromSeed("11".repeat(32), { telemetry: false });
-    expect(seeded.aptosAddress).toBe(wallet.aptosAddress);
-    expect(seeded.nearAddress).toBe(wallet.nearAddress);
+    expect(seeded.aptosAddress).toBe(wallet.aptos.address);
+    expect(seeded.nearAddress).toBe(wallet.near.address);
   });
 });

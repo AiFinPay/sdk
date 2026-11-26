@@ -6,6 +6,14 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## Agent: wallet 2.0.0 — agent 3.0.0
+
+- Breaking: `@aifinpay/agent` moves its `@aifinpay/wallet` pin to 2.0.0, so the
+  re-exported wallet API loses the flat `*Address` fields, `keys`,
+  `walletFromSolanaSecret`, the derivation mode and Casper. Agent addresses
+  and payments are unchanged. `@aifinpay/mcp` and `mcp-http` keep the wallet
+  their published `@aifinpay/agent` resolves until they move to agent 3.
+
 ## Wallet: deprecated API, Casper and legacy-solana removed — wallet 2.0.0
 
 - Breaking: `@aifinpay/wallet` drops the flat `*Address` fields, the `keys`

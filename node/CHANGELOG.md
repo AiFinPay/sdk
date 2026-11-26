@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.0.0 — wallet 2.0.0
+
+Breaking, through the re-exported wallet API only. Agent derivation,
+addresses and payments are unchanged.
+
+- `@aifinpay/agent` depends on `@aifinpay/wallet` 2.0.0, and the wallet API it
+  re-exports follows that release: use `w.<chain>.address`,
+  `w.<chain>.exportPrivateKey()` and `exportSeed()` instead of the flat
+  `*Address` fields and `keys`. `walletFromSolanaSecret`, `derivationMode`,
+  `DerivationMode`, `WalletKeys` and Casper derivation are no longer exported.
+- The agent's own `fromSolanaSecret` and Solana handling are unchanged.
+
 ## 2.18.0 — the SDK names its version
 
 - AIFP-1 requests (merchant, `/v1/quote`, `/v1/pay`, the issuer's keys), the
