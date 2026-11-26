@@ -6,6 +6,14 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## Wallet: per-chain accounts — wallet 1.8.0
+
+- `@aifinpay/wallet` exposes one account per chain (`w.evm.address`,
+  `w.evm.exportPrivateKey()`, …) plus `exportSeed()`, so signing on one chain
+  no longer exports every key. The unpublished 1.7.0 `exportKeys()` is
+  removed; the flat address fields and `keys` are deprecated. Addresses and
+  keystores are unchanged.
+
 ## Wallet: keys behind a private field — wallet 1.7.0
 
 - `@aifinpay/wallet` `DerivedWallet` holds its seed in a `#private` field and

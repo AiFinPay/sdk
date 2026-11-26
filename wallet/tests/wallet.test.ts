@@ -16,39 +16,59 @@ const SEEDS = ["11".repeat(32), "ab".repeat(32), "0f".repeat(32), "00".repeat(31
 
 describe("key material protection", () => {
   const SEED = "ab".repeat(32);
+  const CHAINS = ["evm", "solana", "near", "aptos", "tron", "casper"] as const;
 
   it("keeps every secret out of JSON, inspect, spread and structuredClone", () => {
     const w = deriveWallet(SEED, { index: 3 });
-    const k = w.exportKeys();
-    const secrets = Object.values(k).map((v) => v.replace(/^0x/, ""));
-    for (const view of [
+    const secrets = [w.exportSeed(), ...CHAINS.map((c) => w[c].exportPrivateKey().replace(/^0x/, ""))];
+    const views = [
       JSON.stringify(w),
-      inspect(w, { showHidden: true, getters: true }),
+      inspect(w, { showHidden: true, getters: true, depth: 5 }),
+      inspect(w.evm, { showHidden: true, getters: true }),
       JSON.stringify({ ...w }),
       JSON.stringify(structuredClone(w)),
-    ]) {
+    ];
+    for (const view of views) {
       for (const secret of secrets) expect(view).not.toContain(secret);
-      expect(view).toContain(w.evmAddress);
     }
+    expect(views[0]).toContain(w.evm.address);
     expect(Object.keys(w)).not.toContain("keys");
   });
 
-  it("exportKeys returns stable material and the deprecated keys getter matches it", () => {
+  it("pairs each chain's address and public key with its own private key", () => {
     const w = deriveWallet(SEED);
-    expect(w.exportKeys()).toEqual(w.exportKeys());
-    expect(w.keys).toEqual(w.exportKeys());
-    expect(w.exportKeys().seedHex).toBe(SEED);
+    const legacy = w.keys;
+    expect(w.exportSeed()).toBe(SEED);
+    expect(w.evm.exportPrivateKey()).toBe(legacy.evmPrivateKey);
+    expect(w.solana.exportPrivateKey()).toBe(legacy.solanaSecretKeyB58);
+    expect(w.near.exportPrivateKey()).toBe(legacy.nearSecretSeedHex);
+    expect(w.aptos.exportPrivateKey()).toBe(legacy.aptosSecretSeedHex);
+    expect(w.tron.exportPrivateKey()).toBe(legacy.tronPrivateKeyHex);
+    expect(w.casper.exportPrivateKey()).toBe(legacy.casperSecretSeedHex);
+    for (const c of CHAINS) expect(w[c].chain).toBe(c);
+    expect([w.evm.address, w.solana.address, w.near.address, w.aptos.address, w.tron.address]).toEqual([
+      w.evmAddress,
+      w.solanaAddress,
+      w.nearAddress,
+      w.aptosAddress,
+      w.tronAddress,
+    ]);
+    expect(w.near.publicKey).toBe(w.near.address);
+    expect(w.casperPublicKey).toBe(`01${w.casper.publicKey}`);
+    expect(w.evm.publicKey).toMatch(/^0[23][0-9a-f]{64}$/);
+    expect(w.tron.publicKey).toMatch(/^0[23][0-9a-f]{64}$/);
   });
 
-  it("dispose wipes the seed, blocks exports and leaves addresses readable", () => {
+  it("dispose wipes the seed, revokes every export and leaves public data readable", () => {
     const w = deriveWallet(SEED);
-    const address = w.evmAddress;
+    const address = w.evm.address;
     expect(w.disposed).toBe(false);
     w.dispose();
     expect(w.disposed).toBe(true);
-    expect(() => w.exportKeys()).toThrow(/disposed/);
+    expect(() => w.exportSeed()).toThrow(/disposed/);
+    for (const c of CHAINS) expect(() => w[c].exportPrivateKey()).toThrow(/disposed/);
     expect(() => w.keys).toThrow(/disposed/);
-    expect(w.evmAddress).toBe(address);
+    expect(w.evm.address).toBe(address);
     expect(() => w.dispose()).not.toThrow();
   });
 

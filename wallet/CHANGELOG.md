@@ -1,5 +1,18 @@
 # @aifinpay/wallet — changelog
 
+## 1.8.0 — per-chain accounts
+
+- One `ChainAccount` per chain on `DerivedWallet`: `evm`, `solana`, `near`,
+  `aptos`, `tron` (and deprecated `casper`), each with `address`, `publicKey`
+  and `exportPrivateKey()`, which exports that chain's key only.
+  `exportSeed()` returns the recovery seed.
+- `exportKeys()` from 1.7.0 is removed: it exported every key to sign on one
+  chain. 1.7.0 was not published, so no released API breaks.
+- Deprecated, still working: the flat `*Address` fields and the
+  non-enumerable `keys` getter, now built from the per-chain exports.
+- `dispose()` revokes every account's export. Addresses, derivation and the
+  keystore format are unchanged.
+
 ## 1.7.0 — key material behind a private field
 
 - `DerivedWallet` is now a class. Addresses stay plain readonly fields; the

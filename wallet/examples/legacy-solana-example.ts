@@ -24,7 +24,7 @@ async function example() {
   console.log("  Mode:", legacyWallet.derivationMode);
 
   // Example 3: Recover wallet from existing seed
-  const seedHex = legacyWallet.exportKeys().seedHex;
+  const seedHex = legacyWallet.exportSeed();
   const recovered = deriveWallet(seedHex, { mode: "legacy-solana" });
   console.log("\nRecovered wallet from seed:");
   console.log("  EVM:", recovered.evmAddress);

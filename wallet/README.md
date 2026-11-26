@@ -143,38 +143,41 @@ node dist/cli.js show
 import { deriveWallet, newWallet, walletFromSeed } from "@aifinpay/wallet";
 
 const w = await newWallet();
-w.evmAddress; // 0x… (same on every EVM chain)
-w.solanaAddress; // base58
-w.nearAddress; // hex Ed25519 public key
-w.aptosAddress; // 0x… authentication key
-w.tronAddress; // T… base58check
+
+// One account per chain: address + public key, paired with its own private key.
+w.evm.address; // 0x… (same on every EVM chain)
+w.solana.address; // base58
+w.near.address; // hex Ed25519 public key
+w.aptos.address; // 0x… authentication key
+w.tron.address; // T… base58check
+w.aptos.publicKey; // raw public key, hex (secp256k1 chains: 33-byte compressed)
 
 // Key material lives in a private field: JSON.stringify(w), console.log(w)
-// and {...w} show addresses only. Export explicitly when you must sign.
-const keys = w.exportKeys();
-keys.seedHex; // 32-byte seed — THE thing to back up
-keys.evmPrivateKey; // for building your own transactions
-keys.solanaSecretKeyB58; // tweetnacl 64-byte secret, base58
-keys.tronPrivateKeyHex; // Tron secp256k1 key, hex
+// and {...w} show addresses and public keys only. Export what you sign with.
+w.evm.exportPrivateKey(); // 0x… — exposes the EVM key and nothing else
+w.solana.exportPrivateKey(); // tweetnacl 64-byte secret, base58
+w.tron.exportPrivateKey(); // secp256k1 key, hex
+const seedHex = w.exportSeed(); // 32-byte seed — THE thing to back up
 
-deriveWallet(keys.seedHex); // same seed → same wallet, deterministic
+deriveWallet(seedHex); // same seed → same wallet, deterministic
 
-w.dispose(); // zero the in-memory seed; exportKeys() then throws
+w.dispose(); // zero the in-memory seed; every export then throws
 {
-  using tmp = deriveWallet(keys.seedHex); // disposed at end of scope
+  using tmp = deriveWallet(seedHex); // disposed at end of scope
 }
 ```
 
-`w.keys` still works but is deprecated: it is a non-enumerable getter that
-calls `exportKeys()`. Only the root seed is held; per-chain keys are derived on
-export and their byte buffers are zeroed afterwards. Exported strings cannot be
-wiped, so keep them short-lived.
+Only the root seed is held. Each chain's key is derived when you export it and
+its byte buffer is zeroed afterwards; exported strings cannot be wiped, so keep
+them short-lived. The flat `evmAddress`/`solanaAddress`/… fields and the `keys`
+getter (every key at once) still work but are deprecated; `keys` is
+non-enumerable, so it never serialises.
 
 ### Deprecated Casper compatibility
 
 Casper is no longer supported and is not printed by `new` or `show`.
-`DerivationDomain.CASPER`, `casperAddress`, `casperPublicKey` and
-`exportKeys().casperSecretSeedHex` remain available with `@deprecated` annotations.
+`DerivationDomain.CASPER`, `w.casper`, `casperAddress` and `casperPublicKey`
+remain available with `@deprecated` annotations.
 Their values and derivation are unchanged in both modes, so existing consumers
 and legacy key recovery continue to work. No keystore migration is required.
 
