@@ -102,6 +102,7 @@ In the PR description, add a section **Linked surfaces** with one line per surfa
 ## Workflow conventions
 
 - No workspace build orchestrator (no Turbo/Nx/Just). CI runs each package independently.
+- No `CODEOWNERS` file. Do not add `.github/CODEOWNERS` (or `CODEOWNERS`/`docs/CODEOWNERS`) or propose review-ownership rules in it; review routing is not managed in this repo.
 - Per-package lockfiles are authoritative (`package-lock.json` in `node/`, `wallet/`, `mcp/`, `gate/`, `analytics/`, `deployments/`, `mcp-http/`). Root `pnpm-lock.yaml` only tracks `@daochild/agents-config`.
 - Root `opencode.json` loads this file plus shared agent config and skills; edit it only for agent/config changes, not for application code.
 - Default repo-local skills live in `.agents/skills/`; the canonical sibling `agent/skills/` is the published skill content, not the skills workshop.
