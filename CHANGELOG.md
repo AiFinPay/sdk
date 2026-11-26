@@ -6,14 +6,17 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
-## Wallet: deprecated API and Casper removed — wallet 2.0.0
+## Wallet: deprecated API, Casper and legacy-solana removed — wallet 2.0.0
 
 - Breaking: `@aifinpay/wallet` drops the flat `*Address` fields, the `keys`
   getter, `WalletKeys`, `LEGACY_SOLANA_DERIVATION` and all Casper derivation.
   Use `w.<chain>.address`, `w.<chain>.exportPrivateKey()` and `exportSeed()`.
-  `walletFromSolanaSecret` requires `{ mode: "legacy-solana" }` and refuses
-  malformed or mismatched secret keys. Addresses and keystores are unchanged. `@aifinpay/agent` still pins wallet
-  1.x; its re-export changes when that pin moves.
+  The legacy-solana derivation is gone too (`--legacy-solana`, `mode`,
+  `walletFromSolanaSecret`): unindexed legacy-solana and bare `mcp init`
+  keystores need `@aifinpay/wallet@1`. Standard and indexed addresses and the
+  keystore format are unchanged; indexed wallets remain the MCP-compatible
+  path. `@aifinpay/agent` still pins wallet 1.x; its re-export changes when
+  that pin moves.
 
 ## Wallet: per-chain accounts — wallet 1.8.0
 

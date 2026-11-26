@@ -1,8 +1,9 @@
 # @aifinpay/wallet — changelog
 
-## 2.0.0 — deprecated API removed
+## 2.0.0 — deprecated API and legacy-solana removed
 
-Breaking. Addresses, derivation and the keystore format are unchanged.
+Breaking. Standard and indexed addresses and the keystore format are
+unchanged; legacy-solana wallets are no longer derived.
 
 - Removed the flat `evmAddress`, `solanaAddress`, `nearAddress`,
   `aptosAddress` and `tronAddress` fields: use `w.<chain>.address`.
@@ -11,13 +12,19 @@ Breaking. Addresses, derivation and the keystore format are unchanged.
 - Removed Casper: `w.casper`, `casperAddress`, `casperPublicKey`,
   `DerivationDomain.CASPER` and `"casper"` in `ChainName`. Recover a Casper
   key with `@aifinpay/wallet@1` and the same seed.
-- Removed the unused `LEGACY_SOLANA_DERIVATION` constant. The
-  `legacy-solana` derivation mode is unchanged.
-- `walletFromSolanaSecret` requires `{ mode: "legacy-solana" }` (it never
-  supported anything else; the old default always threw), accepts only a
-  64-byte tweetnacl secret key, and refuses one whose public-key half does not
-  match its seed. `export` from a bare MCP keystore goes through the same
-  check instead of slicing the secret unchecked.
+- Removed the unused `LEGACY_SOLANA_DERIVATION` constant.
+- Removed the legacy-solana derivation (raw seed as the Solana key):
+  `DerivationMode`, `derivationMode`, `walletFromSolanaSecret`, the
+  `--legacy-solana` flag and the bundled example. There is one Solana
+  derivation, `Ed25519(SHA-256("aifinpay:solana:v1\0" || seed))`. Passing
+  `--legacy-solana` or `{ mode: "legacy-solana" }` throws rather than
+  silently deriving another Solana address.
+- Unindexed 1.x legacy-solana keystores and bare `npx @aifinpay/mcp init`
+  keystores are refused by `show` and `export` with a pointer to
+  `@aifinpay/wallet@1`; `new` still never overwrites them. Indexed derivation
+  never depended on the mode, so `--index N` use of those keystores is exact.
+- New keystores no longer record `derivationMode`. The CLI now points MCP users
+  to `new --index 0`, whose addresses MCP and the full SDK share.
 
 ## 1.8.0 — per-chain accounts
 

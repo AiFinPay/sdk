@@ -1,4 +1,4 @@
-// @aifinpay/wallet must preserve the legacy EVM/Solana addresses the full
+// @aifinpay/wallet must keep the EVM address and the indexed wallets the full
 // agent already uses, while deriving deterministic NEAR/Aptos/Tron additions.
 // It must also stay free of the heavy transaction stack (AIFINP-117).
 
@@ -8,7 +8,7 @@ import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspect } from "node:util";
 import { createCipheriv, createDecipheriv, scryptSync, randomBytes, randomFillSync } from "node:crypto";
-import { deriveWallet, newWallet, walletFromSolanaSecret, type DerivationMode } from "../src";
+import { deriveWallet, newWallet, walletFromSeed } from "../src";
 import { sha3_256 } from "@noble/hashes/sha3";
 import { secp256k1 } from "@noble/curves/secp256k1";
 import nacl from "tweetnacl";
@@ -95,7 +95,6 @@ describe("derivation", () => {
     expect(w.tron.exportPrivateKey()).toMatch(/^[0-9a-f]{64}$/);
     expect(w.near.exportPrivateKey()).toMatch(/^[0-9a-f]{64}$/);
     expect(w.aptos.exportPrivateKey()).toMatch(/^[0-9a-f]{64}$/);
-    expect(w.derivationMode).toBe("standard");
   });
 
   it("newWallet returns a recoverable seed", async () => {
@@ -104,21 +103,16 @@ describe("derivation", () => {
     expect(deriveWallet(w.exportSeed())).toEqual(w);
   });
 
-  it("walletFromSolanaSecret recovers the same complete wallet the keystore stores", () => {
-    const w = deriveWallet("cd".repeat(32), { mode: "legacy-solana" });
-    expect(walletFromSolanaSecret(w.solana.exportPrivateKey(), { mode: "legacy-solana" })).toEqual(w);
-  });
-
-  it("rejects a malformed seed and a too-short secret", () => {
+  it("rejects a malformed seed", () => {
     expect(() => deriveWallet("nope")).toThrow();
-    expect(() => walletFromSolanaSecret("1", { mode: "legacy-solana" })).toThrow("need 64 bytes");
   });
 
-  it("legacy-solana mode derives Solana address from raw seed", () => {
-    const w = deriveWallet("cd".repeat(32), { mode: "legacy-solana" });
-    expect(w.derivationMode).toBe("legacy-solana");
-    const recovered = walletFromSolanaSecret(w.solana.exportPrivateKey(), { mode: "legacy-solana" });
-    expect(recovered.solana.address).toBe(w.solana.address);
+  it("refuses the removed legacy-solana mode instead of silently deriving another Solana address", async () => {
+    const legacy = { mode: "legacy-solana" } as never;
+    expect(() => deriveWallet("cd".repeat(32), legacy)).toThrow("removed in @aifinpay/wallet 2.0.0");
+    expect(() => walletFromSeed("cd".repeat(32), legacy)).toThrow("removed in @aifinpay/wallet 2.0.0");
+    await expect(newWallet(legacy)).rejects.toThrow("removed in @aifinpay/wallet 2.0.0");
+    expect(deriveWallet("cd".repeat(32), { mode: "standard" } as never)).toEqual(deriveWallet("cd".repeat(32)));
   });
 });
 
@@ -137,11 +131,9 @@ const full: {
 
 describe("backwards-compatible with @aifinpay/agent", () => {
   for (const seed of SEEDS) {
-    it.skipIf(!full)(`seed ${seed.slice(0, 6)}… preserves legacy funded addresses`, async () => {
+    it.skipIf(!full)(`seed ${seed.slice(0, 6)}… keeps the SDK's unindexed EVM address`, async () => {
       const agent = await full!.fromSeed(seed);
-      const w = deriveWallet(seed, { mode: "legacy-solana" });
-      expect(w.solana.address).toBe(agent.solanaAddress);
-      expect(w.evm.address).toBe(agent.evmAddress);
+      expect(deriveWallet(seed).evm.address).toBe(agent.evmAddress);
     });
 
     it.skipIf(!full)(`indexed seed ${seed.slice(0, 6)}… matches the full SDK`, async () => {
@@ -201,18 +193,6 @@ describe("the install stays light", () => {
   });
 });
 
-describe("the CLI writes an mcp-compatible keystore", () => {
-  it("stores secretB58 that walletFromSolanaSecret round-trips", () => {
-    const w = deriveWallet("77".repeat(32), { mode: "legacy-solana" });
-    const store = {
-      secretB58: w.solana.exportPrivateKey(),
-      seedHex: w.exportSeed(),
-      derivationMode: "legacy-solana" as DerivationMode,
-    };
-    expect(walletFromSolanaSecret(store.secretB58, { mode: "legacy-solana" })).toEqual(w);
-  });
-});
-
 describe("encrypted keystore", () => {
   function encrypt(secretB58: string, passphrase: string) {
     const salt = randomBytes(16);
@@ -235,7 +215,7 @@ describe("encrypted keystore", () => {
   }
 
   it("encrypts and decrypts a secret correctly", () => {
-    const w = deriveWallet("99".repeat(32), { mode: "legacy-solana" });
+    const w = deriveWallet("99".repeat(32));
     const passphrase = "test-passphrase-123";
     const encrypted = encrypt(w.solana.exportPrivateKey(), passphrase);
     const key = scryptSync(passphrase, Buffer.from(encrypted.salt, "base64"), 32, {
@@ -250,7 +230,6 @@ describe("encrypted keystore", () => {
       "utf8"
     );
     expect(decrypted).toBe(w.solana.exportPrivateKey());
-    expect(walletFromSolanaSecret(decrypted, { mode: "legacy-solana" })).toEqual(w);
   });
 
   it("rejects wrong passphrase", () => {

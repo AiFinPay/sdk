@@ -18,7 +18,7 @@ Light agent wallet (Solana + EVM + NEAR + Aptos + Tron) with 4 tiny crypto deps 
 npx @aifinpay/wallet              # create if absent, else show (encrypted by default)
 npx @aifinpay/wallet new          # create encrypted keystore (won't overwrite existing)
 npx @aifinpay/wallet new --plain  # create unencrypted legacy keystore (not recommended)
-npx @aifinpay/wallet new --legacy-solana  # create wallet with legacy Solana derivation (not recommended)
+npx @aifinpay/wallet new --index 0  # indexed wallet: same addresses in MCP and the full SDK
 npx @aifinpay/wallet show         # print addresses
 npx @aifinpay/wallet export       # print the seed to back up
 ```
@@ -27,7 +27,6 @@ npx @aifinpay/wallet export       # print the seed to back up
 
 - **Encrypted by default**: New wallets use scrypt-aes-256-gcm encryption (passphrase required)
 - **Legacy plain format**: `--plain` flag creates unencrypted keystore for backwards compatibility
-- **Legacy Solana derivation**: `--legacy-solana` flag creates wallet with raw seed Solana derivation (not recommended for new wallets)
 - **File permissions**: Keystore is mode 600, directory is mode 700
 - **Environment variable**: `AIFINPAY_WALLET_PASSPHRASE` for non-interactive mode
 
@@ -41,9 +40,6 @@ npx @aifinpay/wallet new
 # Agent auto-decrypt (no human interaction)
 export AIFINPAY_WALLET_PASSPHRASE=$(cat ~/.aifinpay/secrets/passphrase)
 npx @aifinpay/wallet show
-
-# Create wallet with legacy Solana derivation (compatibility only)
-npx @aifinpay/wallet new --legacy-solana
 ```
 
 **Recommended:** Store passphrase in `~/.aifinpay/secrets/passphrase` (mode 600) for persistence across reboots. Add to `~/.bashrc` for auto-load:
@@ -59,14 +55,10 @@ The wallet package can be used programmatically:
 ```ts
 import { newWallet, deriveWallet, createWalletCLI } from "@aifinpay/wallet";
 
-// Create wallet with standard derivation (recommended)
-const wallet = await newWallet({ mode: "standard" });
+const wallet = await newWallet(); // root wallet
+const child = deriveWallet(wallet.exportSeed(), { index: 0 }); // what MCP and the full SDK use
 
-// Create wallet with legacy Solana derivation (compatibility)
-const legacy = await newWallet({ mode: "legacy-solana" });
-
-// Use CLI function with --legacy-solana flag
-await createWalletCLI("new", ["node", "wallet", "--legacy-solana"]);
+await createWalletCLI("new", ["node", "wallet", "--index", "0"]);
 ```
 
 ## Rules (Mandatory)
@@ -77,4 +69,4 @@ await createWalletCLI("new", ["node", "wallet", "--legacy-solana"]);
 - Keystore perms stay 600 (dir 700); new key handling needs a test in `tests/`.
 - Key material stays in `DerivedWallet`'s `#seed` and leaves only through `exportSeed()` / `<chain>.exportPrivateKey()`; never add an enumerable or serialisable key field.
 - Encrypted keystores require `AIFINPAY_WALLET_PASSPHRASE` in node/ and MCP.
-- Legacy Solana derivation (`--legacy-solana`) should only be used for compatibility with existing wallets.
+- There is one Solana derivation. legacy-solana (raw-seed Solana key) was removed in 2.0.0: keep `--legacy-solana` and `{ mode: "legacy-solana" }` throwing, and keep unindexed legacy-solana keystores refused rather than shown at a different address. Do not reintroduce it.

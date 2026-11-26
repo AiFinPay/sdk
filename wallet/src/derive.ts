@@ -83,8 +83,6 @@ function aptosAuthKey(publicKey: Uint8Array): `0x${string}` {
   return `0x${hex(sha3_256(material))}` as `0x${string}`;
 }
 
-export type DerivationMode = "standard" | "legacy-solana";
-
 export type ChainName = "evm" | "solana" | "near" | "aptos" | "tron";
 
 interface ChainSpec {
@@ -120,15 +118,6 @@ const CHAINS: Record<ChainName, ChainSpec> = {
   aptos: { domain: DerivationDomain.APTOS, curve: "ed25519", address: aptosAuthKey, privateKey: hex },
   tron: { domain: DerivationDomain.TRON, curve: "secp256k1", address: tronAddress, privateKey: hex },
 };
-
-/**
- * The chain's 32-byte secret (Ed25519 seed or secp256k1 key). Caller wipes it.
- * Index takes precedence over legacy-solana, as in every earlier release.
- */
-function chainSecret(chain: ChainName, seed: Uint8Array, mode: DerivationMode, index?: number): Uint8Array {
-  if (chain === "solana" && index === undefined && mode === "legacy-solana") return seed.slice();
-  return chainSeed(CHAINS[chain].domain, seed, index);
-}
 
 /** Public key for address derivation plus its hex form for `ChainAccount.publicKey`. */
 function publicKeys(curve: ChainSpec["curve"], secret: Uint8Array): { raw: Uint8Array; hex: string } {
@@ -183,7 +172,7 @@ export class ChainAccount<A extends string = string> {
  * `dispose()` (or `using`) zeroes the seed and revokes every export.
  *
  * Derivation contract (v1):
- *   Solana = Ed25519(SHA-256("aifinpay:solana:v1\\0" || seed)); legacy-solana mode: Ed25519(seed)
+ *   Solana = Ed25519(SHA-256("aifinpay:solana:v1\\0" || seed))
  *   EVM    = secp256k1(SHA-256("aifinpay:evm:v1\\0" || seed))
  *   NEAR   = Ed25519(SHA-256("aifinpay:near:v1\\0" || seed))
  *   Aptos  = Ed25519(SHA-256("aifinpay:aptos:v1\\0" || seed)), auth-key address
@@ -203,19 +192,16 @@ export class DerivedWallet {
   readonly aptos: ChainAccount<`0x${string}`>;
   readonly tron: ChainAccount;
 
-  /** Derivation mode used for this wallet. */
-  readonly derivationMode: DerivationMode;
   /** Optional child wallet index derived from the recovery seed. */
   readonly derivationIndex?: number;
 
   #seed: Uint8Array | null;
 
   /** Takes ownership of `seed`: the caller must not reuse or wipe it. */
-  private constructor(seed: Uint8Array, mode: DerivationMode, index?: number) {
+  private constructor(seed: Uint8Array, index?: number) {
     if (seed.length !== 32) throw new Error("seed must be 32 bytes");
     if (index !== undefined) assertIndex(index);
     this.#seed = seed;
-    this.derivationMode = mode;
     if (index !== undefined) this.derivationIndex = index;
 
     this.evm = this.#account("evm") as ChainAccount<`0x${string}`>;
@@ -226,13 +212,13 @@ export class DerivedWallet {
   }
 
   /** @internal Factory for this module; the constructor stays private. */
-  static fromSeedBytes(seed: Uint8Array, mode: DerivationMode = "standard", index?: number): DerivedWallet {
-    return new DerivedWallet(seed, mode, index);
+  static fromSeedBytes(seed: Uint8Array, index?: number): DerivedWallet {
+    return new DerivedWallet(seed, index);
   }
 
   #secret(chain: ChainName): Uint8Array {
     if (!this.#seed) throw new Error("wallet disposed: key material was wiped");
-    return chainSecret(chain, this.#seed, this.derivationMode, this.derivationIndex);
+    return chainSeed(CHAINS[chain].domain, this.#seed, this.derivationIndex);
   }
 
   #account(chain: ChainName): ChainAccount {
@@ -278,56 +264,43 @@ export class DerivedWallet {
   }
 }
 
-export function deriveWallet(seedHex: string, options?: { mode?: DerivationMode; index?: number }): DerivedWallet {
-  return DerivedWallet.fromSeedBytes(fromHex(seedHex), options?.mode, options?.index);
+/** Options for deriving a wallet from a recovery seed. */
+export interface DeriveOptions {
+  /** Child wallet index, 0 to MAX_DERIVATION_INDEX. Omit for the root wallet. */
+  index?: number;
 }
 
-export async function newWallet(options?: { mode?: DerivationMode; index?: number }): Promise<DerivedWallet> {
+/**
+ * 1.x accepted `{ mode: "legacy-solana" }`, which derived a different Solana
+ * address. Ignoring it from an untyped caller would silently move funds'
+ * destination, so refuse it.
+ */
+function assertNoLegacyMode(options?: DeriveOptions): void {
+  const mode = (options as { mode?: unknown } | undefined)?.mode;
+  if (mode !== undefined && mode !== "standard") {
+    throw new Error(
+      `derivation mode "${String(mode)}" was removed in @aifinpay/wallet 2.0.0; open legacy-solana wallets with @aifinpay/wallet@1`
+    );
+  }
+}
+
+export function deriveWallet(seedHex: string, options?: DeriveOptions): DerivedWallet {
+  assertNoLegacyMode(options);
+  return DerivedWallet.fromSeedBytes(fromHex(seedHex), options?.index);
+}
+
+export async function newWallet(options?: DeriveOptions): Promise<DerivedWallet> {
+  assertNoLegacyMode(options);
   const seed = new Uint8Array(32);
   if (typeof globalThis.crypto?.getRandomValues === "function") {
     globalThis.crypto.getRandomValues(seed);
   } else {
     randomFillSync(seed);
   }
-  return DerivedWallet.fromSeedBytes(seed, options?.mode, options?.index);
+  return DerivedWallet.fromSeedBytes(seed, options?.index);
 }
 
-/**
- * Recover a legacy-solana wallet from its 64-byte tweetnacl Solana secret key
- * (seed || public key), as written to `secretB58` by `npx @aifinpay/mcp init`
- * and legacy-solana keystores. In that mode the secret's first 32 bytes are the
- * recovery seed. A standard-mode Solana key is NOT the seed — restore those
- * wallets with `walletFromSeed`; the required `mode` makes callers say so.
- *
- * Fails closed: the input must be exactly 64 bytes and its public-key half must
- * match the seed half, so a corrupted or spliced secret never yields a
- * different wallet.
- */
-export function walletFromSolanaSecret(secretB58: string, options: { mode: "legacy-solana" }): DerivedWallet {
-  if (options?.mode !== "legacy-solana") {
-    throw new Error(
-      "walletFromSolanaSecret only supports legacy-solana mode. For standard mode, use seedHex from keystore."
-    );
-  }
-  const sk = b58.decode(secretB58);
-  try {
-    if (sk.length !== nacl.sign.secretKeyLength) {
-      throw new Error(`not a Solana secret key (need ${nacl.sign.secretKeyLength} bytes, got ${sk.length})`);
-    }
-    const wallet = DerivedWallet.fromSeedBytes(sk.slice(0, 32), "legacy-solana");
-    if (wallet.solana.address !== b58.encode(sk.subarray(32))) {
-      wallet.dispose();
-      throw new Error("Solana secret key is corrupt: its public key does not match its seed");
-    }
-    return wallet;
-  } finally {
-    sk.fill(0);
-  }
-}
-
-/**
- * Recover wallet from stored seedHex. This is the preferred method for standard derivation.
- */
-export function walletFromSeed(seedHex: string, options?: { mode?: DerivationMode; index?: number }): DerivedWallet {
+/** Recover a wallet from its stored recovery seed (same as `deriveWallet`). */
+export function walletFromSeed(seedHex: string, options?: DeriveOptions): DerivedWallet {
   return deriveWallet(seedHex, options);
 }

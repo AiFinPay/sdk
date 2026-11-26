@@ -16,25 +16,28 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import bs58 from "bs58";
-import { DerivationDomain, deriveWallet, newWallet, walletFromSeed, walletFromSolanaSecret } from "../src/index.js";
+import nacl from "tweetnacl";
+import { DerivationDomain, deriveWallet, newWallet, walletFromSeed } from "../src/index.js";
 import { generateStrongPassphrase, run } from "../src/cli.js";
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 
-// ── Known answers from the full SDK ──────────────────────────────────────────
+// ── Known answers ────────────────────────────────────────────────────────────
 //
-// Computed with @aifinpay/agent 2.3.0 built from node/ in this repository
-// (AiFinPayAgent.fromSeed / .fromSolanaSecret, which use viem and tweetnacl —
-// an implementation independent of this package's @noble code). The wallet
-// package does not install the SDK, so the byte-identity test in
-// wallet.test.ts skips in CI; these vectors keep that promise checked.
+// EVM: computed with @aifinpay/agent 2.3.0 built from node/ in this repository
+// (AiFinPayAgent.fromSeed, which uses viem — an implementation independent of
+// this package's @noble code). The wallet package does not install the SDK, so
+// the byte-identity test in wallet.test.ts skips in CI; these vectors keep that
+// promise checked.
+// Solana: Ed25519(SHA-256("aifinpay:solana:v1\0" || seed)), computed with
+// node:crypto and tweetnacl rather than this package's @noble code.
 const SDK = {
   ["11".repeat(32)]: {
-    solana: "F25s3DdjXdCxYBhh2z8FBusVEMT4b9bGNFVKJi3wFoF4",
+    solana: "EuYSsbyUNM8oUM7yRtyoXLzdzDRZfXCoHeYjg3Ns9ZQN",
     evm: "0x467aeE37983Eb1d4aa98e837e7D621bD71Af0F48",
   },
   ["ab".repeat(32)]: {
-    solana: "3TeRu8UfgdkNi3D8c9o6QntCtuEpoPMb2WDu1d7tmptw",
+    solana: "EiG7rhJNcUqc8LHnSw6g8dPcCm6vtrb8N9688vVP7mVV",
     evm: "0xf04Aa0d4EC1440Db063a8510d9cd8F861D44898f",
   },
 } as Record<string, { solana: string; evm: string }>;
@@ -51,18 +54,19 @@ const SDK_LOADS_STANDARD_KEYSTORE_11 = {
  *  secp256k1(SHA-256("aifinpay:evm:v1\0" || secret[0..32])) — i.e. the secret's
  *  first 32 bytes treated as the seed. Pinned against the SDK below. */
 function evmMcpWouldUse(secretB58: string): string {
-  return deriveWallet(hex(bs58.decode(secretB58).slice(0, 32)), { mode: "legacy-solana" }).evm.address;
+  return deriveWallet(hex(bs58.decode(secretB58).slice(0, 32))).evm.address;
+}
+
+/** A 1.x legacy-solana wallet's Solana secret: tweetnacl keypair of the raw seed. */
+function legacySolanaSecret(seedHex: string): string {
+  return bs58.encode(nacl.sign.keyPair.fromSeed(Buffer.from(seedHex, "hex")).secretKey);
 }
 
 describe("derivation agrees with @aifinpay/agent", () => {
   for (const [seed, sdk] of Object.entries(SDK)) {
-    it(`legacy-solana mode reproduces the SDK's addresses for seed ${seed.slice(0, 4)}…`, () => {
-      const w = deriveWallet(seed, { mode: "legacy-solana" });
+    it(`derives the pinned EVM and Solana addresses for seed ${seed.slice(0, 4)}…`, () => {
+      const w = deriveWallet(seed);
       expect({ solana: w.solana.address, evm: w.evm.address }).toEqual(sdk);
-    });
-
-    it(`EVM does not depend on the Solana mode, for seed ${seed.slice(0, 4)}…`, () => {
-      expect(deriveWallet(seed).evm.address).toBe(sdk.evm);
     });
   }
 
@@ -101,39 +105,6 @@ describe("seed and secret input", () => {
 
   it("walletFromSeed is deriveWallet", () => {
     expect(walletFromSeed(seed)).toEqual(deriveWallet(seed));
-    expect(walletFromSeed(seed, { mode: "legacy-solana" })).toEqual(deriveWallet(seed, { mode: "legacy-solana" }));
-  });
-
-  it("walletFromSolanaSecret refuses the standard mode, whose secret is not the seed", () => {
-    const secret = deriveWallet(seed).solana.exportPrivateKey();
-    // @ts-expect-error mode is required: only a legacy-solana secret is the seed.
-    expect(() => walletFromSolanaSecret(secret)).toThrow("only supports legacy-solana");
-    // @ts-expect-error "standard" is not accepted.
-    expect(() => walletFromSolanaSecret(secret, { mode: "standard" })).toThrow("only supports legacy-solana");
-  });
-
-  it("walletFromSolanaSecret refuses something that is not base58", () => {
-    expect(() => walletFromSolanaSecret("0OIl", { mode: "legacy-solana" })).toThrow();
-  });
-
-  it("walletFromSolanaSecret accepts only a 64-byte tweetnacl secret key", () => {
-    const sk = bs58.decode(deriveWallet(seed, { mode: "legacy-solana" }).solana.exportPrivateKey());
-    for (const len of [32, 63, 65, 96]) {
-      const wrong = new Uint8Array(len);
-      wrong.set(sk.subarray(0, Math.min(len, 64)));
-      expect(() => walletFromSolanaSecret(bs58.encode(wrong), { mode: "legacy-solana" })).toThrow(
-        `need 64 bytes, got ${len}`
-      );
-    }
-  });
-
-  it("walletFromSolanaSecret refuses a secret whose public key does not match its seed", () => {
-    const a = bs58.decode(deriveWallet("11".repeat(32), { mode: "legacy-solana" }).solana.exportPrivateKey());
-    const b = bs58.decode(deriveWallet("22".repeat(32), { mode: "legacy-solana" }).solana.exportPrivateKey());
-    const spliced = new Uint8Array([...a.subarray(0, 32), ...b.subarray(32)]);
-    expect(() => walletFromSolanaSecret(bs58.encode(spliced), { mode: "legacy-solana" })).toThrow(
-      "public key does not match its seed"
-    );
   });
 
   it("newWallet gives a different wallet each time, recoverable from its seed", async () => {
@@ -144,12 +115,12 @@ describe("seed and secret input", () => {
 
   it("derives versioned child wallets without changing unindexed derivation", () => {
     const root = "31".repeat(32);
-    const first = walletFromSeed(root, { mode: "legacy-solana", index: 0 });
-    const second = walletFromSeed(root, { mode: "legacy-solana", index: 1 });
-    expect(walletFromSeed(root, { mode: "legacy-solana" })).toEqual(deriveWallet(root, { mode: "legacy-solana" }));
+    const first = walletFromSeed(root, { index: 0 });
+    const second = walletFromSeed(root, { index: 1 });
+    expect(walletFromSeed(root)).toEqual(deriveWallet(root));
     expect(first.exportSeed()).toBe(root);
     expect(first.derivationIndex).toBe(0);
-    expect(walletFromSeed(root, { mode: "legacy-solana", index: 0 })).toEqual(first);
+    expect(walletFromSeed(root, { index: 0 })).toEqual(first);
     expect(first.evm.address).not.toBe(second.evm.address);
     expect(first.solana.address).not.toBe(second.solana.address);
     expect(() => deriveWallet(root, { index: -1 })).toThrow(/derivation index/);
@@ -231,25 +202,28 @@ describe("wallet new --plain", () => {
     expect(out.join("")).toBe(`${store.seedHex}\n`);
   });
 
-  it("--legacy-solana writes a keystore the full SDK derives the same addresses from", async () => {
-    await run("new", ["node", "wallet", "--plain", "--legacy-solana"]);
-    const store = keystore();
-    expect(store.derivationMode).toBe("legacy-solana");
-    expect(evmMcpWouldUse(store.secretB58)).toBe(printed("EVM"));
+  it("refuses --legacy-solana, removed in 2.0.0, and writes nothing", async () => {
+    await expect(run("new", ["node", "wallet", "--plain", "--legacy-solana"])).rejects.toThrow(
+      "--legacy-solana was removed in @aifinpay/wallet 2.0.0"
+    );
+    await expect(run("new", ["node", "wallet", "--plain"], { mode: "legacy-solana" } as never)).rejects.toThrow(
+      "--legacy-solana was removed"
+    );
+    expect(existsSync(keystorePath())).toBe(false);
   });
 
   it("stores an indexed recovery seed and lets show select a sibling index", async () => {
-    await run("new", ["node", "wallet", "--plain", "--legacy-solana", "--index", "0"]);
+    await run("new", ["node", "wallet", "--plain", "--index", "0"]);
     const store = keystore();
-    const expected = walletFromSeed(store.seedHex, { mode: "legacy-solana", index: 0 });
+    const expected = walletFromSeed(store.seedHex, { index: 0 });
     expect(store.derivationIndex).toBe(0);
-    expect(store.derivationMode).toBe("legacy-solana");
+    expect(store).not.toHaveProperty("derivationMode");
     expect(printed("EVM")).toBe(expected.evm.address);
     expect(out.join("")).toContain("uses it with no config");
 
     out = [];
     await run("show", ["node", "wallet", "--index=1"]);
-    const sibling = walletFromSeed(store.seedHex, { mode: "legacy-solana", index: 1 });
+    const sibling = walletFromSeed(store.seedHex, { index: 1 });
     expect(printed("EVM")).toBe(sibling.evm.address);
     expect(out.join("")).toContain("(index 1)");
   });
@@ -263,15 +237,10 @@ describe("wallet new --plain", () => {
 });
 
 describe("the CLI never prints Casper (removed in 2.0.0)", () => {
-  it.each([
-    ["standard", true],
-    ["standard", false],
-    ["legacy-solana", true],
-    ["legacy-solana", false],
-  ] as const)("new and show omit Casper (%s, plain=%s)", async (derivationMode, plain) => {
+  it.each([true, false])("new and show omit Casper (plain=%s)", async (plain) => {
     process.env.AIFINPAY_WALLET_PASSPHRASE = STRONG;
     const argv = plain ? ["node", "wallet", "--plain"] : ["node", "wallet"];
-    await run("new", argv, { mode: derivationMode });
+    await run("new", argv);
     expect(out.join("")).not.toMatch(/casper/i);
     const created = [printed("EVM"), printed("Solana")];
     expect(created.every(Boolean)).toBe(true);
@@ -348,19 +317,20 @@ describe("encrypted keystores", () => {
     await expect(run("show", [])).rejects.toThrow("AIFINPAY_WALLET_PASSPHRASE is required");
   });
 
-  it("an encrypted legacy-solana wallet opens to the addresses it was created with", async () => {
+  it("refuse a 1.x encrypted legacy-solana keystore instead of showing another Solana address", async () => {
+    mkdirSync(home(), { recursive: true, mode: 0o700 });
+    const seed = "ab".repeat(32);
+    const store = { ...wallet110Keystore(seed, STRONG), derivationMode: "legacy-solana" };
+    writeFileSync(keystorePath(), JSON.stringify(store), { mode: 0o600 });
     process.env.AIFINPAY_WALLET_PASSPHRASE = STRONG;
-    await run("new", ["node", "wallet"], { mode: "legacy-solana" });
-    expect(keystore().derivationMode).toBe("legacy-solana");
-    const created = [printed("EVM"), printed("Solana")];
-    out = [];
-    await run("show", []);
-    expect([printed("EVM"), printed("Solana")]).toEqual(created);
+    await expect(run("show", [])).rejects.toThrow("holds a legacy-solana wallet");
+    await expect(run("export", [])).rejects.toThrow("holds a legacy-solana wallet");
+    expect(out.join("")).toBe("");
   });
 
   it("encrypts and restores the recovery seed for an indexed wallet", async () => {
     process.env.AIFINPAY_WALLET_PASSPHRASE = STRONG;
-    await run("new", ["node", "wallet", "--legacy-solana", "--index=3"]);
+    await run("new", ["node", "wallet", "--index=3"]);
     const store = keystore();
     expect(store.derivationIndex).toBe(3);
     expect(store).toHaveProperty("seedEnc");
@@ -371,7 +341,7 @@ describe("encrypted keystores", () => {
     const rootSeed = out.join("").trim();
     expect(rootSeed).toMatch(/^[0-9a-f]{64}$/);
     expect(JSON.stringify(store)).not.toContain(rootSeed);
-    const expected = walletFromSeed(rootSeed, { mode: "legacy-solana", index: 3 });
+    const expected = walletFromSeed(rootSeed, { index: 3 });
     expect(created).toEqual([expected.evm.address, expected.solana.address]);
     out = [];
     await run("show", []);
@@ -470,17 +440,14 @@ function wallet110Keystore(seedHex: string, passphrase: string) {
 }
 
 describe("the encrypted keystore format", () => {
-  it.each([
-    ["standard", []],
-    ["legacy-solana", ["--legacy-solana"]],
-  ])("keeps ct the Solana secret MCP decrypts (%s)", async (_mode, flags) => {
+  it("keeps ct the Solana secret MCP decrypts", async () => {
     process.env.AIFINPAY_WALLET_PASSPHRASE = STRONG;
-    await run("new", ["node", "wallet", ...flags]);
+    await run("new", ["node", "wallet"]);
     out = [];
     await run("export", []);
     const seed = out.join("").trim();
     const store = keystore();
-    const w = deriveWallet(seed, { mode: store.derivationMode });
+    const w = deriveWallet(seed);
     expect(mcpDecrypts(store, STRONG)).toBe(w.solana.exportPrivateKey());
     // The recovery seed is sealed in its own envelope; never stored in the clear.
     expect("seedEnc" in store).toBe(true);
@@ -536,36 +503,48 @@ describe("interoperability with @aifinpay/mcp", () => {
     expect(out.join("")).not.toContain("uses it with no config");
     out = [];
     rmSync(keystorePath());
-    await run("new", ["node", "wallet", "--plain", "--legacy-solana"]);
+    await run("new", ["node", "wallet", "--plain", "--index", "0"]);
     expect(out.join("")).toContain("uses it with no config");
   });
 
   // W7. `npx @aifinpay/mcp init` writes { secretB58, created } — no seedHex and
-  // no derivationMode (mcp/bin/aifinpay-mcp.js). Its Solana key is the seed.
-  it("show reads a keystore written by `npx @aifinpay/mcp init` (W7)", async () => {
+  // no derivationMode (mcp/bin/aifinpay-mcp.js). Its Solana key is the raw seed,
+  // the legacy-solana derivation 2.x no longer has.
+  it("show and export refuse an `npx @aifinpay/mcp init` keystore, and new never overwrites it (W7)", async () => {
     mkdirSync(home(), { recursive: true, mode: 0o700 });
-    const secretB58 = deriveWallet("11".repeat(32), { mode: "legacy-solana" }).solana.exportPrivateKey();
-    writeFileSync(keystorePath(), JSON.stringify({ secretB58, created: "2026-09-01T00:00:00.000Z" }), { mode: 0o600 });
+    const bare = JSON.stringify({
+      secretB58: legacySolanaSecret("11".repeat(32)),
+      created: "2026-09-01T00:00:00.000Z",
+    });
+    writeFileSync(keystorePath(), bare, { mode: 0o600 });
+    await expect(run("show", [])).rejects.toThrow("Open it with `npx @aifinpay/wallet@1`");
+    await expect(run("export", [])).rejects.toThrow("holds a legacy-solana wallet");
+    await expect(run("new", ["node", "wallet", "--plain"])).rejects.toEqual(new Exit(1));
+    expect(err.join("")).toContain("Refusing");
+    expect(readFileSync(keystorePath(), "utf8")).toBe(bare);
+  });
+
+  // Indexed derivation never depended on the Solana mode, so 1.x
+  // `--legacy-solana --index N` keystores — the ones MCP runs — open unchanged.
+  it("still opens a 1.x legacy-solana keystore at its index, and siblings with --index", async () => {
+    mkdirSync(home(), { recursive: true, mode: 0o700 });
+    const seed = "31".repeat(32);
+    const store = {
+      secretB58: legacySolanaSecret(seed),
+      seedHex: seed,
+      derivationMode: "legacy-solana",
+      derivationIndex: 2,
+    };
+    writeFileSync(keystorePath(), JSON.stringify(store), { mode: 0o600 });
     await run("show", []);
-    expect(printed("EVM")).toBe(SDK["11".repeat(32)].evm);
-  });
-});
-
-describe("export from an MCP keystore", () => {
-  it("prints the seed, which is the stored Solana key's first 32 bytes", async () => {
-    mkdirSync(home(), { recursive: true, mode: 0o700 });
-    const secretB58 = deriveWallet("11".repeat(32), { mode: "legacy-solana" }).solana.exportPrivateKey();
-    writeFileSync(keystorePath(), JSON.stringify({ secretB58, created: "2026-09-01T00:00:00.000Z" }), { mode: 0o600 });
+    expect(printed("EVM")).toBe(deriveWallet(seed, { index: 2 }).evm.address);
+    expect(printed("Solana")).toBe(deriveWallet(seed, { index: 2 }).solana.address);
+    out = [];
+    await run("show", ["node", "wallet", "--index", "5"]);
+    expect(printed("Solana")).toBe(deriveWallet(seed, { index: 5 }).solana.address);
+    out = [];
     await run("export", []);
-    expect(out.join("")).toBe(`${"11".repeat(32)}\n`);
-  });
-
-  it("export refuses a bare MCP keystore whose secret is corrupt", async () => {
-    const sk = bs58.decode(deriveWallet("11".repeat(32), { mode: "legacy-solana" }).solana.exportPrivateKey());
-    sk[40] ^= 1;
-    mkdirSync(home(), { recursive: true, mode: 0o700 });
-    writeFileSync(keystorePath(), JSON.stringify({ secretB58: bs58.encode(sk) }), { mode: 0o600 });
-    await expect(run("export", [])).rejects.toThrow("public key does not match its seed");
+    expect(out.join("")).toBe(`${seed}\n`);
   });
 });
 
@@ -623,17 +602,15 @@ describe("Tron derivation", () => {
   } as Record<string, { address: string; key: string }>;
 
   for (const [seed, tron] of Object.entries(TRON)) {
-    it(`derives the pinned Tron address and key in both modes, for seed ${seed.slice(0, 4)}…`, () => {
+    it(`derives the pinned Tron address and key for seed ${seed.slice(0, 4)}…`, () => {
       expect(DerivationDomain.TRON).toBe("aifinpay:tron:v1\0");
-      for (const mode of ["standard", "legacy-solana"] as const) {
-        const w = deriveWallet(seed, { mode });
-        expect([w.tron.address, w.tron.exportPrivateKey()]).toEqual([tron.address, tron.key]);
-      }
+      const w = deriveWallet(seed);
+      expect([w.tron.address, w.tron.exportPrivateKey()]).toEqual([tron.address, tron.key]);
     });
   }
 
   it("leaves the existing EVM and Solana addresses unchanged", () => {
-    const w = deriveWallet("11".repeat(32), { mode: "legacy-solana" });
+    const w = deriveWallet("11".repeat(32));
     expect({ solana: w.solana.address, evm: w.evm.address }).toEqual(SDK["11".repeat(32)]);
   });
 
