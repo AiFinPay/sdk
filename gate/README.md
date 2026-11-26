@@ -193,7 +193,7 @@ Who reads for free is one of three modes:
 | ------------------ | ----------------- | -------------------------------------------------------------------------------------------- |
 | **AI agents only** | `knownAiAgent`    | Clients that say they are AI agents pay. Everyone else reads.                                |
 | **Strict**         | `unprovenPays(…)` | Only readers who passed a silent check and verified search engines read. Everyone else pays. |
-| **AiFinPay decides** | `hostedDetect(…)` | AiFinPay's detection service decides per request; failure serves free.                   |
+| **AiFinPay decides** | `hostedDetect(…)` | AiFinPay's detection service decides per request; on failure `knownAiAgent` decides.     |
 | **Everyone pays**  | omitted           | Every request without a receipt pays. For APIs, catalogs and data feeds.                     |
 
 `knownAiAgent` charges whoever names itself an agent. `unprovenPays` charges
@@ -245,17 +245,29 @@ const shouldCharge = hostedDetect({ merchantId, merchantSecret: process.env.AIFP
 app.use("/articles", aifpGate({ merchantId, registry, shouldCharge }));
 ```
 
-- **It fails free.** A network error, an answer other than 200, or no answer
-  within `timeoutMs` (150 ms) serves the request free and is not cached. An
-  outage on our side never puts a 402 in front of your readers.
-- **It caches.** An answer is reused for the same address and User-Agent for
-  the time the service allows, in memory, at most `cacheMax` (10000) entries.
-- **What leaves your server:** the visitor's address, User-Agent, the path
-  without its query and the headers in `DETECT_HEADERS`. Never cookies, an
-  Authorization header or a receipt. AiFinPay stores these requests for a
-  limited time to improve detection.
+- **On failure it falls back to a local rule.** A network error, an answer
+  other than 200 (a 429 included), or no answer within `timeoutMs` (150 ms) is
+  decided by `fallback`, default `knownAiAgent`: a crawler that names itself
+  pays, a browser reads free. The fallback's answer is not cached; a fallback
+  that throws serves free. `fallback: () => false` serves every failure free.
+- **It pauses.** After `pauseAfterFailures` (5) failures in a row it does not
+  call the service for `pauseMs` (30000 ms) and uses the fallback at once, so
+  an outage does not cost every visitor the timeout. The first call after the
+  pause decides whether it resumes.
+- **It caches.** An answer is reused for the same address, User-Agent and
+  forwarded headers (`Signature`, `Signature-Agent` and `Signature-Input` only
+  as present or absent; `AIFP-Edge-Signal` only by its `vb`, `cat` and `score`)
+  for the time the service allows, in memory, at most `cacheMax` (10000) entries.
+- **What leaves your server:** the visitor's address, User-Agent, the request
+  method, the path without its query and the headers in `DETECT_HEADERS`.
+  Never cookies, an Authorization header or a receipt. AiFinPay stores these
+  requests for a limited time to improve detection.
 - A request carrying `AIFP-Receipt` or `AIFP-Agent-Id` is charged without a call.
-- It reads `req.ip`; `aifpGate` warns once if Express `trust proxy` is `true`.
+- **Behind a proxy**, `req.ip` must be the visitor. A loopback, private,
+  link-local or unspecified address is never sent: the fallback decides and
+  nothing is cached. `aifpGate` warns once if Express `trust proxy` is `true`,
+  and once if it is not set while requests arrive with `X-Forwarded-For` or
+  `CF-Connecting-IP`: `req.ip` is then your proxy for every visitor.
 - **Behind Cloudflare** it gets better: deploy the
   [edge signal Worker](../examples/cloudflare-edge-signal) with the secret from
   `POST /v1/merchants/:id/edge-secret`. Cloudflare's verified-bot flag and, with

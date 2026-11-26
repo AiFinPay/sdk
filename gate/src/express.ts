@@ -21,6 +21,12 @@ export const TRUST_PROXY_WARNING =
   "X-Forwarded-For, which the client controls, so a forged search-crawler address reads free. Set " +
   '`trust proxy` to your proxy (a hop count, "loopback" or its addresses).';
 
+/** With `trust proxy` unset behind a proxy, every visitor has the proxy's address. */
+export const PROXY_UNSET_WARNING =
+  "[@aifinpay/gate] shouldCharge reads req.ip, the request was forwarded (X-Forwarded-For or CF-Connecting-IP) " +
+  "and Express `trust proxy` is not set: req.ip is then your proxy's address for every visitor. Set " +
+  '`trust proxy` to your proxy (a hop count, "loopback" or its addresses).';
+
 // Several mounts sharing a response must never count its terminal event twice.
 const reportingResponses = new WeakSet<Response>();
 
@@ -82,12 +88,22 @@ export function aifpGate(options: GateOptions): RequestHandler {
 
   const readsIp = chargeOf(options.shouldCharge) === "unproven" || readsClientIp(options.shouldCharge);
   let proxyChecked = false;
+  let proxyUnsetWarned = false;
 
   return function aifpGateHandler(req: Request, res: Response, next: NextFunction): void {
     // Once per mount, on the first request: the app setting is not known before.
     if (readsIp && !proxyChecked) {
       proxyChecked = true;
       if (req.app?.get("trust proxy") === true) console.warn(TRUST_PROXY_WARNING);
+    }
+    if (
+      readsIp &&
+      !proxyUnsetWarned &&
+      !req.app?.get("trust proxy") &&
+      (req.header("x-forwarded-for") || req.header("cf-connecting-ip"))
+    ) {
+      proxyUnsetWarned = true;
+      console.warn(PROXY_UNSET_WARNING);
     }
     // Only an HTML response carries it, so the gate's own JSON 402 / 403 / 503
     // and a JSON API behind the gate never do.
@@ -100,6 +116,7 @@ export function aifpGate(options: GateOptions): RequestHandler {
           path: fullPath,
           header: (name: string) => req.header(name) ?? undefined,
           ip: req.ip,
+          method: req.method,
         });
 
         if (options.reporting && result.reportingResource && !reportingResponses.has(res)) {

@@ -66,8 +66,13 @@ from the corresponding CI or payment artifacts.
 ## Self-hosted gates: AiFinPay decides who pays — gate 0.15.0
 
 - `@aifinpay/gate` adds `hostedDetect`, a `shouldCharge` backed by AiFinPay's
-  detection service (`POST /v1/merchants/:id/detect`). It fails free and caches
-  answers for the time the service allows. The Python gate does not have it yet.
+  detection service (`POST /v1/merchants/:id/detect`). When the service fails
+  it falls back to a local rule, `knownAiAgent` by default (a crawler that
+  names itself pays, a browser reads free), and after 5 failures in a row stops
+  asking for 30 s; `fallback: () => false` restores "failure is free". It caches
+  answers for the time the service allows, keyed by address, User-Agent and the
+  forwarded headers, sends the request method, and never sends a loopback or
+  private address. The Python gate does not have it yet.
 
 ## Self-hosted gates: a request the edge counted is counted once — gate 0.14.1, Python gate 0.11.1
 
