@@ -3,7 +3,7 @@ import type { GateMode } from "./types.js";
 import type { TrafficSender } from "./traffic.js";
 
 /** This package's version; a test keeps it equal to package.json. */
-export const GATE_VERSION = "0.14.1";
+export const GATE_VERSION = "0.15.0";
 
 export type GateCharge = "agents" | "unproven" | "everyone" | "custom";
 

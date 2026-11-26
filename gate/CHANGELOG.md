@@ -1,5 +1,22 @@
 # Changelog
 
+## @aifinpay/gate 0.15.0 — AiFinPay decides who pays
+
+- New `hostedDetect({ merchantId, merchantSecret })`, a `shouldCharge` that
+  asks `POST /v1/merchants/:id/detect` whether a visitor request pays. The
+  detection rules run and change on AiFinPay's side, without a release of this
+  package. The call carries the client address, the User-Agent, the path
+  without its query and the headers in `DETECT_HEADERS`; never a cookie, an
+  Authorization header or a receipt.
+- It fails free: a network error, a non-200, a body that is not an answer or a
+  reply slower than `timeoutMs` (default 150 ms) serves the request free and is
+  not cached. An answer is reused per address and User-Agent for the
+  `cache_ttl_s` the service sends. A request carrying `AIFP-Receipt` or
+  `AIFP-Agent-Id` is charged without a call. Reported as `charge=custom`.
+- `aifpGate` warns once when `unprovenPays` or `hostedDetect` runs behind
+  Express `trust proxy: true`: `req.ip` then comes from X-Forwarded-For, which
+  the client writes.
+
 ## @aifinpay/gate 0.14.1 — a request the edge counted is not counted again
 
 - A request carrying `AIFP-Edge-Counted: 1` is left out of the traffic summary:

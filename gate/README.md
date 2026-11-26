@@ -193,6 +193,7 @@ Who reads for free is one of three modes:
 | ------------------ | ----------------- | -------------------------------------------------------------------------------------------- |
 | **AI agents only** | `knownAiAgent`    | Clients that say they are AI agents pay. Everyone else reads.                                |
 | **Strict**         | `unprovenPays(…)` | Only readers who passed a silent check and verified search engines read. Everyone else pays. |
+| **AiFinPay decides** | `hostedDetect(…)` | AiFinPay's detection service decides per request; failure serves free.                   |
 | **Everyone pays**  | omitted           | Every request without a receipt pays. For APIs, catalogs and data feeds.                     |
 
 `knownAiAgent` charges whoever names itself an agent. `unprovenPays` charges
@@ -230,6 +231,31 @@ res.setHeader("Set-Cookie", readerProof.setCookie(readerProof.issue(req.get("use
   crawler is verified and all of them pay.
 - `AIFP-Receipt` or `AIFP-Agent-Id` on the request is charged whatever else it
   carries, so a receipt is always metered.
+
+### AiFinPay decides
+
+`hostedDetect` asks AiFinPay's detection service whether a visitor request
+pays. The rules run on our side and improve without a release of this package.
+
+```ts
+import { aifpGate, hostedDetect } from "@aifinpay/gate";
+
+app.set("trust proxy", "loopback"); // so req.ip is the visitor, not your proxy
+const shouldCharge = hostedDetect({ merchantId, merchantSecret: process.env.AIFP_MERCHANT_SECRET! });
+app.use("/articles", aifpGate({ merchantId, registry, shouldCharge }));
+```
+
+- **It fails free.** A network error, an answer other than 200, or no answer
+  within `timeoutMs` (150 ms) serves the request free and is not cached. An
+  outage on our side never puts a 402 in front of your readers.
+- **It caches.** An answer is reused for the same address and User-Agent for
+  the time the service allows, in memory, at most `cacheMax` (10000) entries.
+- **What leaves your server:** the visitor's address, User-Agent, the path
+  without its query and the headers in `DETECT_HEADERS`. Never cookies, an
+  Authorization header or a receipt. AiFinPay stores these requests for a
+  limited time to improve detection.
+- A request carrying `AIFP-Receipt` or `AIFP-Agent-Id` is charged without a call.
+- It reads `req.ip`; `aifpGate` warns once if Express `trust proxy` is `true`.
 
 ### Tell agents what a page is
 

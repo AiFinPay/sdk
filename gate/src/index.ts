@@ -71,6 +71,8 @@ export type {
   UnprovenPaysOptions,
   VerifySearchBotInput,
 } from "./unproven.js";
+export { hostedDetect, DETECT_HEADERS, DETECT_TIMEOUT_MS, DETECT_CACHE_MAX } from "./hosted-detect.js";
+export type { HostedDetectOptions } from "./hosted-detect.js";
 export { decideOperator, normalizeOperatorPolicy, OPERATOR_ACTIONS, OPERATOR_DEFAULT } from "./operator-policy.js";
 export type { OperatorDecision } from "./operator-policy.js";
 export { scopeCovers } from "./scope.js";

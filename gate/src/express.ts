@@ -5,6 +5,21 @@ import type { AifpContext } from "./types.js";
 import { linkHtmlResponse } from "./discovery.js";
 import { discoveryLinkHeader } from "./discovery-link.js";
 import { validReportingContext, type ReportingContext, type ReportedEvent } from "./reporter.js";
+import { chargeOf } from "./identity.js";
+import { readsClientIp } from "./hosted-detect.js";
+
+/**
+ * `trust proxy: true` makes `req.ip` the left-most X-Forwarded-For entry,
+ * which the client writes. `unprovenPays` and `hostedDetect` decide from
+ * `req.ip` (a search crawler is verified by its address), so with it any
+ * client sending a Googlebot User-Agent and a Google address in
+ * X-Forwarded-For reads free. A hop count, "loopback" or the proxy's
+ * addresses are safe; `true` is not.
+ */
+export const TRUST_PROXY_WARNING =
+  "[@aifinpay/gate] shouldCharge reads req.ip, and Express `trust proxy` is true: req.ip then comes from " +
+  "X-Forwarded-For, which the client controls, so a forged search-crawler address reads free. Set " +
+  '`trust proxy` to your proxy (a hop count, "loopback" or its addresses).';
 
 // Several mounts sharing a response must never count its terminal event twice.
 const reportingResponses = new WeakSet<Response>();
@@ -65,7 +80,15 @@ export function aifpGate(options: GateOptions): RequestHandler {
   const gate = createGateOn({ ...options, store }, "express");
   const link = discoveryLinkHeader(options.discoveryLink);
 
+  const readsIp = chargeOf(options.shouldCharge) === "unproven" || readsClientIp(options.shouldCharge);
+  let proxyChecked = false;
+
   return function aifpGateHandler(req: Request, res: Response, next: NextFunction): void {
+    // Once per mount, on the first request: the app setting is not known before.
+    if (readsIp && !proxyChecked) {
+      proxyChecked = true;
+      if (req.app?.get("trust proxy") === true) console.warn(TRUST_PROXY_WARNING);
+    }
     // Only an HTML response carries it, so the gate's own JSON 402 / 403 / 503
     // and a JSON API behind the gate never do.
     linkHtmlResponse(res, link);

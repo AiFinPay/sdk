@@ -6,6 +6,12 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## Self-hosted gates: AiFinPay decides who pays — gate 0.15.0
+
+- `@aifinpay/gate` adds `hostedDetect`, a `shouldCharge` backed by AiFinPay's
+  detection service (`POST /v1/merchants/:id/detect`). It fails free and caches
+  answers for the time the service allows. The Python gate does not have it yet.
+
 ## Self-hosted gates: a request the edge counted is counted once — gate 0.14.1, Python gate 0.11.1
 
 - With an edge gate in front of a gate package on the same site, both sent
