@@ -1,5 +1,12 @@
 # Changelog
 
+## @aifinpay/analytics 0.2.1
+
+- The install id follows `HOME` (`USERPROFILE` on Windows) as it is when
+  telemetry starts, falling back to `os.homedir()`. Bun's `os.homedir()` keeps
+  the home it started with, so a process or test that changed `HOME` read and
+  wrote the real `~/.aifinpay` there. Under Node the location is unchanged.
+
 ## @aifinpay/analytics 0.2.0 — unreleased
 
 - Telemetry is on unless turned off. Unset or empty `AIFINPAY_TELEMETRY`

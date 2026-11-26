@@ -6,6 +6,13 @@ versions from manifests/registries, deployment metadata from
 [the package registries](deployments/README.md), and execution results
 from the corresponding CI or payment artifacts.
 
+## Analytics: install id follows HOME under Bun — analytics 0.2.1
+
+- `@aifinpay/analytics` finds `~/.aifinpay/.telemetry-id` from `HOME`
+  (`USERPROFILE` on Windows) at call time, as Node's `os.homedir()` does. Under
+  Bun a runtime `HOME` change was ignored, so redirected processes and the MCP
+  telemetry tests used the real `~/.aifinpay`.
+
 ## Agent: wallet 2.0.0 — agent 3.0.0
 
 - Breaking: `@aifinpay/agent` moves its `@aifinpay/wallet` pin to 2.0.0, so the
