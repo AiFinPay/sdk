@@ -29,7 +29,7 @@
     "sync:skills": "node scripts/sync-skills.mjs",
     "prebuild": "npm run sync:skills",
     "build": "node scripts/build.mjs",
-    "test": "vitest run",
+    "test": "vitest run && rm -rf .test-tmp",
     "prepublishOnly": "npm run build && npm test",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
