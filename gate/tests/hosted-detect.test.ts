@@ -62,6 +62,14 @@ describe("hostedDetect — what the gate sends", () => {
     });
   });
 
+  it("forwards the Cloudflare Worker's AIFP-Edge-Signal untouched", async () => {
+    const { calls, fetch } = service(() => json({ charge: false, cache_ttl_s: 60 }));
+    const detect = hostedDetect({ merchantId: MERCHANT_ID, merchantSecret: SECRET, fetch });
+    const signal = "v=1;ts=1760000000;vb=0;cat=;score=95;sig=" + "a".repeat(43);
+    await detect(visitor({ "AIFP-Edge-Signal": signal }));
+    expect(calls[0].body.headers["aifp-edge-signal"]).toBe(signal);
+  });
+
   it("a request speaking AIFP is charged without a call, so its receipt is metered", async () => {
     const { calls, fetch } = service(() => json({ charge: false, cache_ttl_s: 60 }));
     const detect = hostedDetect({ merchantId: MERCHANT_ID, merchantSecret: SECRET, fetch });

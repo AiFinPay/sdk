@@ -1,0 +1,19 @@
+# AiFinPay edge signal — tells AiFinPay's bot detection what Cloudflare saw.
+#
+#   npx wrangler secret put AIFP_EDGE_SECRET   # from POST /v1/merchants/:id/edge-secret
+#   npx wrangler deploy
+#
+# Then add a route below (or in the Cloudflare dashboard) so the worker runs in
+# front of every path your gate charges on.
+name = "aifinpay-edge-signal"
+main = "src/worker.mjs"
+compatibility_date = "2026-10-01"
+
+# routes = [
+#   { pattern = "www.example.com/*", zone_name = "example.com" },
+# ]
+
+[vars]
+# "on" only when the zone has Cloudflare Bot Management (Enterprise): without
+# it there is no real bot score, and AiFinPay decides without one.
+# AIFP_BOT_SCORE = "on"

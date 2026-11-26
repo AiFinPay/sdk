@@ -256,6 +256,12 @@ app.use("/articles", aifpGate({ merchantId, registry, shouldCharge }));
   limited time to improve detection.
 - A request carrying `AIFP-Receipt` or `AIFP-Agent-Id` is charged without a call.
 - It reads `req.ip`; `aifpGate` warns once if Express `trust proxy` is `true`.
+- **Behind Cloudflare** it gets better: deploy the
+  [edge signal Worker](../examples/cloudflare-edge-signal) with the secret from
+  `POST /v1/merchants/:id/edge-secret`. Cloudflare's verified-bot flag and, with
+  Bot Management, its bot score then reach the detection service signed, so a
+  stealth browser with a perfect User-Agent still pays when Cloudflare scores it
+  as automated.
 
 ### Tell agents what a page is
 

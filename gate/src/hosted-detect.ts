@@ -36,6 +36,9 @@ export const DETECT_HEADERS = [
   "signature-input",
   "via",
   "from",
+  // Signed by the merchant's Cloudflare Worker (examples/cloudflare-edge-signal);
+  // only AiFinPay holds the key that verifies it.
+  "aifp-edge-signal",
 ] as const;
 
 export const DETECT_TIMEOUT_MS = 150;

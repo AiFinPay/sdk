@@ -1,0 +1,20 @@
+{
+  "name": "aifinpay-cloudflare-edge-signal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloudflare Worker that signs Cloudflare's verified-bot and bot-score facts into AIFP-Edge-Signal for AiFinPay's bot detection.",
+  "type": "module",
+  "main": "src/worker.mjs",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "test": "node --test test/worker.test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT"
+}

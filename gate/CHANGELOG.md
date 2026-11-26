@@ -13,6 +13,10 @@
   not cached. An answer is reused per address and User-Agent for the
   `cache_ttl_s` the service sends. A request carrying `AIFP-Receipt` or
   `AIFP-Agent-Id` is charged without a call. Reported as `charge=custom`.
+- `DETECT_HEADERS` includes `AIFP-Edge-Signal`: the signal a merchant's
+  Cloudflare Worker ([`examples/cloudflare-edge-signal`](../examples/cloudflare-edge-signal))
+  signs from Cloudflare's verified-bot flag, category and bot score. The gate
+  forwards it untouched; AiFinPay verifies it with the merchant's edge secret.
 - `aifpGate` warns once when `unprovenPays` or `hostedDetect` runs behind
   Express `trust proxy: true`: `req.ip` then comes from X-Forwarded-For, which
   the client writes.
